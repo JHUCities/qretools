@@ -17,14 +17,28 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
   labels ("WATER QUALITY CONCERN", "FLOOD: BASEMENT"). The surface has no `label` or
   `title`, so the codebook preview uses the concept, then the name. Add a field, or keep
   deriving it? **S** once decided.
+  *Evidence, 2026-09-21:* every question in the real BAS bank
+  (`JHUCities/baltimore-area-survey`) has a `title`. Add the field.
 - **Select-all as one variable per option.** BAS publishes a select-all item as one
   binary variable per option ("STEM: OPTION"). We emit a single QuestionItem with a
   cardinality. Decide the DDI shape (and the codebook preview) for select-all. **M**.
+  *Evidence:* the real bank models select-all with `creates_variables`, one named
+  variable per option, each with an `option_title` and a yes/no label set.
 - **The DDI agency identifier.** Placeholder `org.example.qretools`, set in
   `src/app/model.ts`. Needs the project's registered agency. **S**, plus a `parseAgency`
   at the shell boundary so a bad value gets a readable message, not a 180-character regex.
 - **Which optional fields are "recommended".** See *Soft holes* below; the tier only
   works if it is small.
+
+- **Shared response scales.** The real bank references scales by name
+  (`value_labels_name: agree4`), reused across many questions; our surface inlines
+  `responses` in every question. DDI reuses CodeLists by reference, so this maps
+  cleanly. Decide the surface syntax (for example `responses: agree4`) and where
+  scales live. **M**.
+- **Fields the real bank uses that the surface lacks:** `if_condition`, `validation`
+  (both role 2 expressions), `string_label`, `note`, `vargroup`, `surveys_used`,
+  `versions`, `restricted_access`, markdown emphasis and `{{fills}}` in question text.
+  An importer from the v1 files would measure the gap across all 294 questions. **M**.
 
 ## Editor experience
 

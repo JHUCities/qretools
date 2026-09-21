@@ -202,6 +202,40 @@ emit a Universe item and resolve the link in role 2.
   not simultaneous edits; a bad merge is just a document with holes. Git LFS only for
   media. Real-time co-editing later via Yjs; Grove is the principled endgame.
 
+- **Datastore findings, verified 2026-09-21 (not yet a decision).** The BAS team already
+  uses a git repo as the datastore: private `JHUCities/baltimore-area-survey` on GitHub,
+  in the v1 layout (`banks/questions/<topic>.yml` with about 294 questions across 11
+  files, shared `value-labels/`, `banks/modules.yml`, `surveys/bas-2026/design/` with
+  candidates and the composed survey). The v1 R package reads it today to build BAS
+  2026, so v2 must not write v1 files it cannot round-trip. Field names there have
+  drifted (`storage_type` vs `response_type`, `value_labels_name` vs `value_label_id`),
+  which is the case for a checking editor. Prior art for a browser app on a forge is the
+  git-based CMS (Decap, Sveltia, Keystatic): content as files, login by OAuth, review
+  as pull requests. Tested with curl: Codeberg sends `Access-Control-Allow-Origin: *`
+  on its API, on the preflight for an authorised PUT, and on its OAuth token endpoint,
+  and Forgejo supports PKCE public clients, so a fully serverless login works there.
+  GitHub's API allows cross-origin calls but its token endpoint does not and still
+  requires a client secret, so GitHub needs a small auth proxy or a pasted fine-grained
+  token. Storage should be a port in the shell with one adapter per forge.
+- **Decided 2026-09-21: the target forge is GitHub, in the JHUCities organisation.**
+  Codeberg is for prototyping only. Verified the same day with curl: GitHub's API
+  accepts browser cross-origin calls, including the preflights for an authorised
+  contents PUT and for creating a pull request; its OAuth token endpoint and its
+  device-flow endpoint do not, and the token exchange still requires a client secret
+  (GitHub "does not distinguish between public and confidential clients"). Sveltia CMS
+  lists client-side PKCE for GitHub as unimplemented, waiting on GitHub. So a static
+  site needs either a pasted fine-grained token or one small stateless token-exchange
+  function. JHUCities already publishes on GitHub Pages. *Proposed, not yet decided:*
+  a GitHub App owned by the organisation (fine-grained permissions on the bank repo
+  only, 8-hour user tokens, commits attributed to the student), the site on GitHub
+  Pages, PKCE plus a roughly 50-line token-exchange function as the single narrow
+  exception to "no server", and token paste first because it needs no infrastructure.
+  The token never enters the Model: it lives in the shell, and the Model holds only
+  `session: anonymous | signingIn | signedIn{login} | failed`.
+  **Decided the same day: token paste is the login for now.** The user creates a
+  fine-grained personal access token (not a classic one) limited to the bank repository,
+  with Contents read and write, Pull requests read and write, and an expiry, and pastes
+  it into the app. The GitHub App flow swaps in later behind the same messages.
 - **Notes for role 2 from the step reviews.** `elaborate` returns a whole document;
   an instrument is many questions plus constructs, so split out
   `elaborateItems(draft, agency): Item[]` and call `documentOf` once at the edge
