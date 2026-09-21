@@ -1,0 +1,13 @@
+name: nhd_sat
+text: How satisfied are you with your neighborhood as a place to live?
+intent: Prevalence of overall neighborhood satisfaction; anchor item for the nhd module
+concept: neighborhood satisfaction
+universe: All respondents
+responses:
+  1: Very satisfied
+  2: Somewhat satisfied
+  3: Neither satisfied nor dissatisfied
+  4: Somewhat dissatisfied
+  5: Very dissatisfied
+instruction: Select one
+source: DCAS 2018 Q6
