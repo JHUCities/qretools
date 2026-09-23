@@ -278,6 +278,16 @@ emit a Universe item and resolve the link in role 2.
   attributed to the token's owner, refused only when the file changed on GitHub since it
   was opened. No review step exists yet; "propose a change" as a pull request is backlog.
 
+- **A key written with no value is a hole, required or not, at every depth (2026-09-24).**
+  `title:` with nothing after it, `number: min:` empty, an option's empty `title:`, an
+  empty `select:`: all holes, never silently ignored and never type errors, which is what
+  they were before in three different ways. The author opened the key, as typing `?`
+  opens a hole in Hazel; the hint for an optional one says "fill it in, or remove the
+  line". An absent optional key stays a complete value. `opened()` in `read.ts` is the
+  one place this is decided. The migrated bank still has `intent` as its only hole.
+  The Draft does not yet carry the opened-but-empty distinction (a preview shows the
+  fallback, not a hole slot); that remains in FEATURES.md.
+
 ## Principles from PL research (how features are judged)
 
 - **Total error localization.** Every draft, however broken, elaborates. Missing or

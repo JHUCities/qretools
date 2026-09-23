@@ -8,7 +8,15 @@ import { isMap, isScalar } from "yaml";
 import { compact } from "../compact.js";
 import type { Finding } from "../findings.js";
 import type { Code } from "./draft.js";
-import { error, fail, hole, ok, type Read } from "./read.js";
+import {
+	error,
+	fail,
+	hole,
+	isPlainObject,
+	ok,
+	opened,
+	type Read,
+} from "./read.js";
 import { OptionSchema } from "./schema.js";
 
 export const EXAMPLE = "Example:\n  1: Yes\n  2: No";
@@ -60,10 +68,8 @@ export function readCodeMap(
 			}
 		} else if (options && isMap(pair.value)) {
 			const raw: unknown = pair.value.toJS(doc);
-			const label =
-				typeof raw === "object" && raw !== null
-					? (raw as { label?: unknown }).label
-					: undefined;
+			const obj = isPlainObject(raw) ? raw : {};
+			const label = obj.label;
 			if (label === undefined || label === null || label === "") {
 				findings.push(
 					hole(
@@ -74,7 +80,9 @@ export function readCodeMap(
 				);
 				continue;
 			}
-			const result = OptionSchema.safeParse(raw);
+			// The label is present, so any other key written empty is its own hole.
+			const { rest, holes } = opened(obj, at);
+			const result = OptionSchema.safeParse(rest);
 			if (!result.success) {
 				for (const issue of result.error.issues) {
 					const sub =
@@ -89,8 +97,10 @@ export function readCodeMap(
 						),
 					);
 				}
+				findings.push(...holes);
 				continue;
 			}
+			findings.push(...holes);
 			codes.push({ code, ...compact(result.data) });
 		} else if (pair.value === null || pair.value === undefined) {
 			findings.push(hole(at, `Response \`${code}\` has no label.`));

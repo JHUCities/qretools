@@ -13,7 +13,16 @@ import { compact } from "../compact.js";
 import type { Finding, Range } from "../findings.js";
 import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
 import type { Domain, Draft } from "./draft.js";
-import { error, fail, hole, ok, type Read } from "./read.js";
+import {
+	EMPTY_HINT,
+	error,
+	fail,
+	hole,
+	isPlainObject,
+	ok,
+	opened,
+	type Read,
+} from "./read.js";
 import type { Scales } from "./scales.js";
 import {
 	DOMAIN_KEYS,
@@ -134,9 +143,10 @@ function readText(key: TextKey, value: unknown): Read<string> {
 			: fail();
 	}
 	if (value === null || (typeof value === "string" && value.trim() === "")) {
-		return required
-			? fail(hole(key, `\`${key}\` is empty.`, describe(key)))
-			: fail();
+		// Written but empty: a hole whether the field is required or not. The author opened it.
+		return fail(
+			hole(key, `\`${key}\` is empty.`, required ? describe(key) : EMPTY_HINT),
+		);
 	}
 	const result = QuestionSchema.shape[key].safeParse(value);
 	if (!result.success) {
@@ -289,6 +299,8 @@ function readInlineOptions(
 }
 
 function readSelect(value: unknown): Read<"one" | "many"> {
+	if (value === null || value === "")
+		return fail(hole("select", "`select` is empty.", EMPTY_HINT));
 	const result = QuestionSchema.shape.select.safeParse(value);
 	if (!result.success)
 		return fail(
@@ -298,8 +310,10 @@ function readSelect(value: unknown): Read<"one" | "many"> {
 }
 
 function readNumber(value: unknown): Read<Domain> {
-	const result = NumberDomainSchema.safeParse(value ?? {});
-	if (!result.success) return fail(...issueFindings("number", result.error));
+	const { rest, holes } = opened(value ?? {}, "number");
+	const result = NumberDomainSchema.safeParse(rest);
+	if (!result.success)
+		return fail(...issueFindings("number", result.error), ...holes);
 	const { min, max } = result.data;
 	if (min !== undefined && max !== undefined && min > max) {
 		return fail(
@@ -309,15 +323,21 @@ function readNumber(value: unknown): Read<Domain> {
 				`\`min\` (${min}) is greater than \`max\` (${max}).`,
 				"Swap them, or remove one.",
 			),
+			...holes,
 		);
 	}
-	return ok(compact({ kind: "number", ...result.data }));
+	return ok(compact({ kind: "number", ...result.data }), ...holes);
 }
 
 function readOpen(value: unknown): Read<Domain> {
-	const result = OpenDomainSchema.safeParse(value ?? {});
-	if (!result.success) return fail(...issueFindings("open", result.error));
-	return ok(compact({ kind: "open", maxLength: result.data.max_length }));
+	const { rest, holes } = opened(value ?? {}, "open");
+	const result = OpenDomainSchema.safeParse(rest);
+	if (!result.success)
+		return fail(...issueFindings("open", result.error), ...holes);
+	return ok(
+		compact({ kind: "open", maxLength: result.data.max_length }),
+		...holes,
+	);
 }
 
 function issueFindings(kind: "number" | "open", zodError: ZodError): Finding[] {
@@ -388,6 +408,3 @@ const firstIssue = (e: ZodError): string =>
 
 const isKnownKey = (key: string): key is SurfaceKey =>
 	(KNOWN_KEYS as readonly string[]).includes(key);
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);

@@ -62,6 +62,12 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
   adapter behind the same `Store`/Msgs. **M**.
 - **GitHub App sign-in** with the small token-exchange Worker (decided, deferred by the
   owner). Replaces token paste behind `connectRequested`. **M**.
+- **Move a question to another topic** (asked 2026-09-24, as drag-and-drop). No move
+  exists yet: a path is fixed at save. A move is a delete plus a create, one commit if
+  done through the Git Data API (a tree write), two through the contents API. Suggested
+  shape: a "Move to…" action on the open question reusing the save dialog's folder
+  picker; drag-and-drop in the tree as a later gesture over the same Msg. Primer's
+  TreeView has no drag-and-drop of its own. Same mechanism as rename. **M**.
 - **Rename a bank question.** Today a bank file saves to the path it was opened at even
   if `name` changed; needs delete-and-create in one step. **S**.
 - **Auto-refresh and presence.** No polling; a stale save is the only signal that
@@ -125,11 +131,11 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 
 ## Surface language and findings
 
-- **Optional fields have three states, and we model two.** Absent is a complete value
-  (`None`); present-but-empty (`universe:`) is an explicit hole, the author opened it;
-  filled is filled. Today an empty optional key is silently ignored. Model optional
-  fields as `Absent | Hole | Filled` and report the empty case. A reviewer called a
-  Hole wrapper ceremony for the toy; this is the case where it earns its place. **M**.
+- **Show an opened-but-empty optional field as a hole in the previews.** The parser now
+  reports an empty `title:` as a hole (2026-09-24), but the Draft still omits the field,
+  so the codebook preview falls back to the concept rather than showing a clickable
+  hole slot. Carrying `Absent | Hole | Filled` on the Draft would let the previews show
+  it. **S**.
 - **Implicit arguments: defaults the author can see.** Elaboration may fill what the
   author omits, as an Agda elaborator fills implicit arguments: `select` already
   defaults to `one`; `universe` could default to "All respondents"; `instruction` could

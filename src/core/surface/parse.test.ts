@@ -116,6 +116,36 @@ describe("parseSurface", () => {
 		}
 	});
 
+	it("a key written with no value is a hole, required or not, at every depth", () => {
+		const brief = (f: { severity: string; code: string; path: string }) =>
+			`${f.severity}:${f.code}@${f.path}`;
+		const full = "name: q\ntext: Q?\nintent: Prevalence of a thing\n";
+		expect(
+			parseSurface(`${full}title:\nopen:\n`, {}).findings.map(brief),
+		).toEqual(["hole:hole@title"]);
+		const num = parseSurface(`${full}number:\n  min:\n  unit: years\n`, {});
+		expect(num.findings.map(brief)).toEqual(["hole:hole@number.min"]);
+		expect(num.draft.domain).toEqual({ kind: "number", unit: "years" });
+		expect(
+			parseSurface(
+				`${full}select:\nresponses:\n  1: a\n  2: b\n`,
+				{},
+			).findings.map(brief),
+		).toEqual(["hole:hole@select"]);
+		const opt = parseSurface(
+			`${full}select: many\nresponses:\n  a: { label: Yes, title: }\n  b: No\n`,
+			{},
+		);
+		expect(opt.findings.map(brief)).toEqual(["hole:hole@responses.a.title"]);
+		expect(
+			opt.draft.domain?.kind === "responses" && opt.draft.domain.codes[0],
+		).toEqual({ code: "a", label: "Yes" });
+		// An empty optional's hint says the line may simply go.
+		expect(
+			parseSurface(`${full}source:\nopen:\n`, {}).findings[0]?.hint,
+		).toMatch(/remove the line/);
+	});
+
 	it("reads number and open domains, and select many", () => {
 		expect(
 			parseSurface("number:\n  min: 0\n  unit: years\n", {}).draft.domain,
