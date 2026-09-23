@@ -15,6 +15,7 @@ import {
 import type { Draft } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
+import { type Symbols, symbolsOf } from "./symbols.js";
 
 export interface Evaluation {
 	readonly draft: Draft;
@@ -24,10 +25,13 @@ export interface Evaluation {
 	readonly ddi: DdiDocument;
 	readonly respondent: RespondentView;
 	readonly codebook: CodebookView;
+	/** What the question defines and names, for the bank index. */
+	readonly symbols: Symbols;
 }
 
 export function evaluate(source: string, agency: string, env: Env): Evaluation {
-	const { draft, findings, ranges } = parseSurface(source, env);
+	const parsed = parseSurface(source, env);
+	const { draft, findings, ranges } = parsed;
 	return {
 		draft,
 		findings: [...findings, ...lint(draft, env)],
@@ -35,5 +39,6 @@ export function evaluate(source: string, agency: string, env: Env): Evaluation {
 		ddi: elaborate(draft, agency, env.missing),
 		respondent: respondentView(draft),
 		codebook: codebookView(draft, env),
+		symbols: symbolsOf(parsed),
 	};
 }

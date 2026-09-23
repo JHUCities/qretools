@@ -74,3 +74,28 @@ export const optionVariable = (
 	code: Code,
 ): string | undefined =>
 	code.variable ?? (name === undefined ? undefined : `${name}_${code.code}`);
+
+/** A dataset variable a question defines, where in the question it is defined, and its option if it is one. */
+export interface DefinedVariable {
+	readonly name: string;
+	readonly path: string;
+	readonly option?: Code;
+}
+
+/**
+ * The variables a question defines: one named like the question, or one per
+ * select-many option. None without a name or a domain (no name, or no values).
+ * The elaborator and the bank index both read this, so they cannot disagree.
+ */
+export function definedVariables(draft: Draft): readonly DefinedVariable[] {
+	const { name, domain } = draft;
+	if (name === undefined || domain === undefined) return [];
+	if (domain.kind !== "responses" || domain.select === "one")
+		return [{ name, path: "name" }];
+	return domain.codes.flatMap((option) => {
+		const variable = optionVariable(name, option);
+		return variable === undefined
+			? []
+			: [{ name: variable, path: `responses.${option.code}`, option }];
+	});
+}

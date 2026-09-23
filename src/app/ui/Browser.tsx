@@ -1,17 +1,22 @@
-/** The bank as a file tree, with a filter that prunes it. Everything shown is derived by tree.ts. */
+/**
+ * The bank as a file tree, with a filter that prunes it: questions by topic, then
+ * the shared elements by kind. Everything shown is derived by tree.ts.
+ */
 import { SearchIcon } from "@primer/octicons-react";
 import { Label, TextInput, TreeView } from "@primer/react";
 import type { Dispatch, Id } from "../model.js";
-import type { Folder, Leaf } from "../tree.js";
+import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
 import { StatusIcon } from "./Previews.js";
 
 export function Browser({
 	folders,
+	sections,
 	filter,
 	open,
 	dispatch,
 }: {
 	folders: readonly Folder[];
+	sections: readonly SchemeSection[];
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
@@ -36,7 +41,7 @@ export function Browser({
 						: "No questions match."}
 				</p>
 			) : (
-				<TreeView aria-label="Question bank">
+				<TreeView aria-label="Questions">
 					{folders.map((f) => (
 						<FolderItem
 							key={f.name}
@@ -46,6 +51,21 @@ export function Browser({
 						/>
 					))}
 				</TreeView>
+			)}
+			{sections.length > 0 && (
+				<>
+					<h2 className="browser-heading">Shared</h2>
+					<TreeView aria-label="Shared elements">
+						{sections.map((s) => (
+							<SectionItem
+								key={s.key}
+								section={s}
+								open={open}
+								dispatch={dispatch}
+							/>
+						))}
+					</TreeView>
+				</>
 			)}
 		</div>
 	);
@@ -103,30 +123,96 @@ function LeafItem({
 		<TreeView.Item
 			id={`q:${leaf.id}`}
 			current={current}
-			onSelect={() => dispatch({ kind: "questionOpened", id: leaf.id })}
+			onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
 		>
 			{leaf.name ?? <span className="quiet">(no name)</span>}
 			<TreeView.TrailingVisual>
-				<span className="leaf-marks">
-					{leaf.draft && (
-						<Label size="small" variant="attention">
-							draft
-						</Label>
-					)}
-					{!leaf.draft && leaf.unsaved && (
-						<Label size="small" variant="attention">
-							unsaved
-						</Label>
-					)}
-					{leaf.failed && (
-						<Label size="small" variant="danger">
-							failed
-						</Label>
-					)}
-					{leaf.busy && <Label size="small">…</Label>}
-					<StatusIcon status={leaf.status} />
-				</span>
+				<Marks leaf={leaf} />
 			</TreeView.TrailingVisual>
 		</TreeView.Item>
+	);
+}
+
+function SectionItem({
+	section,
+	open,
+	dispatch,
+}: {
+	section: SchemeSection;
+	open: Id | undefined;
+	dispatch: Dispatch;
+}) {
+	return (
+		<TreeView.Item
+			id={section.key}
+			expanded={section.expanded}
+			onExpandedChange={() =>
+				dispatch({ kind: "folderToggled", folder: section.key })
+			}
+			containIntrinsicSize="2rem"
+		>
+			<TreeView.LeadingVisual>
+				<TreeView.DirectoryIcon />
+			</TreeView.LeadingVisual>
+			{section.label}
+			<TreeView.TrailingVisual>
+				<span className="quiet">{section.leaves.length}</span>
+			</TreeView.TrailingVisual>
+			<TreeView.SubTree>
+				{section.leaves.length === 0 ? (
+					<TreeView.Item
+						id={`${section.key}:new`}
+						onSelect={() =>
+							dispatch({ kind: "schemeCreateOpened", scheme: section.kind })
+						}
+					>
+						<span className="quiet">None yet. New…</span>
+					</TreeView.Item>
+				) : (
+					section.leaves.map((leaf) => (
+						<TreeView.Item
+							key={leaf.id}
+							id={`s:${leaf.id}`}
+							current={leaf.id === open}
+							onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
+						>
+							{leaf.name}
+							<TreeView.TrailingVisual>
+								<Marks leaf={leaf} />
+							</TreeView.TrailingVisual>
+						</TreeView.Item>
+					))
+				)}
+			</TreeView.SubTree>
+		</TreeView.Item>
+	);
+}
+
+function Marks({ leaf }: { leaf: Leaf | SchemeLeaf }) {
+	return (
+		<span className="leaf-marks">
+			{leaf.draft && (
+				<Label size="small" variant="attention">
+					draft
+				</Label>
+			)}
+			{!leaf.draft && leaf.unsaved && (
+				<Label size="small" variant="attention">
+					unsaved
+				</Label>
+			)}
+			{leaf.failed && (
+				<Label size="small" variant="danger">
+					failed
+				</Label>
+			)}
+			{leaf.busy && <Label size="small">…</Label>}
+			{"usedBy" in leaf && leaf.usedBy !== undefined && (
+				<span className="quiet" title="Questions naming it">
+					used by {leaf.usedBy}
+				</span>
+			)}
+			<StatusIcon status={leaf.status} />
+		</span>
 	);
 }

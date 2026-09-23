@@ -5,6 +5,7 @@
 
 import type { Finding } from "./findings.js";
 import { err, ok, type Result } from "./result.js";
+import type { SchemeKind } from "./schemes.js";
 import type { Draft } from "./surface/draft.js";
 import { NAME_PATTERN } from "./surface/schema.js";
 
@@ -91,3 +92,11 @@ export function describeChange(
 		? `Update ${name}`
 		: `Update ${name}: ${changed.join(", ")}`;
 }
+
+/** A scheme file's commit message: `Add scale agree5`, `Delete universe renters`. */
+export const describeSchemeChange = (
+	kind: SchemeKind,
+	name: string,
+	op: "add" | "update" | "delete",
+): string =>
+	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${kind === "missing" ? "missing values" : `${kind} ${name}`}`;

@@ -4,14 +4,17 @@ import { locate } from "../core/findings.js";
 import { ok } from "../core/result.js";
 import { EMPTY_ENV } from "../core/surface/env.js";
 import { toDiagnostics } from "./diagnostics.js";
+import { createEvaluations } from "./evaluations.js";
 import {
 	DEFAULT_SETTINGS,
+	envOf,
 	type Id,
 	init,
 	type Model,
 	type Msg,
+	type SchemeEntry,
 } from "./model.js";
-import { update } from "./update.js";
+import { schemeNameProblem, update } from "./update.js";
 
 const fresh = (): Model => init({ stored: ok(undefined), hasToken: false })[0];
 const run = (model: Model, ...msgs: Msg[]) =>
@@ -23,23 +26,24 @@ const connected = (model: Model, canWrite = true): Model => ({
 	...model,
 	session: { kind: "connected", login: "iain", canWrite },
 });
-const firstId = (model: Model): Id => Number(Object.keys(model.questions)[0]);
+const firstId = (model: Model): Id => Number(Object.keys(model.files)[0]);
 
 describe("init", () => {
 	it("starts with an empty list on first run, and asks for the DDI schema", () => {
 		const [model, cmds] = init({ stored: ok(undefined), hasToken: false });
-		expect(Object.keys(model.questions)).toHaveLength(0);
+		expect(Object.keys(model.files)).toHaveLength(0);
 		expect(model.screen).toEqual({ kind: "blank" });
 		expect(cmds).toEqual([{ kind: "loadDdiSchema" }]);
 	});
 
 	it("restores saved work, and starts connecting when a token is on hand", () => {
 		const stored = {
-			version: 1 as const,
+			version: 2 as const,
 			nextId: 9,
-			questions: [
+			files: [
 				{
 					id: 3,
+					kind: "question" as const,
 					source: "name: q\n",
 					origin: {
 						kind: "bank" as const,
@@ -52,7 +56,7 @@ describe("init", () => {
 			settings: { ...DEFAULT_SETTINGS, branch: "sandbox" },
 		};
 		const [model, cmds] = init({ stored: ok(stored), hasToken: true });
-		expect(model.questions[3]?.origin).toEqual(stored.questions[0]?.origin);
+		expect(model.files[3]?.origin).toEqual(stored.files[0]?.origin);
 		expect(model.nextId).toBe(9);
 		expect(model.session.kind).toBe("connecting");
 		expect(cmds.at(-1)).toEqual({ kind: "connect", settings: stored.settings });
@@ -64,7 +68,7 @@ describe("init", () => {
 			hasToken: false,
 		});
 		expect(model.failures).toEqual([{ kind: "unreadable", message: "bad" }]);
-		expect(Object.keys(model.questions)).toHaveLength(0);
+		expect(Object.keys(model.files)).toHaveLength(0);
 	});
 });
 
@@ -77,7 +81,7 @@ describe("editing", () => {
 		expect(m1.screen).toEqual({ kind: "editing", id: 1 });
 		expect(c1.at(-1)?.kind).toBe("persist");
 		const [m2] = update(m1, { kind: "edited", text: "name: q2\n" });
-		expect(m2.questions[1]?.source).toBe("name: q2\n");
+		expect(m2.files[1]?.source).toBe("name: q2\n");
 	});
 
 	it("a click names a place; update resolves it against the open question's text", () => {
@@ -104,7 +108,7 @@ describe("editing", () => {
 				{ name: "b.yaml", text: "name: b\n" },
 			],
 		});
-		expect(Object.keys(m.questions)).toHaveLength(2);
+		expect(Object.keys(m.files)).toHaveLength(2);
 		expect(m.screen.kind).toBe("blank");
 	});
 });
@@ -135,7 +139,7 @@ describe("saving", () => {
 		});
 		expect(cmds).toEqual([]);
 		expect(m.browser.saving).toEqual({ id: 1, folder: "nhd" });
-		expect(m.questions[1]?.activity).toEqual({ kind: "idle" });
+		expect(m.files[1]?.activity).toEqual({ kind: "idle" });
 	});
 
 	it("writes to the chosen folder on confirm, with a core commit message", () => {
@@ -149,14 +153,14 @@ describe("saving", () => {
 		});
 		const [m, cmds] = update(chosen, { kind: "saveConfirmed" });
 		expect(m.browser.saving).toBeUndefined();
-		expect(m.questions[1]?.activity).toEqual({ kind: "saving" });
+		expect(m.files[1]?.activity).toEqual({ kind: "saving" });
 		expect(cmds).toEqual([
 			{
 				kind: "writeFile",
 				id: 1,
 				settings: DEFAULT_SETTINGS,
 				path: "questions/svy/nhd_new.yaml",
-				text: m.questions[1]?.source,
+				text: m.files[1]?.source,
 				message: "Add nhd_new",
 			},
 		]);
@@ -176,10 +180,11 @@ describe("saving", () => {
 		const base = draftModel();
 		const m0: Model = {
 			...connected(base),
-			questions: {
-				...base.questions,
+			files: {
+				...base.files,
 				9: {
 					id: 9,
+					kind: "question",
 					source: "name: nhd_new\n",
 					origin: {
 						kind: "bank",
@@ -195,8 +200,8 @@ describe("saving", () => {
 		const [m, cmds] = update(asked, { kind: "saveConfirmed" });
 		expect(cmds).toEqual([]);
 		expect(
-			m.questions[1]?.activity.kind === "failed" &&
-				m.questions[1].activity.failure.message,
+			m.files[1]?.activity.kind === "failed" &&
+				m.files[1].activity.failure.message,
 		).toMatch(/already exists/);
 	});
 
@@ -207,7 +212,7 @@ describe("saving", () => {
 		});
 		const [m, cmds] = update(connected(m0), { kind: "saveRequested", id: 1 });
 		expect(cmds).toEqual([]);
-		expect(m.questions[1]?.activity.kind).toBe("failed");
+		expect(m.files[1]?.activity.kind).toBe("failed");
 	});
 
 	it("a finished save makes the question a bank file at the text that was written", () => {
@@ -219,14 +224,14 @@ describe("saving", () => {
 			kind: "saveFinished",
 			id: 1,
 			path: "questions/nhd/nhd_new.yaml",
-			text: m1.questions[1]?.source ?? "",
+			text: m1.files[1]?.source ?? "",
 			result: ok({ sha: "new" }),
 		});
-		expect(m2.questions[1]?.origin).toEqual({
+		expect(m2.files[1]?.origin).toEqual({
 			kind: "bank",
 			path: "questions/nhd/nhd_new.yaml",
 			sha: "new",
-			original: m1.questions[1]?.source,
+			original: m1.files[1]?.source,
 		});
 		expect(cmds.at(-1)?.kind).toBe("persist");
 	});
@@ -234,9 +239,10 @@ describe("saving", () => {
 	it("a bank question saves to its opened path with its sha, and a stale answer is a failure with the reload path", () => {
 		const bank: Model = {
 			...connected(fresh()),
-			questions: {
+			files: {
 				1: {
 					id: 1,
+					kind: "question",
 					source: "name: nhd_sat\ntext: New?\n",
 					origin: {
 						kind: "bank",
@@ -262,7 +268,7 @@ describe("saving", () => {
 			text: "x",
 			result: { ok: false, error: { kind: "stale", message: "changed" } },
 		});
-		expect(m2.questions[1]?.activity).toEqual({
+		expect(m2.files[1]?.activity).toEqual({
 			kind: "failed",
 			failure: { kind: "stale", message: "changed" },
 		});
@@ -284,16 +290,17 @@ describe("deleting", () => {
 		expect(c1).toEqual([]);
 		expect(m1.browser.confirmDelete).toBe(id);
 		const [m2, c2] = update(m1, { kind: "deleteRequested", id });
-		expect(m2.questions[id]).toBeUndefined();
+		expect(m2.files[id]).toBeUndefined();
 		expect(c2.at(-1)?.kind).toBe("persist");
 	});
 
 	it("never deletes from the bank without write access", () => {
 		const m: Model = {
 			...connected(fresh(), false),
-			questions: {
+			files: {
 				1: {
 					id: 1,
+					kind: "question",
 					source: "name: q\n",
 					origin: {
 						kind: "bank",
@@ -315,7 +322,7 @@ describe("deleting", () => {
 });
 
 describe("connecting", () => {
-	it("connect, then load the bank, then merge it and take its scales", () => {
+	it("connect, then load the bank, then merge it: every file becomes an entry of the kind its path says", () => {
 		const [m1, c1] = update(fresh(), {
 			kind: "connectRequested",
 			settings: { ...DEFAULT_SETTINGS, branch: "sandbox" },
@@ -333,34 +340,57 @@ describe("connecting", () => {
 		expect(c2[0]?.kind).toBe("loadBank");
 		const [m3] = update(m2, {
 			kind: "bankLoaded",
-			result: ok({
-				questions: [
-					{ path: "questions/nhd/nhd_x.yaml", sha: "a", text: "name: nhd_x\n" },
-				],
-				scales: [
-					{
-						path: "scales/agree4.yaml",
-						sha: "b",
-						text: "labels:\n  1: Yes\n  2: No\n",
-					},
-					{ path: "scales/bad.yaml", sha: "c", text: "labels: [\n" },
-				],
-			}),
+			result: ok([
+				{
+					path: "questions/nhd/nhd_x.yaml",
+					sha: "a",
+					text: "name: nhd_x\nresponses: agree4\nuniverse: renters\n",
+				},
+				{
+					path: "scales/agree4.yaml",
+					sha: "b",
+					text: "labels:\n  1: Yes\n  2: No\n",
+				},
+				{ path: "scales/bad.yaml", sha: "c", text: "labels: [\n" },
+				{ path: "universes/renters.yaml", sha: "d", text: "text: Renters\n" },
+				{ path: "missing.yaml", sha: "e", text: 'labels:\n  "-8": NR\n' },
+				{ path: "README.md", sha: "f", text: "# bank\n" },
+			]),
 		});
 		expect(
-			Object.values(m3.questions).some(
-				(q) =>
-					q.origin.kind === "bank" &&
-					q.origin.path === "questions/nhd/nhd_x.yaml",
+			Object.values(m3.files).map((e) =>
+				e.kind === "question" ? e.kind : `${e.kind}:${e.name}`,
 			),
-		).toBe(true);
-		expect(Object.keys(m3.scales)).toEqual(["agree4"]);
-		expect(
-			m3.bank.kind === "loaded" && m3.bank.scaleFindings.map((s) => s.name),
-		).toEqual(["bad"]);
+		).toEqual([
+			"question",
+			"scale:agree4",
+			"scale:bad",
+			"universe:renters",
+			"missing:missing",
+		]);
+		// Questions are read against the saved schemes; an unreadable one contributes nothing.
+		const env = envOf(m3.files);
+		expect(Object.keys(env.scales)).toEqual(["agree4"]);
+		expect(env.universes.renters?.text).toBe("Renters");
+		expect(env.missing.map((c) => c.code)).toEqual(["-8"]);
 	});
 
-	it("disconnecting forgets the token and returns to the bundled scales", () => {
+	it("reads questions against the saved version of a scheme, not unsaved edits", () => {
+		const [m] = update(fresh(), {
+			kind: "bankLoaded",
+			result: ok([
+				{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
+			]),
+		});
+		const id = firstId(m);
+		const [edited] = update(
+			{ ...m, screen: { kind: "editing", id } },
+			{ kind: "edited", text: "labels:\n  1: Yes\n  2: No\n" },
+		);
+		expect(envOf(edited.files).scales.yn?.codes).toHaveLength(1);
+	});
+
+	it("disconnecting forgets the token", () => {
 		const [m, cmds] = update(connected(fresh()), { kind: "disconnected" });
 		expect(m.session).toEqual({ kind: "anonymous" });
 		expect(cmds).toEqual([{ kind: "forgetToken" }]);
@@ -395,5 +425,120 @@ describe("diagnostics", () => {
 			"name: q\n".length,
 			"name: q\n".length,
 		]);
+	});
+});
+
+describe("scheme files", () => {
+	it("a new scale is named first; a bad or taken name is refused as the author types", () => {
+		const [asked] = update(fresh(), {
+			kind: "schemeCreateOpened",
+			scheme: "scale",
+		});
+		expect(asked.browser.creating).toEqual({ kind: "scale", name: "" });
+		expect(schemeNameProblem(asked, "scale", "")).toMatch(/name/);
+		expect(schemeNameProblem(asked, "scale", "Agree 5")).toMatch(/lower case/);
+		// Confirming an unusable name does nothing.
+		expect(update(asked, { kind: "schemeCreateConfirmed" })[0]).toBe(asked);
+		const [made] = run(
+			asked,
+			{ kind: "schemeNameChanged", name: "agree5" },
+			{ kind: "schemeCreateConfirmed" },
+		);
+		const id = firstId(made);
+		expect(made.files[id]).toMatchObject({
+			kind: "scale",
+			name: "agree5",
+			origin: { kind: "draft" },
+		});
+		expect(made.screen).toEqual({ kind: "editing", id });
+		expect(made.browser.creating).toBeUndefined();
+		expect(schemeNameProblem(made, "scale", "agree5")).toMatch(
+			/already exists/,
+		);
+		// A universe may share a scale's name: they are different namespaces.
+		expect(schemeNameProblem(made, "universe", "agree5")).toBeUndefined();
+	});
+
+	it("missing values are one list: created once, then opened", () => {
+		const [m1] = update(fresh(), {
+			kind: "schemeCreateOpened",
+			scheme: "missing",
+		});
+		const id = firstId(m1);
+		expect(m1.files[id]).toMatchObject({ kind: "missing", name: "missing" });
+		const [m2] = update(
+			{ ...m1, screen: { kind: "blank" } },
+			{ kind: "schemeCreateOpened", scheme: "missing" },
+		);
+		expect(Object.keys(m2.files)).toHaveLength(1);
+		expect(m2.screen).toEqual({ kind: "editing", id });
+	});
+
+	it("saves a new scheme file to the path its kind and name give, with no dialog, and deletes by name", () => {
+		const [made] = run(
+			connected(fresh()),
+			{ kind: "schemeCreateOpened", scheme: "universe" },
+			{ kind: "schemeNameChanged", name: "renters" },
+			{ kind: "schemeCreateConfirmed" },
+		);
+		const id = firstId(made);
+		const [, cmds] = update(made, { kind: "saveRequested", id });
+		expect(cmds[0]).toMatchObject({
+			kind: "writeFile",
+			path: "universes/renters.yaml",
+			message: "Add universe renters",
+		});
+		const saved: Model = {
+			...made,
+			files: {
+				[id]: {
+					...(made.files[id] as SchemeEntry),
+					origin: {
+						kind: "bank",
+						path: "universes/renters.yaml",
+						sha: "s",
+						original: "text: Renters\n",
+					},
+				},
+			},
+		};
+		const [, del] = run(
+			saved,
+			{ kind: "deleteRequested", id },
+			{ kind: "deleteRequested", id },
+		);
+		expect(del[0]).toMatchObject({
+			kind: "deleteFile",
+			message: "Delete universe renters",
+		});
+	});
+});
+
+describe("the environment's identity", () => {
+	it("survives editing a question, and changes when a saved scheme does", () => {
+		const [loaded] = update(fresh(), {
+			kind: "bankLoaded",
+			result: ok([
+				{ path: "questions/a/a.yaml", sha: "q", text: "name: a\n" },
+				{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
+			]),
+		});
+		const evaluations = createEvaluations();
+		const before = evaluations.env(loaded.files);
+		const question = Object.values(loaded.files).find(
+			(e) => e.kind === "question",
+		);
+		const [edited] = update(
+			{ ...loaded, screen: { kind: "editing", id: question?.id ?? 0 } },
+			{ kind: "edited", text: "name: a\ntext: changed\n" },
+		);
+		expect(evaluations.env(edited.files)).toBe(before);
+		const [reloaded] = update(edited, {
+			kind: "bankLoaded",
+			result: ok([
+				{ path: "scales/yn.yaml", sha: "b2", text: "labels:\n  1: Y\n" },
+			]),
+		});
+		expect(evaluations.env(reloaded.files)).not.toBe(before);
 	});
 });

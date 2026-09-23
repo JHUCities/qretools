@@ -9,7 +9,8 @@
  */
 import type { Finding, Range, Target } from "../core/findings.js";
 import type { Result } from "../core/result.js";
-import { EMPTY_ENV, type Env } from "../core/surface/env.js";
+import { type SchemeKind, schemeEnv } from "../core/schemes.js";
+import { EMPTY_ENV, type Env, type NamedScheme } from "../core/surface/env.js";
 import { parseScale, type Scales } from "../core/surface/scales.js";
 import choiceTemplate from "../templates/choice.yaml?raw";
 import numberTemplate from "../templates/number.yaml?raw";
@@ -35,12 +36,26 @@ export type Activity =
 	| { readonly kind: "deleting" }
 	| { readonly kind: "failed"; readonly failure: Failure };
 
-export interface Question {
+interface FileState {
 	readonly id: Id;
 	readonly source: string;
 	readonly origin: Origin;
 	readonly activity: Activity;
 }
+
+/** A question: its name is in its text, and may be a hole. */
+export interface Question extends FileState {
+	readonly kind: "question";
+}
+
+/** A scheme file: its name is its filename, chosen when it is created and never a hole. */
+export interface SchemeEntry extends FileState {
+	readonly kind: SchemeKind;
+	readonly name: string;
+}
+
+/** Everything the bank browser holds. */
+export type Entry = Question | SchemeEntry;
 
 export type Screen =
 	| { readonly kind: "blank" }
@@ -56,6 +71,8 @@ export interface Browser {
 	readonly settingsOpen: boolean;
 	/** The save dialog for a draft: which question, and the topic folder being chosen. */
 	readonly saving?: { readonly id: Id; readonly folder: string };
+	/** The name dialog for a new scale, universe or instruction: a scheme file is named before it exists. */
+	readonly creating?: { readonly kind: NamedScheme; readonly name: string };
 }
 
 export type Session =
@@ -71,13 +88,7 @@ export type Session =
 export type Bank =
 	| { readonly kind: "bundled" }
 	| { readonly kind: "loading" }
-	| {
-			readonly kind: "loaded";
-			readonly scaleFindings: readonly {
-				readonly name: string;
-				readonly findings: readonly Finding[];
-			}[];
-	  };
+	| { readonly kind: "loaded" };
 
 /** The official DDI schema is 900KB and loads lazily. The compiled validator lives in the shell. */
 export type DdiSchema =
@@ -86,14 +97,13 @@ export type DdiSchema =
 	| { readonly kind: "failed"; readonly finding: Finding };
 
 export interface Model {
-	readonly questions: Readonly<Record<Id, Question>>;
+	readonly files: Readonly<Record<Id, Entry>>;
 	readonly nextId: Id;
 	readonly screen: Screen;
 	readonly browser: Browser;
 	readonly session: Session;
 	readonly settings: BankSettings;
 	readonly bank: Bank;
-	readonly scales: Scales;
 	readonly failures: readonly Failure[];
 	readonly agency: string;
 	readonly ddiSchema: DdiSchema;
@@ -104,7 +114,7 @@ export type Msg =
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "ddiSchemaLoaded"; readonly result: DdiSchema }
 	| { readonly kind: "listOpened" }
-	| { readonly kind: "questionOpened"; readonly id: Id }
+	| { readonly kind: "fileOpened"; readonly id: Id }
 	| {
 			readonly kind: "filterChanged";
 			readonly text: string;
@@ -112,6 +122,11 @@ export type Msg =
 	| { readonly kind: "folderToggled"; readonly folder: string }
 	| { readonly kind: "settingsToggled"; readonly open: boolean }
 	| { readonly kind: "questionCreated"; readonly text: string }
+	/** New scheme file: `missing` is created at once (it has one name); the others ask for a name. */
+	| { readonly kind: "schemeCreateOpened"; readonly scheme: SchemeKind }
+	| { readonly kind: "schemeNameChanged"; readonly name: string }
+	| { readonly kind: "schemeCreateConfirmed" }
+	| { readonly kind: "schemeCreateCancelled" }
 	| {
 			readonly kind: "filesUploaded";
 			readonly files: readonly {
@@ -158,13 +173,7 @@ export type Msg =
 	  }
 	| {
 			readonly kind: "bankLoaded";
-			readonly result: Result<
-				{
-					readonly questions: readonly File[];
-					readonly scales: readonly File[];
-				},
-				Failure
-			>;
+			readonly result: Result<readonly File[], Failure>;
 	  }
 	| { readonly kind: "disconnected" }
 	| { readonly kind: "failureDismissed"; readonly index: number };
@@ -224,7 +233,18 @@ export const TEMPLATES: ReadonlyArray<{
 	{ label: "Select all that apply", text: selectManyTemplate },
 ];
 
-/** The DDI agency identifier for this bank: Johns Hopkins 21st Century Cities. */
+/**
+ * What a new scheme file starts as: every value empty, so it opens as holes. The
+ * missing template shows the shape codes take (quoted, since `-8` is not a key YAML keeps as text).
+ */
+export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
+	scale: "labels:\n  1:\n  2:\n",
+	universe: "text:\n",
+	instruction: "text:\n",
+	missing: 'labels:\n  "-8":\n',
+};
+
+/** The DDI agency identifier for this bank: Johns Hopkins 21st Century Cities. A constant for now; see FEATURES.md, "Generality". */
 const AGENCY = "edu.jhu.21cc";
 
 export const DEFAULT_SETTINGS: BankSettings = {
@@ -241,7 +261,7 @@ const SCALE_FILES = import.meta.glob("../examples/scales/*.yaml", {
 }) as Readonly<Record<string, string>>;
 
 /** Bundled example scales, named by file. A malformed example is a bug, not a user error, so it is simply absent. */
-export const EXAMPLE_SCALES: Scales = Object.fromEntries(
+const EXAMPLE_SCALES: Scales = Object.fromEntries(
 	Object.entries(SCALE_FILES).flatMap(([path, text]) => {
 		const name = path.replace(/^.*\//, "").replace(/\.yaml$/, "");
 		const { scale } = parseScale(text);
@@ -258,29 +278,28 @@ export interface Flags {
 
 export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	const stored = flags.stored.ok ? flags.stored.value : undefined;
-	const { questions, nextId } = stored
+	const { files, nextId } = stored
 		? {
-				questions: Object.fromEntries(
-					stored.questions.map((q) => [
-						q.id,
-						{ ...q, activity: { kind: "idle" } as const },
+				files: Object.fromEntries(
+					stored.files.map((f) => [
+						f.id,
+						{ ...f, activity: { kind: "idle" } as const },
 					]),
 				),
 				nextId: stored.nextId,
 			}
 		: // First run: an empty list. "New question" and "New from <example>" are one click
 			// away; seeded example drafts would sit beside bank questions of the same name.
-			{ questions: {}, nextId: 1 };
+			{ files: {}, nextId: 1 };
 	const settings = stored?.settings ?? DEFAULT_SETTINGS;
 	const model: Model = {
-		questions,
+		files,
 		nextId,
 		screen: { kind: "blank" },
 		browser: { filter: "", expanded: [], settingsOpen: false },
 		session: flags.hasToken ? { kind: "connecting" } : { kind: "anonymous" },
 		settings,
 		bank: { kind: "bundled" },
-		scales: EXAMPLE_SCALES,
 		failures: flags.stored.ok ? [] : [flags.stored.error],
 		agency: AGENCY,
 		ddiSchema: { kind: "loading" },
@@ -294,19 +313,48 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	];
 }
 
-/** The environment questions are read against. Until the schemes live in the Model, only scales are populated. */
-export const envOf = (model: Pick<Model, "scales">): Env => ({
-	...EMPTY_ENV,
-	scales: model.scales,
-});
+export const isScheme = (e: Entry): e is SchemeEntry => e.kind !== "question";
+
+/**
+ * The saved bank version of every scheme file, in id order: what questions are read
+ * against. Unsaved edits and never-saved drafts do not count (owner, 2026-09-24): a
+ * question resolves only against what is on GitHub, so its export references only
+ * that. With no scheme files at all (no bank yet), the bundled example scales stand in.
+ */
+export function savedSchemes(
+	files: Readonly<Record<Id, Entry>>,
+): readonly (SchemeEntry & { readonly origin: { readonly kind: "bank" } })[] {
+	return Object.values(files).flatMap((e) =>
+		isScheme(e) && e.origin.kind === "bank" ? [{ ...e, origin: e.origin }] : [],
+	);
+}
+
+export function envOf(files: Readonly<Record<Id, Entry>>): Env {
+	const saved = savedSchemes(files);
+	return saved.length === 0
+		? { ...EMPTY_ENV, scales: EXAMPLE_SCALES }
+		: schemeEnv(
+				saved.map((e) => ({
+					kind: e.kind,
+					name: e.name,
+					text: e.origin.original,
+				})),
+			);
+}
 
 export const toPersisted = (model: Model): Persisted => ({
-	version: 1,
+	version: 2,
 	nextId: model.nextId,
-	questions: Object.values(model.questions).map(({ id, source, origin }) => ({
-		id,
-		source,
-		origin,
-	})),
+	files: Object.values(model.files).map((e) =>
+		isScheme(e)
+			? {
+					id: e.id,
+					kind: e.kind,
+					name: e.name,
+					source: e.source,
+					origin: e.origin,
+				}
+			: { id: e.id, kind: e.kind, source: e.source, origin: e.origin },
+	),
 	settings: model.settings,
 });

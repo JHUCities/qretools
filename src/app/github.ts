@@ -82,6 +82,9 @@ export const makeGitHubStore = (
 						repo,
 						questions: `${branch}:questions`,
 						scales: `${branch}:scales`,
+						universes: `${branch}:universes`,
+						instructions: `${branch}:instructions`,
+						missing: `${branch}:missing.yaml`,
 					},
 				}),
 			});
@@ -101,10 +104,24 @@ export const makeGitHubStore = (
 					blobFile(`questions/${folder.name}/${e.name}`, e),
 				),
 			);
-			const scales = (data.scales?.entries ?? []).flatMap((e) =>
-				blobFile(`scales/${e.name}`, e),
-			);
-			return ok({ questions, scales });
+			const flat = (folder: string, tree?: { entries?: readonly Entry[] }) =>
+				(tree?.entries ?? []).flatMap((e) =>
+					blobFile(`${folder}/${e.name}`, e),
+				);
+			const missing = data.missing
+				? blobFile("missing.yaml", {
+						name: "missing.yaml",
+						type: "blob",
+						object: data.missing,
+					})
+				: [];
+			return ok([
+				...questions,
+				...flat("scales", data.scales),
+				...flat("universes", data.universes),
+				...flat("instructions", data.instructions),
+				...missing,
+			]);
 		},
 
 		async read(path) {
@@ -163,17 +180,28 @@ interface GraphQL {
 		readonly repository?: {
 			readonly questions?: { readonly entries?: readonly Entry[] };
 			readonly scales?: { readonly entries?: readonly Entry[] };
+			readonly universes?: { readonly entries?: readonly Entry[] };
+			readonly instructions?: { readonly entries?: readonly Entry[] };
+			readonly missing?: Entry["object"];
 		} | null;
 	};
 	readonly errors?: readonly { readonly message: string }[];
 }
 
-/** Verified against the real bank: one request, cost 1, 330 blobs, none truncated. */
-const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $questions: String!, $scales: String!) {
+/**
+ * Verified against the real bank: one request, cost 1, 330 blobs, none truncated.
+ * A folder or file the bank lacks comes back null, which reads as empty.
+ */
+const FLAT =
+	"... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } }";
+const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $questions: String!, $scales: String!, $universes: String!, $instructions: String!, $missing: String!) {
   repository(owner: $owner, name: $repo) {
     questions: object(expression: $questions) { ... on Tree { entries { name type object {
       ... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } } } } } }
-    scales: object(expression: $scales) { ... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } } }
+    scales: object(expression: $scales) { ${FLAT} }
+    universes: object(expression: $universes) { ${FLAT} }
+    instructions: object(expression: $instructions) { ${FLAT} }
+    missing: object(expression: $missing) { ... on Blob { oid text isBinary isTruncated } }
   }
 }`;
 

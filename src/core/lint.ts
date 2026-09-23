@@ -9,7 +9,7 @@
  * without one), "text must end in ?" (stems like "Please indicate..." are fine).
  */
 import type { Finding, LintCode } from "./findings.js";
-import { type Draft, optionVariable } from "./surface/draft.js";
+import { type Code, type Draft, optionVariable } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
 
 type Rule = (draft: Draft, env: Env) => readonly Finding[];
@@ -223,16 +223,29 @@ const matchesScale: Rule = ({ domain }, env) => {
 };
 
 /** A response code that the bank reserves for missing data would be unreadable in the dataset. */
-const missingCode: Rule = ({ domain }, env) => {
-	if (domain?.kind !== "responses" || domain.scale !== undefined) return [];
-	const reserved = new Set(env.missing.map((c) => c.code));
-	return domain.codes
+const missingCode: Rule = ({ domain }, env) =>
+	domain?.kind !== "responses" || domain.scale !== undefined
+		? []
+		: missingCollisions(domain.codes, env.missing, "responses");
+
+/**
+ * Codes in a list that the bank reserves for missing data. Run on a question's inline
+ * options and on a scale file, never on a question naming a scale: fifty questions
+ * would repeat one scale's problem.
+ */
+export const missingCollisions = (
+	codes: readonly Code[],
+	missing: readonly Code[],
+	at: string,
+): readonly Finding[] => {
+	const reserved = new Set(missing.map((c) => c.code));
+	return codes
 		.filter((c) => reserved.has(c.code))
 		.map((c) =>
 			advise(
 				"missing-code",
 				"warning",
-				`responses.${c.code}`,
+				`${at}.${c.code}`,
 				`Code \`${c.code}\` is the bank's missing-value code.`,
 				"Pick another code; the dataset uses this one for missing data.",
 			),

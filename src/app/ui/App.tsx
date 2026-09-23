@@ -1,4 +1,4 @@
-/** The page: a split layout with the bank tree in the pane and the open question in the content. */
+/** The page: a split layout with the bank tree in the pane and the open file in the content. */
 import { GearIcon, PlusIcon } from "@primer/octicons-react";
 import {
 	ActionList,
@@ -8,24 +8,17 @@ import {
 	SplitPageLayout,
 } from "@primer/react";
 import { useMemo } from "react";
-import { status } from "../../core/findings.js";
-import { toDiagnostics } from "../diagnostics.js";
-import { isUnsaved } from "./../merge.js";
+import { SCHEME_KINDS } from "../../core/schemes.js";
+import { indexOf, usedBy } from "../../core/symbols.js";
 import { type Id, TEMPLATES } from "../model.js";
-import { bankFolders, treeOf } from "../tree.js";
+import { bankFolders, SCHEME_LABELS, schemeSections, treeOf } from "../tree.js";
+import { schemeNameProblem } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
-import { EditorPane } from "./EditorPane.js";
-import {
-	Codebook,
-	Ddi,
-	Findings,
-	Respondent,
-	StatusBadge,
-} from "./Previews.js";
-import { QuestionHeader } from "./QuestionHeader.js";
+import { Editing } from "./Editing.js";
 import { SaveDialog } from "./SaveDialog.js";
+import { SchemeNameDialog } from "./SchemeNameDialog.js";
 
 export function App() {
 	const { dispatch, evaluations } = useApp();
@@ -35,18 +28,52 @@ export function App() {
 		() => treeOf(model, (q) => evaluations.get(q, model.agency, env)),
 		[model, evaluations, env],
 	);
+	// The bank's symbol table: which variables each question defines and which
+	// scheme names it writes. Rebuilt from cached evaluations, so cheap per keystroke.
+	const index = useMemo(
+		() =>
+			indexOf(
+				Object.values(model.files).flatMap((q) =>
+					q.kind === "question"
+						? [
+								{
+									key: q.id,
+									symbols: evaluations.get(q, model.agency, env).symbols,
+								},
+							]
+						: [],
+				),
+			),
+		[model.files, model.agency, evaluations, env],
+	);
+	const sections = useMemo(
+		() => schemeSections(model, (e) => evaluations.scheme(e, env), index),
+		[model, evaluations, env, index],
+	);
+	const creating = model.browser.creating;
 	const open: Id | undefined =
 		model.screen.kind === "editing" ? model.screen.id : undefined;
 	const saving = model.browser.saving;
 	const savingQuestion =
-		saving === undefined ? undefined : model.questions[saving.id];
+		saving === undefined ? undefined : model.files[saving.id];
 	const confirm =
 		model.browser.confirmDelete === undefined
 			? undefined
-			: model.questions[model.browser.confirmDelete];
-	const confirmName = confirm
-		? evaluations.get(confirm, model.agency, env).draft.name
-		: undefined;
+			: model.files[model.browser.confirmDelete];
+	const confirmName =
+		confirm === undefined
+			? undefined
+			: confirm.kind === "question"
+				? evaluations.get(confirm, model.agency, env).draft.name
+				: confirm.name;
+	// Deleting a scheme file others name turns each of those names into a hole: say how many.
+	const confirmUsers =
+		confirm === undefined ||
+		confirm.kind === "question" ||
+		confirm.kind === "missing"
+			? 0
+			: new Set(usedBy(index, confirm.kind, confirm.name).map((s) => s.key))
+					.size;
 
 	return (
 		<>
@@ -85,6 +112,20 @@ export function App() {
 											{t.label}
 										</ActionList.Item>
 									))}
+									<ActionList.Divider />
+									<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
+									{SCHEME_KINDS.map((k) => (
+										<ActionList.Item
+											key={k}
+											onSelect={() =>
+												dispatch({ kind: "schemeCreateOpened", scheme: k })
+											}
+										>
+											{k === "missing"
+												? "Missing values"
+												: SCHEME_LABELS[k].replace(/s$/, "")}
+										</ActionList.Item>
+									))}
 								</ActionList>
 							</ActionMenu.Overlay>
 						</ActionMenu>
@@ -106,6 +147,7 @@ export function App() {
 				>
 					<Browser
 						folders={folders}
+						sections={sections}
 						filter={model.browser.filter}
 						open={open}
 						dispatch={dispatch}
@@ -115,11 +157,12 @@ export function App() {
 					{open === undefined ? (
 						<div className="blank">
 							<p className="quiet">
-								Pick a question in the bank, or create a new one.
+								Pick a question or a shared element in the bank, or create a new
+								one.
 							</p>
 						</div>
 					) : (
-						<Editing id={open} />
+						<Editing id={open} index={index} />
 					)}
 				</SplitPageLayout.Content>
 			</SplitPageLayout>
@@ -132,13 +175,21 @@ export function App() {
 					dispatch={dispatch}
 				/>
 			)}
-			{saving && savingQuestion && (
+			{creating && (
+				<SchemeNameDialog
+					kind={creating.kind}
+					name={creating.name}
+					problem={schemeNameProblem(model, creating.kind, creating.name)}
+					dispatch={dispatch}
+				/>
+			)}
+			{saving && savingQuestion?.kind === "question" && (
 				<SaveDialog
 					draft={evaluations.get(savingQuestion, model.agency, env).draft}
 					folder={saving.folder}
 					folders={bankFolders(model)}
 					taken={(path) =>
-						Object.values(model.questions).some(
+						Object.values(model.files).some(
 							(o) => o.origin.kind === "bank" && o.origin.path === path,
 						)
 					}
@@ -165,88 +216,10 @@ export function App() {
 					{confirm.origin.kind === "draft"
 						? `The draft ${confirmName ?? "(no name)"} is only in this browser and cannot be recovered.`
 						: `${confirmName ?? confirm.origin.path} will be deleted from the repository in a commit under your name. Git keeps the history.`}
+					{confirmUsers > 0 &&
+						` ${confirmUsers} question${confirmUsers === 1 ? " names" : "s name"} it; each will show a hole there until it is changed.`}
 				</ConfirmationDialog>
 			)}
 		</>
-	);
-}
-
-function Editing({ id }: { id: Id }) {
-	const { dispatch, evaluations, effects } = useApp();
-	const q = useModel((m) => m.questions[id]);
-	const agency = useModel((m) => m.agency);
-	const env = useEnv();
-	const session = useModel((m) => m.session);
-	const ddiSchema = useModel((m) => m.ddiSchema);
-	// Hooks run unconditionally; the early return comes after them.
-	const ev = q ? evaluations.get(q, agency, env) : undefined;
-	const diagnostics = useMemo(
-		() => (ev ? toDiagnostics(ev.findings, ev.ranges) : []),
-		[ev],
-	);
-	if (!q || !ev) return null;
-	const schema = evaluations.schema(env);
-	const onTarget = (
-		target: Parameters<typeof Findings>[0]["onTarget"] extends (
-			t: infer T,
-		) => void
-			? T
-			: never,
-	) => dispatch({ kind: "locationClicked", target });
-	const problems =
-		ddiSchema.kind === "failed"
-			? [ddiSchema.finding]
-			: (effects.validate(ev.ddi) ?? []);
-	return (
-		<div className="editing">
-			<QuestionHeader
-				q={q}
-				name={ev.draft.name}
-				unsaved={isUnsaved(q)}
-				session={session}
-				on={{
-					save: () => dispatch({ kind: "saveRequested", id }),
-					reload: () => dispatch({ kind: "reloadRequested", id }),
-					remove: () => dispatch({ kind: "deleteRequested", id }),
-					downloadYaml: () =>
-						dispatch({ kind: "downloadRequested", id, format: "yaml" }),
-					downloadDdi: () =>
-						dispatch({ kind: "downloadRequested", id, format: "ddi" }),
-				}}
-			/>
-			<div className="split">
-				<section className="left" aria-label="Question source">
-					<EditorPane
-						id={id}
-						text={q.source}
-						diagnostics={diagnostics}
-						schema={schema}
-					/>
-				</section>
-				<section className="right">
-					<article className="pane">
-						<h2>
-							Findings <StatusBadge status={status(ev.findings)} />
-						</h2>
-						<div className="pane-body">
-							<Findings findings={ev.findings} onTarget={onTarget} />
-						</div>
-					</article>
-					<article className="pane">
-						<h2>As the respondent sees it</h2>
-						<div className="pane-body">
-							<Respondent view={ev.respondent} onTarget={onTarget} />
-						</div>
-					</article>
-					<article className="pane">
-						<h2>Codebook entry</h2>
-						<div className="pane-body">
-							<Codebook view={ev.codebook} onTarget={onTarget} />
-						</div>
-					</article>
-					<Ddi document={ev.ddi} schema={ddiSchema} problems={problems} />
-				</section>
-			</div>
-		</div>
 	);
 }

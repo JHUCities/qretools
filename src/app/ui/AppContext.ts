@@ -1,7 +1,7 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import type { Env } from "../../core/surface/env.js";
-import { envOf, type Model } from "../model.js";
+import type { Model } from "../model.js";
 import type { App } from "../store.js";
 
 export const AppContext = createContext<App | null>(null);
@@ -18,8 +18,9 @@ export function useModel<T>(select: (model: Model) => T): T {
 	return useStore(store, (s) => select(s.model));
 }
 
-/** The environment questions are read in, rebuilt only when the schemes change, so caches keyed on it hold. */
+/** The environment questions are read against. Keeps its identity until a saved scheme changes; see evaluations.ts. */
 export function useEnv(): Env {
-	const scales = useModel((m) => m.scales);
-	return useMemo(() => envOf({ scales }), [scales]);
+	const { evaluations } = useApp();
+	const files = useModel((m) => m.files);
+	return evaluations.env(files);
 }

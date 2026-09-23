@@ -9,12 +9,14 @@ const bank = (
 	source = text,
 ): Question => ({
 	id,
+	kind: "question",
 	source,
 	origin: { kind: "bank", path, sha: `sha-${id}`, original: text },
 	activity: { kind: "idle" },
 });
 const draft = (id: number, source: string): Question => ({
 	id,
+	kind: "question",
 	source,
 	origin: { kind: "draft" },
 	activity: { kind: "idle" },
@@ -33,8 +35,10 @@ describe("mergeBank", () => {
 			{ path: "questions/a/a.yaml", sha: "A", text: "new a" },
 			{ path: "questions/b/b.yaml", sha: "B", text: "new b" },
 			{ path: "questions/e/e.yaml", sha: "E", text: "new e" },
+			{ path: "scales/yn.yaml", sha: "Y", text: "labels: {}" },
+			{ path: "migration/README.md", sha: "M", text: "ignored" },
 		];
-		const { questions: out, nextId } = mergeBank(questions, files, 6);
+		const { files: out, nextId } = mergeBank(questions, files, 6);
 		expect(out[1]).toMatchObject({
 			source: "new a",
 			origin: { sha: "A", original: "new a" },
@@ -53,6 +57,8 @@ describe("mergeBank", () => {
 			source: "new e",
 			origin: { kind: "bank", path: "questions/e/e.yaml", sha: "E" },
 		});
-		expect(nextId).toBe(7);
+		// A new file is an entry of the kind its path says; a path the tool does not read is ignored.
+		expect(out[7]).toMatchObject({ kind: "scale", name: "yn" });
+		expect(nextId).toBe(8);
 	});
 });

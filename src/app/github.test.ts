@@ -138,16 +138,28 @@ describe("GitHub adapter", () => {
 								},
 							],
 						},
+						universes: {
+							entries: [
+								{
+									name: "renters.yaml",
+									type: "blob",
+									object: blob("text: Renters\n"),
+								},
+							],
+						},
+						// A bank without instructions: GitHub answers null.
+						instructions: null,
+						missing: blob('labels:\n  "-8": NR\n'),
 					},
 				},
 			}),
 		);
 		const r = await s.loadBank();
-		expect(r.ok && r.value.questions.map((f) => f.path)).toEqual([
+		expect(r.ok && r.value.map((f) => f.path)).toEqual([
 			"questions/nhd/nhd_sat.yaml",
-		]);
-		expect(r.ok && r.value.scales.map((f) => f.path)).toEqual([
 			"scales/agree4.yaml",
+			"universes/renters.yaml",
+			"missing.yaml",
 		]);
 	});
 

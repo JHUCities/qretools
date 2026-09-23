@@ -30,7 +30,9 @@ export type LintCode =
 	| "duplicate-option-variable"
 	| "option-variable-prefix"
 	| "matches-scale"
-	| "missing-code";
+	| "missing-code"
+	/** Bank-level: another question defines the same variable. */
+	| "duplicate-variable";
 
 export type FindingCode = ParseCode | LintCode | "ddi-invalid";
 

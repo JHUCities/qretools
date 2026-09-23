@@ -23,6 +23,20 @@ export interface Env {
 	readonly missing: readonly Code[];
 }
 
+/** A scheme a question can name. `missing` is not one: it is a list, never named. */
+export type NamedScheme = "scale" | "universe" | "instruction";
+
+/**
+ * A name a question writes in a reference position, whether or not it resolves.
+ * An unresolved name is absent from the Draft; "used by" must still count it, or a
+ * broken scale would look unused exactly when deleting it matters.
+ */
+export interface Mention {
+	readonly scheme: NamedScheme;
+	readonly name: string;
+	readonly path: string;
+}
+
 export const EMPTY_ENV: Env = {
 	scales: {},
 	universes: {},

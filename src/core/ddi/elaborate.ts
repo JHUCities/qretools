@@ -17,10 +17,11 @@
 import { compact } from "../compact.js";
 import {
 	type Code,
+	type DefinedVariable,
 	type Domain,
 	type Draft,
+	definedVariables,
 	type Named,
-	optionVariable,
 } from "../surface/draft.js";
 import type { TextEntry } from "../surface/env.js";
 import {
@@ -93,15 +94,12 @@ export function elaborate(
 	);
 
 	// No name or no domain, no variable: it would have no name or no values.
-	const specs =
-		draft.name === undefined || draft.domain === undefined || !domain
-			? { variables: [], items: [] }
-			: variableSpecs(
-					draft.domain,
-					{ name: draft.name, title: draft.title },
-					domain.value,
-					agency,
-				);
+	const specs = variableSpecs(
+		definedVariables(draft),
+		draft.title,
+		domain?.value,
+		agency,
+	);
 	const missingItems =
 		missing.length > 0 && specs.variables.length > 0
 			? missingValueItems(agency, missing)
@@ -303,30 +301,33 @@ interface VariableSpec {
  * to the option's label, which is exactly what 1 means for that variable.
  */
 function variableSpecs(
-	domain: Domain,
-	{
-		name,
-		title,
-	}: { readonly name: string; readonly title: string | undefined },
-	value: JsonObject,
+	defined: readonly DefinedVariable[],
+	title: string | undefined,
+	value: JsonObject | undefined,
 	agency: string,
 ): { variables: readonly VariableSpec[]; items: readonly Item[] } {
-	if (domain.kind !== "responses" || domain.select === "one")
-		return { variables: [compact({ name, label: title, value })], items: [] };
+	const [first] = defined;
+	if (first === undefined || value === undefined)
+		return { variables: [], items: [] };
+	if (first.option === undefined)
+		return {
+			variables: [compact({ name: first.name, label: title, value })],
+			items: [],
+		};
 	const binary = codeListItems(agency, `scale-${BINARY_SCALE}`, BINARY);
 	const yesNo = {
 		$type: "CodeDomain",
 		CodeListReference: ref(binary.codeList),
 	};
-	const variables = domain.codes.flatMap((c) => {
-		const variable = optionVariable(name, c);
-		return variable === undefined
-			? []
-			: [{ name: variable, label: c.title ?? c.label, value: yesNo }];
-	});
 	return {
-		variables,
-		items: variables.length > 0 ? [binary.codeList, ...binary.categories] : [],
+		variables: defined.map((d) =>
+			compact({
+				name: d.name,
+				label: d.option?.title ?? d.option?.label,
+				value: yesNo,
+			}),
+		),
+		items: [binary.codeList, ...binary.categories],
 	};
 }
 

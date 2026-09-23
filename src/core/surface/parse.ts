@@ -13,7 +13,13 @@ import { compact } from "../compact.js";
 import type { Finding, Range } from "../findings.js";
 import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
 import type { Domain, Draft, Named } from "./draft.js";
-import { type Env, listNames, type Scheme, type TextEntry } from "./env.js";
+import {
+	type Env,
+	listNames,
+	type Mention,
+	type Scheme,
+	type TextEntry,
+} from "./env.js";
 import {
 	EMPTY_HINT,
 	error,
@@ -42,6 +48,8 @@ export interface Parsed {
 	readonly findings: readonly Finding[];
 	/** Source range of every `key` and nested `key.subkey`, plus `""` for the whole text. */
 	readonly ranges: Readonly<Record<string, Range>>;
+	/** Every scheme name written, resolved or not. */
+	readonly mentions: readonly Mention[];
 }
 
 const TEXT_KEYS = [
@@ -78,6 +86,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			draft: {},
 			findings: [...syntax, ...js.findings, notAMap],
 			ranges,
+			mentions: [],
 		};
 	}
 	const data = js.value;
@@ -112,6 +121,16 @@ export function parseSurface(text: string, env: Env): Parsed {
 		instructionText,
 		env.instructions,
 	);
+	const scale = scaleName(doc);
+	const mentions: Mention[] = [
+		...(scale === undefined
+			? []
+			: [{ scheme: "scale", name: scale, path: "responses" } as const]),
+		...(["universe", "instruction"] as const).flatMap((key) => {
+			const name = nameIn(fields[key]);
+			return name === undefined ? [] : [{ scheme: key, name, path: key }];
+		}),
+	];
 	const legacy = readLegacy(data.legacy);
 	const domain = readDomain(doc, data, ranges, env.scales);
 	const draft: Draft = compact({
@@ -135,6 +154,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			...domain.findings,
 		],
 		ranges,
+		mentions,
 	};
 }
 
@@ -205,17 +225,32 @@ function refOrProse(
 	scheme: Scheme<TextEntry>,
 ): Read<Named<TextEntry>> {
 	if (text === undefined) return fail();
-	if (!NAME_PATTERN.test(text)) return ok({ kind: "text", text });
-	const value = scheme[text];
+	const name = nameIn(text);
+	if (name === undefined) return ok({ kind: "text", text });
+	const value = scheme[name];
 	if (value === undefined)
 		return fail(
 			hole(
 				key,
-				`No ${key} named \`${text}\`.`,
+				`No ${key} named \`${name}\`.`,
 				listNames(key, Object.keys(scheme), true),
 			),
 		);
-	return ok({ kind: "ref", name: text, value });
+	return ok({ kind: "ref", name, value });
+}
+
+/** The one rule for universe and instruction: a bare identifier is a name. */
+const nameIn = (text: string | undefined): string | undefined =>
+	text !== undefined && NAME_PATTERN.test(text) ? text : undefined;
+
+/** The one rule for responses: a plain string, rather than a map, names a scale. */
+function scaleName(doc: Document): string | undefined {
+	const node = isMap(doc.contents)
+		? doc.contents.get("responses", true)
+		: undefined;
+	return isScalar(node) && typeof node.value === "string"
+		? node.value
+		: undefined;
 }
 
 function readDomain(
@@ -280,11 +315,12 @@ function readResponses(
 	const node = isMap(doc.contents)
 		? doc.contents.get("responses", true)
 		: undefined;
+	const name = scaleName(doc);
 	const read =
 		node === undefined || (isScalar(node) && node.value === null)
 			? fail<Domain>(hole("responses", "`responses` is empty.", EXAMPLE))
-			: isScalar(node) && typeof node.value === "string"
-				? readScaleName(node.value, scales, chosen)
+			: name !== undefined
+				? readScaleName(name, scales, chosen)
 				: readInlineOptions(doc, node, chosen);
 	return { ...read, findings: [...read.findings, ...selectRead.findings] };
 }
@@ -400,7 +436,14 @@ function issueFindings(kind: "number" | "open", zodError: ZodError): Finding[] {
 	});
 }
 
-function indexRanges(doc: Document, length: number): Record<string, Range> {
+/** Where each path is in a text. Depends on nothing but the YAML, so any file kind can use it. */
+export const rangesOf = (text: string): Readonly<Record<string, Range>> =>
+	indexRanges(parseDocument(text, { prettyErrors: false }), text.length);
+
+export function indexRanges(
+	doc: Document,
+	length: number,
+): Record<string, Range> {
 	const ranges: Record<string, Range> = { "": [0, length] };
 	const walk = (node: unknown, prefix: string): void => {
 		if (!isMap(node)) return;

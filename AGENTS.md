@@ -530,7 +530,30 @@ names it *mentions*, resolved or not, from the parser) and one `index(files)`, n
 `usedBy` plus a separate duplicate check. A bank-level finding is attached to each file
 involved ("`con_nhdkfp` is also defined by con_nhdnc, con_nhdsc", with links), never
 shown in a place of its own. Model identity stays the numeric `Id`; names are only the
-index's keys. Notes for step 5 from the step 4 review: identify questions by a
+index's keys.
+
+**Step 8(b) built (2026-09-24): schemes in the shell.** The Model holds `files:
+Record<Id, Entry>`, `Entry = Question | SchemeEntry{kind, name}`; a scheme file's name
+is its filename, chosen in a dialog before it exists (`schemeNameProblem` is the one
+rule, shown as the author types and enforced by `update`); `missing` is created once
+and then opened. Paths follow from kind and name (`schemePath`, `kindAt`, core
+`schemes.ts`); a new scheme file saves with no folder dialog. The loader fetches
+`questions/`, `scales/`, `universes/`, `instructions/` and `missing.yaml` in one GraphQL
+request (verified on the real bank: 332 + 136 + 1 + 2 + 1, about 2.3 s); `mergeBank`
+makes each file an entry of the kind its path says and ignores paths it does not read.
+Persisted state is version 2 (`files`), and version 1 still reads. The Env is
+`envOf(files)`: the saved version of every scheme file, bundled example scales only
+when there are none; `evaluations.env` memoises it on the saved schemes' ids and shas.
+Core `symbols.ts` is the bank index (`symbolsOf`, `indexOf`, `usedBy`, `bankFindings`),
+built from mentions the parser records whether or not they resolve and from
+`definedVariables`, which the elaborator now also uses. The tree shows questions by
+topic, then a "Shared" tree with one section per kind (always shown, so the kinds are
+discoverable; an empty one offers "New…"), each file with "used by N". A scheme file
+opens with its own schema, findings (a scale's codes colliding with the missing list
+are flagged there, once), a preview, and "used by" links, with a note when it is not in
+effect. Deleting a scheme file says how many questions name it. The duplicate-variable
+finding shows on each question involved (`con_nhddk` and the two others, verified in the
+browser). Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

@@ -39,6 +39,29 @@ body {
 	flex-direction: column;
 	gap: 8px;
 }
+.browser-heading {
+	margin: 8px 0 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fgColor-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.used-by {
+	margin: 0;
+	padding-left: 18px;
+}
+.linklike {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--fgColor-accent);
+	font: inherit;
+	cursor: pointer;
+}
+.linklike:hover {
+	text-decoration: underline;
+}
 .leaf-marks {
 	display: inline-flex;
 	align-items: center;

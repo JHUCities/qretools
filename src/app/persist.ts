@@ -18,23 +18,60 @@ export const OriginSchema = z.discriminatedUnion("kind", [
 	}),
 ]);
 
-export const PersistedSchema = z.strictObject({
-	version: z.literal(1),
-	nextId: z.int().positive(),
-	questions: z.array(
-		z.strictObject({
-			id: z.int().positive(),
-			source: z.string(),
-			origin: OriginSchema,
-		}),
-	),
-	settings: z.strictObject({
-		owner: z.string(),
-		repo: z.string(),
-		branch: z.string(),
-		remember: z.boolean(),
-	}),
+const SettingsSchema = z.strictObject({
+	owner: z.string(),
+	repo: z.string(),
+	branch: z.string(),
+	remember: z.boolean(),
 });
+
+const FileSchema = z.discriminatedUnion("kind", [
+	z.strictObject({
+		id: z.int().positive(),
+		kind: z.literal("question"),
+		source: z.string(),
+		origin: OriginSchema,
+	}),
+	z.strictObject({
+		id: z.int().positive(),
+		kind: z.enum(["scale", "universe", "instruction", "missing"]),
+		name: z.string(),
+		source: z.string(),
+		origin: OriginSchema,
+	}),
+]);
+
+export const PersistedSchema = z.strictObject({
+	version: z.literal(2),
+	nextId: z.int().positive(),
+	files: z.array(FileSchema),
+	settings: SettingsSchema,
+});
+
+/** Version 1 held only questions; read it as version 2, so saved drafts survive the upgrade. */
+const V1Schema = z
+	.strictObject({
+		version: z.literal(1),
+		nextId: z.int().positive(),
+		questions: z.array(
+			z.strictObject({
+				id: z.int().positive(),
+				source: z.string(),
+				origin: OriginSchema,
+			}),
+		),
+		settings: SettingsSchema,
+	})
+	.transform(
+		({ nextId, questions, settings }): z.infer<typeof PersistedSchema> => ({
+			version: 2,
+			nextId,
+			files: questions.map((q) => ({ ...q, kind: "question" as const })),
+			settings,
+		}),
+	);
+
+const StoredSchema = z.union([PersistedSchema, V1Schema]);
 
 export type Persisted = z.infer<typeof PersistedSchema>;
 
@@ -56,7 +93,7 @@ export function readPersisted(
 			hint: `It was kept under \`${UNREADABLE_KEY}\`.`,
 		});
 	}
-	const parsed = PersistedSchema.safeParse(json);
+	const parsed = StoredSchema.safeParse(json);
 	if (!parsed.success) {
 		return err({
 			kind: "unreadable",

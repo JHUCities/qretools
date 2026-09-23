@@ -45,6 +45,7 @@ describe("Browser", () => {
 		render(
 			<Browser
 				folders={folders}
+				sections={[]}
 				filter=""
 				open={undefined}
 				dispatch={dispatch}
@@ -56,7 +57,7 @@ describe("Browser", () => {
 		fireEvent.click(
 			screen.getAllByRole("treeitem", { name: "nhd_sat" })[0] as HTMLElement,
 		);
-		expect(dispatch).toHaveBeenCalledWith({ kind: "questionOpened", id: 1 });
+		expect(dispatch).toHaveBeenCalledWith({ kind: "fileOpened", id: 1 });
 	});
 
 	it("typing in the filter dispatches filterChanged with the text", () => {
@@ -64,6 +65,7 @@ describe("Browser", () => {
 		render(
 			<Browser
 				folders={folders}
+				sections={[]}
 				filter=""
 				open={undefined}
 				dispatch={dispatch}
@@ -83,6 +85,7 @@ describe("Browser", () => {
 		render(
 			<Browser
 				folders={folders}
+				sections={[]}
 				filter=""
 				open={undefined}
 				dispatch={dispatch}
@@ -94,6 +97,57 @@ describe("Browser", () => {
 		expect(dispatch).toHaveBeenCalledWith({
 			kind: "folderToggled",
 			folder: "svy",
+		});
+	});
+
+	it("shows shared elements by kind; an empty kind offers to create one", () => {
+		const dispatch = vi.fn();
+		render(
+			<Browser
+				folders={[]}
+				sections={[
+					{
+						kind: "scale",
+						label: "Scales",
+						key: "scheme:scale",
+						expanded: true,
+						leaves: [
+							{
+								id: 7,
+								name: "agree4",
+								usedBy: 12,
+								status: { kind: "complete" },
+								unsaved: false,
+								draft: false,
+								failed: false,
+								busy: false,
+							},
+						],
+					},
+					{
+						kind: "universe",
+						label: "Universes",
+						key: "scheme:universe",
+						expanded: true,
+						leaves: [],
+					},
+				]}
+				filter=""
+				open={undefined}
+				dispatch={dispatch}
+			/>,
+		);
+		expect(screen.getByText("used by 12")).toBeTruthy();
+		fireEvent.click(
+			screen.getAllByRole("treeitem", { name: /agree4/ })[0] as HTMLElement,
+		);
+		expect(dispatch).toHaveBeenCalledWith({ kind: "fileOpened", id: 7 });
+		fireEvent.click(
+			screen.getAllByRole("treeitem", { name: /None yet/ })[0] as HTMLElement,
+		);
+		expect(dispatch).toHaveBeenCalledWith({
+			kind: "schemeCreateOpened",
+			scheme: "universe",
 		});
 	});
 });

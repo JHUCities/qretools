@@ -128,16 +128,8 @@ export function BankDialog({
 				{bank.kind === "loading" && <p>Loading the bank…</p>}
 				{bank.kind === "loaded" && (
 					<p>
-						Bank loaded;{" "}
-						{bank.scaleFindings.length === 0
-							? "all scales read cleanly."
-							: "some scale files need attention:"}
-						{bank.scaleFindings.map((s) => (
-							<span className="finding warning" key={s.name}>
-								<b>{s.name}: </b>
-								{s.findings.map((f) => f.message).join("; ")}
-							</span>
-						))}
+						Bank loaded. Shared scales, universes, instructions and missing
+						values are in the tree, each with its own findings.
 					</p>
 				)}
 				{failures.map((f, i) => (

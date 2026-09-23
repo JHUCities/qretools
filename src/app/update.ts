@@ -1,18 +1,25 @@
-import { bankLocation, describeChange } from "../core/bank.js";
+import {
+	bankLocation,
+	describeChange,
+	describeSchemeChange,
+} from "../core/bank.js";
 import { compact } from "../core/compact.js";
 import { evaluate } from "../core/evaluate.js";
 import { locate } from "../core/findings.js";
-import { parseSurface } from "../core/surface/parse.js";
-import { parseScales } from "../core/surface/scales.js";
+import { MISSING_NAME, schemePath } from "../core/schemes.js";
+import type { NamedScheme } from "../core/surface/env.js";
+import { parseSurface, rangesOf } from "../core/surface/parse.js";
+import { NAME_PATTERN } from "../core/surface/schema.js";
 import { mergeBank } from "./merge.js";
 import {
 	type Cmd,
-	EXAMPLE_SCALES,
+	type Entry,
 	envOf,
 	type Id,
 	type Model,
 	type Msg,
-	type Question,
+	SCHEME_TEMPLATES,
+	type SchemeEntry,
 	toPersisted,
 } from "./model.js";
 import type { Failure } from "./storage.js";
@@ -32,10 +39,14 @@ export function update(model: Model, msg: Msg): Step {
 			// against the text as it is now.
 			const q = current(model);
 			if (!q) return [model, []];
-			const { ranges } = evaluate(q.source, model.agency, envOf(model));
 			return [
 				model,
-				[{ kind: "revealRange", range: locate(msg.target, ranges) }],
+				[
+					{
+						kind: "revealRange",
+						range: locate(msg.target, rangesOf(q.source)),
+					},
+				],
 			];
 		}
 
@@ -45,8 +56,8 @@ export function update(model: Model, msg: Msg): Step {
 		case "listOpened":
 			return [{ ...model, screen: { kind: "blank" } }, []];
 
-		case "questionOpened":
-			return model.questions[msg.id]
+		case "fileOpened":
+			return model.files[msg.id]
 				? [{ ...model, screen: { kind: "editing", id: msg.id } }, []]
 				: [model, []];
 
@@ -71,18 +82,80 @@ export function update(model: Model, msg: Msg): Step {
 			];
 
 		case "questionCreated": {
-			const [next, id] = add(model, msg.text);
+			const [next, id] = add(model, { kind: "question", source: msg.text });
+			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
+		}
+
+		case "schemeCreateOpened": {
+			if (msg.scheme !== "missing")
+				return [
+					{
+						...model,
+						browser: {
+							...model.browser,
+							creating: { kind: msg.scheme, name: "" },
+						},
+					},
+					[],
+				];
+			// One list per bank: open it if it exists, else start it.
+			const existing = Object.values(model.files).find(
+				(e) => e.kind === "missing",
+			);
+			if (existing)
+				return [{ ...model, screen: { kind: "editing", id: existing.id } }, []];
+			const [next, id] = add(model, {
+				kind: "missing",
+				name: MISSING_NAME,
+				source: SCHEME_TEMPLATES.missing,
+			});
+			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
+		}
+
+		case "schemeNameChanged":
+			return model.browser.creating === undefined
+				? [model, []]
+				: [
+						{
+							...model,
+							browser: {
+								...model.browser,
+								creating: { ...model.browser.creating, name: msg.name },
+							},
+						},
+						[],
+					];
+
+		case "schemeCreateCancelled":
+			return [{ ...model, browser: withoutCreating(model.browser) }, []];
+
+		case "schemeCreateConfirmed": {
+			const creating = model.browser.creating;
+			if (
+				creating === undefined ||
+				schemeNameProblem(model, creating.kind, creating.name) !== undefined
+			)
+				return [model, []];
+			const [next, id] = add(
+				{ ...model, browser: withoutCreating(model.browser) },
+				{
+					kind: creating.kind,
+					name: creating.name,
+					source: SCHEME_TEMPLATES[creating.kind],
+				},
+			);
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
 		}
 
 		case "filesUploaded": {
 			let next = model;
-			for (const f of msg.files) [next] = add(next, f.text);
+			for (const f of msg.files)
+				[next] = add(next, { kind: "question", source: f.text });
 			return persist([next, []]);
 		}
 
 		case "deleteRequested": {
-			const q = model.questions[msg.id];
+			const q = model.files[msg.id];
 			if (!q) return [model, []];
 			if (model.browser.confirmDelete !== msg.id)
 				return [
@@ -93,7 +166,6 @@ export function update(model: Model, msg: Msg): Step {
 			if (q.origin.kind === "draft")
 				return persist([without(cleared, msg.id), []]);
 			if (!canWrite(model)) return [cleared, []];
-			const before = parseSurface(q.origin.original, envOf(model)).draft;
 			return [
 				patch(cleared, msg.id, { activity: { kind: "deleting" } })[0],
 				[
@@ -103,7 +175,13 @@ export function update(model: Model, msg: Msg): Step {
 						settings: model.settings,
 						path: q.origin.path,
 						sha: q.origin.sha,
-						message: describeChange(before, undefined),
+						message:
+							q.kind === "question"
+								? describeChange(
+										parseSurface(q.origin.original, envOf(model.files)).draft,
+										undefined,
+									)
+								: describeSchemeChange(q.kind, q.name, "delete"),
 					},
 				],
 			];
@@ -113,14 +191,31 @@ export function update(model: Model, msg: Msg): Step {
 			return [{ ...model, browser: withoutConfirm(model.browser) }, []];
 
 		case "saveRequested": {
-			const q = model.questions[msg.id];
+			const q = model.files[msg.id];
 			if (!q || !canWrite(model)) return [model, []];
 			// A bank file goes back to the path it was opened at. A draft's path is chosen
 			// once, deliberately: it decides the topic folder, and git would create an
-			// unseen folder without a word.
+			// unseen folder without a word. A scheme file's path follows from its kind
+			// and the name it was given at creation.
 			if (q.origin.kind === "bank")
 				return write(model, msg.id, q, q.origin.path);
-			const where = bankLocation(parseSurface(q.source, envOf(model)).draft);
+			if (q.kind !== "question") {
+				const path = schemePath(q.kind, q.name);
+				return taken(model, path)
+					? [
+							refuse(
+								model,
+								msg.id,
+								`\`${path}\` already exists in the bank.`,
+								"Open the bank's copy to change it.",
+							),
+							[],
+						]
+					: write(model, msg.id, q, path);
+			}
+			const where = bankLocation(
+				parseSurface(q.source, envOf(model.files)).draft,
+			);
 			if (!where.ok)
 				return [
 					refuse(model, msg.id, where.error.message, where.error.hint),
@@ -157,11 +252,12 @@ export function update(model: Model, msg: Msg): Step {
 
 		case "saveConfirmed": {
 			const saving = model.browser.saving;
-			const q = saving === undefined ? undefined : model.questions[saving.id];
-			if (saving === undefined || !q || !canWrite(model)) return [model, []];
+			const q = saving === undefined ? undefined : model.files[saving.id];
+			if (saving === undefined || q?.kind !== "question" || !canWrite(model))
+				return [model, []];
 			const closed = { ...model, browser: withoutSaving(model.browser) };
 			const where = bankLocation(
-				parseSurface(q.source, envOf(model)).draft,
+				parseSurface(q.source, envOf(model.files)).draft,
 				saving.folder,
 			);
 			if (!where.ok)
@@ -170,10 +266,7 @@ export function update(model: Model, msg: Msg): Step {
 					[],
 				];
 			// A new draft must not silently overwrite a bank file at that path.
-			const taken = Object.values(model.questions).some(
-				(o) => o.origin.kind === "bank" && o.origin.path === where.value.path,
-			);
-			if (taken) {
+			if (taken(model, where.value.path)) {
 				return [
 					refuse(
 						closed,
@@ -188,7 +281,7 @@ export function update(model: Model, msg: Msg): Step {
 		}
 
 		case "saveFinished": {
-			const q = model.questions[msg.id];
+			const q = model.files[msg.id];
 			if (!q) return [model, []];
 			if (!msg.result.ok)
 				return [
@@ -217,7 +310,7 @@ export function update(model: Model, msg: Msg): Step {
 			return persist([without(model, msg.id), []]);
 
 		case "reloadRequested": {
-			const q = model.questions[msg.id];
+			const q = model.files[msg.id];
 			if (q?.origin.kind !== "bank") return [model, []];
 			return [
 				model,
@@ -249,9 +342,23 @@ export function update(model: Model, msg: Msg): Step {
 		}
 
 		case "downloadRequested": {
-			const q = model.questions[msg.id];
+			const q = model.files[msg.id];
 			if (!q) return [model, []];
-			const ev = evaluate(q.source, model.agency, envOf(model));
+			if (q.kind !== "question")
+				return [
+					model,
+					msg.format === "yaml"
+						? [
+								{
+									kind: "download",
+									filename: `${q.name}.yaml`,
+									text: q.source,
+									mime: "application/yaml",
+								},
+							]
+						: [],
+				];
+			const ev = evaluate(q.source, model.agency, envOf(model.files));
 			const stem = ev.draft.name ?? `question-${msg.id}`;
 			return [
 				model,
@@ -310,26 +417,8 @@ export function update(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
-			const merged = mergeBank(
-				model.questions,
-				msg.result.value.questions,
-				model.nextId,
-			);
-			const scales = parseScales(
-				msg.result.value.scales.map((f) => ({
-					name: f.path.replace(/^scales\//, "").replace(/\.yaml$/, ""),
-					text: f.text,
-				})),
-			);
-			return persist([
-				{
-					...model,
-					...merged,
-					scales: scales.scales,
-					bank: { kind: "loaded", scaleFindings: scales.findings },
-				},
-				[],
-			]);
+			const merged = mergeBank(model.files, msg.result.value, model.nextId);
+			return persist([{ ...model, ...merged, bank: { kind: "loaded" } }, []]);
 		}
 
 		case "disconnected":
@@ -338,7 +427,6 @@ export function update(model: Model, msg: Msg): Step {
 					...model,
 					session: { kind: "anonymous" },
 					bank: { kind: "bundled" },
-					scales: EXAMPLE_SCALES,
 				},
 				[{ kind: "forgetToken" }],
 			];
@@ -357,13 +445,8 @@ export function update(model: Model, msg: Msg): Step {
 	}
 }
 
-/** Emit the write for a question whose path is settled. */
-function write(model: Model, id: Id, q: Question, path: string): Step {
-	const after = parseSurface(q.source, envOf(model)).draft;
-	const before =
-		q.origin.kind === "bank"
-			? parseSurface(q.origin.original, envOf(model)).draft
-			: undefined;
+/** Emit the write for a file whose path is settled. */
+function write(model: Model, id: Id, q: Entry, path: string): Step {
 	return [
 		patch(model, id, { activity: { kind: "saving" } })[0],
 		[
@@ -374,7 +457,7 @@ function write(model: Model, id: Id, q: Question, path: string): Step {
 				path,
 				text: q.source,
 				...(q.origin.kind === "bank" && { sha: q.origin.sha }),
-				message: describeChange(before, after),
+				message: messageOf(model, q),
 			},
 		],
 	];
@@ -386,49 +469,79 @@ const refuse = (model: Model, id: Id, message: string, hint?: string): Model =>
 		activity: failed(compact({ kind: "refused", message, hint })),
 	})[0];
 
+/** The commit message for saving a file: what changed in a question, or which scheme file. */
+function messageOf(model: Model, q: Entry): string {
+	if (q.kind !== "question")
+		return describeSchemeChange(
+			q.kind,
+			q.name,
+			q.origin.kind === "bank" ? "update" : "add",
+		);
+	const env = envOf(model.files);
+	return describeChange(
+		q.origin.kind === "bank"
+			? parseSurface(q.origin.original, env).draft
+			: undefined,
+		parseSurface(q.source, env).draft,
+	);
+}
+
+/** Whether a bank file already lives at a path. */
+const taken = (model: Model, path: string): boolean =>
+	Object.values(model.files).some(
+		(o) => o.origin.kind === "bank" && o.origin.path === path,
+	);
+
+/**
+ * Why a name cannot be given to a new scheme file, or undefined when it can. The
+ * dialog shows it as the user types; `update` refuses on it.
+ */
+export function schemeNameProblem(
+	model: Model,
+	kind: NamedScheme,
+	name: string,
+): string | undefined {
+	if (name === "") return "Give it a name.";
+	if (!NAME_PATTERN.test(name))
+		return "A name is lower case letters, digits and `_`, starting with a letter.";
+	return Object.values(model.files).some(
+		(e) => e.kind === kind && e.name === name,
+	)
+		? `A ${kind} named \`${name}\` already exists.`
+		: undefined;
+}
+
 const withoutSaving = (browser: Model["browser"]): Model["browser"] =>
-	compact({
-		filter: browser.filter,
-		expanded: browser.expanded,
-		settingsOpen: browser.settingsOpen,
-		confirmDelete: browser.confirmDelete,
-	});
+	compact({ ...browser, saving: undefined });
 
 const withoutConfirm = (browser: Model["browser"]): Model["browser"] =>
-	compact({
-		filter: browser.filter,
-		expanded: browser.expanded,
-		settingsOpen: browser.settingsOpen,
-	});
+	compact({ ...browser, confirmDelete: undefined });
 
-const current = (model: Model): Question | undefined =>
-	model.screen.kind === "editing"
-		? model.questions[model.screen.id]
-		: undefined;
+const withoutCreating = (browser: Model["browser"]): Model["browser"] =>
+	compact({ ...browser, creating: undefined });
+
+const current = (model: Model): Entry | undefined =>
+	model.screen.kind === "editing" ? model.files[model.screen.id] : undefined;
 
 const canWrite = (model: Model): boolean =>
 	model.session.kind === "connected" && model.session.canWrite;
 
 const failed = (failure: Failure) => ({ kind: "failed" as const, failure });
 
-function patch(model: Model, id: Id, changes: Partial<Question>): Step {
-	const q = model.questions[id];
+type FileChanges = Partial<Pick<Entry, "source" | "origin" | "activity">>;
+
+function patch(model: Model, id: Id, changes: FileChanges): Step {
+	const q = model.files[id];
 	return q
-		? [
-				{
-					...model,
-					questions: { ...model.questions, [id]: { ...q, ...changes } },
-				},
-				[],
-			]
+		? [{ ...model, files: { ...model.files, [id]: { ...q, ...changes } } }, []]
 		: [model, []];
 }
 
 function without(model: Model, id: Id): Model {
-	const { [id]: _, ...rest } = model.questions;
+	const { [id]: _, ...rest } = model.files;
 	return {
 		...model,
-		questions: rest,
+		files: rest,
 		screen:
 			model.screen.kind === "editing" && model.screen.id === id
 				? { kind: "blank" }
@@ -436,16 +549,20 @@ function without(model: Model, id: Id): Model {
 	};
 }
 
-function add(model: Model, text: string): [Model, Id] {
+type NewFile =
+	| { readonly kind: "question"; readonly source: string }
+	| Pick<SchemeEntry, "kind" | "name" | "source">;
+
+function add(model: Model, file: NewFile): [Model, Id] {
 	const id = model.nextId;
-	const q: Question = {
+	const entry: Entry = {
+		...file,
 		id,
-		source: text,
 		origin: { kind: "draft" },
 		activity: { kind: "idle" },
 	};
 	return [
-		{ ...model, questions: { ...model.questions, [id]: q }, nextId: id + 1 },
+		{ ...model, files: { ...model.files, [id]: entry }, nextId: id + 1 },
 		id,
 	];
 }

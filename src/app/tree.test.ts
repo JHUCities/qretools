@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../core/evaluate.js";
 import { ok } from "../core/result.js";
-import { envOf, init, type Model, type Question } from "./model.js";
-import { treeOf, UNFILED } from "./tree.js";
+import { evaluateScheme, schemePath } from "../core/schemes.js";
+import { indexOf } from "../core/symbols.js";
+import {
+	envOf,
+	init,
+	type Model,
+	type Question,
+	type SchemeEntry,
+} from "./model.js";
+import { schemeSections, treeOf, UNFILED } from "./tree.js";
 
 const bank = (
 	id: number,
@@ -11,12 +19,14 @@ const bank = (
 	source = text,
 ): Question => ({
 	id,
+	kind: "question",
 	source,
 	origin: { kind: "bank", path, sha: "s", original: text },
 	activity: { kind: "idle" },
 });
 const draft = (id: number, source: string): Question => ({
 	id,
+	kind: "question",
 	source,
 	origin: { kind: "draft" },
 	activity: { kind: "idle" },
@@ -24,7 +34,7 @@ const draft = (id: number, source: string): Question => ({
 const base = init({ stored: ok(undefined), hasToken: false })[0];
 const model: Model = {
 	...base,
-	questions: {
+	files: {
 		1: bank(
 			1,
 			"questions/nhd/nhd_sat.yaml",
@@ -36,7 +46,7 @@ const model: Model = {
 	},
 };
 const tree = (m: Model) =>
-	treeOf(m, (q) => evaluate(q.source, m.agency, envOf(m)));
+	treeOf(m, (q) => evaluate(q.source, m.agency, envOf(m.files)));
 
 describe("treeOf", () => {
 	it("files bank questions by their path, drafts by name prefix, unnamed drafts last", () => {
@@ -76,8 +86,8 @@ describe("treeOf", () => {
 	it("marks drafts, unsaved bank files and the status verdict", () => {
 		const t = tree({
 			...model,
-			questions: {
-				...model.questions,
+			files: {
+				...model.files,
 				1: bank(
 					1,
 					"questions/nhd/nhd_sat.yaml",
@@ -95,5 +105,92 @@ describe("treeOf", () => {
 		expect(t.find((f) => f.name === "att")?.leaves[0]).toMatchObject({
 			draft: true,
 		});
+	});
+});
+
+describe("schemeSections", () => {
+	const scheme = (
+		id: number,
+		kind: SchemeEntry["kind"],
+		name: string,
+		text: string,
+	): SchemeEntry => ({
+		id,
+		kind,
+		name,
+		source: text,
+		origin: {
+			kind: "bank",
+			path: schemePath(kind, name),
+			sha: "s",
+			original: text,
+		},
+		activity: { kind: "idle" },
+	});
+	const m: Model = {
+		...model,
+		files: {
+			...model.files,
+			5: bank(
+				5,
+				"questions/nhd/nhd_a.yaml",
+				"name: nhd_a\nresponses: agree4\n",
+			),
+			// Names a scale that does not exist: still counted as a use.
+			6: bank(6, "questions/nhd/nhd_b.yaml", "name: nhd_b\nresponses: gone\n"),
+			10: scheme(10, "scale", "agree4", "labels:\n  1: Agree\n"),
+			11: scheme(11, "scale", "unused", "labels:\n  1: X\n"),
+			12: scheme(12, "missing", "missing", 'labels:\n  "-8": NR\n'),
+		},
+	};
+	const index = (mm: Model) =>
+		indexOf(
+			Object.values(mm.files).flatMap((q) =>
+				q.kind === "question"
+					? [
+							{
+								key: q.id,
+								symbols: evaluate(q.source, mm.agency, envOf(mm.files)).symbols,
+							},
+						]
+					: [],
+			),
+		);
+	const sections = (mm: Model) =>
+		schemeSections(
+			mm,
+			(e) => evaluateScheme(e.kind, e.source, envOf(mm.files)),
+			index(mm),
+		);
+
+	it("shows every kind, even empty, with how many questions name each file", () => {
+		const s = sections(m);
+		expect(
+			s.map((x) => [x.kind, x.leaves.map((l) => [l.name, l.usedBy])]),
+		).toEqual([
+			[
+				"scale",
+				[
+					["agree4", 1],
+					["unused", 0],
+				],
+			],
+			["universe", []],
+			["instruction", []],
+			["missing", [["missing", undefined]]],
+		]);
+	});
+
+	it("filters by name, and opens the section holding the open file", () => {
+		expect(
+			sections({ ...m, browser: { ...m.browser, filter: "agree" } }).map(
+				(x) => x.kind,
+			),
+		).toEqual(["scale"]);
+		expect(
+			sections({ ...m, screen: { kind: "editing", id: 12 } }).find(
+				(x) => x.kind === "missing",
+			)?.expanded,
+		).toBe(true);
 	});
 });

@@ -1,7 +1,7 @@
-/** The open question's header: identity, state, and the actions on it. */
+/** The open file's header: identity, state, and the actions on it. */
 import { DownloadIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label } from "@primer/react";
-import type { Question, Session } from "../model.js";
+import type { Entry, Session } from "../model.js";
 import { inlineCode } from "./Previews.js";
 
 export interface HeaderActions {
@@ -9,18 +9,22 @@ export interface HeaderActions {
 	readonly reload: () => void;
 	readonly remove: () => void;
 	readonly downloadYaml: () => void;
-	readonly downloadDdi: () => void;
+	/** Absent for a file that is not a question: only a question elaborates to DDI. */
+	readonly downloadDdi: (() => void) | undefined;
 }
 
-export function QuestionHeader({
+export function FileHeader({
 	q,
 	name,
+	kind,
 	unsaved,
 	session,
 	on,
 }: {
-	q: Question;
+	q: Entry;
 	name: string | undefined;
+	/** What the file is, when it is not a question: "scale", "universe", … */
+	kind?: string;
 	unsaved: boolean;
 	session: Session;
 	on: HeaderActions;
@@ -37,6 +41,7 @@ export function QuestionHeader({
 	return (
 		<div className="qhead">
 			<div className="qhead-row">
+				{kind !== undefined && <span className="quiet">{kind}</span>}
 				<span className="qname">
 					{name ?? <span className="quiet">(no name yet)</span>}
 				</span>
@@ -56,13 +61,15 @@ export function QuestionHeader({
 				>
 					YAML
 				</Button>
-				<Button
-					size="small"
-					leadingVisual={DownloadIcon}
-					onClick={on.downloadDdi}
-				>
-					DDI
-				</Button>
+				{on.downloadDdi !== undefined && (
+					<Button
+						size="small"
+						leadingVisual={DownloadIcon}
+						onClick={on.downloadDdi}
+					>
+						DDI
+					</Button>
+				)}
 				<Button
 					size="small"
 					variant="danger"

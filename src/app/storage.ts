@@ -39,9 +39,8 @@ export interface BankSettings {
 
 export interface Store {
 	whoAmI(): Promise<Result<{ login: string; canWrite: boolean }, Failure>>;
-	loadBank(): Promise<
-		Result<{ questions: readonly File[]; scales: readonly File[] }, Failure>
-	>;
+	/** Every file the tool reads: questions and scheme files, each with its path. */
+	loadBank(): Promise<Result<readonly File[], Failure>>;
 	read(path: string): Promise<Result<File, Failure>>;
 	write(
 		path: string,
