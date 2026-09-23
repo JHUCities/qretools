@@ -50,8 +50,8 @@ export const EXAMPLES: ReadonlyArray<{
 	{ label: "blank", text: "" },
 ];
 
-/** Placeholder agency until the project chooses its registered DDI agency identifier. */
-const AGENCY = "org.example.qretools";
+/** The DDI agency identifier for this bank: Johns Hopkins 21st Century Cities. */
+const AGENCY = "edu.jhu.21cc";
 
 const SCALE_FILES = import.meta.glob("../examples/scales/*.yaml", {
 	query: "?raw",

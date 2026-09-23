@@ -24,12 +24,21 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
   cardinality. Decide the DDI shape (and the codebook preview) for select-all. **M**.
   *Evidence:* the real bank models select-all with `creates_variables`, one named
   variable per option, each with an `option_title` and a yes/no label set.
-- **The DDI agency identifier.** Placeholder `org.example.qretools`, set in
-  `src/app/model.ts`. Needs the project's registered agency. **S**, plus a `parseAgency`
-  at the shell boundary so a bad value gets a readable message, not a 180-character regex.
-- **Which optional fields are "recommended".** See *Soft holes* below; the tier only
-  works if it is small.
+- **`parseAgency` at the shell boundary** so a bad agency value gets a readable message,
+  not a 180-character regex. The agency itself is decided: `edu.jhu.21cc`. **S**.
+- **Soft holes are accepted (2026-09-23); which fields are "recommended" is open.** See
+  *Soft holes* below; the tier only works if it is small. Candidates: `title`, `concept`.
 
+- **Merge identical scales (deferred 2026-09-23).** The v1 bank has 226 scales of which
+  about 48 duplicate another by content; the importer keeps every referenced scale as
+  its own file, so questions keep the scale name they had. Merging means choosing a
+  survivor and rewriting references, which edits question files; a lint that points
+  out identical scales is the gentler first step. **M**.
+- **Versioning, seen in the migration.** Two 2026 candidates revise bank questions; the
+  importer keeps the old record under `legacy.superseded`, and 15 questions carry a
+  v1 `versions` block under `legacy`. These are exactly what DDI-Lifecycle versions
+  model (one item, version 1 and 2, each instrument naming the version it used). The
+  design belongs with survey composition. **L**.
 - **Shared response scales.** The real bank references scales by name
   (`value_labels_name: agree4`), reused across many questions; our surface inlines
   `responses` in every question. DDI reuses CodeLists by reference, so this maps

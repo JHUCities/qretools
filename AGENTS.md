@@ -293,9 +293,8 @@ emit a Universe item and resolve the link in role 2.
   titles are short curated labels ("WATER QUALITY CONCERN"), and the surface has no
   `label`/title field; the concept stands in. BAS publishes select-all items as one
   binary variable per option ("STEM: OPTION"); we emit one QuestionItem.
-- **Assumption: the DDI agency is the placeholder `org.example.qretools`** until the
-  project picks its registered agency identifier. It is an explicit input to
-  `elaborate`, set in `src/app/model.ts`.
+- **The DDI agency is `edu.jhu.21cc`** (decided 2026-09-23). It is an explicit input to
+  `elaborate`, set in `src/app/model.ts`; the bank's surface files carry no URNs.
 
 ## Working rules
 
