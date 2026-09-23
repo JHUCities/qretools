@@ -553,7 +553,27 @@ opens with its own schema, findings (a scale's codes colliding with the missing 
 are flagged there, once), a preview, and "used by" links, with a note when it is not in
 effect. Deleting a scheme file says how many questions name it. The duplicate-variable
 finding shows on each question involved (`con_nhddk` and the two others, verified in the
-browser). Notes for step 5 from the step 4 review: identify questions by a
+browser). A hole naming a scheme file that exists only in this browser says it is
+not saved yet (`explainUnsaved`), since questions read saved versions only.
+
+**Intended direction, not yet built: keep GitHub's copy apart from working copies
+(owner question and step 8(b) after-pass, 2026-09-24).** Today each entry carries the
+bank's text as `origin.original`, and the Env keeps its identity only through a cache
+keyed on the saved schemes' shas (content addressing; correct and tested). The Elm
+answer is a Model slice holding the remote snapshot, **split by kind**:
+`remote: { schemes: Record<Path, Blob>; questions: Record<Path, Blob> }`. Then
+`envOf(model.remote.schemes)` keeps its identity by structural sharing, memoising on
+reference is exact, and "a question Msg never touches `remote.schemes`" is a property of
+`update` rather than of a cache key. One undivided `remote` would be a trap: saving a
+question would replace it and re-evaluate the whole bank. It also removes the duplicated
+`original` ("unsaved" becomes `source !== remote[path].text`) and shrinks `mergeBank`.
+Incremental computation with early cutoff (Salsa, Adapton) was considered and rejected:
+the graph has two levels and a query engine would be the least readable code here.
+**When:** not as a standalone refactor (persistence v3, two-place writes, a `mergeBank`
+rewrite, to replace ten correct lines); do it with the first step that must touch origins
+anyway, **rename** (a path changes while the remote copy is at the old one) or **propose
+a change as a pull request** (a branch that differs from its base is a second remote,
+which a per-entry `original` cannot represent). Start there, never add a third copy. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

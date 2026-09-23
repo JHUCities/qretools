@@ -9,7 +9,13 @@ import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
 } from "../../core/surface/schema.js";
-import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
+import {
+	bankFindings,
+	explainUnsaved,
+	type Index,
+	mentionKey,
+	usedBy,
+} from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
 import { isUnsaved } from "../merge.js";
 import type { Id, Question, SchemeEntry } from "../model.js";
@@ -77,7 +83,20 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				(other.origin.kind === "bank" ? other.origin.path : `draft ${id}`)
 			);
 		};
-		return [...ev.findings, ...bankFindings(q.id, ev.symbols, index, label)];
+		// Scheme files that exist here but not on GitHub, which questions cannot yet use.
+		const unsaved = new Set(
+			Object.values(files).flatMap((e) =>
+				e.kind !== "question" &&
+				e.kind !== "missing" &&
+				e.origin.kind === "draft"
+					? [mentionKey(e.kind, e.name)]
+					: [],
+			),
+		);
+		return [
+			...explainUnsaved(ev.findings, ev.symbols.mentions, unsaved),
+			...bankFindings(q.id, ev.symbols, index, label),
+		];
 	}, [ev, index, q.id, files, evaluations, agency, env]);
 	const diagnostics = useMemo(
 		() => toDiagnostics(findings, ev.ranges),
