@@ -86,9 +86,23 @@ end to end. Keep every step small; do not build ahead of that.
 | Surface schema | Zod 4 (single source of truth; emits JSON Schema for the editor) |
 | DDI validation | ajv, draft 2020-12, against the vendored DDI schema |
 | Editor | CodeMirror 6, `@codemirror/lang-yaml`, `codemirror-json-schema`, `yaml` |
+| UI | React 19, Primer React, Zustand (see the decision below the table) |
 
-No UI framework for now; the preview is a pure function from document to DOM.
-If reactivity gets painful, Solid is the fit.
+**Decided 2026-09-24: React 19 with GitHub's Primer design system and Zustand.** This
+reverses the earlier "no UI framework" line. The owner asked for a fuller UI (a file-tree
+browser for the bank) from a design system with a funded team behind it. Evaluated with
+measured builds: Cloudscape (AWS, broadest, 513 KB gz), Elastic EUI, Primer (GitHub),
+Carbon (IBM, the only non-React tree view), Web Awesome, daisyUI, Ark UI. Primer won
+because the bank, the login and the students' commits are all GitHub, and Primer's tree
+view is the one github.com uses; it is React-only, so React came with it. Zustand holds
+the Model: one `dispatch` action runs `update`, sets the Model, executes the returned
+Cmds; components subscribe with selectors; the `devtools` middleware names each message
+for Redux DevTools. Thunks and any effect outside `update` are forbidden: `update` stays
+the only place a state change or an effect is decided. Stack additions: `react`,
+`react-dom`, `@primer/react` 38 (CSS modules and tokens, no CSS-in-JS runtime),
+`@primer/primitives`, `@primer/octicons-react`, `zustand`, `@vitejs/plugin-react-oxc`,
+`@testing-library/react` with jsdom. CodeMirror stays behind `editor.ts`, wrapped by a
+small component that owns its lifecycle and calls `sync`.
 
 ## The surface language (role 1)
 
