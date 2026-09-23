@@ -51,6 +51,11 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 
 ## Bank and storage (cut from step 5, port shape unchanged)
 
+- **The open question in the URL** (asked for 2026-09-24), so links to a question can be
+  shared: `#questions/<topic>/<name>.yaml` for bank files, which have a stable identity;
+  drafts do not until named. In the architecture the URL is an effect: `update` decides
+  the open question, a `setUrl` Cmd writes the hash, and a page load or back-navigation
+  arrives as a Msg. **S**, next.
 - **"Propose a change" by pull request** for read-only users and for review: a second
   adapter behind the same `Store`/Msgs. **M**.
 - **GitHub App sign-in** with the small token-exchange Worker (decided, deferred by the
