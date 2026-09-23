@@ -258,8 +258,9 @@ export function Ddi({
 				<h2>DDI-Lifecycle 4.0 {badge}</h2>
 			</summary>
 			<div className="pane-body">
-				{problems.map((f) => (
-					<p className="finding error" key={f.message}>
+				{problems.map((f, i) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: schema problems are positional and can repeat
+					<p className="finding error" key={i}>
 						{inlineCode(f.message)}
 					</p>
 				))}

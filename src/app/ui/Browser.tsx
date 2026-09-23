@@ -1,7 +1,6 @@
 /** The bank as a file tree, with a filter that prunes it. Everything shown is derived by tree.ts. */
 import { SearchIcon } from "@primer/octicons-react";
 import { Label, TextInput, TreeView } from "@primer/react";
-import { memo } from "react";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf } from "../tree.js";
 import { StatusIcon } from "./Previews.js";
@@ -52,7 +51,7 @@ export function Browser({
 	);
 }
 
-const FolderItem = memo(function FolderItem({
+function FolderItem({
 	folder,
 	open,
 	dispatch,
@@ -89,7 +88,7 @@ const FolderItem = memo(function FolderItem({
 			</TreeView.SubTree>
 		</TreeView.Item>
 	);
-});
+}
 
 function LeafItem({
 	leaf,

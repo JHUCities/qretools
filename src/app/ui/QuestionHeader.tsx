@@ -2,6 +2,7 @@
 import { DownloadIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label } from "@primer/react";
 import type { Question, Session } from "../model.js";
+import { inlineCode } from "./Previews.js";
 
 export interface HeaderActions {
 	readonly save: () => void;
@@ -85,7 +86,11 @@ export function QuestionHeader({
 				<Banner
 					variant="critical"
 					title={q.activity.failure.message}
-					description={q.activity.failure.hint}
+					description={
+						q.activity.failure.hint === undefined
+							? undefined
+							: inlineCode(q.activity.failure.hint)
+					}
 					primaryAction={
 						q.activity.failure.kind === "stale" && q.origin.kind === "bank" ? (
 							<Banner.PrimaryAction

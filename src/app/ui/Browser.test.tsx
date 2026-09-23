@@ -50,8 +50,12 @@ describe("Browser", () => {
 				dispatch={dispatch}
 			/>,
 		);
-		expect(screen.getByText("nhd")).toBeTruthy();
-		fireEvent.click(screen.getByText("nhd_sat"));
+		expect(
+			screen.getAllByRole("treeitem", { name: "nhd" })[0] as HTMLElement,
+		).toBeTruthy();
+		fireEvent.click(
+			screen.getAllByRole("treeitem", { name: "nhd_sat" })[0] as HTMLElement,
+		);
 		expect(dispatch).toHaveBeenCalledWith({ kind: "questionOpened", id: 1 });
 	});
 
@@ -65,7 +69,7 @@ describe("Browser", () => {
 				dispatch={dispatch}
 			/>,
 		);
-		fireEvent.change(screen.getByLabelText("Filter"), {
+		fireEvent.change(screen.getByRole("searchbox"), {
 			target: { value: "sat" },
 		});
 		expect(dispatch).toHaveBeenCalledWith({
@@ -84,7 +88,9 @@ describe("Browser", () => {
 				dispatch={dispatch}
 			/>,
 		);
-		fireEvent.click(screen.getByText("svy"));
+		fireEvent.click(
+			screen.getAllByRole("treeitem", { name: "svy" })[0] as HTMLElement,
+		);
 		expect(dispatch).toHaveBeenCalledWith({
 			kind: "folderToggled",
 			folder: "svy",
