@@ -7,8 +7,11 @@
  * the rest of the program reasons about.
  */
 import { z } from "zod";
+import { type Scales, scaleSummary } from "./scales.js";
 
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+const NAME_RULE =
+	"lowercase letters, digits and underscores, starting with a letter";
 
 export const NumberDomainSchema = z
 	.strictObject({
@@ -38,17 +41,41 @@ export const OpenDomainSchema = z
 	})
 	.describe("A free-text answer.");
 
+export const OptionSchema = z
+	.strictObject({
+		label: z.string().describe("Text shown to the respondent for this option."),
+		title: z
+			.string()
+			.optional()
+			.describe(
+				"Select many only: codebook title of this option's own variable, e.g. Race selected -- White.",
+			),
+		variable: z
+			.string()
+			.regex(NAME_PATTERN, NAME_RULE)
+			.optional()
+			.describe(
+				"Select many only: this option's variable name when it is not <name>_<code>.",
+			),
+		note: z
+			.string()
+			.optional()
+			.describe("Documentation for this option, not shown to the respondent."),
+	})
+	.describe("A response option with its own documentation.");
+
 export const QuestionSchema = z
 	.strictObject({
 		name: z
 			.string()
-			.regex(
-				NAME_PATTERN,
-				"lowercase letters, digits and underscores, starting with a letter",
-			)
+			.regex(NAME_PATTERN, NAME_RULE)
 			.describe(
 				"Variable name used in the dataset and codebook. Lowercase, starts with a letter, e.g. nhd_sat.",
 			),
+		title: z
+			.string()
+			.optional()
+			.describe("Short codebook title, e.g. Neighborhood satisfaction."),
 		text: z
 			.string()
 			.describe(
@@ -74,10 +101,13 @@ export const QuestionSchema = z
 		// Documentation and JSON Schema only: parse.ts reads responses from the YAML
 		// AST (author order, original code spelling), not through this record.
 		responses: z
-			.record(z.string(), z.string())
+			.union([
+				z.string().describe("The name of a shared scale, e.g. agree4."),
+				z.record(z.string(), z.union([z.string(), OptionSchema])),
+			])
 			.optional()
 			.describe(
-				"Response options as code: label pairs, e.g. 1: Very satisfied. Options must be mutually exclusive and together exhaustive. Becomes a DDI CodeList.",
+				"Response options as code: label pairs (e.g. 1: Very satisfied), or the name of a shared scale. Options must be mutually exclusive and together exhaustive. Becomes a DDI CodeList.",
 			),
 		select: z
 			.enum(["one", "many"])
@@ -103,6 +133,18 @@ export const QuestionSchema = z
 			.describe(
 				"Where the question comes from, e.g. DCAS 2018 Q6, or Original.",
 			),
+		note: z
+			.string()
+			.optional()
+			.describe(
+				"Documentation not shown to the respondent: fills, randomisation, history.",
+			),
+		legacy: z
+			.record(z.string(), z.unknown())
+			.optional()
+			.describe(
+				"Fields carried over from an older format, kept verbatim and not checked.",
+			),
 	})
 	.describe(
 		"A survey question and its documentation. Exactly one response domain is required: responses, number, or open.",
@@ -117,8 +159,31 @@ export const KNOWN_KEYS = Object.keys(
 export const REQUIRED_KEYS = ["name", "text", "intent"] as const;
 export const DOMAIN_KEYS = ["responses", "number", "open"] as const;
 
-/** JSON Schema of the surface, for editor completion and hover. */
-export const questionJsonSchema = () => z.toJSONSchema(QuestionSchema);
+/** JSON Schema of the surface, for editor completion and hover. Scale names become completable constants. */
+export function questionJsonSchema(
+	scales: Scales = {},
+): Record<string, unknown> {
+	const schema = z.toJSONSchema(QuestionSchema) as Record<string, unknown> & {
+		properties?: Record<string, Record<string, unknown>>;
+	};
+	const names = Object.keys(scales);
+	const responses = schema.properties?.responses;
+	const branches = responses?.anyOf;
+	if (responses !== undefined && names.length > 0 && Array.isArray(branches)) {
+		responses.anyOf = branches.map((b: Record<string, unknown>) =>
+			b.type === "string"
+				? {
+						...b,
+						oneOf: names.map((n) => ({
+							const: n,
+							description: scaleSummary(scales[n] as Scales[string]),
+						})),
+					}
+				: b,
+		);
+	}
+	return schema;
+}
 
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";

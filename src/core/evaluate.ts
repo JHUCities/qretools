@@ -14,6 +14,7 @@ import {
 } from "./render.js";
 import type { Draft } from "./surface/draft.js";
 import { parseSurface } from "./surface/parse.js";
+import type { Scales } from "./surface/scales.js";
 
 export interface Evaluation {
 	readonly draft: Draft;
@@ -25,8 +26,12 @@ export interface Evaluation {
 	readonly codebook: CodebookView;
 }
 
-export function evaluate(source: string, agency: string): Evaluation {
-	const { draft, findings, ranges } = parseSurface(source);
+export function evaluate(
+	source: string,
+	agency: string,
+	scales: Scales = {},
+): Evaluation {
+	const { draft, findings, ranges } = parseSurface(source, scales);
 	return {
 		draft,
 		findings: [...findings, ...lint(draft)],

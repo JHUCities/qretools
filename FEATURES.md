@@ -130,9 +130,8 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 
 ## Engineering and housekeeping
 
-- **The first commit and push are still pending.** The repository `maitland/qretools2`
-  exists on Codeberg and `origin` is set, but commits are GPG-signed with a curses
-  pinentry that needs the owner's own terminal. Unlock gpg-agent there, then commit.
+- **Commits are GPG-signed with a curses pinentry** that needs the owner's own terminal;
+  an agent session cannot sign until gpg-agent is unlocked there.
 - **No end-to-end test in the repository.** Browser verification was done with
   throwaway Playwright scripts outside the project. Add one smoke test: load, blank,
   complete a field, click a finding, check the DDI badge. Remember that synthetic keys
@@ -149,7 +148,7 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 - **ajv compiles with `new Function`**, which needs `unsafe-eval`. If the page is ever
   served under a strict Content Security Policy, precompile the validator with ajv
   standalone. **M**, only on demand.
-- **Deploy as a static page** (Codeberg Pages or similar) so students can try it without
+- **Deploy as a static page** (GitHub Pages, beside the codebook) so students can try it without
   a checkout. **S**.
 - **Accessibility pass.** Announce only the findings count, never the panes that redraw
   on every keystroke; check focus order and contrast. **S**.

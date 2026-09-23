@@ -2,16 +2,16 @@
  * The only file that touches CodeMirror. The editor is a stateful widget that
  * owns the text while a keystroke is in flight; the Model owns it otherwise.
  * `sync` is idempotent: it pushes the Model's text in only when it differs
- * (loading an example), and always pushes the current diagnostics.
+ * (loading an example), always pushes the current diagnostics, and pushes the
+ * JSON Schema when it is a new value (the bank's scales changed).
  */
-
 import { startCompletion } from "@codemirror/autocomplete";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { Annotation, Prec } from "@codemirror/state";
 import { hoverTooltip, keymap } from "@codemirror/view";
 import { basicSetup, EditorView } from "codemirror";
-import { stateExtensions } from "codemirror-json-schema";
+import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion, yamlSchemaHover } from "codemirror-json-schema/yaml";
 import type { Range } from "../core/findings.js";
 import { schemaCompletion } from "./complete.js";
@@ -19,19 +19,22 @@ import { schemaCompletion } from "./complete.js";
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
 const external = Annotation.define<boolean>();
 
+export interface EditorState {
+	readonly text: string;
+	readonly diagnostics: readonly Diagnostic[];
+	readonly schema: object;
+}
+
 export interface Editor {
-	sync(state: {
-		readonly text: string;
-		readonly diagnostics: readonly Diagnostic[];
-	}): void;
+	sync(state: EditorState): void;
 	reveal(range: Range): void;
 }
 
 export function createEditor(
 	parent: HTMLElement,
-	schema: object,
 	onEdit: (text: string) => void,
 ): Editor {
+	let schema: object | undefined;
 	const view = new EditorView({
 		parent,
 		extensions: [
@@ -40,9 +43,9 @@ export function createEditor(
 			// We compose the schema features ourselves. The package's bundled extension
 			// adds its own linter, which would double-report and call holes errors.
 			yamlLanguage.data.of({ autocomplete: yamlCompletion() }),
-			yamlLanguage.data.of({ autocomplete: schemaCompletion(schema) }),
+			yamlLanguage.data.of({ autocomplete: schemaCompletion }),
 			hoverTooltip(yamlSchemaHover()),
-			stateExtensions(schema as never),
+			stateExtensions(),
 			macCompletionKeys,
 			EditorView.lineWrapping,
 			holeTheme,
@@ -54,7 +57,11 @@ export function createEditor(
 		],
 	});
 	return {
-		sync({ text, diagnostics }) {
+		sync({ text, diagnostics, schema: next }) {
+			if (next !== schema) {
+				schema = next;
+				updateSchema(view, next as never);
+			}
 			if (text !== view.state.doc.toString()) {
 				view.dispatch({
 					changes: { from: 0, to: view.state.doc.length, insert: text },

@@ -8,9 +8,8 @@
  * "single-select needs a residual option" (bipolar scales are exhaustive
  * without one), "text must end in ?" (stems like "Please indicate..." are fine).
  */
-
 import type { Finding, LintCode } from "./findings.js";
-import type { Draft } from "./surface/draft.js";
+import { type Draft, optionVariable } from "./surface/draft.js";
 
 type Rule = (draft: Draft) => readonly Finding[];
 
@@ -20,13 +19,23 @@ const advise = (
 	path: string,
 	message: string,
 	hint: string,
-): Finding => ({ code, severity, path, message, hint });
+): Finding => ({
+	code,
+	severity,
+	path,
+	message,
+	hint,
+});
 
 const normalise = (s: string): string =>
 	s.trim().toLowerCase().replace(/\s+/g, " ");
 
 const duplicateLabels: Rule = ({ domain }) => {
 	if (domain?.kind !== "responses") return [];
+	const where =
+		domain.scale === undefined
+			? "Responses"
+			: `Scale \`${domain.scale}\`: responses`;
 	const seen = new Map<string, string>();
 	return domain.codes.flatMap(({ code, label }) => {
 		const key = normalise(label);
@@ -40,7 +49,7 @@ const duplicateLabels: Rule = ({ domain }) => {
 				"duplicate-label",
 				"warning",
 				`responses.${code}`,
-				`Responses \`${first}\` and \`${code}\` have the same label.`,
+				`${where} \`${first}\` and \`${code}\` have the same label.`,
 				"Options must be mutually exclusive: a respondent should fit exactly one.",
 			),
 		];
@@ -54,7 +63,9 @@ const tooFewResponses: Rule = ({ domain }) =>
 					"too-few-responses",
 					"warning",
 					"responses",
-					"A choice needs at least two labelled responses.",
+					domain.scale === undefined
+						? "A choice needs at least two labelled responses."
+						: `Scale \`${domain.scale}\` has fewer than two responses.`,
 					"Options must together be exhaustive: every respondent should find one that fits.",
 				),
 			]
@@ -84,10 +95,12 @@ const noNoneOption: Rule = ({ domain }) =>
  * test fired on 8%, almost all false: "and" in a preamble sentence, in a list of
  * examples ("such as gas, electricity, and water"), or in "you and your family".
  * So: look only at the sentence that asks, and skip those two patterns. It still
- * asks rather than asserts.
+ * asks rather than asserts. `{{FILL}}` placeholders are not words the respondent reads.
  */
 const asksTwoThings = (text: string): boolean => {
-	const asking = text.match(/[^.?!]*\?/g)?.find((s) => s.trim() !== "") ?? text;
+	const plain = text.replace(/\{\{[^}]*\}\}/g, "");
+	const asking =
+		plain.match(/[^.?!]*\?/g)?.find((s) => s.trim() !== "") ?? plain;
 	const withoutSafeAnds = asking
 		.replace(/\b(such as|like|including)\b[^?]*/i, "")
 		.replace(/\byou(rself)? and your\b/gi, "you");
@@ -126,12 +139,65 @@ const thinIntent: Rule = ({ intent, text }) => {
 		: [];
 };
 
+const legacyFields: Rule = ({ legacy }) =>
+	legacy === undefined || legacy.length === 0
+		? []
+		: [
+				advise(
+					"legacy-fields",
+					"info",
+					"legacy",
+					`Legacy fields kept verbatim: ${legacy.join(", ")}.`,
+					"They are not checked and are not exported to DDI. Move each into a real field when its meaning is settled.",
+				),
+			];
+
+/** Select-many options each become a variable; two options must not become the same one. */
+const optionVariables: Rule = ({ name, domain }) => {
+	if (domain?.kind !== "responses" || domain.select !== "many") return [];
+	const seen = new Map<string, string>();
+	return domain.codes.flatMap((c) => {
+		const variable = optionVariable(name, c);
+		if (variable === undefined) return [];
+		const out: Finding[] = [];
+		const first = seen.get(variable);
+		if (first === undefined) seen.set(variable, c.code);
+		else
+			out.push(
+				advise(
+					"duplicate-option-variable",
+					"warning",
+					`responses.${c.code}`,
+					`Options \`${first}\` and \`${c.code}\` both become the variable \`${variable}\`.`,
+					"Each select-many option is its own variable; give one of them a different `variable`.",
+				),
+			);
+		if (
+			name !== undefined &&
+			c.variable !== undefined &&
+			!c.variable.startsWith(name)
+		)
+			out.push(
+				advise(
+					"option-variable-prefix",
+					"info",
+					`responses.${c.code}`,
+					`Variable \`${c.variable}\` does not start with \`${name}\`.`,
+					"A codebook groups an option's variable with its question by name prefix.",
+				),
+			);
+		return out;
+	});
+};
+
 const RULES: readonly Rule[] = [
 	duplicateLabels,
 	tooFewResponses,
 	noNoneOption,
 	doubleBarreled,
 	thinIntent,
+	legacyFields,
+	optionVariables,
 ];
 
 export const lint = (draft: Draft): readonly Finding[] =>

@@ -1,61 +1,87 @@
 /**
  * Completion where codemirror-json-schema offers none: on a blank line, for the
- * first key under a parent, and for an empty enum value. Generic over the JSON
- * Schema it is given; it knows nothing about surveys.
+ * first key under a parent, and for an empty value that has known choices (an
+ * enum, or the shared scale names). Generic over the JSON Schema in the editor's
+ * state; it knows nothing about surveys.
  */
 import type {
 	Completion,
 	CompletionContext,
 	CompletionResult,
 } from "@codemirror/autocomplete";
+import { getJSONSchema } from "codemirror-json-schema";
 
 interface SchemaNode {
 	readonly description?: string;
 	readonly enum?: readonly unknown[];
+	readonly anyOf?: readonly SchemaNode[];
+	readonly oneOf?: readonly {
+		readonly const?: unknown;
+		readonly description?: string;
+	}[];
 	readonly properties?: Readonly<Record<string, SchemaNode>>;
 }
 
 const KEY_LINE = /^(\s*)([A-Za-z_][\w-]*):(.*)$/;
 
-export const schemaCompletion =
-	(schema: SchemaNode) =>
-	(context: CompletionContext): CompletionResult | null => {
-		const line = context.state.doc.lineAt(context.pos);
-		const before = line.text.slice(0, context.pos - line.from);
+/** Values a field may take: a plain enum, or the constants of a branch (shared scale names). */
+function valuesOf(node: SchemaNode | undefined): readonly Completion[] {
+	if (!node) return [];
+	if (node.enum)
+		return node.enum.map((v) => ({ label: String(v), type: "enum" }));
+	return (node.anyOf ?? [node]).flatMap((branch) =>
+		(branch.oneOf ?? []).flatMap((o) =>
+			o.const === undefined
+				? []
+				: [
+						{
+							label: String(o.const),
+							type: "enum",
+							...(o.description !== undefined && { info: o.description }),
+						},
+					],
+		),
+	);
+}
 
-		const value = /^\s*([A-Za-z_][\w-]*):\s+(\w*)$/.exec(before);
-		if (value) {
-			const [, key = "", typed = ""] = value;
-			const options = schema.properties?.[key]?.enum ?? [];
-			if (typed !== "" || options.length === 0) return null;
-			return {
-				from: context.pos,
-				options: options.map((o) => ({ label: String(o), type: "enum" })),
-			};
-		}
+export function schemaCompletion(
+	context: CompletionContext,
+): CompletionResult | null {
+	const schema = getJSONSchema(context.state) as SchemaNode | undefined;
+	if (!schema) return null;
+	const line = context.state.doc.lineAt(context.pos);
+	const before = line.text.slice(0, context.pos - line.from);
 
-		const key = /^(\s*)(\w*)$/.exec(before);
-		if (!key) return null;
-		const [, indent = "", typed = ""] = key;
-		const lines = context.state.doc.toString().split("\n");
-		const here = line.number - 1;
-		const { node, siblings } = scope(schema, lines, here, indent.length);
-		if (!node?.properties || packageHandles(typed, indent.length, siblings))
-			return null;
-		const options: Completion[] = Object.entries(node.properties)
-			.filter(([name]) => !siblings.includes(name))
-			.map(([name, sub], i) => ({
-				label: name,
-				type: "property",
-				// Keep the schema's order (name, text, intent first), not the alphabet's.
-				boost: 50 - i,
-				apply: `${name}: `,
-				...(sub.description !== undefined && { info: sub.description }),
-			}));
-		return options.length === 0
-			? null
-			: { from: context.pos - typed.length, options, validFor: /^\w*$/ };
-	};
+	const value = /^\s*([A-Za-z_][\w-]*):\s+(\w*)$/.exec(before);
+	if (value) {
+		const [, key = "", typed = ""] = value;
+		const options = valuesOf(schema.properties?.[key]);
+		if (typed !== "" || options.length === 0) return null;
+		return { from: context.pos, options: [...options] };
+	}
+
+	const key = /^(\s*)(\w*)$/.exec(before);
+	if (!key) return null;
+	const [, indent = "", typed = ""] = key;
+	const lines = context.state.doc.toString().split("\n");
+	const here = line.number - 1;
+	const { node, siblings } = scope(schema, lines, here, indent.length);
+	if (!node?.properties || packageHandles(typed, indent.length, siblings))
+		return null;
+	const options: Completion[] = Object.entries(node.properties)
+		.filter(([name]) => !siblings.includes(name))
+		.map(([name, sub], i) => ({
+			label: name,
+			type: "property",
+			// Keep the schema's order (name, text, intent first), not the alphabet's.
+			boost: 50 - i,
+			apply: `${name}: `,
+			...(sub.description !== undefined && { info: sub.description }),
+		}));
+	return options.length === 0
+		? null
+		: { from: context.pos - typed.length, options, validFor: /^\w*$/ };
+}
 
 /**
  * codemirror-json-schema completes a typed prefix, except for the first key under

@@ -18,7 +18,8 @@ export type ItemType =
 	| "Category"
 	| "Concept"
 	| "Instruction"
-	| "Universe";
+	| "Universe"
+	| "Variable";
 
 export interface Identity {
 	readonly URN: string;
@@ -65,7 +66,7 @@ export const item = (type: ItemType, id: Identity, body: JsonObject): Item => ({
  * We use `[Agency, ID, Version]`, matching the root key. Inferred, not confirmed:
  * keep every reference going through here.
  */
-export const ref = (target: Item): JsonObject => ({
+export const ref = (target: Pick<Item, "type" | "identity">): JsonObject => ({
 	$type: target.type,
 	value: [target.identity.Agency, target.identity.ID, target.identity.Version],
 });

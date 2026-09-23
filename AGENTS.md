@@ -170,6 +170,33 @@ emit a Universe item and resolve the link in role 2.
   Option binding that passes headless can fail on a real keyboard; reproduce with the
   real event shape (`key: "Dead"`, `code: "KeyI"`).
 
+- **Step 6 (surface extensions), 2026-09-23.** `title` and `note` are fields; `legacy`
+  is a map kept verbatim, of which only the key names enter the Draft (values are
+  never read), and a lint says it is there. `responses` is either an inline map or the
+  name of a shared scale; scales are a bank-level value (`Scales`, one file per scale
+  with a `labels:` map, named by file) that the shell loads and passes to
+  `parseSurface(text, scales)`; an unknown name is a hole, never a crash, and the
+  domain records `scale` so previews and elaboration know it is shared. Scale names
+  reach the editor as `oneOf` constants on the string branch of the JSON Schema, with
+  the labels as their description, so completion shows them; the schema is a value the
+  shell pushes with `updateSchema` when the scales change.
+- **Select-many is one variable per option**, as BAS publishes it. An option may be a
+  map `{ label, title, variable, note }`; its variable is `optionVariable(name, code)`,
+  one total function: `variable` if given, else `<name>_<code>`, else undefined while
+  `name` is a hole. The settled `<name>_<code>` default describes only 5 of the 188
+  option variables in the real bank (157 concatenate with no separator, 26 are
+  unrelated to the question name), so `variable` is mandatory syntax and the importer
+  writes it wherever the default does not match. DDI: one QuestionItem with a
+  CodeDomain and cardinality, plus one `Variable` item per option referencing the
+  question, each a CodeDomain on the shared binary scale `yesno01` (0 No, 1 Yes).
+  QuestionGrid (matrices) and one QuestionItem per option were rejected.
+- **DDI IDs allow one dot.** Every code list hangs off a base: `<base>.codes`,
+  `<base>.cat-i`, `<base>.code-i`; a question's base is its name, a shared scale's is
+  `scale-<name>`. The step 2 reviewer had warned about this and the step 6 code
+  violated it anyway; the "validates against the official schema" test caught it.
+- **`title`/`variable` on an option under `select: one`** get an `ignored-key` warning
+  rather than being dropped silently. "Other, specify" stays under `legacy` for now.
+
 ## Principles from PL research (how features are judged)
 
 - **Total error localization.** Every draft, however broken, elaborates. Missing or
@@ -196,7 +223,7 @@ emit a Universe item and resolve the link in role 2.
   conditions. DDI-L 4.0 already has Sequence, IfThenElse, Loop, ComputationItem,
   StatementItem, QuestionConstruct; conditions go in CommandCode.
 - **Git as the local-first backend.** One file per question/survey on a forge
-  (GitHub, or Codeberg/Forgejo) via its REST API with hash preconditions
+  (GitHub) via its REST API with hash preconditions
   (compare-and-swap). Login is OAuth to the forge. Upload is a pull request; merge is
   promotion to the bank and gives provenance for free. Git prevents silent overwrites,
   not simultaneous edits; a bad merge is just a document with holes. Git LFS only for
@@ -211,14 +238,11 @@ emit a Universe item and resolve the link in role 2.
   drifted (`storage_type` vs `response_type`, `value_labels_name` vs `value_label_id`),
   which is the case for a checking editor. Prior art for a browser app on a forge is the
   git-based CMS (Decap, Sveltia, Keystatic): content as files, login by OAuth, review
-  as pull requests. Tested with curl: Codeberg sends `Access-Control-Allow-Origin: *`
-  on its API, on the preflight for an authorised PUT, and on its OAuth token endpoint,
-  and Forgejo supports PKCE public clients, so a fully serverless login works there.
-  GitHub's API allows cross-origin calls but its token endpoint does not and still
+  as pull requests. Tested with curl: GitHub's API allows cross-origin calls but its token endpoint does not and still
   requires a client secret, so GitHub needs a small auth proxy or a pasted fine-grained
   token. Storage should be a port in the shell with one adapter per forge.
 - **Decided 2026-09-21: the target forge is GitHub, in the JHUCities organisation.**
-  Codeberg is for prototyping only. Verified the same day with curl: GitHub's API
+  Verified the same day with curl: GitHub's API
   accepts browser cross-origin calls, including the preflights for an authorised
   contents PUT and for creating a pull request; its OAuth token endpoint and its
   device-flow endpoint do not, and the token exchange still requires a client secret

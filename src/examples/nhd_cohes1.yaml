@@ -1,0 +1,8 @@
+name: nhd_cohes1
+title: Neighbors willing to help
+text: People in your neighborhood are willing to help their neighbors.
+intent: Prevalence of perceived neighborhood social cohesion; one of two items forming the cohesion scale
+concept: neighborhood social cohesion
+universe: All respondents
+responses: agree4
+source: PHDCN Q11.a

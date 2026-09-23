@@ -7,18 +7,21 @@
  * flow is visible in signatures; nothing is threaded through a mutable
  * accumulator.
  */
-import {
-	type Document,
-	isMap,
-	isNode,
-	isScalar,
-	parseDocument,
-	type Scalar,
-} from "yaml";
+import { type Document, isMap, isNode, isScalar, parseDocument } from "yaml";
 import type { ZodError } from "zod";
 import { compact } from "../compact.js";
 import type { Finding, ParseCode, Range } from "../findings.js";
-import type { Code, Domain, Draft } from "./draft.js";
+import {
+	EXAMPLE,
+	fail,
+	hole,
+	keyText,
+	ok,
+	type Read,
+	readCodeMap,
+} from "./codes.js";
+import type { Domain, Draft } from "./draft.js";
+import type { Scales } from "./scales.js";
 import {
 	DOMAIN_KEYS,
 	describe,
@@ -37,26 +40,22 @@ export interface Parsed {
 	readonly ranges: Readonly<Record<string, Range>>;
 }
 
-interface Read<T> {
-	readonly value?: T;
-	readonly findings: readonly Finding[];
-}
-
 const TEXT_KEYS = [
 	"name",
+	"title",
 	"text",
 	"intent",
 	"concept",
 	"universe",
 	"instruction",
 	"source",
+	"note",
 ] as const;
 type TextKey = (typeof TEXT_KEYS)[number];
 
-const RESPONSES_EXAMPLE = "Example:\n  1: Yes\n  2: No";
-const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}`;
+const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older format go under \`legacy\`.`;
 
-export function parseSurface(text: string): Parsed {
+export function parseSurface(text: string, scales: Scales = {}): Parsed {
 	const doc = parseDocument(text, { prettyErrors: false });
 	const ranges = indexRanges(doc, text.length);
 	const syntax = doc.errors.map((e) =>
@@ -98,8 +97,13 @@ export function parseSurface(text: string): Parsed {
 		fieldFindings.push(...read.findings);
 	}
 
-	const domain = readDomain(doc, data, ranges);
-	const draft: Draft = compact({ ...fields, domain: domain.value });
+	const legacy = readLegacy(data.legacy);
+	const domain = readDomain(doc, data, ranges, scales);
+	const draft: Draft = compact({
+		...fields,
+		legacy: legacy.value,
+		domain: domain.value,
+	});
 
 	return {
 		draft,
@@ -108,6 +112,7 @@ export function parseSurface(text: string): Parsed {
 			...js.findings,
 			...unknown,
 			...fieldFindings,
+			...legacy.findings,
 			...domain.findings,
 		],
 		ranges,
@@ -154,10 +159,26 @@ function readText(key: TextKey, value: unknown): Read<string> {
 	return result.data === undefined ? fail() : ok(result.data);
 }
 
+/** Legacy values are never read; only the field names are kept, so a lint can say they are there. */
+function readLegacy(value: unknown): Read<readonly string[]> {
+	if (value === undefined || value === null) return fail();
+	if (!isPlainObject(value))
+		return fail(
+			error(
+				"wrong-type",
+				"legacy",
+				"`legacy` must be a map of the fields kept from the older format.",
+			),
+		);
+	const keys = Object.keys(value);
+	return keys.length === 0 ? fail() : ok(keys);
+}
+
 function readDomain(
 	doc: Document,
 	data: Record<string, unknown>,
 	ranges: Record<string, Range>,
+	scales: Scales,
 ): Read<Domain> {
 	const present = DOMAIN_KEYS.filter((k) => k in data).sort(
 		(a, b) =>
@@ -170,7 +191,7 @@ function readDomain(
 			hole(
 				"",
 				"Add a response domain: `responses` (a code list), `number`, or `open` (free text).",
-				RESPONSES_EXAMPLE,
+				EXAMPLE,
 			),
 		);
 	}
@@ -195,7 +216,7 @@ function readDomain(
 			: [];
 	const read =
 		first === "responses"
-			? readResponses(doc, data.select)
+			? readResponses(doc, data.select, scales)
 			: first === "number"
 				? readNumber(data.number)
 				: readOpen(data.open);
@@ -205,50 +226,62 @@ function readDomain(
 	};
 }
 
-function readResponses(doc: Document, select: unknown): Read<Domain> {
+function readResponses(
+	doc: Document,
+	select: unknown,
+	scales: Scales,
+): Read<Domain> {
 	const node = isMap(doc.contents)
 		? doc.contents.get("responses", true)
 		: undefined;
+	const selectRead = readSelect(select);
+	const chosen = selectRead.value ?? "one";
 	if (node === undefined || (isScalar(node) && node.value === null)) {
-		return fail(hole("responses", "`responses` is empty.", RESPONSES_EXAMPLE));
-	}
-	if (!isMap(node)) {
 		return fail(
-			error(
-				"wrong-type",
-				"responses",
-				"`responses` must be a list of `code: label` lines.",
-				RESPONSES_EXAMPLE,
-			),
+			hole("responses", "`responses` is empty.", EXAMPLE),
+			...selectRead.findings,
 		);
 	}
-	const codes: Code[] = [];
-	const findings: Finding[] = [];
-	for (const pair of node.items) {
-		if (!isScalar(pair.key)) continue;
-		const code = keyText(pair.key);
-		const path = `responses.${code}`;
-		const label = isScalar(pair.value) ? pair.value.value : pair.value;
-		if (label === null || label === undefined || label === "") {
-			findings.push(hole(path, `Response \`${code}\` has no label.`));
-		} else if (typeof label !== "string") {
-			findings.push(
-				error(
-					"wrong-type",
-					path,
-					`Label for \`${code}\` must be text.`,
-					`Quote it: ${code}: "${String(label)}"`,
-				),
+	if (isScalar(node) && typeof node.value === "string") {
+		const name = node.value;
+		const scale = scales[name];
+		if (scale === undefined) {
+			const known = Object.keys(scales);
+			const hint =
+				known.length === 0
+					? "No shared scales are loaded; write the options inline."
+					: `Scales: ${known.slice(0, 12).join(", ")}${known.length > 12 ? ", …" : ""}`;
+			return fail(
+				hole("responses", `No scale named \`${name}\`.`, hint),
+				...selectRead.findings,
 			);
-		} else {
-			codes.push({ code, label });
 		}
+		return ok(
+			{ kind: "responses", codes: scale.codes, select: chosen, scale: name },
+			...selectRead.findings,
+		);
 	}
-	const selectRead = readSelect(select);
+	const codes = readCodeMap(doc, node, "responses", true);
+	if (codes.value === undefined)
+		return fail(...codes.findings, ...selectRead.findings);
+	// Per-option titles and variables describe a select-many option's own variable; on
+	// a single select they mean nothing, and saying so is kinder than dropping them.
+	const ignored: Finding[] =
+		chosen === "one"
+			? codes.value
+					.filter((c) => c.title !== undefined || c.variable !== undefined)
+					.map((c) => ({
+						code: "ignored-key",
+						severity: "warning",
+						path: `responses.${c.code}`,
+						message: `\`title\` and \`variable\` on an option only apply to \`select: many\`.`,
+					}))
+			: [];
 	return ok(
-		{ kind: "responses", codes, select: selectRead.value ?? "one" },
-		...findings,
+		{ kind: "responses", codes: codes.value, select: chosen },
+		...codes.findings,
 		...selectRead.findings,
+		...ignored,
 	);
 }
 
@@ -344,25 +377,8 @@ function syntaxFinding(
 /** A range that CodeMirror will accept: inside the text, non-empty where possible, `from <= to`. */
 function clampRange(from: number, to: number, length: number): Range {
 	const f = Math.min(Math.max(0, from), length);
-	return [
-		f,
-		Math.min(length, Math.max(f + 1, to)) < f
-			? f
-			: Math.min(length, Math.max(f + 1, to)),
-	];
+	return [f, Math.min(length, Math.max(f + 1, to))];
 }
-
-/** The code as the author spelled it (`010` stays `010`), not as YAML typed it (`10`). */
-const keyText = (key: Scalar): string => key.source ?? String(key.value);
-
-const ok = <T>(value: T, ...findings: Finding[]): Read<T> => ({
-	value,
-	findings,
-});
-const fail = <T>(...findings: Finding[]): Read<T> => ({ findings });
-
-const hole = (path: string, message: string, hint?: string): Finding =>
-	compact({ code: "hole", severity: "hole", path, message, hint });
 
 const error = (
 	code: Exclude<ParseCode, "hole">,

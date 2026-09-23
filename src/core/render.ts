@@ -6,7 +6,12 @@
  * and never an empty space.
  */
 import { compact } from "./compact.js";
-import type { Code, Domain, Draft } from "./surface/draft.js";
+import {
+	type Code,
+	type Domain,
+	type Draft,
+	optionVariable,
+} from "./surface/draft.js";
 
 export interface Hole {
 	readonly kind: "hole";
@@ -61,7 +66,7 @@ const DOMAIN_PROMPT =
 const PROMPT = {
 	name: "variable name",
 	text: "question text",
-	title: "title: concept, or name",
+	title: "title",
 } as const;
 
 const slot = (value: string | undefined, path: "name" | "text"): Slot =>
@@ -101,7 +106,7 @@ function input(domain: Domain): Input {
 
 export function codebookView(draft: Draft): CodebookView {
 	const values: CodebookView["values"] = draft.domain
-		? { kind: "lines", lines: valueLines(draft.domain) }
+		? { kind: "lines", lines: valueLines(draft.domain, draft.name) }
 		: domainHole;
 	return compact({
 		title: title(draft),
@@ -114,22 +119,27 @@ export function codebookView(draft: Draft): CodebookView {
 	});
 }
 
-/**
- * BAS entries have a short human title. The surface language has no field for
- * one yet, so the concept stands in, then the name. Upper-casing is presentation
- * and belongs to the shell's stylesheet.
- */
+/** The codebook title: `title`, else the concept, else the name. */
 function title(draft: Draft): Slot {
-	const source = draft.concept ?? draft.name;
+	const source = draft.title ?? draft.concept ?? draft.name;
 	return source === undefined
 		? { kind: "hole", path: "name", prompt: PROMPT.title }
 		: { kind: "filled", text: source };
 }
 
-function valueLines(domain: Domain): readonly string[] {
+function valueLines(
+	domain: Domain,
+	name: string | undefined,
+): readonly string[] {
 	switch (domain.kind) {
 		case "responses":
-			return domain.codes.map((c) => `${c.code} = ${c.label}`);
+			// A select-many option is its own variable in the dataset, listed the way the
+			// codebook publishes it: the variable, then the option's title.
+			return domain.select === "many"
+				? domain.codes.map(
+						(c) => `${optionVariable(name, c) ?? "?"}: ${c.title ?? c.label}`,
+					)
+				: domain.codes.map((c) => `${c.code} = ${c.label}`);
 		case "number":
 			return [numberLine(domain.min, domain.max, domain.unit)];
 		case "open":
@@ -160,7 +170,17 @@ function numberLine(
 }
 
 function notes(draft: Draft): readonly string[] {
-	return draft.domain?.kind === "responses" && draft.domain.select === "many"
-		? ["Select all that apply: respondents may choose more than one response."]
-		: [];
+	const out: string[] = [];
+	const d = draft.domain;
+	if (d?.kind === "responses" && d.scale !== undefined)
+		out.push(`Uses the shared scale ${d.scale}.`);
+	if (d?.kind === "responses" && d.select === "many") {
+		out.push(
+			"Select all that apply: each option is its own variable, coded 0 = No, 1 = Yes.",
+		);
+		for (const c of d.codes)
+			if (c.note !== undefined) out.push(`${c.code}: ${c.note}`);
+	}
+	if (draft.note !== undefined) out.push(draft.note);
+	return out;
 }

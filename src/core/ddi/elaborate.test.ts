@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import schemaText from "../../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
+import demRace from "../../examples/dem_race.yaml?raw";
+import nhdCohes1 from "../../examples/nhd_cohes1.yaml?raw";
 import nhdNyrs from "../../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../../examples/nhd_sat.yaml?raw";
+import agree4Text from "../../examples/scales/agree4.yaml?raw";
 import { parseSurface } from "../surface/parse.js";
+import { parseScale } from "../surface/scales.js";
 import type { DdiDocument, ItemType, JsonObject } from "./document.js";
 import { elaborate } from "./elaborate.js";
 import { makeValidator } from "./validate.js";
@@ -150,6 +154,65 @@ describe("elaborate", () => {
 			"q",
 		);
 		expect(o.ResponseDomain).toEqual({ $type: "TextDomain", MaxLength: 200 });
+	});
+});
+
+describe("shared scales and select-many", () => {
+	const agree4 = parseScale(agree4Text).scale;
+	const scales = agree4 ? { agree4 } : {};
+
+	it("a named scale is one CodeList for the bank, identified by the scale, and validates", () => {
+		const { draft, findings } = parseSurface(nhdCohes1, scales);
+		expect(findings).toEqual([]);
+		const doc = elaborate(draft, AGENCY);
+		expect(validate(doc)).toEqual([]);
+		expect(Object.keys(doc.CodeList ?? {})).toEqual([
+			`${AGENCY}:scale-agree4.codes:1`,
+		]);
+		expect(question(doc, "nhd_cohes1").Label).toEqual([
+			{
+				Content: [
+					{
+						MultilingualStringValue: {
+							LanguageTag: "en",
+							Value: "Neighbors willing to help",
+						},
+					},
+				],
+			},
+		]);
+	});
+
+	it("select-many yields one yes/no Variable per option, referencing the question", () => {
+		const { draft, findings } = parseSurface(demRace);
+		expect(findings).toEqual([]);
+		const doc = elaborate(draft, AGENCY);
+		expect(validate(doc)).toEqual([]);
+		expect(Object.keys(doc.Variable ?? {})).toEqual(
+			["wh", "bl", "am", "as", "ot"].map((c) => `${AGENCY}:dem_race_${c}:1`),
+		);
+		const wh = itemOf(doc, "Variable", "dem_race_wh");
+		expect(wh.QuestionReference).toEqual([
+			{ $type: "QuestionItem", value: [AGENCY, "dem_race", "1"] },
+		]);
+		expect(wh.VariableRepresentation).toEqual({
+			ValueRepresentation: {
+				$type: "CodeDomain",
+				CodeListReference: {
+					$type: "CodeList",
+					value: [AGENCY, "scale-yesno01.codes", "1"],
+				},
+			},
+		});
+		expect(itemOf(doc, "CodeList", "scale-yesno01.codes").Code).toHaveLength(2);
+		expect(question(doc, "dem_race").Description).toBeDefined();
+	});
+
+	it("emits no Variable while the name is a hole", () => {
+		const { draft } = parseSurface(
+			"select: many\nresponses:\n  a: A\n  b: B\n",
+		);
+		expect(elaborate(draft, AGENCY).Variable).toBeUndefined();
 	});
 });
 

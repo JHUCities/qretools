@@ -79,20 +79,21 @@ export function mount(
 		),
 	);
 
-	const editor = createEditor(editorHost, questionJsonSchema(), (text) =>
+	const editor = createEditor(editorHost, (text) =>
 		dispatch({ kind: "edited", text }),
 	);
 	const onTarget = (
 		target: Parameters<Parameters<typeof viewFindings>[1]>[0],
 	) => dispatch({ kind: "locationClicked", target });
 	const evaluated = memo(evaluate);
+	const schemaFor = memo(questionJsonSchema);
 	const redraw = changeDetector();
 	// Written only by `exec`, just before it dispatches `ready`; read only by `view`.
 	let validator: Validator | undefined;
 
 	return {
 		view(model) {
-			const ev = evaluated(model.source, model.agency);
+			const ev = evaluated(model.source, model.agency, model.scales);
 			const problems: readonly Finding[] =
 				model.ddiSchema.kind === "failed"
 					? [model.ddiSchema.finding]
@@ -101,6 +102,7 @@ export function mount(
 			editor.sync({
 				text: model.source,
 				diagnostics: toDiagnostics(ev.findings, ev.ranges),
+				schema: schemaFor(model.scales),
 			});
 			// Preview inputs hold DOM state (a ticked radio). Redraw a pane only when what
 			// it shows has changed, so editing `intent` does not wipe the respondent's tick.

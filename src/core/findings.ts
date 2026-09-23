@@ -25,7 +25,10 @@ export type LintCode =
 	| "too-few-responses"
 	| "no-none-option"
 	| "double-barreled"
-	| "thin-intent";
+	| "thin-intent"
+	| "legacy-fields"
+	| "duplicate-option-variable"
+	| "option-variable-prefix";
 
 export type FindingCode = ParseCode | LintCode | "ddi-invalid";
 
