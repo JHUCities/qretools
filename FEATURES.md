@@ -238,3 +238,21 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
   variable name; today `con_nhdkfp` and `con_nhdkdmo` are each claimed by `con_nhddk`,
   `con_nhdnc` and `con_nhdsc`. Needs 8(b)'s bank-level view; fixing the three files is
   the owner's edit.
+
+## Generality (the core tenet: any DDI-conformant bank)
+
+Places where the code still assumes BAS or JHU, found 2026-09-24:
+
+- **Agency is a constant** (`AGENCY = "edu.jhu.21cc"` in `src/app/model.ts`). It should
+  come from the bank (e.g. a bank-level settings file beside `missing.yaml`) or a setting.
+- **Default bank settings name `JHUCities/bas-question-bank`.** Fine as a visible
+  example; a first run for another team should start empty or ask.
+- **Select-all coding is fixed**: one variable per option on a built-in `yesno01`
+  scale (0 No, 1 Yes), a BAS publishing choice and a core constant that the bank must
+  mirror by name. Should be a bank convention, a named scale in the bank.
+- **Option variable naming** (`<name>_<code>` default, the `option-variable-prefix`
+  lint) reflects BAS habits; another bank may name differently.
+- **The bank layout** (`questions/<topic>/`, `scales/`, `universes/`, `instructions/`,
+  `missing.yaml`) is this tool's own format. Open question for the owner: does "any
+  DDI-conformant bank" also mean reading banks that exist only as DDI (3.3 XML or 4.0
+  JSON), i.e. an importer from DDI into the surface language?

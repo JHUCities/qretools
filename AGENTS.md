@@ -20,6 +20,27 @@ https://jhucities.github.io/baltimore-area-survey-data/bas-2025/codebook.html
 Vocabulary: in this sociological field, question metadata is called "documentation",
 and the compiled documentation of a survey's variables is a "codebook".
 
+## Core tenet: usable for any DDI-conformant question bank (2026-09-24)
+
+This is a general tool, not a BAS tool. Any survey team with a question bank should be
+able to use it, and everything it produces must be conformant DDI. The Baltimore Area
+Survey and JHU 21st Century Cities are the reference case and the first user, never
+the design target. Concretely:
+
+- **Nothing about one bank is a constant.** Agency, repository, bank conventions
+  (missing-value codes, the binary scale select-all options are coded on, variable
+  naming) are data the bank supplies or settings the user chooses, never literals in
+  `src/`. A BAS value may be a default or an example, visibly so.
+- **DDI is the contract; the surface language is a convenience.** What is exported
+  validates against the official schema, and uses DDI's own mechanisms (schemes,
+  managed representations, variables) rather than conventions only BAS would recognise.
+- **BAS-shaped views are defaults, not policy.** The codebook preview follows the BAS
+  codebook because that is the reference; another team's house style is a view, not a fork.
+- When a feature is justified only by BAS ("how BAS publishes it"), say so in the code
+  and ask whether it is a bank convention that should become data.
+
+Known departures today are listed in `FEATURES.md` under "Generality".
+
 ## Overarching goal: a codebase that is easy to reason about
 
 Above every feature: a well-factored codebase that adopts patterns borrowed from Elm
