@@ -16,8 +16,27 @@ import { NAME_PATTERN } from "./surface/schema.js";
 export const folderOf = (name: string): string => name.split("_")[0] ?? name;
 
 /** A draft can be saved once it has a valid name. Findings never block saving. */
-export function bankPath(draft: Draft): Result<string, Finding> {
-	if (draft.name === undefined || !NAME_PATTERN.test(draft.name)) {
+/** Topic folders are directory names, not variable names: hyphens are allowed. */
+export const FOLDER_PATTERN = /^[a-z][a-z0-9_-]*$/;
+
+export interface BankLocation {
+	readonly folder: string;
+	readonly name: string;
+	readonly path: string;
+}
+
+/**
+ * Where a question belongs in the bank. The folder defaults to the name's prefix
+ * but is the author's to choose: git creates any missing path, so a folder that
+ * does not exist yet is a new topic, and that should be a deliberate act.
+ * Findings never block saving; only a missing or malformed name does.
+ */
+export function bankLocation(
+	draft: Draft,
+	folder?: string,
+): Result<BankLocation, Finding> {
+	const name = draft.name;
+	if (name === undefined || !NAME_PATTERN.test(name)) {
 		return err({
 			code: "hole",
 			severity: "hole",
@@ -27,7 +46,17 @@ export function bankPath(draft: Draft): Result<string, Finding> {
 			hint: "Lowercase letters, digits and underscores, starting with a letter, e.g. nhd_sat.",
 		});
 	}
-	return ok(`questions/${folderOf(draft.name)}/${draft.name}.yaml`);
+	const where = folder ?? folderOf(name);
+	if (!FOLDER_PATTERN.test(where)) {
+		return err({
+			code: "wrong-type",
+			severity: "error",
+			path: "",
+			message: `\`${where}\` is not a topic folder name.`,
+			hint: "Lowercase letters, digits, hyphens and underscores, starting with a letter.",
+		});
+	}
+	return ok({ folder: where, name, path: `questions/${where}/${name}.yaml` });
 }
 
 const FIELDS = [

@@ -53,6 +53,8 @@ export interface Browser {
 	readonly confirmDelete?: Id;
 	/** The bank settings dialog. */
 	readonly settingsOpen: boolean;
+	/** The save dialog for a draft: which question, and the topic folder being chosen. */
+	readonly saving?: { readonly id: Id; readonly folder: string };
 }
 
 export type Session =
@@ -119,6 +121,9 @@ export type Msg =
 	| { readonly kind: "deleteRequested"; readonly id: Id }
 	| { readonly kind: "deleteCancelled" }
 	| { readonly kind: "saveRequested"; readonly id: Id }
+	| { readonly kind: "saveFolderChanged"; readonly folder: string }
+	| { readonly kind: "saveConfirmed" }
+	| { readonly kind: "saveCancelled" }
 	| {
 			readonly kind: "saveFinished";
 			readonly id: Id;

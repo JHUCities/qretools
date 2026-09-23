@@ -313,3 +313,10 @@ code {
 	align-items: center;
 	font-size: 13px;
 }
+
+.save-path {
+	margin: 12px 0 4px;
+}
+.save-path code {
+	font-size: 13px;
+}

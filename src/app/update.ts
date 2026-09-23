@@ -1,4 +1,4 @@
-import { bankPath, describeChange } from "../core/bank.js";
+import { bankLocation, describeChange } from "../core/bank.js";
 import { compact } from "../core/compact.js";
 import { evaluate } from "../core/evaluate.js";
 import { locate } from "../core/findings.js";
@@ -114,59 +114,76 @@ export function update(model: Model, msg: Msg): Step {
 		case "saveRequested": {
 			const q = model.questions[msg.id];
 			if (!q || !canWrite(model)) return [model, []];
-			const after = parseSurface(q.source, model.scales).draft;
-			const path =
-				q.origin.kind === "bank"
-					? { ok: true as const, value: q.origin.path }
-					: bankPath(after);
-			if (!path.ok) {
+			// A bank file goes back to the path it was opened at. A draft's path is chosen
+			// once, deliberately: it decides the topic folder, and git would create an
+			// unseen folder without a word.
+			if (q.origin.kind === "bank")
+				return write(model, msg.id, q, q.origin.path);
+			const where = bankLocation(parseSurface(q.source, model.scales).draft);
+			if (!where.ok)
 				return [
-					patch(model, msg.id, {
-						activity: failed({
-							kind: "refused",
-							message: path.error.message,
-							...(path.error.hint && { hint: path.error.hint }),
-						}),
-					})[0],
+					refuse(model, msg.id, where.error.message, where.error.hint),
 					[],
 				];
-			}
-			// A new draft must not silently overwrite a bank file of the same name.
-			const taken =
-				q.origin.kind === "draft" &&
-				Object.values(model.questions).some(
-					(o) => o.origin.kind === "bank" && o.origin.path === path.value,
-				);
+			return [
+				{
+					...model,
+					browser: {
+						...model.browser,
+						saving: { id: msg.id, folder: where.value.folder },
+					},
+				},
+				[],
+			];
+		}
+
+		case "saveFolderChanged":
+			return model.browser.saving === undefined
+				? [model, []]
+				: [
+						{
+							...model,
+							browser: {
+								...model.browser,
+								saving: { ...model.browser.saving, folder: msg.folder },
+							},
+						},
+						[],
+					];
+
+		case "saveCancelled":
+			return [{ ...model, browser: withoutSaving(model.browser) }, []];
+
+		case "saveConfirmed": {
+			const saving = model.browser.saving;
+			const q = saving === undefined ? undefined : model.questions[saving.id];
+			if (saving === undefined || !q || !canWrite(model)) return [model, []];
+			const closed = { ...model, browser: withoutSaving(model.browser) };
+			const where = bankLocation(
+				parseSurface(q.source, model.scales).draft,
+				saving.folder,
+			);
+			if (!where.ok)
+				return [
+					refuse(closed, saving.id, where.error.message, where.error.hint),
+					[],
+				];
+			// A new draft must not silently overwrite a bank file at that path.
+			const taken = Object.values(model.questions).some(
+				(o) => o.origin.kind === "bank" && o.origin.path === where.value.path,
+			);
 			if (taken) {
 				return [
-					patch(model, msg.id, {
-						activity: failed({
-							kind: "refused",
-							message: `A question named \`${after.name}\` already exists in the bank.`,
-							hint: "Open the bank's copy to change it, or give this draft another name.",
-						}),
-					})[0],
+					refuse(
+						closed,
+						saving.id,
+						`A question already exists at \`${where.value.path}\`.`,
+						"Open the bank's copy to change it, or choose another name or topic.",
+					),
 					[],
 				];
 			}
-			const before =
-				q.origin.kind === "bank"
-					? parseSurface(q.origin.original, model.scales).draft
-					: undefined;
-			return [
-				patch(model, msg.id, { activity: { kind: "saving" } })[0],
-				[
-					{
-						kind: "writeFile",
-						id: msg.id,
-						settings: model.settings,
-						path: path.value,
-						text: q.source,
-						...(q.origin.kind === "bank" && { sha: q.origin.sha }),
-						message: describeChange(before, after),
-					},
-				],
-			];
+			return write(closed, saving.id, q, where.value.path);
 		}
 
 		case "saveFinished": {
@@ -338,6 +355,43 @@ export function update(model: Model, msg: Msg): Step {
 			return msg satisfies never;
 	}
 }
+
+/** Emit the write for a question whose path is settled. */
+function write(model: Model, id: Id, q: Question, path: string): Step {
+	const after = parseSurface(q.source, model.scales).draft;
+	const before =
+		q.origin.kind === "bank"
+			? parseSurface(q.origin.original, model.scales).draft
+			: undefined;
+	return [
+		patch(model, id, { activity: { kind: "saving" } })[0],
+		[
+			{
+				kind: "writeFile",
+				id,
+				settings: model.settings,
+				path,
+				text: q.source,
+				...(q.origin.kind === "bank" && { sha: q.origin.sha }),
+				message: describeChange(before, after),
+			},
+		],
+	];
+}
+
+/** The app declined before any request: say so on the question. */
+const refuse = (model: Model, id: Id, message: string, hint?: string): Model =>
+	patch(model, id, {
+		activity: failed(compact({ kind: "refused", message, hint })),
+	})[0];
+
+const withoutSaving = (browser: Model["browser"]): Model["browser"] =>
+	compact({
+		filter: browser.filter,
+		expanded: browser.expanded,
+		settingsOpen: browser.settingsOpen,
+		confirmDelete: browser.confirmDelete,
+	});
 
 const withoutConfirm = (browser: Model["browser"]): Model["browser"] =>
 	compact({

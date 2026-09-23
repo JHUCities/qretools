@@ -84,3 +84,15 @@ export function treeOf(
 				model.browser.expanded.includes(name),
 		}));
 }
+
+/** The topic folders the bank has, for the save dialog. Drafts do not count: they are not filed yet. */
+export const bankFolders = (model: Model): readonly string[] =>
+	[
+		...new Set(
+			Object.values(model.questions).flatMap((q) =>
+				q.origin.kind === "bank" ? [q.origin.path.split("/")[1] ?? ""] : [],
+			),
+		),
+	]
+		.filter((f) => f !== "")
+		.sort();

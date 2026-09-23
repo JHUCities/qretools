@@ -12,7 +12,7 @@ import { status } from "../../core/findings.js";
 import { toDiagnostics } from "../diagnostics.js";
 import { isUnsaved } from "./../merge.js";
 import { type Id, TEMPLATES } from "../model.js";
-import { treeOf } from "../tree.js";
+import { bankFolders, treeOf } from "../tree.js";
 import { useApp, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
@@ -25,6 +25,7 @@ import {
 	StatusBadge,
 } from "./Previews.js";
 import { QuestionHeader } from "./QuestionHeader.js";
+import { SaveDialog } from "./SaveDialog.js";
 
 export function App() {
 	const { dispatch, evaluations } = useApp();
@@ -35,6 +36,9 @@ export function App() {
 	);
 	const open: Id | undefined =
 		model.screen.kind === "editing" ? model.screen.id : undefined;
+	const saving = model.browser.saving;
+	const savingQuestion =
+		saving === undefined ? undefined : model.questions[saving.id];
 	const confirm =
 		model.browser.confirmDelete === undefined
 			? undefined
@@ -124,6 +128,21 @@ export function App() {
 					session={model.session}
 					bank={model.bank}
 					failures={model.failures}
+					dispatch={dispatch}
+				/>
+			)}
+			{saving && savingQuestion && (
+				<SaveDialog
+					draft={
+						evaluations.get(savingQuestion, model.agency, model.scales).draft
+					}
+					folder={saving.folder}
+					folders={bankFolders(model)}
+					taken={(path) =>
+						Object.values(model.questions).some(
+							(o) => o.origin.kind === "bank" && o.origin.path === path,
+						)
+					}
 					dispatch={dispatch}
 				/>
 			)}

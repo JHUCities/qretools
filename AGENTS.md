@@ -264,10 +264,16 @@ emit a Universe item and resolve the link in role 2.
   name produced a draft that collided with the bank's copy and could not be saved. Every
   required field is empty, so a new question opens as a list of holes. `src/examples/`
   stays as test fixtures.
-- **Where a question lands is decided at save, by its name**: `folderOf(name)` gives
-  `questions/<prefix>/<name>.yaml`. Git has no directories, so a name with an unseen
-  prefix simply creates the folder; a typo therefore creates a topic silently (see
-  FEATURES.md). A bank file always saves back to the path it was opened at.
+- **Where a new question goes is chosen at save, not derived silently.** Saving a draft
+  opens a dialog with the topic folder prefilled from the name's prefix
+  (`folderOf`), editable, showing the resulting path; it says when the folder is new
+  ("saving creates it") and refuses a path a bank question already holds. Only on
+  confirm is the write emitted. Core `bankLocation(draft, folder?)` returns
+  `{ folder, name, path }` and validates both. The filename always follows the name, so
+  a question has one identity; the folder is free, which the bank needs
+  (`dem_latx` lives in `svy/`). A bank file never asks: it saves back to the path it was
+  opened at. Rationale: git creates any missing path, so an unseen folder would
+  otherwise be created by a typo without a word.
 - **Save commits directly to the branch in the Bank panel**, one commit per save,
   attributed to the token's owner, refused only when the file changed on GitHub since it
   was opened. No review step exists yet; "propose a change" as a pull request is backlog.

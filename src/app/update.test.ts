@@ -127,25 +127,51 @@ describe("saving", () => {
 		).toEqual([]);
 	});
 
-	it("writes a new draft to the path its name implies, with a core commit message", () => {
+	it("asks where a new draft goes, with the folder its name implies, and writes nothing yet", () => {
 		const [m, cmds] = update(connected(draftModel()), {
 			kind: "saveRequested",
 			id: 1,
 		});
+		expect(cmds).toEqual([]);
+		expect(m.browser.saving).toEqual({ id: 1, folder: "nhd" });
+		expect(m.questions[1]?.activity).toEqual({ kind: "idle" });
+	});
+
+	it("writes to the chosen folder on confirm, with a core commit message", () => {
+		const [asked] = update(connected(draftModel()), {
+			kind: "saveRequested",
+			id: 1,
+		});
+		const [chosen] = update(asked, {
+			kind: "saveFolderChanged",
+			folder: "svy",
+		});
+		const [m, cmds] = update(chosen, { kind: "saveConfirmed" });
+		expect(m.browser.saving).toBeUndefined();
 		expect(m.questions[1]?.activity).toEqual({ kind: "saving" });
 		expect(cmds).toEqual([
 			{
 				kind: "writeFile",
 				id: 1,
 				settings: DEFAULT_SETTINGS,
-				path: "questions/nhd/nhd_new.yaml",
+				path: "questions/svy/nhd_new.yaml",
 				text: m.questions[1]?.source,
 				message: "Add nhd_new",
 			},
 		]);
 	});
 
-	it("refuses to save a draft over a bank question of the same name", () => {
+	it("cancelling the save writes nothing", () => {
+		const [asked] = update(connected(draftModel()), {
+			kind: "saveRequested",
+			id: 1,
+		});
+		const [m, cmds] = update(asked, { kind: "saveCancelled" });
+		expect(m.browser.saving).toBeUndefined();
+		expect(cmds).toEqual([]);
+	});
+
+	it("refuses to save a draft over a bank question at the same path", () => {
 		const base = draftModel();
 		const m0: Model = {
 			...connected(base),
@@ -164,7 +190,8 @@ describe("saving", () => {
 				},
 			},
 		};
-		const [m, cmds] = update(m0, { kind: "saveRequested", id: 1 });
+		const [asked] = update(m0, { kind: "saveRequested", id: 1 });
+		const [m, cmds] = update(asked, { kind: "saveConfirmed" });
 		expect(cmds).toEqual([]);
 		expect(
 			m.questions[1]?.activity.kind === "failed" &&
