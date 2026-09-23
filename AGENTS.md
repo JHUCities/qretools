@@ -211,7 +211,14 @@ emit a Universe item and resolve the link in role 2.
   Questions are keyed by a numeric `Id`; a question's origin is `draft` or
   `bank{path, sha, original}` and "unsaved" is derived, never stored. New drafts file
   under `questions/<prefix>/<name>.yaml` (core `bankPath`); bank files keep the path
-  they were opened at. Commit messages come from core `describeChange`. `update`
+  they were opened at. Commit messages come from core `describeChange`.
+  Folder-from-name-prefix is an assumption for new drafts only; a bank file that
+  becomes a draft again (gone remotely, modified locally) refiles by prefix on its next
+  save. A `Failure` of kind `refused` means the app declined before any request was
+  made (no valid name; path already taken by a bank question). 409/422 is "stale" only
+  when a sha was presented. The list toolbar and the bank form are static controls
+  (rebuilding the filter input per keystroke steals the caret). No example drafts are
+  seeded: the first run is an empty list with "New from <example>" one click away. `update`
   refuses to save a draft over a bank path that another question occupies. Local
   persistence is a `persist` Cmd debounced in `exec`; the stored value is validated by
   a Zod schema and an unreadable one becomes a failure and is kept aside. `mergeBank`

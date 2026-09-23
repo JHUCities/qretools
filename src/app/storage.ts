@@ -21,7 +21,9 @@ export interface Failure {
 		| "auth"
 		| "stale"
 		| "rateLimited"
-		| "unreadable";
+		| "unreadable"
+		/** The app declined before any request was made. */
+		| "refused";
 	readonly message: string;
 	readonly hint?: string;
 	readonly status?: number;

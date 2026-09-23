@@ -239,7 +239,6 @@ export interface ListActions {
 	readonly open: (id: Id) => void;
 	readonly remove: (id: Id) => void;
 	readonly cancelRemove: () => void;
-	readonly filter: (text: string, folder: string | undefined) => void;
 }
 
 export function viewFailure(
@@ -258,16 +257,12 @@ export function viewFailure(
 	);
 }
 
-export function viewList(
+/** The rows the current filter shows. Pure, so the static toolbar and the table agree. */
+export const visibleRows = (
 	rows: readonly Row[],
 	screen: Extract<Screen, { kind: "list" }>,
-	canWrite: boolean,
-	on: ListActions,
-): HTMLElement {
-	const folders = [
-		...new Set(rows.flatMap((r) => (r.folder === undefined ? [] : [r.folder]))),
-	].sort();
-	const shown = rows.filter(
+): readonly Row[] =>
+	rows.filter(
 		(r) =>
 			(screen.folder === undefined || r.folder === screen.folder) &&
 			(screen.text === "" ||
@@ -275,132 +270,101 @@ export function viewList(
 					.toLowerCase()
 					.includes(screen.text.toLowerCase())),
 	);
+
+export function viewList(
+	shown: readonly Row[],
+	screen: Extract<Screen, { kind: "list" }>,
+	canWrite: boolean,
+	on: ListActions,
+): HTMLElement {
+	if (shown.length === 0)
+		return h("p", { class: "quiet" }, "No questions match.");
 	return h(
-		"div",
-		{ class: "list" },
+		"table",
+		{ class: "rows" },
 		h(
-			"div",
-			{ class: "toolbar" },
-			h("input", {
-				type: "search",
-				placeholder: "Filter by name or title",
-				value: screen.text,
-				"aria-label": "Filter",
-				onInput: (e) =>
-					on.filter((e.target as HTMLInputElement).value, screen.folder),
-			}),
+			"thead",
+			{},
 			h(
-				"select",
-				{
-					"aria-label": "Topic",
-					onChange: (e) =>
-						on.filter(
-							screen.text,
-							(e.target as HTMLSelectElement).value || undefined,
-						),
-				},
-				h("option", { value: "" }, "All topics"),
-				...folders.map((f) =>
-					h("option", { value: f, selected: f === screen.folder }, f),
-				),
+				"tr",
+				{},
+				h("th", {}, "Name"),
+				h("th", {}, "Title"),
+				h("th", {}, "Topic"),
+				h("th", {}, "Status"),
+				h("th", {}, ""),
 			),
-			h("span", { class: "count" }, `${shown.length} of ${rows.length}`),
 		),
-		shown.length === 0
-			? h("p", { class: "quiet" }, "No questions match.")
-			: h(
-					"table",
-					{ class: "rows" },
+		h(
+			"tbody",
+			{},
+			...shown.map((r) =>
+				h(
+					"tr",
+					{ class: r.unsaved ? "unsaved" : "" },
 					h(
-						"thead",
+						"td",
 						{},
 						h(
-							"tr",
-							{},
-							h("th", {}, "Name"),
-							h("th", {}, "Title"),
-							h("th", {}, "Topic"),
-							h("th", {}, "Status"),
-							h("th", {}, ""),
+							"button",
+							{ type: "button", class: "link", onClick: () => on.open(r.id) },
+							r.name ?? h("span", { class: "quiet" }, "(no name)"),
 						),
 					),
+					h("td", {}, r.title ?? ""),
+					h("td", {}, r.folder ?? ""),
 					h(
-						"tbody",
+						"td",
 						{},
-						...shown.map((r) =>
+						statusBadge(r.status),
+						r.unsaved &&
 							h(
-								"tr",
-								{ class: r.unsaved ? "unsaved" : "" },
-								h(
-									"td",
-									{},
+								"span",
+								{ class: "badge hole" },
+								r.origin === "draft" ? "draft" : "unsaved",
+							),
+						r.activity.kind === "failed" &&
+							h("span", { class: "badge error" }, "failed"),
+					),
+					h(
+						"td",
+						{ class: "row-actions" },
+						...(screen.confirmDelete === r.id
+							? [
 									h(
 										"button",
 										{
 											type: "button",
-											class: "link",
-											onClick: () => on.open(r.id),
+											class: "danger",
+											onClick: () => on.remove(r.id),
 										},
-										r.name ?? h("span", { class: "quiet" }, "(no name)"),
+										r.origin === "draft" ? "Delete draft" : "Delete from bank",
 									),
-								),
-								h("td", {}, r.title ?? ""),
-								h("td", {}, r.folder ?? ""),
-								h(
-									"td",
-									{},
-									statusBadge(r.status),
-									r.unsaved &&
-										h(
-											"span",
-											{ class: "badge hole" },
-											r.origin === "draft" ? "draft" : "unsaved",
-										),
-									r.activity.kind === "failed" &&
-										h("span", { class: "badge error" }, "failed"),
-								),
-								h(
-									"td",
-									{ class: "row-actions" },
-									...(screen.confirmDelete === r.id
-										? [
-												h(
-													"button",
-													{
-														type: "button",
-														class: "danger",
-														onClick: () => on.remove(r.id),
-													},
-													r.origin === "draft"
-														? "Delete draft"
-														: "Delete from bank",
-												),
-												h(
-													"button",
-													{ type: "button", onClick: () => on.cancelRemove() },
-													"Keep",
-												),
-											]
-										: [
-												h(
-													"button",
-													{
-														type: "button",
-														disabled: r.origin === "bank" && !canWrite,
-														title:
-															r.origin === "bank" && !canWrite
-																? "Read access only"
-																: "Delete",
-														onClick: () => on.remove(r.id),
-													},
-													"Delete…",
-												),
-											]),
-								),
-							),
-						),
+									h(
+										"button",
+										{ type: "button", onClick: () => on.cancelRemove() },
+										"Keep",
+									),
+								]
+							: [
+									h(
+										"button",
+										{
+											type: "button",
+											disabled: r.origin === "bank" && !canWrite,
+											title:
+												r.origin === "bank" && !canWrite
+													? "Read access only"
+													: "Delete",
+											onClick: () => on.remove(r.id),
+										},
+										"Delete…",
+									),
+								]),
 					),
 				),
+			),
+		),
 	);
 }
 

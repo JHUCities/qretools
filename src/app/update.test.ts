@@ -25,9 +25,9 @@ const connected = (model: Model, canWrite = true): Model => ({
 const firstId = (model: Model): Id => Number(Object.keys(model.questions)[0]);
 
 describe("init", () => {
-	it("seeds the bundled examples as drafts on first run, and asks for the DDI schema", () => {
+	it("starts with an empty list on first run, and asks for the DDI schema", () => {
 		const [model, cmds] = init({ stored: ok(undefined), hasToken: false });
-		expect(Object.keys(model.questions)).toHaveLength(4);
+		expect(Object.keys(model.questions)).toHaveLength(0);
 		expect(model.screen).toEqual({ kind: "list", text: "" });
 		expect(cmds).toEqual([{ kind: "loadDdiSchema" }]);
 	});
@@ -63,7 +63,7 @@ describe("init", () => {
 			hasToken: false,
 		});
 		expect(model.failures).toEqual([{ kind: "unreadable", message: "bad" }]);
-		expect(Object.keys(model.questions)).toHaveLength(4);
+		expect(Object.keys(model.questions)).toHaveLength(0);
 	});
 });
 
@@ -73,11 +73,10 @@ describe("editing", () => {
 			kind: "questionCreated",
 			text: "name: q\n",
 		});
-		expect(m1.screen).toEqual({ kind: "editing", id: 5 });
+		expect(m1.screen).toEqual({ kind: "editing", id: 1 });
 		expect(c1.at(-1)?.kind).toBe("persist");
 		const [m2] = update(m1, { kind: "edited", text: "name: q2\n" });
-		expect(m2.questions[5]?.source).toBe("name: q2\n");
-		expect(m2.questions[1]?.source).toBe(m1.questions[1]?.source);
+		expect(m2.questions[1]?.source).toBe("name: q2\n");
 	});
 
 	it("a click names a place; update resolves it against the open question's text", () => {
@@ -104,7 +103,7 @@ describe("editing", () => {
 				{ name: "b.yaml", text: "name: b\n" },
 			],
 		});
-		expect(Object.keys(m.questions)).toHaveLength(6);
+		expect(Object.keys(m.questions)).toHaveLength(2);
 		expect(m.screen.kind).toBe("list");
 	});
 });
@@ -117,13 +116,13 @@ describe("saving", () => {
 		})[0];
 
 	it("does nothing without write access", () => {
-		expect(update(draftModel(), { kind: "saveRequested", id: 5 })[1]).toEqual(
+		expect(update(draftModel(), { kind: "saveRequested", id: 1 })[1]).toEqual(
 			[],
 		);
 		expect(
 			update(connected(draftModel(), false), {
 				kind: "saveRequested",
-				id: 5,
+				id: 1,
 			})[1],
 		).toEqual([]);
 	});
@@ -131,16 +130,16 @@ describe("saving", () => {
 	it("writes a new draft to the path its name implies, with a core commit message", () => {
 		const [m, cmds] = update(connected(draftModel()), {
 			kind: "saveRequested",
-			id: 5,
+			id: 1,
 		});
-		expect(m.questions[5]?.activity).toEqual({ kind: "saving" });
+		expect(m.questions[1]?.activity).toEqual({ kind: "saving" });
 		expect(cmds).toEqual([
 			{
 				kind: "writeFile",
 				id: 5,
 				settings: DEFAULT_SETTINGS,
 				path: "questions/nhd/nhd_new.yaml",
-				text: m.questions[5]?.source,
+				text: m.questions[1]?.source,
 				message: "Add nhd_new",
 			},
 		]);
@@ -165,11 +164,11 @@ describe("saving", () => {
 				},
 			},
 		};
-		const [m, cmds] = update(m0, { kind: "saveRequested", id: 5 });
+		const [m, cmds] = update(m0, { kind: "saveRequested", id: 1 });
 		expect(cmds).toEqual([]);
 		expect(
-			m.questions[5]?.activity.kind === "failed" &&
-				m.questions[5].activity.failure.message,
+			m.questions[1]?.activity.kind === "failed" &&
+				m.questions[1].activity.failure.message,
 		).toMatch(/already exists/);
 	});
 
@@ -178,27 +177,28 @@ describe("saving", () => {
 			kind: "questionCreated",
 			text: "text: Q?\n",
 		});
-		const [m, cmds] = update(connected(m0), { kind: "saveRequested", id: 5 });
+		const [m, cmds] = update(connected(m0), { kind: "saveRequested", id: 1 });
 		expect(cmds).toEqual([]);
-		expect(m.questions[5]?.activity.kind).toBe("failed");
+		expect(m.questions[1]?.activity.kind).toBe("failed");
 	});
 
 	it("a finished save makes the question a bank file at the text that was written", () => {
 		const [m1] = update(connected(draftModel()), {
 			kind: "saveRequested",
-			id: 5,
+			id: 1,
 		});
 		const [m2, cmds] = update(m1, {
 			kind: "saveFinished",
-			id: 5,
-			text: m1.questions[5]?.source ?? "",
+			id: 1,
+			path: "questions/nhd/nhd_new.yaml",
+			text: m1.questions[1]?.source ?? "",
 			result: ok({ sha: "new" }),
 		});
-		expect(m2.questions[5]?.origin).toEqual({
+		expect(m2.questions[1]?.origin).toEqual({
 			kind: "bank",
 			path: "questions/nhd/nhd_new.yaml",
 			sha: "new",
-			original: m1.questions[5]?.source,
+			original: m1.questions[1]?.source,
 		});
 		expect(cmds.at(-1)?.kind).toBe("persist");
 	});
@@ -230,6 +230,7 @@ describe("saving", () => {
 		const [m2] = update(bank, {
 			kind: "saveFinished",
 			id: 1,
+			path: "questions/svy/nhd_sat.yaml",
 			text: "x",
 			result: { ok: false, error: { kind: "stale", message: "changed" } },
 		});
@@ -247,7 +248,9 @@ describe("saving", () => {
 
 describe("deleting", () => {
 	it("asks first, then deletes a draft locally or a bank file through the store", () => {
-		const m = connected(fresh());
+		const m = connected(
+			update(fresh(), { kind: "questionCreated", text: "name: q\n" })[0],
+		);
 		const id = firstId(m);
 		const [m1, c1] = update(m, { kind: "deleteRequested", id });
 		expect(c1).toEqual([]);

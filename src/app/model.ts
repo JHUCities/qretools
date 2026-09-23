@@ -115,6 +115,7 @@ export type Msg =
 	| {
 			readonly kind: "saveFinished";
 			readonly id: Id;
+			readonly path: string;
 			readonly text: string;
 			readonly result: Result<{ readonly sha: string }, Failure>;
 	  }
@@ -236,20 +237,6 @@ export interface Flags {
 	readonly hasToken: boolean;
 }
 
-/** First run: the bundled examples become drafts, so the list is not empty. */
-const seed = (): { questions: Record<Id, Question>; nextId: Id } => {
-	const questions: Record<Id, Question> = {};
-	EXAMPLES.forEach((e, i) => {
-		questions[i + 1] = {
-			id: i + 1,
-			source: e.text,
-			origin: { kind: "draft" },
-			activity: { kind: "idle" },
-		};
-	});
-	return { questions, nextId: EXAMPLES.length + 1 };
-};
-
 export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	const stored = flags.stored.ok ? flags.stored.value : undefined;
 	const { questions, nextId } = stored
@@ -262,7 +249,9 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 				),
 				nextId: stored.nextId,
 			}
-		: seed();
+		: // First run: an empty list. "New question" and "New from <example>" are one click
+			// away; seeded example drafts would sit beside bank questions of the same name.
+			{ questions: {}, nextId: 1 };
 	const settings = stored?.settings ?? DEFAULT_SETTINGS;
 	const model: Model = {
 		questions,

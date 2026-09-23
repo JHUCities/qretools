@@ -4,6 +4,8 @@
  * caches. Built once; `view(model)` redraws from the Model, and `exec` runs the
  * commands `update` describes and reports their results as messages.
  */
+
+import { folderOf } from "../core/bank.js";
 import type { Validator } from "../core/ddi/validate.js";
 import { makeValidator } from "../core/ddi/validate.js";
 import { type Evaluation, evaluate } from "../core/evaluate.js";
@@ -33,6 +35,7 @@ import {
 	viewList,
 	viewQuestionHeader,
 	viewRespondent,
+	visibleRows,
 } from "./panes.js";
 import { STORAGE_KEY } from "./persist.js";
 import type { Mounted } from "./runtime.js";
@@ -43,6 +46,12 @@ export interface Deps {
 	readonly tokenStore: TokenStore;
 }
 
+/** A command that needs the bank when no token is on hand: reported, never swallowed. */
+const NO_TOKEN = {
+	kind: "auth",
+	message: "No token. Paste a fine-grained personal access token and connect.",
+} as const;
+
 export function mount(
 	root: HTMLElement,
 	dispatch: Dispatch,
@@ -50,6 +59,14 @@ export function mount(
 ): Mounted<Model, Cmd> {
 	// ---- skeleton -------------------------------------------------------------
 	const bankForm = bankPanel();
+	const toolbar = listToolbar((text, folder) =>
+		dispatch({
+			kind: "filterChanged",
+			text,
+			...(folder !== undefined && { folder }),
+		}),
+	);
+	const listTable = h("div", { class: "list" });
 	const listHost = h("section", { class: "list-screen" });
 	const editorHost = h("div", { class: "editor" });
 	const qhead = h("div", { class: "qhead-host" });
@@ -130,11 +147,17 @@ export function mount(
 	let token: string | null = deps.tokenStore.load();
 	let store: Store | undefined;
 	let settingsInUse: BankSettings | undefined;
+	let tokenInUse: string | null = null;
 	const storeFor = (settings: BankSettings): Store | undefined => {
 		if (token === null) return undefined;
-		if (!store || JSON.stringify(settings) !== JSON.stringify(settingsInUse)) {
+		if (
+			!store ||
+			token !== tokenInUse ||
+			JSON.stringify(settings) !== JSON.stringify(settingsInUse)
+		) {
 			store = deps.makeStore(settings, token);
 			settingsInUse = settings;
+			tokenInUse = token;
 		}
 		return store;
 	};
@@ -233,7 +256,9 @@ export function mount(
 						folder:
 							q.origin.kind === "bank"
 								? q.origin.path.split("/")[1]
-								: ev.draft.name?.split("_")[0],
+								: ev.draft.name === undefined
+									? undefined
+									: folderOf(ev.draft.name),
 						status: status(ev.findings),
 						unsaved: isUnsaved(q),
 						origin: q.origin.kind,
@@ -241,19 +266,28 @@ export function mount(
 					};
 				});
 				rows.sort((a, b) => (a.name ?? "~").localeCompare(b.name ?? "~"));
-				listHost.replaceChildren(
-					bankForm.newButtons,
-					viewList(rows, model.screen, canWrite, {
+				const shown = visibleRows(rows, model.screen);
+				toolbar.fill(
+					model.screen,
+					[
+						...new Set(
+							rows.flatMap((r) => (r.folder === undefined ? [] : [r.folder])),
+						),
+					].sort(),
+					shown.length,
+					rows.length,
+				);
+				listTable.replaceChildren(
+					viewList(shown, model.screen, canWrite, {
 						open: (id) => dispatch({ kind: "questionOpened", id }),
 						remove: (id) => dispatch({ kind: "deleteRequested", id }),
 						cancelRemove: () => dispatch({ kind: "deleteCancelled" }),
-						filter: (text, folder) =>
-							dispatch({
-								kind: "filterChanged",
-								text,
-								...(folder !== undefined && { folder }),
-							}),
 					}),
+				);
+				listHost.replaceChildren(
+					bankForm.newButtons,
+					toolbar.element,
+					listTable,
 				);
 				return;
 			}
@@ -368,7 +402,10 @@ export function mount(
 				}
 				case "loadBank": {
 					const s = storeFor(cmd.settings);
-					if (!s) return;
+					if (!s) {
+						dispatch({ kind: "bankLoaded", result: err(NO_TOKEN) });
+						return;
+					}
 					s.loadBank().then((result) =>
 						dispatch({ kind: "bankLoaded", result }),
 					);
@@ -376,7 +413,14 @@ export function mount(
 				}
 				case "readFile": {
 					const s = storeFor(cmd.settings);
-					if (!s) return;
+					if (!s) {
+						dispatch({
+							kind: "fileReloaded",
+							id: cmd.id,
+							result: err(NO_TOKEN),
+						});
+						return;
+					}
 					s.read(cmd.path).then((result) =>
 						dispatch({ kind: "fileReloaded", id: cmd.id, result }),
 					);
@@ -384,11 +428,21 @@ export function mount(
 				}
 				case "writeFile": {
 					const s = storeFor(cmd.settings);
-					if (!s) return;
+					if (!s) {
+						dispatch({
+							kind: "saveFinished",
+							id: cmd.id,
+							path: cmd.path,
+							text: cmd.text,
+							result: err(NO_TOKEN),
+						});
+						return;
+					}
 					s.write(cmd.path, cmd.text, cmd.message, cmd.sha).then((result) =>
 						dispatch({
 							kind: "saveFinished",
 							id: cmd.id,
+							path: cmd.path,
 							text: cmd.text,
 							result,
 						}),
@@ -397,7 +451,14 @@ export function mount(
 				}
 				case "deleteFile": {
 					const s = storeFor(cmd.settings);
-					if (!s) return;
+					if (!s) {
+						dispatch({
+							kind: "deleteFinished",
+							id: cmd.id,
+							result: err(NO_TOKEN),
+						});
+						return;
+					}
 					s.remove(cmd.path, cmd.sha, cmd.message).then((result) =>
 						dispatch({ kind: "deleteFinished", id: cmd.id, result }),
 					);
@@ -425,6 +486,52 @@ export function mount(
 }
 
 // ---- pieces ---------------------------------------------------------------------
+
+/**
+ * The list toolbar is static: rebuilding the filter input on every keystroke would
+ * take the focus and the caret away from the person typing (the step 4 lesson,
+ * again). `fill` pushes the Model's values in only where they differ.
+ */
+function listToolbar(
+	onFilter: (text: string, folder: string | undefined) => void,
+) {
+	const input = h("input", {
+		type: "search",
+		placeholder: "Filter by name or title",
+		"aria-label": "Filter",
+	}) as HTMLInputElement;
+	const select = h("select", { "aria-label": "Topic" }) as HTMLSelectElement;
+	const count = h("span", { class: "count" });
+	input.addEventListener("input", () =>
+		onFilter(input.value, select.value || undefined),
+	);
+	select.addEventListener("change", () =>
+		onFilter(input.value, select.value || undefined),
+	);
+	let folders = "";
+	return {
+		element: h("div", { class: "toolbar" }, input, select, count),
+		fill(
+			screen: { readonly text: string; readonly folder?: string },
+			names: readonly string[],
+			shown: number,
+			total: number,
+		) {
+			if (input.value !== screen.text) input.value = screen.text;
+			const key = names.join("\n");
+			if (key !== folders) {
+				folders = key;
+				select.replaceChildren(
+					h("option", { value: "" }, "All topics"),
+					...names.map((f) => h("option", { value: f }, f)),
+				);
+			}
+			if (select.value !== (screen.folder ?? ""))
+				select.value = screen.folder ?? "";
+			count.textContent = `${shown} of ${total}`;
+		},
+	};
+}
 
 /** The bank form is static: built once, its handlers read its inputs. */
 function bankPanel() {

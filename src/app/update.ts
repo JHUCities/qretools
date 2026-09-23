@@ -127,7 +127,7 @@ export function update(model: Model, msg: Msg): Step {
 				return [
 					patch(model, msg.id, {
 						activity: failed({
-							kind: "unreadable",
+							kind: "refused",
 							message: path.error.message,
 							...(path.error.hint && { hint: path.error.hint }),
 						}),
@@ -145,7 +145,7 @@ export function update(model: Model, msg: Msg): Step {
 				return [
 					patch(model, msg.id, {
 						activity: failed({
-							kind: "http",
+							kind: "refused",
 							message: `A question named \`${after.name}\` already exists in the bank.`,
 							hint: "Open the bank's copy to change it, or give this draft another name.",
 						}),
@@ -181,19 +181,12 @@ export function update(model: Model, msg: Msg): Step {
 					patch(model, msg.id, { activity: failed(msg.result.error) })[0],
 					[],
 				];
-			const path =
-				q.origin.kind === "bank"
-					? q.origin.path
-					: bankPath(parseSurface(msg.text, model.scales).draft);
-			const resolved =
-				typeof path === "string" ? path : path.ok ? path.value : undefined;
-			if (resolved === undefined) return [model, []];
 			return persist(
 				patch(model, msg.id, {
 					activity: { kind: "idle" },
 					origin: {
 						kind: "bank",
-						path: resolved,
+						path: msg.path,
 						sha: msg.result.value.sha,
 						original: msg.text,
 					},
