@@ -3,15 +3,19 @@
  * into DOM and decides nothing. Survey policy lives here: field order, how a
  * codebook formats values, what a hole says. Previews evaluate around holes:
  * a required field that is missing becomes a visible `hole` slot, never a crash
- * and never an empty space.
+ * and never an empty space. A reference is shown resolved, with its name kept
+ * so the shell can offer "go to definition".
  */
 import { compact } from "./compact.js";
 import {
 	type Code,
 	type Domain,
 	type Draft,
+	type Named,
 	optionVariable,
+	textOf,
 } from "./surface/draft.js";
+import type { Env, TextEntry } from "./surface/env.js";
 
 export interface Hole {
 	readonly kind: "hole";
@@ -21,6 +25,12 @@ export interface Hole {
 }
 
 export type Slot = { readonly kind: "filled"; readonly text: string } | Hole;
+
+/** Prose or a resolved reference: the text to show, and the name when it came from a scheme. */
+export interface Resolved {
+	readonly text: string;
+	readonly ref?: string;
+}
 
 export type Input =
 	| {
@@ -41,7 +51,7 @@ export type Input =
 /** The question as the respondent sees it. */
 export interface RespondentView {
 	readonly text: Slot;
-	readonly instruction?: string;
+	readonly instruction?: Resolved;
 	readonly input: Input;
 }
 
@@ -53,14 +63,12 @@ export interface CodebookView {
 	readonly values:
 		| { readonly kind: "lines"; readonly lines: readonly string[] }
 		| Hole;
-	readonly universe?: string;
+	/** The bank's missing-value line, as the codebook prints it, when the bank declares any. */
+	readonly missing?: string;
+	readonly universe?: Resolved;
 	readonly source?: string;
 	readonly notes: readonly string[];
 }
-
-/** Neutral on purpose: the author may have typed a domain that parse rejected. */
-const DOMAIN_PROMPT =
-	"No usable response domain yet: responses, number, or open";
 
 /** Short prompts of render's own: the schema descriptions are hover prose, too long for a placeholder. */
 const PROMPT = {
@@ -69,6 +77,10 @@ const PROMPT = {
 	title: "title",
 } as const;
 
+/** Neutral on purpose: the author may have typed a domain that parse rejected. */
+const DOMAIN_PROMPT =
+	"No usable response domain yet: responses, number, or open";
+
 const slot = (value: string | undefined, path: "name" | "text"): Slot =>
 	value === undefined
 		? { kind: "hole", path, prompt: PROMPT[path] }
@@ -76,10 +88,15 @@ const slot = (value: string | undefined, path: "name" | "text"): Slot =>
 
 const domainHole: Hole = { kind: "hole", path: "", prompt: DOMAIN_PROMPT };
 
+const resolved = (n: Named<TextEntry> | undefined): Resolved | undefined =>
+	n === undefined
+		? undefined
+		: compact({ text: textOf(n), ref: n.kind === "ref" ? n.name : undefined });
+
 export function respondentView(draft: Draft): RespondentView {
 	return compact({
 		text: slot(draft.text, "text"),
-		instruction: draft.instruction,
+		instruction: resolved(draft.instruction),
 		input: draft.domain ? input(draft.domain) : domainHole,
 	});
 }
@@ -104,7 +121,7 @@ function input(domain: Domain): Input {
 	}
 }
 
-export function codebookView(draft: Draft): CodebookView {
+export function codebookView(draft: Draft, env: Env): CodebookView {
 	const values: CodebookView["values"] = draft.domain
 		? { kind: "lines", lines: valueLines(draft.domain, draft.name) }
 		: domainHole;
@@ -113,13 +130,17 @@ export function codebookView(draft: Draft): CodebookView {
 		variable: slot(draft.name, "name"),
 		text: slot(draft.text, "text"),
 		values,
-		universe: draft.universe,
+		missing:
+			env.missing.length === 0
+				? undefined
+				: `Missing: ${env.missing.map((c) => `${c.code} (${c.label})`).join(", ")}`,
+		universe: resolved(draft.universe),
 		source: draft.source,
 		notes: notes(draft),
 	});
 }
 
-/** The codebook title: `title`, else the concept, else the name. */
+/** The codebook title: `title`, else the concept, else the name. Upper-casing is the shell's. */
 function title(draft: Draft): Slot {
 	const source = draft.title ?? draft.concept ?? draft.name;
 	return source === undefined

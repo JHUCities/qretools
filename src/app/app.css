@@ -207,6 +207,15 @@ textarea {
 	font-family: var(--fontStack-monospace);
 	font-size: 13px;
 }
+.ref {
+	margin-left: 6px;
+	padding: 0 4px;
+	border-radius: 4px;
+	background: var(--bgColor-neutral-muted);
+	font-family: var(--fontStack-monospace);
+	font-size: 12px;
+	font-style: normal;
+}
 .cb-meta {
 	margin: 2px 0;
 	color: var(--fgColor-muted);

@@ -10,8 +10,9 @@
  */
 import type { Finding, LintCode } from "./findings.js";
 import { type Draft, optionVariable } from "./surface/draft.js";
+import type { Env } from "./surface/env.js";
 
-type Rule = (draft: Draft) => readonly Finding[];
+type Rule = (draft: Draft, env: Env) => readonly Finding[];
 
 const advise = (
 	code: LintCode,
@@ -190,6 +191,54 @@ const optionVariables: Rule = ({ name, domain }) => {
 	});
 };
 
+const pairs = (codes: readonly { code: string; label: string }[]): string =>
+	JSON.stringify(codes.map((c) => [c.code, normalise(c.label)]));
+
+/** An inline list that duplicates a shared scale: the extract-to-shared refactoring, offered, not forced. */
+const matchesScale: Rule = ({ domain }, env) => {
+	if (
+		domain?.kind !== "responses" ||
+		domain.scale !== undefined ||
+		domain.codes.length === 0
+	)
+		return [];
+	const key = pairs(domain.codes);
+	const matches = Object.entries(env.scales)
+		.filter(([, s]) => pairs(s.codes) === key)
+		.map(([n]) => n);
+	if (matches.length === 0) return [];
+	const which =
+		matches.length === 1
+			? `the shared scale \`${matches[0]}\``
+			: `the shared scales ${matches.map((m) => `\`${m}\``).join(", ")}`;
+	return [
+		advise(
+			"matches-scale",
+			"info",
+			"responses",
+			`These responses match ${which}.`,
+			`Write \`responses: ${matches[0]}\` to share it, so a change to the scale reaches every question that uses it.`,
+		),
+	];
+};
+
+/** A response code that the bank reserves for missing data would be unreadable in the dataset. */
+const missingCode: Rule = ({ domain }, env) => {
+	if (domain?.kind !== "responses" || domain.scale !== undefined) return [];
+	const reserved = new Set(env.missing.map((c) => c.code));
+	return domain.codes
+		.filter((c) => reserved.has(c.code))
+		.map((c) =>
+			advise(
+				"missing-code",
+				"warning",
+				`responses.${c.code}`,
+				`Code \`${c.code}\` is the bank's missing-value code.`,
+				"Pick another code; the dataset uses this one for missing data.",
+			),
+		);
+};
+
 const RULES: readonly Rule[] = [
 	duplicateLabels,
 	tooFewResponses,
@@ -198,7 +247,9 @@ const RULES: readonly Rule[] = [
 	thinIntent,
 	legacyFields,
 	optionVariables,
+	matchesScale,
+	missingCode,
 ];
 
-export const lint = (draft: Draft): readonly Finding[] =>
-	RULES.flatMap((rule) => rule(draft));
+export const lint = (draft: Draft, env: Env): readonly Finding[] =>
+	RULES.flatMap((rule) => rule(draft, env));

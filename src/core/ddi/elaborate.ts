@@ -2,13 +2,18 @@
  * Elaboration: a Draft becomes a DDI-Lifecycle 4.0 document. Total: any Draft,
  * holes included, elaborates. What is present is emitted; a hole emits nothing.
  * Parse already reported the holes, so elaboration reports none of its own.
+ *
+ * A reference into a scheme becomes one shared item, identified by scheme and
+ * name (`scale-agree4`, `universe-renters`); prose becomes a per-question item.
  */
 import {
 	type Code,
 	type Domain,
 	type Draft,
+	type Named,
 	optionVariable,
 } from "../surface/draft.js";
+import type { TextEntry } from "../surface/env.js";
 import {
 	codeValue,
 	type DdiDocument,
@@ -35,7 +40,14 @@ const BINARY: readonly Code[] = [
 	{ code: "1", label: "Yes" },
 ];
 
-export function elaborate(draft: Draft, agency: string): DdiDocument {
+/** The bank's missing-value list: one managed representation, referenced by every variable. */
+const MISSING_ID = "missing";
+
+export function elaborate(
+	draft: Draft,
+	agency: string,
+	missing: readonly Code[] = [],
+): DdiDocument {
 	const qid = draft.name ?? UNTITLED;
 	const questionId = identity(agency, qid);
 	const questionRef = { type: "QuestionItem" as const, identity: questionId };
@@ -45,18 +57,23 @@ export function elaborate(draft: Draft, agency: string): DdiDocument {
 		item("Concept", named("concept"), { ConceptName: [intl(c)] }),
 	);
 	const universe = maybe(draft.universe, (u) =>
-		item("Universe", named("universe"), {
-			UniverseName: [intl(u)],
-			Description: structured(u),
-		}),
+		universeItem(u, agency, named("universe")),
 	);
 	const instruction = maybe(draft.instruction, (i) =>
-		item("Instruction", named("instruction"), {
-			InstructionText: [literalText(i)],
-		}),
+		instructionItem(i, agency, named("instruction")),
 	);
+	const missingItems =
+		missing.length > 0 ? missingValueItems(agency, missing) : undefined;
 	const domain = maybe(draft.domain, (d) =>
-		elaborateDomain(d, agency, qid, draft.name, questionRef),
+		elaborateDomain(
+			d,
+			agency,
+			qid,
+			draft.name,
+			questionRef,
+			missing,
+			missingItems?.representation,
+		),
 	);
 
 	const question = item(
@@ -80,10 +97,74 @@ export function elaborate(draft: Draft, agency: string): DdiDocument {
 	);
 
 	return documentOf(
-		[question, ...(domain?.items ?? []), concept, instruction, universe].filter(
-			(it) => it !== undefined,
-		),
+		[
+			question,
+			...(domain?.items ?? []),
+			concept,
+			instruction,
+			universe,
+			...(domain && missingItems ? missingItems.items : []),
+		].filter((it) => it !== undefined),
 	);
+}
+
+/** Prose is this question's own universe; a reference is the bank's, named as the bank names it. */
+function universeItem(
+	u: Named<TextEntry>,
+	agency: string,
+	own: Identity,
+): Item {
+	return u.kind === "text"
+		? item("Universe", own, {
+				UniverseName: [intl(u.text)],
+				Description: structured(u.text),
+			})
+		: item("Universe", identity(agency, `universe-${u.name}`), {
+				UniverseName: [intl(u.name)],
+				Label: [structured(u.value.text)],
+				Description: structured(u.value.text),
+			});
+}
+
+function instructionItem(
+	i: Named<TextEntry>,
+	agency: string,
+	own: Identity,
+): Item {
+	return i.kind === "text"
+		? item("Instruction", own, { InstructionText: [literalText(i.text)] })
+		: item("Instruction", identity(agency, `instruction-${i.name}`), {
+				InstructionName: [intl(i.name)],
+				InstructionText: [literalText(i.value.text)],
+			});
+}
+
+/**
+ * DDI attaches missing values to variables, not questions: a response domain can
+ * only list the codes as a string, and `MissingValuesReference` lives on the
+ * variable's representation. So the bank's list becomes one
+ * ManagedMissingValuesRepresentation over a CodeList whose categories are marked
+ * missing, referenced from every select-many variable, and its codes are stamped
+ * on every response domain.
+ */
+function missingValueItems(
+	agency: string,
+	missing: readonly Code[],
+): { representation: Item; items: readonly Item[] } {
+	const { codeList, categories } = codeListItems(
+		agency,
+		MISSING_ID,
+		missing,
+		true,
+	);
+	const representation = item(
+		"ManagedMissingValuesRepresentation",
+		identity(agency, MISSING_ID),
+		{
+			MissingCodeRepresentation: [{ CodeListReference: ref(codeList) }],
+		},
+	);
+	return { representation, items: [representation, codeList, ...categories] };
 }
 
 interface ElaboratedDomain {
@@ -103,10 +184,22 @@ function elaborateDomain(
 	qid: string,
 	name: string | undefined,
 	questionRef: Pick<Item, "type" | "identity">,
+	missing: readonly Code[],
+	missingRef: Item | undefined,
 ): ElaboratedDomain {
+	const missingCodes =
+		missing.length > 0 ? missing.map((c) => c.code).join(" ") : undefined;
 	switch (domain.kind) {
 		case "responses":
-			return elaborateResponses(domain, agency, qid, name, questionRef);
+			return elaborateResponses(
+				domain,
+				agency,
+				qid,
+				name,
+				questionRef,
+				missingCodes,
+				missingRef,
+			);
 		case "number":
 			return {
 				items: [],
@@ -117,6 +210,7 @@ function elaborateDomain(
 					NumericTypeCode: codeValue(domain.decimals ? "Decimal" : "Integer"),
 					DecimalPositions: domain.decimals,
 					MeasurementUnit: maybe(domain.unit, codeValue),
+					MissingValue: missingCodes,
 				}),
 			};
 		case "open":
@@ -125,6 +219,7 @@ function elaborateDomain(
 				responseDomain: obj({
 					$type: "TextDomain",
 					MaxLength: domain.maxLength,
+					MissingValue: missingCodes,
 				}),
 			};
 		default:
@@ -147,6 +242,8 @@ function elaborateResponses(
 	qid: string,
 	name: string | undefined,
 	questionRef: Pick<Item, "type" | "identity">,
+	missingCodes: string | undefined,
+	missingRef: Item | undefined,
 ): ElaboratedDomain {
 	// DDI IDs allow one dot, so every list hangs off a base: `<base>.codes`,
 	// `<base>.cat-i`, `<base>.code-i`. A shared scale's base is `scale-<name>`.
@@ -160,7 +257,7 @@ function elaborateResponses(
 				: undefined;
 	const variables =
 		domain.select === "many"
-			? variableItems(domain.codes, agency, name, questionRef)
+			? variableItems(domain.codes, agency, name, questionRef, missingRef)
 			: { items: [] };
 	return {
 		items: [codeList, ...categories, ...variables.items],
@@ -168,6 +265,7 @@ function elaborateResponses(
 			$type: "CodeDomain",
 			CodeListReference: ref(codeList),
 			ResponseCardinality: maybe(maximum, (m) => ({ MaximumResponses: m })),
+			MissingValue: missingCodes,
 		}),
 	};
 }
@@ -176,11 +274,14 @@ function codeListItems(
 	agency: string,
 	base: string,
 	codes: readonly Code[],
+	isMissing = false,
 ): { codeList: Item; categories: Item[] } {
 	const options = codes.map((c, i) => {
-		const category = item("Category", identity(agency, `${base}.cat-${i}`), {
-			Label: [structured(c.label)],
-		});
+		const category = item(
+			"Category",
+			identity(agency, `${base}.cat-${i}`),
+			obj({ Label: [structured(c.label)], IsMissing: isMissing || undefined }),
+		);
 		const code: JsonObject = {
 			...identity(agency, `${base}.code-${i}`),
 			Value: codeValue(c.code),
@@ -199,6 +300,7 @@ function variableItems(
 	agency: string,
 	name: string | undefined,
 	questionRef: Pick<Item, "type" | "identity">,
+	missingRef: Item | undefined,
 ): { items: readonly Item[] } {
 	const named = codes.flatMap((c) => {
 		const variable = optionVariable(name, c);
@@ -211,12 +313,13 @@ function variableItems(
 			VariableName: [intl(variable)],
 			Label: [structured(code.title ?? code.label)],
 			QuestionReference: [ref(questionRef)],
-			VariableRepresentation: {
+			VariableRepresentation: obj({
 				ValueRepresentation: {
 					$type: "CodeDomain",
 					CodeListReference: ref(binary.codeList),
 				},
-			},
+				MissingValuesReference: maybe(missingRef, ref),
+			}),
 		}),
 	);
 	return { items: [...variables, binary.codeList, ...binary.categories] };

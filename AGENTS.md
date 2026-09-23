@@ -434,7 +434,29 @@ reference position resolves against its scheme or is a hole, and each scheme get
 section in the tree with "used by" derived from the loaded questions. Populate all four:
 scales (exists), missing-value codes (one bank-level file), universes, instructions.
 Syntax decides reference versus prose: a bare identifier is a name, anything else is
-text. Concepts and sources stay free text; categories are never surfaced. Notes for step 5 from the step 4 review: identify questions by a
+text. Concepts and sources stay free text; categories are never surfaced.
+
+**Step 8(a) built (2026-09-24): the core of schemes.** `Env { scales, universes,
+instructions, missing }` (`src/core/surface/env.ts`) replaces the bare `Scales` argument
+everywhere: `parseSurface(text, env)`, `lint(draft, env)`, `codebookView(draft, env)`,
+`questionJsonSchema(env)`; `elaborate(draft, agency, missing)` takes only what it uses.
+`universe` and `instruction` are `Named<TextEntry> = Prose | Ref`: a bare identifier is a
+name and must resolve (else a hole whose hint lists the names, "or write it as a
+sentence"), anything else is prose. Scheme files are `labels:` (scales, `missing.yaml`)
+or `text:` (universes, instructions); an empty `text:` file is a hole, like an empty
+question. A reference elaborates to one shared item per scheme entry
+(`universe-<name>`, `instruction-<name>`); prose keeps a per-question item. Missing
+values are one `ManagedMissingValuesRepresentation` (`missing`) over a code list whose
+categories are `IsMissing`; Variables reference it; `CodeDomain` cannot, so the codes
+are also stamped as `MissingValue` on every response domain. **Open question for the
+owner:** stamp only Variables instead? Two lints: `matches-scale` (inline codes identical
+to a bank scale, "use the name") and `missing-code` (an inline code that collides with a
+bank missing code). Previews show a resolved reference's name beside its text and the
+codebook prints the bank's missing line. Until 8(b) the shell builds the Env from
+`model.scales` alone (`envOf`, memoised by `useEnv` so the evaluation cache holds).
+Verified against the bank: 332 questions, 0 errors, all DDI-valid with missing values;
+no question references a universe or instruction by name yet (they are prose; the bank
+is never rewritten programmatically). Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

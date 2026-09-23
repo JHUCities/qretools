@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EMPTY_ENV } from "./env.js";
 import { parseSurface } from "./parse.js";
 import { parseScale, type Scales } from "./scales.js";
 import { questionJsonSchema } from "./schema.js";
@@ -7,6 +8,7 @@ const agree4 = parseScale(
 	"labels:\n  1: Strongly agree\n  2: Agree\n  3: Disagree\n  4: Strongly disagree\n",
 );
 const scales: Scales = agree4.scale ? { agree4: agree4.scale } : {};
+const env = { ...EMPTY_ENV, scales };
 const brief = (f: { severity: string; code: string; path: string }) =>
 	`${f.severity}:${f.code}@${f.path}`;
 
@@ -46,10 +48,7 @@ describe("named scales in a question", () => {
 		"name: q\ntext: Neighbors help each other.\nintent: Prevalence of perceived social cohesion\n";
 
 	it("resolve to the scale's codes and remember the name", () => {
-		const { draft, findings } = parseSurface(
-			`${base}responses: agree4\n`,
-			scales,
-		);
+		const { draft, findings } = parseSurface(`${base}responses: agree4\n`, env);
 		expect(findings).toEqual([]);
 		expect(draft.domain).toEqual({
 			kind: "responses",
@@ -60,24 +59,21 @@ describe("named scales in a question", () => {
 	});
 
 	it("an unknown name is a hole that lists what exists", () => {
-		const { draft, findings } = parseSurface(
-			`${base}responses: agre4\n`,
-			scales,
-		);
+		const { draft, findings } = parseSurface(`${base}responses: agre4\n`, env);
 		expect(draft.domain).toBeUndefined();
 		expect(findings.map(brief)).toEqual(["hole:hole@responses"]);
 		expect(findings[0]?.hint).toContain("agree4");
 	});
 
 	it("with no scales loaded, the hint says to write options inline", () => {
-		const { findings } = parseSurface(`${base}responses: agree4\n`, {});
+		const { findings } = parseSurface(`${base}responses: agree4\n`, EMPTY_ENV);
 		expect(findings[0]?.hint).toMatch(/inline/);
 	});
 });
 
 describe("questionJsonSchema with scales", () => {
 	it("offers scale names as constants with their labels, only on the string branch", () => {
-		const schema = questionJsonSchema(scales) as {
+		const schema = questionJsonSchema(env) as {
 			properties: { responses: { anyOf: Array<Record<string, unknown>> } };
 		};
 		const branches = schema.properties.responses.anyOf;

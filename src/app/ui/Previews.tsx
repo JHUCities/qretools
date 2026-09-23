@@ -13,6 +13,7 @@ import type {
 	CodebookView,
 	Hole,
 	Input,
+	Resolved,
 	RespondentView,
 	Slot,
 } from "../../core/render.js";
@@ -99,7 +100,9 @@ export function Respondent({
 		<fieldset className="respondent">
 			<legend>{slot(view.text, onTarget)}</legend>
 			{view.instruction !== undefined && (
-				<p className="instruction">{view.instruction}</p>
+				<p className="instruction">
+					<ResolvedText value={view.instruction} />
+				</p>
 			)}
 			<RespondentInput input={view.input} onTarget={onTarget} />
 		</fieldset>
@@ -183,9 +186,10 @@ export function Codebook({
 			{view.universe !== undefined && (
 				<p className="cb-meta">
 					<b>Universe: </b>
-					{view.universe}
+					<ResolvedText value={view.universe} />
 				</p>
 			)}
+			{view.missing !== undefined && <p className="cb-meta">{view.missing}</p>}
 			{view.source !== undefined && (
 				<p className="cb-meta">
 					<b>Source: </b>
@@ -267,5 +271,15 @@ export function Ddi({
 				<pre className="json">{JSON.stringify(document, null, 2)}</pre>
 			</div>
 		</details>
+	);
+}
+
+/** Shared text shows the scheme name it came from, so the author sees it is not theirs to reword here. */
+function ResolvedText({ value }: { value: Resolved }) {
+	return (
+		<>
+			{value.text}
+			{value.ref !== undefined && <span className="ref">{value.ref}</span>}
+		</>
 	);
 }

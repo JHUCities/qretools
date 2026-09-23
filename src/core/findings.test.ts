@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "./evaluate.js";
 import { status } from "./findings.js";
+import { EMPTY_ENV } from "./surface/env.js";
 
 const statusOf = (source: string) =>
-	status(evaluate(source, "org.example", {}).findings);
+	status(evaluate(source, "org.example", EMPTY_ENV).findings);
 
 describe("status", () => {
 	it("is the core's verdict on a draft", () => {

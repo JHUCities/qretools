@@ -12,7 +12,8 @@ import type { ZodError } from "zod";
 import { compact } from "../compact.js";
 import type { Finding, Range } from "../findings.js";
 import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
-import type { Domain, Draft } from "./draft.js";
+import type { Domain, Draft, Named } from "./draft.js";
+import { type Env, listNames, type Scheme, type TextEntry } from "./env.js";
 import {
 	EMPTY_HINT,
 	error,
@@ -28,6 +29,7 @@ import {
 	DOMAIN_KEYS,
 	describe,
 	KNOWN_KEYS,
+	NAME_PATTERN,
 	NumberDomainSchema,
 	OpenDomainSchema,
 	QuestionSchema,
@@ -57,7 +59,7 @@ type TextKey = (typeof TEXT_KEYS)[number];
 
 const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older format go under \`legacy\`.`;
 
-export function parseSurface(text: string, scales: Scales): Parsed {
+export function parseSurface(text: string, env: Env): Parsed {
 	const doc = parseDocument(text, { prettyErrors: false });
 	const ranges = indexRanges(doc, text.length);
 	const syntax = doc.errors.map((e) =>
@@ -99,10 +101,23 @@ export function parseSurface(text: string, scales: Scales): Parsed {
 		fieldFindings.push(...read.findings);
 	}
 
+	const {
+		universe: universeText,
+		instruction: instructionText,
+		...plain
+	} = fields;
+	const universe = refOrProse("universe", universeText, env.universes);
+	const instruction = refOrProse(
+		"instruction",
+		instructionText,
+		env.instructions,
+	);
 	const legacy = readLegacy(data.legacy);
-	const domain = readDomain(doc, data, ranges, scales);
+	const domain = readDomain(doc, data, ranges, env.scales);
 	const draft: Draft = compact({
-		...fields,
+		...plain,
+		universe: universe.value,
+		instruction: instruction.value,
 		legacy: legacy.value,
 		domain: domain.value,
 	});
@@ -114,6 +129,8 @@ export function parseSurface(text: string, scales: Scales): Parsed {
 			...js.findings,
 			...unknown,
 			...fieldFindings,
+			...universe.findings,
+			...instruction.findings,
 			...legacy.findings,
 			...domain.findings,
 		],
@@ -175,6 +192,30 @@ function readLegacy(value: unknown): Read<readonly string[]> {
 		);
 	const keys = Object.keys(value);
 	return keys.length === 0 ? fail() : ok(keys);
+}
+
+/**
+ * Syntax decides: a bare identifier is a name in a scheme, anything else is prose.
+ * A name that resolves is a reference; one that does not is a hole, and the hint
+ * says what exists and that a sentence is also fine.
+ */
+function refOrProse(
+	key: "universe" | "instruction",
+	text: string | undefined,
+	scheme: Scheme<TextEntry>,
+): Read<Named<TextEntry>> {
+	if (text === undefined) return fail();
+	if (!NAME_PATTERN.test(text)) return ok({ kind: "text", text });
+	const value = scheme[text];
+	if (value === undefined)
+		return fail(
+			hole(
+				key,
+				`No ${key} named \`${text}\`.`,
+				listNames(key, Object.keys(scheme), true),
+			),
+		);
+	return ok({ kind: "ref", name: text, value });
 }
 
 function readDomain(
@@ -254,21 +295,16 @@ function readScaleName(
 	select: "one" | "many",
 ): Read<Domain> {
 	const scale = scales[name];
-	if (scale === undefined)
-		return fail(
-			hole(
-				"responses",
-				`No scale named \`${name}\`.`,
-				listScales(Object.keys(scales)),
-			),
-		);
+	if (scale === undefined) {
+		const names = Object.keys(scales);
+		const hint =
+			names.length === 0
+				? "No shared scales are loaded; write the options inline."
+				: listNames("scale", names, false);
+		return fail(hole("responses", `No scale named \`${name}\`.`, hint));
+	}
 	return ok({ kind: "responses", codes: scale.codes, select, scale: name });
 }
-
-const listScales = (names: readonly string[]): string =>
-	names.length === 0
-		? "No shared scales are loaded; write the options inline."
-		: `Scales: ${names.slice(0, 12).join(", ")}${names.length > 12 ? ", …" : ""}`;
 
 function readInlineOptions(
 	doc: Document,

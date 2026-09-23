@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../core/evaluate.js";
 import { ok } from "../core/result.js";
-import { init, type Model, type Question } from "./model.js";
+import { envOf, init, type Model, type Question } from "./model.js";
 import { treeOf, UNFILED } from "./tree.js";
 
 const bank = (
@@ -36,7 +36,7 @@ const model: Model = {
 	},
 };
 const tree = (m: Model) =>
-	treeOf(m, (q) => evaluate(q.source, m.agency, m.scales));
+	treeOf(m, (q) => evaluate(q.source, m.agency, envOf(m)));
 
 describe("treeOf", () => {
 	it("files bank questions by their path, drafts by name prefix, unnamed drafts last", () => {

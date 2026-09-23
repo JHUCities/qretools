@@ -8,6 +8,7 @@ import { mergeBank } from "./merge.js";
 import {
 	type Cmd,
 	EXAMPLE_SCALES,
+	envOf,
 	type Id,
 	type Model,
 	type Msg,
@@ -31,7 +32,7 @@ export function update(model: Model, msg: Msg): Step {
 			// against the text as it is now.
 			const q = current(model);
 			if (!q) return [model, []];
-			const { ranges } = evaluate(q.source, model.agency, model.scales);
+			const { ranges } = evaluate(q.source, model.agency, envOf(model));
 			return [
 				model,
 				[{ kind: "revealRange", range: locate(msg.target, ranges) }],
@@ -92,7 +93,7 @@ export function update(model: Model, msg: Msg): Step {
 			if (q.origin.kind === "draft")
 				return persist([without(cleared, msg.id), []]);
 			if (!canWrite(model)) return [cleared, []];
-			const before = parseSurface(q.origin.original, model.scales).draft;
+			const before = parseSurface(q.origin.original, envOf(model)).draft;
 			return [
 				patch(cleared, msg.id, { activity: { kind: "deleting" } })[0],
 				[
@@ -119,7 +120,7 @@ export function update(model: Model, msg: Msg): Step {
 			// unseen folder without a word.
 			if (q.origin.kind === "bank")
 				return write(model, msg.id, q, q.origin.path);
-			const where = bankLocation(parseSurface(q.source, model.scales).draft);
+			const where = bankLocation(parseSurface(q.source, envOf(model)).draft);
 			if (!where.ok)
 				return [
 					refuse(model, msg.id, where.error.message, where.error.hint),
@@ -160,7 +161,7 @@ export function update(model: Model, msg: Msg): Step {
 			if (saving === undefined || !q || !canWrite(model)) return [model, []];
 			const closed = { ...model, browser: withoutSaving(model.browser) };
 			const where = bankLocation(
-				parseSurface(q.source, model.scales).draft,
+				parseSurface(q.source, envOf(model)).draft,
 				saving.folder,
 			);
 			if (!where.ok)
@@ -250,7 +251,7 @@ export function update(model: Model, msg: Msg): Step {
 		case "downloadRequested": {
 			const q = model.questions[msg.id];
 			if (!q) return [model, []];
-			const ev = evaluate(q.source, model.agency, model.scales);
+			const ev = evaluate(q.source, model.agency, envOf(model));
 			const stem = ev.draft.name ?? `question-${msg.id}`;
 			return [
 				model,
@@ -358,10 +359,10 @@ export function update(model: Model, msg: Msg): Step {
 
 /** Emit the write for a question whose path is settled. */
 function write(model: Model, id: Id, q: Question, path: string): Step {
-	const after = parseSurface(q.source, model.scales).draft;
+	const after = parseSurface(q.source, envOf(model)).draft;
 	const before =
 		q.origin.kind === "bank"
-			? parseSurface(q.origin.original, model.scales).draft
+			? parseSurface(q.origin.original, envOf(model)).draft
 			: undefined;
 	return [
 		patch(model, id, { activity: { kind: "saving" } })[0],

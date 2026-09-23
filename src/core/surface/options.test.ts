@@ -3,6 +3,7 @@ import demRace from "../../examples/dem_race.yaml?raw";
 import { lint } from "../lint.js";
 import { codebookView } from "../render.js";
 import { optionVariable } from "./draft.js";
+import { EMPTY_ENV } from "./env.js";
 import { parseSurface } from "./parse.js";
 
 const brief = (f: { severity: string; code: string; path: string }) =>
@@ -12,7 +13,7 @@ const base =
 
 describe("select-many options", () => {
 	it("read the example: labels, titles, legacy, note", () => {
-		const { draft, findings } = parseSurface(demRace, {});
+		const { draft, findings } = parseSurface(demRace, EMPTY_ENV);
 		expect(findings).toEqual([]);
 		expect(draft.title).toBe("Race");
 		expect(draft.legacy).toEqual(["surveys_used", "vargroup"]);
@@ -24,7 +25,7 @@ describe("select-many options", () => {
 			},
 		);
 		// The example has no "none of these" option, and that advice is correct for a real BAS item.
-		expect(lint(draft).map(brief)).toEqual([
+		expect(lint(draft, EMPTY_ENV).map(brief)).toEqual([
 			"warning:no-none-option@select",
 			"info:legacy-fields@legacy",
 		]);
@@ -47,7 +48,7 @@ describe("select-many options", () => {
 	});
 
 	it("the codebook lists one variable per option", () => {
-		const v = codebookView(parseSurface(demRace, {}).draft);
+		const v = codebookView(parseSurface(demRace, EMPTY_ENV).draft, EMPTY_ENV);
 		expect(v.values).toMatchObject({ kind: "lines" });
 		expect(v.values.kind === "lines" && v.values.lines[0]).toBe(
 			"dem_race_wh: Race selected -- White",
@@ -89,15 +90,17 @@ describe("select-many options", () => {
 	];
 
 	it.each(table)("%s", (_t, source, expected) => {
-		expect(parseSurface(source, {}).findings.map(brief)).toEqual(expected);
+		expect(parseSurface(source, EMPTY_ENV).findings.map(brief)).toEqual(
+			expected,
+		);
 	});
 
 	it("lints duplicate and unprefixed option variables", () => {
 		const { draft } = parseSurface(
 			`${base}responses:\n  a: { label: A, variable: dem_race_x }\n  b: { label: B, variable: dem_race_x }\n  c: { label: C, variable: other_c }\n  d: None of these\n`,
-			{},
+			EMPTY_ENV,
 		);
-		expect(lint(draft).map(brief)).toEqual([
+		expect(lint(draft, EMPTY_ENV).map(brief)).toEqual([
 			"warning:duplicate-option-variable@responses.b",
 			"info:option-variable-prefix@responses.c",
 		]);

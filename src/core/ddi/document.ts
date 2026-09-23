@@ -19,7 +19,8 @@ export type ItemType =
 	| "Concept"
 	| "Instruction"
 	| "Universe"
-	| "Variable";
+	| "Variable"
+	| "ManagedMissingValuesRepresentation";
 
 export interface Identity {
 	readonly URN: string;

@@ -28,7 +28,9 @@ export type LintCode =
 	| "thin-intent"
 	| "legacy-fields"
 	| "duplicate-option-variable"
-	| "option-variable-prefix";
+	| "option-variable-prefix"
+	| "matches-scale"
+	| "missing-code";
 
 export type FindingCode = ParseCode | LintCode | "ddi-invalid";
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { bankLocation, describeChange, folderOf } from "./bank.js";
+import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
 
-const draft = (text: string) => parseSurface(text, {}).draft;
+const draft = (text: string) => parseSurface(text, EMPTY_ENV).draft;
 
 describe("bank paths", () => {
 	it("files a new question by its name prefix", () => {

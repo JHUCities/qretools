@@ -5,6 +5,7 @@ import nhdCohes1 from "../../examples/nhd_cohes1.yaml?raw";
 import nhdNyrs from "../../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../../examples/nhd_sat.yaml?raw";
 import agree4Text from "../../examples/scales/agree4.yaml?raw";
+import { EMPTY_ENV } from "../surface/env.js";
 import { parseSurface } from "../surface/parse.js";
 import { parseScale } from "../surface/scales.js";
 import type { DdiDocument, ItemType, JsonObject } from "./document.js";
@@ -35,7 +36,7 @@ describe("elaborate", () => {
 	it.each(["nhd_sat", "nhd_nyrs"])(
 		"elaborates %s to a schema-valid document",
 		(name) => {
-			const { draft, findings } = parseSurface(example(name), {});
+			const { draft, findings } = parseSurface(example(name), EMPTY_ENV);
 			expect(findings).toEqual([]);
 			expect(validate(elaborate(draft, AGENCY))).toEqual([]);
 		},
@@ -48,7 +49,7 @@ describe("elaborate", () => {
 			"responses:\n",
 			"name: q\nselect: many\nresponses:\n  1:\n",
 		]) {
-			const doc = elaborate(parseSurface(text, {}).draft, AGENCY);
+			const doc = elaborate(parseSurface(text, EMPTY_ENV).draft, AGENCY);
 			expect(validate(doc)).toEqual([]);
 			expect(Object.keys(doc.QuestionItem ?? {})).toHaveLength(1);
 		}
@@ -61,7 +62,10 @@ describe("elaborate", () => {
 	});
 
 	it("maps a code list: author codes in Value, index-based IDs, references by [agency, id, version]", () => {
-		const doc = elaborate(parseSurface(example("nhd_sat"), {}).draft, AGENCY);
+		const doc = elaborate(
+			parseSurface(example("nhd_sat"), EMPTY_ENV).draft,
+			AGENCY,
+		);
 		const q = question(doc, "nhd_sat");
 		expect(q.URN).toBe("urn:ddi:org.example:nhd_sat:1");
 		expect(q.QuestionIntent).toEqual({
@@ -108,7 +112,7 @@ describe("elaborate", () => {
 	it("select many allows as many responses as there are codes", () => {
 		const { draft } = parseSurface(
 			"name: q\nselect: many\nresponses:\n  1: a\n  2: b\n  3: c\n",
-			{},
+			EMPTY_ENV,
 		);
 		expect(
 			(question(elaborate(draft, AGENCY), "q").ResponseDomain as JsonObject)
@@ -120,7 +124,7 @@ describe("elaborate", () => {
 
 	it("maps number and open domains", () => {
 		const n = question(
-			elaborate(parseSurface(example("nhd_nyrs"), {}).draft, AGENCY),
+			elaborate(parseSurface(example("nhd_nyrs"), EMPTY_ENV).draft, AGENCY),
 			"nhd_nyrs",
 		);
 		expect(n.ResponseDomain).toEqual({
@@ -136,7 +140,8 @@ describe("elaborate", () => {
 		});
 		const half = question(
 			elaborate(
-				parseSurface("name: q\nnumber:\n  min: 0\n  decimals: 2\n", {}).draft,
+				parseSurface("name: q\nnumber:\n  min: 0\n  decimals: 2\n", EMPTY_ENV)
+					.draft,
 				AGENCY,
 			),
 			"q",
@@ -149,7 +154,7 @@ describe("elaborate", () => {
 		});
 		const o = question(
 			elaborate(
-				parseSurface("name: q\nopen:\n  max_length: 200\n", {}).draft,
+				parseSurface("name: q\nopen:\n  max_length: 200\n", EMPTY_ENV).draft,
 				AGENCY,
 			),
 			"q",
@@ -160,10 +165,10 @@ describe("elaborate", () => {
 
 describe("shared scales and select-many", () => {
 	const agree4 = parseScale(agree4Text).scale;
-	const scales = agree4 ? { agree4 } : {};
+	const env = { ...EMPTY_ENV, scales: agree4 ? { agree4 } : {} };
 
 	it("a named scale is one CodeList for the bank, identified by the scale, and validates", () => {
-		const { draft, findings } = parseSurface(nhdCohes1, scales);
+		const { draft, findings } = parseSurface(nhdCohes1, env);
 		expect(findings).toEqual([]);
 		const doc = elaborate(draft, AGENCY);
 		expect(validate(doc)).toEqual([]);
@@ -185,7 +190,7 @@ describe("shared scales and select-many", () => {
 	});
 
 	it("select-many yields one yes/no Variable per option, referencing the question", () => {
-		const { draft, findings } = parseSurface(demRace, {});
+		const { draft, findings } = parseSurface(demRace, EMPTY_ENV);
 		expect(findings).toEqual([]);
 		const doc = elaborate(draft, AGENCY);
 		expect(validate(doc)).toEqual([]);
@@ -212,7 +217,7 @@ describe("shared scales and select-many", () => {
 	it("emits no Variable while the name is a hole", () => {
 		const { draft } = parseSurface(
 			"select: many\nresponses:\n  a: A\n  b: B\n",
-			{},
+			EMPTY_ENV,
 		);
 		expect(elaborate(draft, AGENCY).Variable).toBeUndefined();
 	});
@@ -227,5 +232,67 @@ describe("validate", () => {
 		expect(
 			findings.every((f) => f.code === "ddi-invalid" && f.severity === "error"),
 		).toBe(true);
+	});
+});
+
+describe("schemes", () => {
+	it("a universe or instruction reference is one shared item named as the bank names it", async () => {
+		const { EMPTY_ENV } = await import("../surface/env.js");
+		const env = {
+			...EMPTY_ENV,
+			universes: { renters: { text: "Renters" } },
+			instructions: { select_one: { text: "Select one" } },
+		};
+		const { draft, findings } = parseSurface(
+			"name: q\ntext: Q?\nintent: Prevalence of x among renters\nuniverse: renters\ninstruction: select_one\nopen:\n",
+			env,
+		);
+		expect(findings).toEqual([]);
+		const doc = elaborate(draft, AGENCY, env.missing);
+		expect(validate(doc)).toEqual([]);
+		expect(Object.keys(doc.Universe ?? {})).toEqual([
+			`${AGENCY}:universe-renters:1`,
+		]);
+		expect(Object.keys(doc.Instruction ?? {})).toEqual([
+			`${AGENCY}:instruction-select_one:1`,
+		]);
+		expect(itemOf(doc, "Universe", "universe-renters").UniverseName).toEqual([
+			{
+				String: [
+					{ MultilingualStringValue: { LanguageTag: "en", Value: "renters" } },
+				],
+			},
+		]);
+	});
+
+	it("missing values become one managed representation, stamped on domains and referenced from variables", async () => {
+		const { EMPTY_ENV } = await import("../surface/env.js");
+		const { parseScale } = await import("../surface/scales.js");
+		const missing =
+			parseScale('labels:\n  "-8": Item non-response\n  "-7": Skipped\n').scale
+				?.codes ?? [];
+		const env = { ...EMPTY_ENV, missing };
+		const { draft } = parseSurface(demRace, env);
+		const doc = elaborate(draft, AGENCY, missing);
+		expect(validate(doc)).toEqual([]);
+		expect(Object.keys(doc.ManagedMissingValuesRepresentation ?? {})).toEqual([
+			`${AGENCY}:missing:1`,
+		]);
+		expect(
+			(question(doc, "dem_race").ResponseDomain as JsonObject).MissingValue,
+		).toBe("-8 -7");
+		const wh = itemOf(doc, "Variable", "dem_race_wh");
+		expect(
+			(wh.VariableRepresentation as JsonObject).MissingValuesReference,
+		).toEqual({
+			$type: "ManagedMissingValuesRepresentation",
+			value: [AGENCY, "missing", "1"],
+		});
+		const cat = itemOf(doc, "Category", "missing.cat-0");
+		expect(cat.IsMissing).toBe(true);
+		// no bank list, nothing emitted
+		expect(
+			elaborate(draft, AGENCY, []).ManagedMissingValuesRepresentation,
+		).toBeUndefined();
 	});
 });

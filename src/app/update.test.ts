@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../core/evaluate.js";
 import { locate } from "../core/findings.js";
 import { ok } from "../core/result.js";
+import { EMPTY_ENV } from "../core/surface/env.js";
 import { toDiagnostics } from "./diagnostics.js";
 import {
 	DEFAULT_SETTINGS,
@@ -379,13 +380,13 @@ describe("diagnostics", () => {
 			"a: [",
 			"name: q\ntext: x: y\nresponses:\n  1:\n",
 		]) {
-			const ev = evaluate(source, "org.example", {});
+			const ev = evaluate(source, "org.example", EMPTY_ENV);
 			for (const d of toDiagnostics(ev.findings, ev.ranges)) {
 				expect(d.from).toBeLessThanOrEqual(d.to);
 				expect(d.to).toBeLessThanOrEqual(source.length);
 			}
 		}
-		const ev = evaluate("name: q\n", "org.example", {});
+		const ev = evaluate("name: q\n", "org.example", EMPTY_ENV);
 		expect(
 			toDiagnostics(ev.findings, ev.ranges).some((d) => d.severity === "hint"),
 		).toBe(true);

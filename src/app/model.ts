@@ -9,6 +9,7 @@
  */
 import type { Finding, Range, Target } from "../core/findings.js";
 import type { Result } from "../core/result.js";
+import { EMPTY_ENV, type Env } from "../core/surface/env.js";
 import { parseScale, type Scales } from "../core/surface/scales.js";
 import choiceTemplate from "../templates/choice.yaml?raw";
 import numberTemplate from "../templates/number.yaml?raw";
@@ -292,6 +293,12 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		],
 	];
 }
+
+/** The environment questions are read against. Until the schemes live in the Model, only scales are populated. */
+export const envOf = (model: Pick<Model, "scales">): Env => ({
+	...EMPTY_ENV,
+	scales: model.scales,
+});
 
 export const toPersisted = (model: Model): Persisted => ({
 	version: 1,

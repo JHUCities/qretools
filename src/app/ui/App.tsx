@@ -13,7 +13,7 @@ import { toDiagnostics } from "../diagnostics.js";
 import { isUnsaved } from "./../merge.js";
 import { type Id, TEMPLATES } from "../model.js";
 import { bankFolders, treeOf } from "../tree.js";
-import { useApp, useModel } from "./AppContext.js";
+import { useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
 import { EditorPane } from "./EditorPane.js";
@@ -30,9 +30,10 @@ import { SaveDialog } from "./SaveDialog.js";
 export function App() {
 	const { dispatch, evaluations } = useApp();
 	const model = useModel((m) => m);
+	const env = useEnv();
 	const folders = useMemo(
-		() => treeOf(model, (q) => evaluations.get(q, model.agency, model.scales)),
-		[model, evaluations],
+		() => treeOf(model, (q) => evaluations.get(q, model.agency, env)),
+		[model, evaluations, env],
 	);
 	const open: Id | undefined =
 		model.screen.kind === "editing" ? model.screen.id : undefined;
@@ -44,7 +45,7 @@ export function App() {
 			? undefined
 			: model.questions[model.browser.confirmDelete];
 	const confirmName = confirm
-		? evaluations.get(confirm, model.agency, model.scales).draft.name
+		? evaluations.get(confirm, model.agency, env).draft.name
 		: undefined;
 
 	return (
@@ -133,9 +134,7 @@ export function App() {
 			)}
 			{saving && savingQuestion && (
 				<SaveDialog
-					draft={
-						evaluations.get(savingQuestion, model.agency, model.scales).draft
-					}
+					draft={evaluations.get(savingQuestion, model.agency, env).draft}
 					folder={saving.folder}
 					folders={bankFolders(model)}
 					taken={(path) =>
@@ -176,17 +175,17 @@ function Editing({ id }: { id: Id }) {
 	const { dispatch, evaluations, effects } = useApp();
 	const q = useModel((m) => m.questions[id]);
 	const agency = useModel((m) => m.agency);
-	const scales = useModel((m) => m.scales);
+	const env = useEnv();
 	const session = useModel((m) => m.session);
 	const ddiSchema = useModel((m) => m.ddiSchema);
 	// Hooks run unconditionally; the early return comes after them.
-	const ev = q ? evaluations.get(q, agency, scales) : undefined;
+	const ev = q ? evaluations.get(q, agency, env) : undefined;
 	const diagnostics = useMemo(
 		() => (ev ? toDiagnostics(ev.findings, ev.ranges) : []),
 		[ev],
 	);
 	if (!q || !ev) return null;
-	const schema = evaluations.schema(scales);
+	const schema = evaluations.schema(env);
 	const onTarget = (
 		target: Parameters<typeof Findings>[0]["onTarget"] extends (
 			t: infer T,

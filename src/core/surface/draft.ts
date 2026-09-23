@@ -1,10 +1,11 @@
 /**
  * A Draft is the core's view of a question: every field may still be a hole,
  * but what is present is typed, and impossible states are unrepresentable.
- * In particular the response domain is one tagged union, never three optional
- * fields that must be checked together, and a named scale that did not resolve
- * is not a domain at all (it is a hole).
+ * The response domain is one tagged union; a universe or instruction is either
+ * prose or a resolved reference into the bank's schemes, never a dangling name
+ * (an unresolved name is a hole and absent here).
  */
+import type { TextEntry } from "./env.js";
 
 export interface Code {
 	readonly code: string;
@@ -34,14 +35,27 @@ export type Domain =
 	  }
 	| { readonly kind: "open"; readonly maxLength?: number };
 
+/** Written as a sentence. */
+export type Prose = { readonly kind: "text"; readonly text: string };
+/** A name resolved against a scheme; the name is kept for DDI and for "used by". */
+export type Ref<T> = {
+	readonly kind: "ref";
+	readonly name: string;
+	readonly value: T;
+};
+export type Named<T> = Prose | Ref<T>;
+
+export const textOf = (n: Named<TextEntry>): string =>
+	n.kind === "text" ? n.text : n.value.text;
+
 export interface Draft {
 	readonly name?: string;
 	readonly title?: string;
 	readonly text?: string;
 	readonly intent?: string;
 	readonly concept?: string;
-	readonly universe?: string;
-	readonly instruction?: string;
+	readonly universe?: Named<TextEntry>;
+	readonly instruction?: Named<TextEntry>;
 	readonly source?: string;
 	readonly note?: string;
 	/** Names of fields carried over verbatim from an older format; their values are never read. */

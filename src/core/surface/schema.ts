@@ -7,7 +7,8 @@
  * the rest of the program reasons about.
  */
 import { z } from "zod";
-import type { Scale, Scales } from "./scales.js";
+import { EMPTY_ENV, type Env } from "./env.js";
+import type { Scale } from "./scales.js";
 
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 const NAME_RULE =
@@ -163,31 +164,81 @@ export const DOMAIN_KEYS = ["responses", "number", "open"] as const;
 export const scaleSummary = (scale: Scale): string =>
 	scale.codes.map((c) => `${c.code} ${c.label}`).join(" · ");
 
-/** JSON Schema of the surface, for editor completion and hover. Scale names become completable constants. */
+/**
+ * Names in a scheme, offered as constants for completion, each carrying its
+ * definition as the description the completion popup shows. On a prose-or-name
+ * field the `oneOf` is a semantic lie (it says prose is invalid); nothing enforces
+ * it, because the package's own linter is not used, and `examples`, the honest
+ * keyword, is not completed from.
+ */
+const withNames = (
+	node: Record<string, unknown>,
+	names: readonly string[],
+	describeName: (name: string) => string,
+): Record<string, unknown> =>
+	names.length === 0
+		? node
+		: {
+				...node,
+				oneOf: names.map((n) => ({ const: n, description: describeName(n) })),
+			};
+
+type JsonNode = Record<string, unknown> & {
+	properties?: Record<string, Record<string, unknown>>;
+};
+
+/** JSON Schema of the surface, for editor completion and hover, with the bank's names as constants. */
 export function questionJsonSchema(
-	scales: Scales = {},
+	env: Env = EMPTY_ENV,
 ): Record<string, unknown> {
-	const schema = z.toJSONSchema(QuestionSchema) as Record<string, unknown> & {
-		properties?: Record<string, Record<string, unknown>>;
-	};
-	const names = Object.keys(scales);
-	const responses = schema.properties?.responses;
+	const schema = z.toJSONSchema(QuestionSchema) as JsonNode;
+	const props = schema.properties;
+	if (!props) return schema;
+	const responses = props.responses;
 	const branches = responses?.anyOf;
-	if (responses !== undefined && names.length > 0 && Array.isArray(branches)) {
+	if (responses && Array.isArray(branches)) {
 		responses.anyOf = branches.map((b: Record<string, unknown>) =>
 			b.type === "string"
-				? {
-						...b,
-						oneOf: names.map((n) => ({
-							const: n,
-							description: scaleSummary(scales[n] as Scales[string]),
-						})),
-					}
+				? withNames(b, Object.keys(env.scales), (n) =>
+						scaleSummary(env.scales[n] as Scale),
+					)
 				: b,
 		);
 	}
+	if (props.universe)
+		props.universe = withNames(
+			props.universe,
+			Object.keys(env.universes),
+			(n) => env.universes[n]?.text ?? n,
+		);
+	if (props.instruction)
+		props.instruction = withNames(
+			props.instruction,
+			Object.keys(env.instructions),
+			(n) => env.instructions[n]?.text ?? n,
+		);
 	return schema;
 }
+
+/** The schema of a scale file or the missing-values file: a `labels:` map. */
+export const LabelsFileSchema = z.strictObject({
+	labels: z
+		.record(z.string(), z.string())
+		.describe(
+			"Response options as code: label pairs, in the order they are shown.",
+		),
+});
+export const labelsJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(LabelsFileSchema) as Record<string, unknown>;
+
+/** The schema of a universe or instruction file: one `text:` line. */
+export const TextEntryFileSchema = z.strictObject({
+	text: z
+		.string()
+		.describe("The wording, as respondents or interviewers read it."),
+});
+export const textEntryJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(TextEntryFileSchema) as Record<string, unknown>;
 
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";
