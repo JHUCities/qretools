@@ -98,8 +98,7 @@ export function elaborate(
 			? { variables: [], items: [] }
 			: variableSpecs(
 					draft.domain,
-					draft.name,
-					draft.title,
+					{ name: draft.name, title: draft.title },
 					domain.value,
 					agency,
 				);
@@ -298,13 +297,17 @@ interface VariableSpec {
 /**
  * One variable named like the question; or, for select-many, one per option, each
  * a yes/no on the shared binary scale (how the Baltimore Area Survey publishes
- * such items), whose list comes with them as `items`. The label is the author's
- * title or nothing: the previews fall back to other text, DDI does not invent one.
+ * such items), whose list comes with them as `items`. The two labels differ on
+ * purpose: a question's variable is labelled by the author's title or nothing (the
+ * previews fall back to other text, DDI does not invent one); an option's falls back
+ * to the option's label, which is exactly what 1 means for that variable.
  */
 function variableSpecs(
 	domain: Domain,
-	name: string,
-	title: string | undefined,
+	{
+		name,
+		title,
+	}: { readonly name: string; readonly title: string | undefined },
 	value: JsonObject,
 	agency: string,
 ): { variables: readonly VariableSpec[]; items: readonly Item[] } {

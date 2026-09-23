@@ -501,7 +501,15 @@ default. Bank regression: 332 questions give 502 variables, every one DDI-valid.
 variable names are claimed by three questions:** `con_nhdkfp` and `con_nhdkdmo` are
 declared by `con_nhddk`, `con_nhdnc` and `con_nhdsc` (a v1 slip, also in the migration
 report). This is bank content for the owner to fix; a bank-wide "duplicate variable" check
-belongs with 8(b)'s bank-level evaluation. Notes for step 5 from the step 4 review: identify questions by a
+belongs with 8(b)'s bank-level evaluation. **8(b) design point from the after-pass:** duplicate
+variables, "used by", "delete a scale 12 questions use" and a future rename are all
+queries over one bank-wide table, so build one pure `symbols(parsed)` per question
+(variable names it *defines*, from the Draft as `variableSpecs` computes them; scheme
+names it *mentions*, resolved or not, from the parser) and one `index(files)`, not a
+`usedBy` plus a separate duplicate check. A bank-level finding is attached to each file
+involved ("`con_nhdkfp` is also defined by con_nhdnc, con_nhdsc", with links), never
+shown in a place of its own. Model identity stays the numeric `Id`; names are only the
+index's keys. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

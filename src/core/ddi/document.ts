@@ -96,6 +96,12 @@ export const codeValue = (value: string): JsonObject => ({
 	StringValue: value,
 });
 
+/**
+ * Items keyed by type and URN. A repeated URN keeps the last item silently: two
+ * options naming one variable do this inside one question today (the
+ * `duplicate-option-variable` lint warns the author), and role 2 will reach it by
+ * concatenating questions.
+ */
 export const documentOf = (items: readonly Item[]): DdiDocument => {
 	const doc: Partial<Record<ItemType, Record<string, JsonObject>>> = {};
 	for (const it of items) {
