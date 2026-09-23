@@ -6,7 +6,7 @@ import {
 	IssueOpenedIcon,
 } from "@primer/octicons-react";
 import { Label } from "@primer/react";
-import { Children, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Status, Target } from "../../core/findings.js";
 import type {
@@ -22,12 +22,12 @@ type OnTarget = (target: Target) => void;
 
 /** Messages mark field names with backticks (a core/shell convention); show those as code. */
 export function inlineCode(text: string): ReactNode[] {
-	// Children.toArray keys the pieces by position, which is the only identity a split string has.
-	return Children.toArray(
-		text
-			.split("`")
-			.map((part, i) => (i % 2 === 1 ? <code>{part}</code> : part)),
-	);
+	const out: ReactNode[] = [];
+	text.split("`").forEach((part, i) => {
+		// biome-ignore lint/suspicious/noArrayIndexKey: the pieces of a split string have no identity but their position
+		out.push(i % 2 === 1 ? <code key={i}>{part}</code> : part);
+	});
+	return out;
 }
 
 function HoleButton({ hole, onTarget }: { hole: Hole; onTarget: OnTarget }) {
