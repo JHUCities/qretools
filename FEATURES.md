@@ -39,11 +39,18 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
   v1 `versions` block under `legacy`. These are exactly what DDI-Lifecycle versions
   model (one item, version 1 and 2, each instrument naming the version it used). The
   design belongs with survey composition. **L**.
-- **Shared response scales.** The real bank references scales by name
-  (`value_labels_name: agree4`), reused across many questions; our surface inlines
-  `responses` in every question. DDI reuses CodeLists by reference, so this maps
-  cleanly. Decide the surface syntax (for example `responses: agree4`) and where
-  scales live. **M**.
+- **A home for shared scales in the UI** (asked 2026-09-24). Scales exist only as files
+  the app reads: the tree does not show them, nothing lists them, and none can be created
+  or edited in the tool. Today a scale is discoverable only at the point of use:
+  completion after `responses: ` lists every scale with its labels, a mistyped name is a
+  hole whose hint lists the names, and the codebook preview shows the resolved labels.
+  Hovering the name shows the generic `responses` description, not the scale's labels
+  (verified), which is the gap Hazel's live projection would fill. Proposal: a
+  `scales/` folder in the tree (it is one in the repo); opening a scale shows its labels
+  and the questions that use it (reverse references, derived from the Model), with the
+  same save flow and a "New scale" template; from a question, go to the scale; hover on
+  the name shows its labels; a lint that says an inline list matches an existing scale
+  (extract-to-shared). **M**.
 - **Fields the real bank uses that the surface lacks:** `if_condition`, `validation`
   (both role 2 expressions), `string_label`, `note`, `vargroup`, `surveys_used`,
   `versions`, `restricted_access`, markdown emphasis and `{{fills}}` in question text.
