@@ -3,7 +3,7 @@ import { evaluate } from "./evaluate.js";
 import { status } from "./findings.js";
 
 const statusOf = (source: string) =>
-	status(evaluate(source, "org.example").findings);
+	status(evaluate(source, "org.example", {}).findings);
 
 describe("status", () => {
 	it("is the core's verdict on a draft", () => {

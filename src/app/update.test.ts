@@ -58,13 +58,13 @@ describe("diagnostics", () => {
 			"a: [",
 			"name: q\ntext: x: y\nresponses:\n  1:\n",
 		]) {
-			const ev = evaluate(source, "org.example");
+			const ev = evaluate(source, "org.example", {});
 			for (const d of toDiagnostics(ev.findings, ev.ranges)) {
 				expect(d.from).toBeLessThanOrEqual(d.to);
 				expect(d.to).toBeLessThanOrEqual(source.length);
 			}
 		}
-		const ev = evaluate("name: q\n", "org.example");
+		const ev = evaluate("name: q\n", "org.example", {});
 		expect(
 			toDiagnostics(ev.findings, ev.ranges).some((d) => d.severity === "hint"),
 		).toBe(true);
@@ -72,7 +72,7 @@ describe("diagnostics", () => {
 
 	it("a hole for a key not yet typed points at the end of the text, not the whole document", () => {
 		const source = "name: q\n";
-		const ev = evaluate(source, "org.example");
+		const ev = evaluate(source, "org.example", {});
 		const textHole = ev.findings.find((f) => f.path === "text");
 		expect(textHole && locate(textHole, ev.ranges)).toEqual([
 			source.length,

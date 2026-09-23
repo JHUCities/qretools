@@ -29,7 +29,7 @@ export interface Evaluation {
 export function evaluate(
 	source: string,
 	agency: string,
-	scales: Scales = {},
+	scales: Scales,
 ): Evaluation {
 	const { draft, findings, ranges } = parseSurface(source, scales);
 	return {

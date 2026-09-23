@@ -15,7 +15,7 @@ responses:
 
 describe("parseSurface", () => {
 	it("parses a complete question with no findings", () => {
-		const { draft, findings } = parseSurface(complete);
+		const { draft, findings } = parseSurface(complete, {});
 		expect(findings).toEqual([]);
 		expect(draft.name).toBe("nhd_sat");
 		expect(draft.domain).toEqual({
@@ -30,7 +30,7 @@ describe("parseSurface", () => {
 	});
 
 	it("keeps response codes in the author's order", () => {
-		const { draft } = parseSurface("responses:\n  2: b\n  10: c\n  1: a\n");
+		const { draft } = parseSurface("responses:\n  2: b\n  10: c\n  1: a\n", {});
 		expect(
 			draft.domain?.kind === "responses" &&
 				draft.domain.codes.map((c) => c.code),
@@ -83,12 +83,12 @@ describe("parseSurface", () => {
 	];
 
 	it.each(table)("%s", (_title, input, expected) => {
-		const { findings } = parseSurface(input);
+		const { findings } = parseSurface(input, {});
 		expect(findings.map(brief).sort()).toEqual(expected.sort());
 	});
 
 	it("keeps the author's spelling of codes", () => {
-		const { draft } = parseSurface("responses:\n  010: a\n  '02': b\n");
+		const { draft } = parseSurface("responses:\n  010: a\n  '02': b\n", {});
 		expect(
 			draft.domain?.kind === "responses" &&
 				draft.domain.codes.map((c) => c.code),
@@ -98,6 +98,7 @@ describe("parseSurface", () => {
 	it("reports the later domain in document order as the extra one", () => {
 		const { findings } = parseSurface(
 			"number:\n  min: 0\nresponses:\n  1: a\n",
+			{},
 		);
 		expect(findings.filter((f) => f.severity === "error").map(brief)).toEqual([
 			"error:too-many-domains@responses",
@@ -106,7 +107,7 @@ describe("parseSurface", () => {
 
 	it("clamps syntax ranges to the text", () => {
 		for (const input of ["a: [", "number: {min: 1", "x"]) {
-			for (const f of parseSurface(input).findings) {
+			for (const f of parseSurface(input, {}).findings) {
 				if (f.range) {
 					expect(f.range[0]).toBeLessThanOrEqual(f.range[1]);
 					expect(f.range[1]).toBeLessThanOrEqual(input.length);
@@ -117,24 +118,26 @@ describe("parseSurface", () => {
 
 	it("reads number and open domains, and select many", () => {
 		expect(
-			parseSurface("number:\n  min: 0\n  unit: years\n").draft.domain,
+			parseSurface("number:\n  min: 0\n  unit: years\n", {}).draft.domain,
 		).toEqual({
 			kind: "number",
 			min: 0,
 			unit: "years",
 		});
-		expect(parseSurface("open:\n  max_length: 200\n").draft.domain).toEqual({
-			kind: "open",
-			maxLength: 200,
-		});
-		expect(parseSurface("open:\n").draft.domain).toEqual({ kind: "open" });
+		expect(parseSurface("open:\n  max_length: 200\n", {}).draft.domain).toEqual(
+			{
+				kind: "open",
+				maxLength: 200,
+			},
+		);
+		expect(parseSurface("open:\n", {}).draft.domain).toEqual({ kind: "open" });
 		expect(
-			parseSurface("responses:\n  1: a\nselect: many\n").draft.domain,
+			parseSurface("responses:\n  1: a\nselect: many\n", {}).draft.domain,
 		).toMatchObject({ select: "many" });
 	});
 
 	it("indexes source ranges by dotted path", () => {
-		const { ranges } = parseSurface(complete);
+		const { ranges } = parseSurface(complete, {});
 		expect(ranges[""]).toEqual([0, complete.length]);
 		const r = ranges["responses.2"];
 		expect(r && complete.slice(r[0], r[1])).toBe("2: Somewhat satisfied");
@@ -154,7 +157,7 @@ describe("parseSurface", () => {
 			"a: &x *x",
 			"---\n---\n",
 		]) {
-			expect(() => parseSurface(s)).not.toThrow();
+			expect(() => parseSurface(s, {})).not.toThrow();
 		}
 	});
 });

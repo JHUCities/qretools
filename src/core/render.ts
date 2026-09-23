@@ -178,9 +178,11 @@ function notes(draft: Draft): readonly string[] {
 		out.push(
 			"Select all that apply: each option is its own variable, coded 0 = No, 1 = Yes.",
 		);
+	}
+	// An option's note is documentation whatever the select mode; it must never vanish.
+	if (d?.kind === "responses")
 		for (const c of d.codes)
 			if (c.note !== undefined) out.push(`${c.code}: ${c.note}`);
-	}
 	if (draft.note !== undefined) out.push(draft.note);
 	return out;
 }

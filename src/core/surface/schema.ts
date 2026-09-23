@@ -7,7 +7,7 @@
  * the rest of the program reasons about.
  */
 import { z } from "zod";
-import { type Scales, scaleSummary } from "./scales.js";
+import type { Scale, Scales } from "./scales.js";
 
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 const NAME_RULE =
@@ -158,6 +158,10 @@ export const KNOWN_KEYS = Object.keys(
 ) as readonly SurfaceKey[];
 export const REQUIRED_KEYS = ["name", "text", "intent"] as const;
 export const DOMAIN_KEYS = ["responses", "number", "open"] as const;
+
+/** One line of a scale, for completion info: `1 Strongly agree · 2 Agree`. */
+export const scaleSummary = (scale: Scale): string =>
+	scale.codes.map((c) => `${c.code} ${c.label}`).join(" · ");
 
 /** JSON Schema of the surface, for editor completion and hover. Scale names become completable constants. */
 export function questionJsonSchema(

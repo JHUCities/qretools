@@ -4,7 +4,7 @@ import nhdSat from "../examples/nhd_sat.yaml?raw";
 import { codebookView, respondentView } from "./render.js";
 import { parseSurface } from "./surface/parse.js";
 
-const draftOf = (source: string) => parseSurface(source).draft;
+const draftOf = (source: string) => parseSurface(source, {}).draft;
 
 describe("respondentView", () => {
 	it("renders a single-choice question", () => {

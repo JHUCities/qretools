@@ -19,14 +19,14 @@ import { schemaCompletion } from "./complete.js";
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
 const external = Annotation.define<boolean>();
 
-export interface EditorState {
+export interface EditorInputs {
 	readonly text: string;
 	readonly diagnostics: readonly Diagnostic[];
 	readonly schema: object;
 }
 
 export interface Editor {
-	sync(state: EditorState): void;
+	sync(inputs: EditorInputs): void;
 	reveal(range: Range): void;
 }
 

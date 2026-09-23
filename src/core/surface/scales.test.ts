@@ -21,6 +21,17 @@ describe("parseScale", () => {
 		]);
 	});
 
+	it("keeps quoted codes as written, the way the migrated scales are spelled", () => {
+		const { scale, findings } = parseScale(
+			"labels:\n  '0': 'No'\n  \"1\": Yes\n",
+		);
+		expect(findings).toEqual([]);
+		expect(scale?.codes).toEqual([
+			{ code: "0", label: "No" },
+			{ code: "1", label: "Yes" },
+		]);
+	});
+
 	it("is total: no labels, or bad labels, are findings", () => {
 		expect(parseScale("").findings.map(brief)).toEqual(["hole:hole@labels"]);
 		expect(parseScale("labels:\n  1: 7\n").findings.map(brief)).toEqual([
@@ -59,7 +70,7 @@ describe("named scales in a question", () => {
 	});
 
 	it("with no scales loaded, the hint says to write options inline", () => {
-		const { findings } = parseSurface(`${base}responses: agree4\n`);
+		const { findings } = parseSurface(`${base}responses: agree4\n`, {});
 		expect(findings[0]?.hint).toMatch(/inline/);
 	});
 });

@@ -1,35 +1,17 @@
 /**
  * Reading a `code: label` map from the YAML AST, shared by question responses
  * and scale files. The AST, not `toJS()`, so codes keep the author's order and
- * spelling (`010` stays `010`).
+ * spelling (`010` stays `010`, and a quoted `'0'` is `0`).
  */
 import type { Document, Scalar } from "yaml";
 import { isMap, isScalar } from "yaml";
 import { compact } from "../compact.js";
 import type { Finding } from "../findings.js";
 import type { Code } from "./draft.js";
+import { error, fail, hole, ok, type Read } from "./read.js";
 import { OptionSchema } from "./schema.js";
 
-export interface Read<T> {
-	readonly value?: T;
-	readonly findings: readonly Finding[];
-}
-
-export const ok = <T>(value: T, ...findings: Finding[]): Read<T> => ({
-	value,
-	findings,
-});
-export const fail = <T>(...findings: Finding[]): Read<T> => ({ findings });
-
-export const hole = (path: string, message: string, hint?: string): Finding =>
-	compact({ code: "hole", severity: "hole", path, message, hint });
-
-export const wrongType = (
-	path: string,
-	message: string,
-	hint?: string,
-): Finding =>
-	compact({ code: "wrong-type", severity: "error", path, message, hint });
+export const EXAMPLE = "Example:\n  1: Yes\n  2: No";
 
 /** The code as the author spelled it (`010` stays `010`), not as YAML typed it (`10`). */
 export const keyText = (key: Scalar): string => key.source ?? String(key.value);
@@ -47,7 +29,8 @@ export function readCodeMap(
 ): Read<readonly Code[]> {
 	if (!isMap(node))
 		return fail(
-			wrongType(
+			error(
+				"wrong-type",
 				path,
 				`\`${path}\` must be a list of \`code: label\` lines.`,
 				EXAMPLE,
@@ -65,7 +48,8 @@ export function readCodeMap(
 				findings.push(hole(at, `Response \`${code}\` has no label.`));
 			} else if (typeof label !== "string") {
 				findings.push(
-					wrongType(
+					error(
+						"wrong-type",
 						at,
 						`Label for \`${code}\` must be text.`,
 						`Quote it: ${code}: "${String(label)}"`,
@@ -98,7 +82,8 @@ export function readCodeMap(
 							? issue.keys.join(", ")
 							: issue.path.map(String).join(".");
 					findings.push(
-						wrongType(
+						error(
+							"wrong-type",
 							sub ? `${at}.${sub}` : at,
 							`Option \`${code}\`: ${issue.message}`,
 						),
@@ -110,10 +95,10 @@ export function readCodeMap(
 		} else if (pair.value === null || pair.value === undefined) {
 			findings.push(hole(at, `Response \`${code}\` has no label.`));
 		} else {
-			findings.push(wrongType(at, `Label for \`${code}\` must be text.`));
+			findings.push(
+				error("wrong-type", at, `Label for \`${code}\` must be text.`),
+			);
 		}
 	}
 	return ok(codes, ...findings);
 }
-
-export const EXAMPLE = "Example:\n  1: Yes\n  2: No";

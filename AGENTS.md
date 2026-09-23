@@ -190,6 +190,9 @@ emit a Universe item and resolve the link in role 2.
   CodeDomain and cardinality, plus one `Variable` item per option referencing the
   question, each a CodeDomain on the shared binary scale `yesno01` (0 No, 1 Yes).
   QuestionGrid (matrices) and one QuestionItem per option were rejected.
+  **Coupling to record:** the elaborator's binary scale is a core constant emitted under
+  the identity `scale-yesno01.codes`; the bank must ship `scales/yesno01.yaml` with
+  exactly `0: No`, `1: Yes`, or the two will disagree by name.
 - **DDI IDs allow one dot.** Every code list hangs off a base: `<base>.codes`,
   `<base>.cat-i`, `<base>.code-i`; a question's base is its name, a shared scale's is
   `scale-<name>`. The step 2 reviewer had warned about this and the step 6 code
@@ -343,7 +346,9 @@ schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd 
 debouncing happens in `exec`, never in `update`; `editor.sync` must take the question
 id and reset editor state when it changes, or undo history leaks from one question into
 another; normalise `\r\n` to `\n` at the upload boundary, or diagnostics drift;
-`parseAgency` at the shell boundary for a readable message.
+`parseAgency` at the shell boundary for a readable message. A malformed *bank* scale is the user's
+file: its findings must be shown, unlike a malformed bundled example, which
+`model.ts` simply drops.
 
 **Added 2026-09-23, ahead of step 5.** The question bank is migrating from the v1 repo
 into `JHUCities/bas-question-bank` (plan and decisions: that repo's

@@ -56,6 +56,10 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
   lint sees the parsed string, not the source; the two differ for quoted, escaped or
   folded values. Exact for plain single-line values only, so it needs a fallback to the
   whole value. **M**, low priority.
+- **A select-many option whose variable is unknown prints `?`** in the codebook line
+  while `name` is a hole. Everywhere else a missing thing is a clickable hole slot;
+  here it is a literal question mark. Make the values a list of slots, or print
+  `<name>_wh` with the name as the hole prompt. **S**, cosmetic.
 - **Quick fixes on findings.** CodeMirror diagnostics can carry actions. Candidates:
   quote a text containing `: `, quote a numeric label, swap `min` and `max`, add a
   "None of these" response, add a missing recommended field. The fix is an edit

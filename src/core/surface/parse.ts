@@ -10,17 +10,10 @@
 import { type Document, isMap, isNode, isScalar, parseDocument } from "yaml";
 import type { ZodError } from "zod";
 import { compact } from "../compact.js";
-import type { Finding, ParseCode, Range } from "../findings.js";
-import {
-	EXAMPLE,
-	fail,
-	hole,
-	keyText,
-	ok,
-	type Read,
-	readCodeMap,
-} from "./codes.js";
+import type { Finding, Range } from "../findings.js";
+import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
 import type { Domain, Draft } from "./draft.js";
+import { error, fail, hole, ok, type Read } from "./read.js";
 import type { Scales } from "./scales.js";
 import {
 	DOMAIN_KEYS,
@@ -55,7 +48,7 @@ type TextKey = (typeof TEXT_KEYS)[number];
 
 const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older format go under \`legacy\`.`;
 
-export function parseSurface(text: string, scales: Scales = {}): Parsed {
+export function parseSurface(text: string, scales: Scales): Parsed {
 	const doc = parseDocument(text, { prettyErrors: false });
 	const ranges = indexRanges(doc, text.length);
 	const syntax = doc.errors.map((e) =>
@@ -231,56 +224,66 @@ function readResponses(
 	select: unknown,
 	scales: Scales,
 ): Read<Domain> {
+	const selectRead = readSelect(select);
+	const chosen = selectRead.value ?? "one";
 	const node = isMap(doc.contents)
 		? doc.contents.get("responses", true)
 		: undefined;
-	const selectRead = readSelect(select);
-	const chosen = selectRead.value ?? "one";
-	if (node === undefined || (isScalar(node) && node.value === null)) {
+	const read =
+		node === undefined || (isScalar(node) && node.value === null)
+			? fail<Domain>(hole("responses", "`responses` is empty.", EXAMPLE))
+			: isScalar(node) && typeof node.value === "string"
+				? readScaleName(node.value, scales, chosen)
+				: readInlineOptions(doc, node, chosen);
+	return { ...read, findings: [...read.findings, ...selectRead.findings] };
+}
+
+function readScaleName(
+	name: string,
+	scales: Scales,
+	select: "one" | "many",
+): Read<Domain> {
+	const scale = scales[name];
+	if (scale === undefined)
 		return fail(
-			hole("responses", "`responses` is empty.", EXAMPLE),
-			...selectRead.findings,
+			hole(
+				"responses",
+				`No scale named \`${name}\`.`,
+				listScales(Object.keys(scales)),
+			),
 		);
-	}
-	if (isScalar(node) && typeof node.value === "string") {
-		const name = node.value;
-		const scale = scales[name];
-		if (scale === undefined) {
-			const known = Object.keys(scales);
-			const hint =
-				known.length === 0
-					? "No shared scales are loaded; write the options inline."
-					: `Scales: ${known.slice(0, 12).join(", ")}${known.length > 12 ? ", …" : ""}`;
-			return fail(
-				hole("responses", `No scale named \`${name}\`.`, hint),
-				...selectRead.findings,
-			);
-		}
-		return ok(
-			{ kind: "responses", codes: scale.codes, select: chosen, scale: name },
-			...selectRead.findings,
-		);
-	}
+	return ok({ kind: "responses", codes: scale.codes, select, scale: name });
+}
+
+const listScales = (names: readonly string[]): string =>
+	names.length === 0
+		? "No shared scales are loaded; write the options inline."
+		: `Scales: ${names.slice(0, 12).join(", ")}${names.length > 12 ? ", …" : ""}`;
+
+function readInlineOptions(
+	doc: Document,
+	node: unknown,
+	select: "one" | "many",
+): Read<Domain> {
 	const codes = readCodeMap(doc, node, "responses", true);
-	if (codes.value === undefined)
-		return fail(...codes.findings, ...selectRead.findings);
+	if (codes.value === undefined) return fail(...codes.findings);
 	// Per-option titles and variables describe a select-many option's own variable; on
 	// a single select they mean nothing, and saying so is kinder than dropping them.
 	const ignored: Finding[] =
-		chosen === "one"
+		select === "one"
 			? codes.value
 					.filter((c) => c.title !== undefined || c.variable !== undefined)
 					.map((c) => ({
 						code: "ignored-key",
 						severity: "warning",
 						path: `responses.${c.code}`,
-						message: `\`title\` and \`variable\` on an option only apply to \`select: many\`.`,
+						message:
+							"`title` and `variable` on an option only apply to `select: many`.",
 					}))
 			: [];
 	return ok(
-		{ kind: "responses", codes: codes.value, select: chosen },
+		{ kind: "responses", codes: codes.value, select },
 		...codes.findings,
-		...selectRead.findings,
 		...ignored,
 	);
 }
@@ -379,13 +382,6 @@ function clampRange(from: number, to: number, length: number): Range {
 	const f = Math.min(Math.max(0, from), length);
 	return [f, Math.min(length, Math.max(f + 1, to))];
 }
-
-const error = (
-	code: Exclude<ParseCode, "hole">,
-	path: string,
-	message: string,
-	hint?: string,
-): Finding => compact({ code, severity: "error", path, message, hint });
 
 const firstIssue = (e: ZodError): string =>
 	e.issues[0]?.message ?? "invalid value";

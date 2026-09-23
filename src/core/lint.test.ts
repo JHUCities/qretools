@@ -7,7 +7,7 @@ import { parseSurface } from "./surface/parse.js";
 const base =
 	"name: q\ntext: How often do you take the bus?\nintent: Prevalence of bus use among adults\n";
 const lintOf = (source: string) =>
-	lint(parseSurface(source).draft).map(
+	lint(parseSurface(source, {}).draft).map(
 		(f) => `${f.severity}:${f.code}@${f.path}`,
 	);
 
@@ -81,7 +81,7 @@ describe("lint", () => {
 
 	it("only ever advises, and every path it uses can be located in the source", () => {
 		for (const [, source] of table) {
-			const parsed = parseSurface(source);
+			const parsed = parseSurface(source, {});
 			for (const f of lint(parsed.draft)) {
 				expect(["warning", "info"]).toContain(f.severity);
 				expect(parsed.ranges[f.path]).toBeDefined();
@@ -94,6 +94,7 @@ describe("parse findings added with the lints", () => {
 	it("min greater than max is an error and yields no domain", () => {
 		const { draft, findings } = parseSurface(
 			`${base}number:\n  min: 5\n  max: 1\n`,
+			{},
 		);
 		expect(findings.map((f) => `${f.severity}:${f.code}@${f.path}`)).toEqual([
 			"error:bad-range@number",
@@ -102,7 +103,7 @@ describe("parse findings added with the lints", () => {
 	});
 
 	it("select without responses is reported as ignored", () => {
-		const { findings } = parseSurface(`${base}select: many\nopen:\n`);
+		const { findings } = parseSurface(`${base}select: many\nopen:\n`, {});
 		expect(findings.map((f) => `${f.severity}:${f.code}@${f.path}`)).toEqual([
 			"warning:ignored-key@select",
 		]);
