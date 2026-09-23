@@ -109,6 +109,10 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 - **Soft holes: a recommended tier.** A missing recommended field (candidate:
   `concept`) is an `info` finding with a one-click "add it" quick fix. Keep the tier
   tiny; advice that fires on every new question gets ignored. **S** after quick fixes.
+- **Known verbatim oddities in the imported bank.** Some titles end in a colon
+  (`Type of Heating:`), and 93 multi-line texts end in a newline, which reaches DDI
+  QuestionText. Both are as v1 had them. Lints for a trailing colon in a title and a
+  trailing newline in text would make the first authoring pass find them. **S**.
 - **Parse messages that leak YAML jargon.** A duplicate code reports "Map keys must be
   unique". Say "Response code `1` is used twice". **S**.
 - **`01` and `1` collide.** YAML types both as the number 1, so they are reported as
