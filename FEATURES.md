@@ -161,8 +161,9 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 - **ajv compiles with `new Function`**, which needs `unsafe-eval`. If the page is ever
   served under a strict Content Security Policy, precompile the validator with ajv
   standalone. **M**, only on demand.
-- **Deploy as a static page** (GitHub Pages, beside the codebook) so students can try it without
-  a checkout. **S**.
+- **Deploy as a static page on GitHub Pages** (accepted 2026-09-23, not scheduled) so
+  students can use it without a checkout. Its URL also becomes the redirect URL for the
+  eventual GitHub App login, so decide the URL once. **S**.
 - **Accessibility pass.** Announce only the findings count, never the panes that redraw
   on every keystroke; check focus order and contrast. **S**.
 - **The respondent preview is not a working form.** Its inputs hold browser state, kept
