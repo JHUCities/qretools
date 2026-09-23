@@ -573,7 +573,32 @@ the graph has two levels and a query engine would be the least readable code her
 rewrite, to replace ten correct lines); do it with the first step that must touch origins
 anyway, **rename** (a path changes while the remote copy is at the old one) or **propose
 a change as a pull request** (a branch that differs from its base is a second remote,
-which a per-entry `original` cannot represent). Start there, never add a third copy. Notes for step 5 from the step 4 review: identify questions by a
+which a per-entry `original` cannot represent). Start there, never add a third copy.
+
+**Step 9 (decided by the owner 2026-09-24): local and remote, each with its own
+environment; warn wherever they disagree or work could be lost.** This **reverses** the
+morning's decision that questions read the saved bank version, and brings forward the
+remote slice above instead of waiting for rename. The Model holds `local` (working
+copies) and `remote` (GitHub as last loaded or saved), each split by kind (questions,
+scheme files). Questions are shown against the **local environment**, built from the
+working scheme files, so a scale edit updates its questions live and a new universe is
+usable at once; the **remote environment** is built from GitHub's scheme files. Each
+working file keeps its **base** (path, blob sha, text it started from), because telling
+"you changed it" from "GitHub changed it" needs three versions, as in git. Derived per
+file, never stored: in sync, unsaved, behind (fast-forwarded silently), conflict (warned
+*before* a save, not after a refusal), deleted on GitHub, draft. Derived per question:
+reads differently on GitHub (it names a scheme file whose local and remote differ; the
+missing list touches every question), shown as a finding naming the files. Saving warns
+when the question depends on unsaved scheme files and offers to include them; saving a
+scheme file says how many saved questions it changes; a DDI download says when it
+includes unsaved shared elements. **Every save is one commit of a change set** (one or
+more files added, updated or deleted) through GitHub's Git Data API (blobs, tree with
+`base_tree`, commit, fast-forward ref update), chosen by the owner over one commit per
+file so the bank is never half-updated. It replaces the contents API as the only write
+path. Staleness is checked per file against the branch head's blob shas before the
+commit, and the ref update refuses anything but a fast-forward. Plan: (9a) data layout
+and the two environments; (9b) sync states, badges, banners, the pre-save conflict
+check; (9c) disagreement findings and change-set saves through the Git Data API. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
