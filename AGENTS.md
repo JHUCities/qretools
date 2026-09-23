@@ -598,7 +598,19 @@ file so the bank is never half-updated. It replaces the contents API as the only
 path. Staleness is checked per file against the branch head's blob shas before the
 commit, and the ref update refuses anything but a fast-forward. Plan: (9a) data layout
 and the two environments; (9b) sync states, badges, banners, the pre-save conflict
-check; (9c) disagreement findings and change-set saves through the Git Data API. Notes for step 5 from the step 4 review: identify questions by a
+check; (9c) disagreement findings and change-set saves through the Git Data API.
+
+**Save is not publish (owner, 2026-09-24).** Every user works on their own branch, and
+the bank changes only when that branch is merged into `main` through a pull request.
+Save is a commit to the user's branch (frequent, safe, never changes the bank, and
+work lives on GitHub rather than only in one browser); propose opens or updates the pull
+request; publish is the merge, governed by GitHub (branch protection and review on
+`main`), never by the app. A commit to `main` is never a proxy for a save. This replaces
+"save commits directly to the branch in the Bank panel" (step 5) and folds the backlog's
+"propose a change as a pull request" into step 9. Open for the step 9 design: branch
+granularity (one per user or one per proposal), which remote each comparison uses
+(`main` or the user's branch), and read-only contributors (forks, or write access with
+`main` protected). Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
