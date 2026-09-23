@@ -30,6 +30,8 @@ export interface EditorInputs {
 export interface Editor {
 	sync(inputs: EditorInputs): void;
 	reveal(range: Range): void;
+	/** Tear the editor down; React mounts and unmounts the host, so this must exist. */
+	destroy(): void;
 }
 
 export function createEditor(
@@ -86,6 +88,9 @@ export function createEditor(
 			view.dispatch({ selection: { anchor, head }, scrollIntoView: true });
 			view.focus();
 		},
+		destroy() {
+			view.destroy();
+		},
 	};
 }
 
@@ -108,11 +113,11 @@ const macCompletionKeys = Prec.highest(
 const holeTheme = EditorView.theme({
 	".cm-lintRange-hint": {
 		backgroundImage: "none",
-		backgroundColor: "var(--hole-bg)",
-		borderBottom: "2px dashed var(--hole)",
+		backgroundColor: "var(--bgColor-attention-muted)",
+		borderBottom: "2px dashed var(--fgColor-attention)",
 	},
-	".cm-lintPoint-hint:after": { borderBottomColor: "var(--hole)" },
-	".cm-diagnostic-hint": { borderLeftColor: "var(--hole)" },
+	".cm-lintPoint-hint:after": { borderBottomColor: "var(--fgColor-attention)" },
+	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },
 	"&": { height: "100%", fontSize: "14px" },
-	".cm-scroller": { fontFamily: "var(--mono)" },
+	".cm-scroller": { fontFamily: "var(--fontStack-monospace)" },
 });

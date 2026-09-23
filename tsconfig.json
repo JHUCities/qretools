@@ -3,6 +3,7 @@
 		"target": "ES2022",
 		"lib": ["ES2023", "DOM", "DOM.Iterable"],
 		"module": "ESNext",
+		"jsx": "react-jsx",
 		"moduleResolution": "bundler",
 		"types": ["vite/client"],
 		"strict": true,

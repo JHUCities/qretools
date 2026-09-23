@@ -42,7 +42,7 @@ export function update(model: Model, msg: Msg): Step {
 			return [{ ...model, ddiSchema: msg.result }, []];
 
 		case "listOpened":
-			return [{ ...model, screen: { kind: "list", text: "" } }, []];
+			return [{ ...model, screen: { kind: "blank" } }, []];
 
 		case "questionOpened":
 			return model.questions[msg.id]
@@ -51,14 +51,21 @@ export function update(model: Model, msg: Msg): Step {
 
 		case "filterChanged":
 			return [
-				{
-					...model,
-					screen: {
-						kind: "list",
-						text: msg.text,
-						...(msg.folder !== undefined && { folder: msg.folder }),
-					},
-				},
+				{ ...model, browser: { ...model.browser, filter: msg.text } },
+				[],
+			];
+
+		case "folderToggled": {
+			const open = model.browser.expanded.includes(msg.folder);
+			const expanded = open
+				? model.browser.expanded.filter((f) => f !== msg.folder)
+				: [...model.browser.expanded, msg.folder];
+			return [{ ...model, browser: { ...model.browser, expanded } }, []];
+		}
+
+		case "settingsToggled":
+			return [
+				{ ...model, browser: { ...model.browser, settingsOpen: msg.open } },
 				[],
 			];
 
@@ -70,33 +77,24 @@ export function update(model: Model, msg: Msg): Step {
 		case "filesUploaded": {
 			let next = model;
 			for (const f of msg.files) [next] = add(next, f.text);
-			return persist([{ ...next, screen: { kind: "list", text: "" } }, []]);
+			return persist([next, []]);
 		}
 
 		case "deleteRequested": {
 			const q = model.questions[msg.id];
 			if (!q) return [model, []];
-			const list =
-				model.screen.kind === "list"
-					? model.screen
-					: { kind: "list" as const, text: "" };
-			if (list.confirmDelete !== msg.id)
-				return [{ ...model, screen: { ...list, confirmDelete: msg.id } }, []];
-			if (q.origin.kind === "draft")
-				return persist([
-					{
-						...without(model, msg.id),
-						screen: withoutConfirm(list),
-					},
+			if (model.browser.confirmDelete !== msg.id)
+				return [
+					{ ...model, browser: { ...model.browser, confirmDelete: msg.id } },
 					[],
-				]);
-			if (!canWrite(model)) return [model, []];
+				];
+			const cleared = { ...model, browser: withoutConfirm(model.browser) };
+			if (q.origin.kind === "draft")
+				return persist([without(cleared, msg.id), []]);
+			if (!canWrite(model)) return [cleared, []];
 			const before = parseSurface(q.origin.original, model.scales).draft;
 			return [
-				{
-					...patch(model, msg.id, { activity: { kind: "deleting" } })[0],
-					screen: withoutConfirm(list),
-				},
+				patch(cleared, msg.id, { activity: { kind: "deleting" } })[0],
 				[
 					{
 						kind: "deleteFile",
@@ -111,9 +109,7 @@ export function update(model: Model, msg: Msg): Step {
 		}
 
 		case "deleteCancelled":
-			return model.screen.kind === "list"
-				? [{ ...model, screen: withoutConfirm(model.screen) }, []]
-				: [model, []];
+			return [{ ...model, browser: withoutConfirm(model.browser) }, []];
 
 		case "saveRequested": {
 			const q = model.questions[msg.id];
@@ -204,7 +200,7 @@ export function update(model: Model, msg: Msg): Step {
 
 		case "reloadRequested": {
 			const q = model.questions[msg.id];
-			if (!q || q.origin.kind !== "bank") return [model, []];
+			if (q?.origin.kind !== "bank") return [model, []];
 			return [
 				model,
 				[
@@ -266,6 +262,7 @@ export function update(model: Model, msg: Msg): Step {
 					settings: msg.settings,
 					session: { kind: "connecting" },
 					failures: [],
+					browser: { ...model.browser, settingsOpen: false },
 				},
 				[{ kind: "connect", settings: msg.settings }],
 			]);
@@ -342,10 +339,12 @@ export function update(model: Model, msg: Msg): Step {
 	}
 }
 
-const withoutConfirm = (
-	list: Extract<Model["screen"], { kind: "list" }>,
-): Model["screen"] =>
-	compact({ kind: "list", text: list.text, folder: list.folder });
+const withoutConfirm = (browser: Model["browser"]): Model["browser"] =>
+	compact({
+		filter: browser.filter,
+		expanded: browser.expanded,
+		settingsOpen: browser.settingsOpen,
+	});
 
 const current = (model: Model): Question | undefined =>
 	model.screen.kind === "editing"
@@ -377,7 +376,7 @@ function without(model: Model, id: Id): Model {
 		questions: rest,
 		screen:
 			model.screen.kind === "editing" && model.screen.id === id
-				? { kind: "list", text: "" }
+				? { kind: "blank" }
 				: model.screen,
 	};
 }

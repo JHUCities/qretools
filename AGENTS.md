@@ -100,7 +100,7 @@ Cmds; components subscribe with selectors; the `devtools` middleware names each 
 for Redux DevTools. Thunks and any effect outside `update` are forbidden: `update` stays
 the only place a state change or an effect is decided. Stack additions: `react`,
 `react-dom`, `@primer/react` 38 (CSS modules and tokens, no CSS-in-JS runtime),
-`@primer/primitives`, `@primer/octicons-react`, `zustand`, `@vitejs/plugin-react-oxc`,
+`@primer/primitives`, `@primer/octicons-react`, `zustand`, `@vitejs/plugin-react` 6,
 `@testing-library/react` with jsdom. CodeMirror stays behind `editor.ts`, wrapped by a
 small component that owns its lifecycle and calls `sync`.
 
@@ -240,6 +240,23 @@ emit a Universe item and resolve the link in role 2.
   refresh, modified ones stay, gone-and-modified become drafts. The editor resets its
   state when the open question changes. Development writes go to the throwaway
   `sandbox` branch through the branch setting; `main` stays untouched until trusted.
+
+- **The Primer shell (2026-09-24).** `src/app/ui/` holds React components; `store.ts` is
+  the Zustand store whose only mutation is `dispatch` (update, setState named by
+  `msg.kind`, then the Cmds); `effects.ts` is `exec` plus the shell's only hidden state
+  (token, store, validator, persist debouncer, editor handle); `evaluations.ts` is a pure
+  cache; `tree.ts` derives the bank tree from the Model, tested without React. The Model
+  gained `browser: { filter, expanded, confirmDelete?, settingsOpen }`: the tree is always
+  visible so its state outlives the open question, and dialog visibility is Model state,
+  not component state. Effective folder expansion is derived (opened by the user, or
+  holding the open question, or any folder while filtering). Unnamed drafts show under
+  "(unfiled)", last: an assumption. Bank files keep the folder of their path. The
+  CodeMirror wrapper (`EditorPane.tsx`) owns only the editor's lifecycle and registers
+  its handle with the effects for `revealRange`; `editor.ts` gained `destroy()` and
+  reads Primer's tokens for the hole colour and font. Component state is limited to
+  transient form input (the Bank dialog's fields; the token goes to the effects, never a
+  Msg). Vite plugin: `@vitejs/plugin-react` 6 (oxc-based); `plugin-react-oxc` does not
+  install against Vite 8. Measured: the bundle grew from 368 KB to 559 KB gzipped.
 
 ## Principles from PL research (how features are judged)
 

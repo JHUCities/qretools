@@ -69,6 +69,13 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 
 ## Editor experience
 
+- **Dark mode for CodeMirror.** Primer switches with `colorMode="auto"` and the hole
+  styling follows its tokens, but the editor's syntax theme is still the light default.
+  Pick a dark base theme from `useTheme().resolvedColorScheme`. **S**.
+- **Previews as tabs** (Primer `UnderlinePanels`, experimental) instead of stacked panes,
+  if the right column gets crowded. **S**.
+- **A `Store` fake for a mount smoke test** now maps to rendering `App` with a fixture
+  store in jsdom; the Browser and tree are tested, `App` is not. **S**.
 - **Precise spans: key, value, whole.** The ranges index holds one span per path, from
   key start to value end. The parser gives the key and value their own ranges. With
   both, an unknown field underlines the key, a wrong type underlines the value, and a

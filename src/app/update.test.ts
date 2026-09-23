@@ -28,7 +28,7 @@ describe("init", () => {
 	it("starts with an empty list on first run, and asks for the DDI schema", () => {
 		const [model, cmds] = init({ stored: ok(undefined), hasToken: false });
 		expect(Object.keys(model.questions)).toHaveLength(0);
-		expect(model.screen).toEqual({ kind: "list", text: "" });
+		expect(model.screen).toEqual({ kind: "blank" });
 		expect(cmds).toEqual([{ kind: "loadDdiSchema" }]);
 	});
 
@@ -104,7 +104,7 @@ describe("editing", () => {
 			],
 		});
 		expect(Object.keys(m.questions)).toHaveLength(2);
-		expect(m.screen.kind).toBe("list");
+		expect(m.screen.kind).toBe("blank");
 	});
 });
 
@@ -254,7 +254,7 @@ describe("deleting", () => {
 		const id = firstId(m);
 		const [m1, c1] = update(m, { kind: "deleteRequested", id });
 		expect(c1).toEqual([]);
-		expect(m1.screen).toMatchObject({ kind: "list", confirmDelete: id });
+		expect(m1.browser.confirmDelete).toBe(id);
 		const [m2, c2] = update(m1, { kind: "deleteRequested", id });
 		expect(m2.questions[id]).toBeUndefined();
 		expect(c2.at(-1)?.kind).toBe("persist");

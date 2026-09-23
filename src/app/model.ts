@@ -42,13 +42,18 @@ export interface Question {
 }
 
 export type Screen =
-	| {
-			readonly kind: "list";
-			readonly folder?: string;
-			readonly text: string;
-			readonly confirmDelete?: Id;
-	  }
+	| { readonly kind: "blank" }
 	| { readonly kind: "editing"; readonly id: Id };
+
+/** The bank browser beside the open question. Effective expansion is derived in tree.ts. */
+export interface Browser {
+	readonly filter: string;
+	/** Folders the user opened. A folder holding the open question, or any folder while filtering, is open regardless. */
+	readonly expanded: readonly string[];
+	readonly confirmDelete?: Id;
+	/** The bank settings dialog. */
+	readonly settingsOpen: boolean;
+}
 
 export type Session =
 	| { readonly kind: "anonymous" }
@@ -81,6 +86,7 @@ export interface Model {
 	readonly questions: Readonly<Record<Id, Question>>;
 	readonly nextId: Id;
 	readonly screen: Screen;
+	readonly browser: Browser;
 	readonly session: Session;
 	readonly settings: BankSettings;
 	readonly bank: Bank;
@@ -98,9 +104,10 @@ export type Msg =
 	| { readonly kind: "questionOpened"; readonly id: Id }
 	| {
 			readonly kind: "filterChanged";
-			readonly folder?: string;
 			readonly text: string;
 	  }
+	| { readonly kind: "folderToggled"; readonly folder: string }
+	| { readonly kind: "settingsToggled"; readonly open: boolean }
 	| { readonly kind: "questionCreated"; readonly text: string }
 	| {
 			readonly kind: "filesUploaded";
@@ -256,7 +263,8 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	const model: Model = {
 		questions,
 		nextId,
-		screen: { kind: "list", text: "" },
+		screen: { kind: "blank" },
+		browser: { filter: "", expanded: [], settingsOpen: false },
 		session: flags.hasToken ? { kind: "connecting" } : { kind: "anonymous" },
 		settings,
 		bank: { kind: "bundled" },
