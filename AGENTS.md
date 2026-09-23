@@ -472,9 +472,12 @@ survives a broken or deleted entry ("used by 12, unresolved"); (2) Env identity 
 performance contract: derive it from the scheme entries' `(id, source)` only, never from
 all `files`, and test that editing a question leaves it referentially equal;
 (3) `missing-code` belongs on the scale file's own evaluation, not per question;
-(4) owner question: is the Env built from an entry's local source (live: edit a scale,
-watch its questions change; a DDI export may then reference a scale only this browser
-has) or from its bank original? Recommended: local. Notes for step 5 from the step 4 review: identify questions by a
+(4) **decided by the owner 2026-09-24: the Env is built from each scheme entry's saved
+bank version (`origin.original`), not its local edits.** A question never resolves
+against a scale that exists only in this browser, so a DDI export only references what
+is on GitHub; an unsaved scheme edit shows its effect on questions once saved. (The
+reviewer had recommended local, live evaluation; declined.) A consequence that helps:
+the Env changes only on bank load and save, never per keystroke. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
