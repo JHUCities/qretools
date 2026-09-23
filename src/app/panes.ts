@@ -273,10 +273,17 @@ export const visibleRows = (
 
 export function viewList(
 	shown: readonly Row[],
+	total: number,
 	screen: Extract<Screen, { kind: "list" }>,
 	canWrite: boolean,
 	on: ListActions,
 ): HTMLElement {
+	if (total === 0)
+		return h(
+			"p",
+			{ class: "quiet" },
+			"No questions yet. Create one above, or connect to the bank.",
+		);
 	if (shown.length === 0)
 		return h("p", { class: "quiet" }, "No questions match.");
 	return h(

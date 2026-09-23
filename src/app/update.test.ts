@@ -136,7 +136,7 @@ describe("saving", () => {
 		expect(cmds).toEqual([
 			{
 				kind: "writeFile",
-				id: 5,
+				id: 1,
 				settings: DEFAULT_SETTINGS,
 				path: "questions/nhd/nhd_new.yaml",
 				text: m.questions[1]?.source,

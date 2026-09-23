@@ -67,7 +67,13 @@ export function mount(
 		}),
 	);
 	const listTable = h("div", { class: "list" });
-	const listHost = h("section", { class: "list-screen" });
+	// Composed once: re-inserting the toolbar on every view would steal the caret from the filter.
+	const listHost = h(
+		"section",
+		{ class: "list-screen" },
+		toolbar.element,
+		listTable,
+	);
 	const editorHost = h("div", { class: "editor" });
 	const qhead = h("div", { class: "qhead-host" });
 	const respondent = h("div", { class: "pane-body" });
@@ -211,6 +217,7 @@ export function mount(
 			),
 		);
 	}
+	listHost.prepend(bankForm.newButtons);
 	bankForm.newButtons.prepend(
 		h(
 			"button",
@@ -278,16 +285,11 @@ export function mount(
 					rows.length,
 				);
 				listTable.replaceChildren(
-					viewList(shown, model.screen, canWrite, {
+					viewList(shown, rows.length, model.screen, canWrite, {
 						open: (id) => dispatch({ kind: "questionOpened", id }),
 						remove: (id) => dispatch({ kind: "deleteRequested", id }),
 						cancelRemove: () => dispatch({ kind: "deleteCancelled" }),
 					}),
-				);
-				listHost.replaceChildren(
-					bankForm.newButtons,
-					toolbar.element,
-					listTable,
 				);
 				return;
 			}
