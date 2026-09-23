@@ -651,7 +651,21 @@ is rebuilt from the bases, which record the last GitHub state this browser knew)
 v1 upgrade step by step, verified in the running app. Until 9d a save still writes to
 the branch in the settings through the contents API, and `bank` moves with `remote`.
 Measured: typing in `agree4` (re-evaluating the bank per keystroke) takes about 30 ms a
-keystroke with no long task, so no debounce. Notes for step 5 from the step 4 review: identify questions by a
+keystroke with no long task, so no debounce.
+
+**Step 9a after-pass (2026-09-24).** `remote` is not persisted: before this session's
+load it means only "last known, as of each base", which hides conflicts and deletions
+on GitHub. So writing waits for the load: `writeBlocked(model)` is the one rule (not
+connected, read only, or "Checking GitHub…" until `loading` is `loaded`), `update`
+refuses on it and the header shows it; 9b shows no conflict or deleted-on-GitHub badge
+before the load. (The reviewer withdrew storing `remote` as a diff from `bank`: the
+branch and pull request are loaded fresh in 9d too.) `taken` also counts paths other
+working files claim (a changed file deleted on GitHub keeps its base). `rebase` computes
+the claimed paths first, as a value. The example scales stand in while no bank is
+known (`remote.schemes` empty), beneath local ones, so one local draft does not blank
+questions on an example scale. `envOf` runs uncached inside `update` on the save and
+delete paths, by design (a comment says so). Carried into 9b: when a fast-forward
+replaces the open file's text, the editor document must be replaced. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

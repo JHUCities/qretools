@@ -46,7 +46,9 @@ const model: Model = {
 	},
 };
 const tree = (m: Model) =>
-	treeOf(m, (q) => evaluate(q.source, m.agency, envOf(m.local.schemes)));
+	treeOf(m, (q) =>
+		evaluate(q.source, m.agency, envOf(m.local.schemes, m.remote.schemes)),
+	);
 
 describe("treeOf", () => {
 	it("files bank questions by their path, drafts by name prefix, unnamed drafts last", () => {
@@ -152,13 +154,22 @@ describe("schemeSections", () => {
 		indexOf(
 			Object.values(mm.local.questions).map((q) => ({
 				key: q.id,
-				symbols: evaluate(q.source, mm.agency, envOf(mm.local.schemes)).symbols,
+				symbols: evaluate(
+					q.source,
+					mm.agency,
+					envOf(mm.local.schemes, mm.remote.schemes),
+				).symbols,
 			})),
 		);
 	const sections = (mm: Model) =>
 		schemeSections(
 			mm,
-			(e) => evaluateScheme(e.kind, e.source, envOf(mm.local.schemes)),
+			(e) =>
+				evaluateScheme(
+					e.kind,
+					e.source,
+					envOf(mm.local.schemes, mm.remote.schemes),
+				),
 			index(mm),
 		);
 

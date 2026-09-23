@@ -115,15 +115,21 @@ export function rebase(
 	remote: Remote,
 	nextId: Id,
 ): { local: Local; nextId: Id } {
-	const claimed = new Set<Path>();
+	// Every path a working file holds or will hold, computed first as a value. A file
+	// dropped below as a clean deletion still counts; its path is not on GitHub anyway.
+	const claimed = new Set(
+		[
+			...Object.values(local.questions),
+			...Object.values(local.schemes),
+		].flatMap((f) => claimOf(f) ?? []),
+	);
+	/** Settle each file against GitHub; a slice with no change keeps its reference. */
 	const settle = <T extends Entry>(
 		files: Readonly<Record<Id, T>>,
 	): Readonly<Record<Id, T>> => {
 		let changed = false;
 		const out: Record<Id, T> = {};
 		for (const f of Object.values(files)) {
-			const path = claimOf(f);
-			if (path !== undefined) claimed.add(path);
 			const blob = remoteBlob(remote, f);
 			const sync = syncOf(f, blob);
 			if (sync === "behind" && blob && f.base) {

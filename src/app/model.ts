@@ -386,16 +386,24 @@ export const allFiles = (local: Local): readonly Entry[] => [
 /**
  * The environment built from the working scheme files: what questions are shown
  * against, so a scale edit updates its questions live and a new universe is usable at
- * once (owner, step 9). With no scheme files at all (no bank yet), the bundled example
- * scales stand in.
+ * once (owner, step 9). While no bank is known (`remote.schemes` empty), the bundled
+ * example scales stand in beneath any local ones, so a first local scale does not
+ * turn every question on an example scale into a hole.
  */
-export function envOf(schemes: Readonly<Record<Id, SchemeEntry>>): Env {
-	const files = Object.values(schemes);
-	return files.length === 0
-		? { ...EMPTY_ENV, scales: EXAMPLE_SCALES }
-		: schemeEnv(
-				files.map((e) => ({ kind: e.kind, name: e.name, text: e.source })),
-			);
+export function envOf(
+	schemes: Local["schemes"],
+	remoteSchemes: Remote["schemes"],
+): Env {
+	const env = schemeEnv(
+		Object.values(schemes).map((e) => ({
+			kind: e.kind,
+			name: e.name,
+			text: e.source,
+		})),
+	);
+	return Object.keys(remoteSchemes).length === 0
+		? { ...env, scales: { ...EXAMPLE_SCALES, ...env.scales } }
+		: env;
 }
 
 export const toPersisted = (model: Model): Persisted => ({

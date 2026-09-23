@@ -17,7 +17,7 @@ import {
 	remoteOfBases,
 	type SchemeEntry,
 } from "./model.js";
-import { schemeNameProblem, update } from "./update.js";
+import { schemeNameProblem, update, writeBlocked } from "./update.js";
 
 const fresh = (): Model => init({ stored: ok(undefined), hasToken: false })[0];
 const run = (model: Model, ...msgs: Msg[]) =>
@@ -25,9 +25,11 @@ const run = (model: Model, ...msgs: Msg[]) =>
 		([m], msg) => update(m, msg),
 		[model, []],
 	);
+/** Connected, with this session's load done: the state in which writing is allowed. */
 const connected = (model: Model, canWrite = true): Model => ({
 	...model,
 	session: { kind: "connected", login: "iain", canWrite },
+	loading: { kind: "loaded" },
 });
 const firstId = (model: Model): Id =>
 	Number(
@@ -370,7 +372,7 @@ describe("connecting", () => {
 			"missing:missing",
 		]);
 		// Questions are read against the saved schemes; an unreadable one contributes nothing.
-		const env = envOf(m3.local.schemes);
+		const env = envOf(m3.local.schemes, m3.remote.schemes);
 		expect(Object.keys(env.scales)).toEqual(["agree4"]);
 		expect(env.universes.renters?.text).toBe("Renters");
 		expect(env.missing.map((c) => c.code)).toEqual(["-8"]);
@@ -388,7 +390,9 @@ describe("connecting", () => {
 			{ ...m, screen: { kind: "editing", id } },
 			{ kind: "edited", text: "labels:\n  1: Yes\n  2: No\n" },
 		);
-		expect(envOf(edited.local.schemes).scales.yn?.codes).toHaveLength(2);
+		expect(
+			envOf(edited.local.schemes, edited.remote.schemes).scales.yn?.codes,
+		).toHaveLength(2);
 		// GitHub's copy is untouched until a save.
 		expect(edited.remote).toBe(m.remote);
 	});
@@ -542,8 +546,8 @@ describe("the environment's identity", () => {
 		expect(edited.local.schemes).toBe(loaded.local.schemes);
 		expect(edited.remote).toBe(loaded.remote);
 		const evaluations = createEvaluations();
-		expect(evaluations.env(edited.local.schemes)).toBe(
-			evaluations.env(loaded.local.schemes),
+		expect(evaluations.env(edited.local.schemes, edited.remote.schemes)).toBe(
+			evaluations.env(loaded.local.schemes, loaded.remote.schemes),
 		);
 	});
 
@@ -568,5 +572,67 @@ describe("the environment's identity", () => {
 		expect(again.remote.schemes).toBe(loaded.remote.schemes);
 		expect(again.remote.questions).toBe(loaded.remote.questions);
 		expect(again.local).toBe(loaded.local);
+	});
+});
+
+describe("writing waits for this session's load", () => {
+	it("refuses to save or delete until the bank has loaded, and says why", () => {
+		const m = withBank(
+			{ ...connected(fresh()), loading: { kind: "loading" } },
+			[
+				bankQuestion(
+					1,
+					"questions/q/q.yaml",
+					"name: q\n",
+					"name: q\ntext: x\n",
+				),
+			],
+		);
+		expect(writeBlocked(m)).toMatch(/Checking GitHub/);
+		expect(update(m, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
+		expect(
+			run(
+				m,
+				{ kind: "deleteRequested", id: 1 },
+				{ kind: "deleteRequested", id: 1 },
+			)[1],
+		).toEqual([]);
+		expect(writeBlocked({ ...m, loading: { kind: "loaded" } })).toBeUndefined();
+	});
+
+	it("a path a working file still claims is taken, though GitHub deleted it", () => {
+		// q/q.yaml was deleted on GitHub while changed here: its base still claims the path.
+		const kept = bankQuestion(
+			9,
+			"questions/q/q.yaml",
+			"name: q\n",
+			"name: q\nnote: mine\n",
+		);
+		const base = withBank(connected(fresh()), [kept]);
+		const m: Model = {
+			...base,
+			remote: { questions: {}, schemes: {} },
+			bank: { questions: {}, schemes: {} },
+		};
+		const [made] = update(m, { kind: "questionCreated", text: "name: q\n" });
+		const id = made.nextId - 1;
+		const [asked] = update(made, { kind: "saveRequested", id });
+		const [refused, cmds] = update(
+			{ ...asked, browser: { ...asked.browser, saving: { id, folder: "q" } } },
+			{ kind: "saveConfirmed" },
+		);
+		expect(cmds).toEqual([]);
+		expect(refused.activity[id]?.kind).toBe("failed");
+	});
+
+	it("with no bank known, example scales stand in beneath a first local scale", () => {
+		const [m] = run(
+			fresh(),
+			{ kind: "schemeCreateOpened", scheme: "scale" },
+			{ kind: "schemeNameChanged", name: "mine" },
+			{ kind: "schemeCreateConfirmed" },
+		);
+		const env = envOf(m.local.schemes, m.remote.schemes);
+		expect(Object.keys(env.scales)).toContain("agree4");
 	});
 });

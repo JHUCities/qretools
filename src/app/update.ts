@@ -12,6 +12,7 @@ import { parseSurface, rangesOf } from "../core/surface/parse.js";
 import { NAME_PATTERN } from "../core/surface/schema.js";
 import {
 	type Activity,
+	allFiles,
 	type Blob,
 	type Cmd,
 	type Entry,
@@ -27,7 +28,7 @@ import {
 	toPersisted,
 } from "./model.js";
 import type { Failure } from "./storage.js";
-import { rebase, remoteOf, sliceOf } from "./sync.js";
+import { claimOf, rebase, remoteOf, sliceOf } from "./sync.js";
 
 type Step = readonly [Model, readonly Cmd[]];
 
@@ -182,7 +183,10 @@ export function update(model: Model, msg: Msg): Step {
 						message:
 							q.kind === "question"
 								? describeChange(
-										parseSurface(q.base.text, envOf(model.local.schemes)).draft,
+										parseSurface(
+											q.base.text,
+											envOf(model.local.schemes, model.remote.schemes),
+										).draft,
 										undefined,
 									)
 								: describeSchemeChange(q.kind, q.name, "delete"),
@@ -204,7 +208,7 @@ export function update(model: Model, msg: Msg): Step {
 			if (q.base !== undefined) return write(model, msg.id, q, q.base.path);
 			if (q.kind !== "question") {
 				const path = schemePath(q.kind, q.name);
-				return taken(model, path)
+				return taken(model, path, msg.id)
 					? [
 							refuse(
 								model,
@@ -217,7 +221,8 @@ export function update(model: Model, msg: Msg): Step {
 					: write(model, msg.id, q, path);
 			}
 			const where = bankLocation(
-				parseSurface(q.source, envOf(model.local.schemes)).draft,
+				parseSurface(q.source, envOf(model.local.schemes, model.remote.schemes))
+					.draft,
 			);
 			if (!where.ok)
 				return [
@@ -261,7 +266,8 @@ export function update(model: Model, msg: Msg): Step {
 				return [model, []];
 			const closed = { ...model, browser: withoutSaving(model.browser) };
 			const where = bankLocation(
-				parseSurface(q.source, envOf(model.local.schemes)).draft,
+				parseSurface(q.source, envOf(model.local.schemes, model.remote.schemes))
+					.draft,
 				saving.folder,
 			);
 			if (!where.ok)
@@ -270,7 +276,7 @@ export function update(model: Model, msg: Msg): Step {
 					[],
 				];
 			// A new draft must not silently overwrite a bank file at that path.
-			if (taken(model, where.value.path)) {
+			if (taken(model, where.value.path, saving.id)) {
 				return [
 					refuse(
 						closed,
@@ -362,7 +368,11 @@ export function update(model: Model, msg: Msg): Step {
 							]
 						: [],
 				];
-			const ev = evaluate(q.source, model.agency, envOf(model.local.schemes));
+			const ev = evaluate(
+				q.source,
+				model.agency,
+				envOf(model.local.schemes, model.remote.schemes),
+			);
 			const stem = ev.draft.name ?? `question-${msg.id}`;
 			return [
 				model,
@@ -483,7 +493,12 @@ function write(model: Model, id: Id, q: Entry, path: string): Step {
 const refuse = (model: Model, id: Id, message: string, hint?: string): Model =>
 	withActivity(model, id, failed(compact({ kind: "refused", message, hint })));
 
-/** The commit message for saving a file: what changed in a question, or which scheme file. */
+/**
+ * The commit message for saving a file: what changed in a question, or which scheme file.
+ * `envOf` runs uncached here, re-reading the scheme files (a few milliseconds, only on
+ * the save and delete paths). `update` is pure and cannot reach the view's cache; do
+ * not thread one in to save those milliseconds.
+ */
 function messageOf(model: Model, q: Entry): string {
 	if (q.kind !== "question")
 		return describeSchemeChange(
@@ -491,16 +506,22 @@ function messageOf(model: Model, q: Entry): string {
 			q.name,
 			q.base === undefined ? "add" : "update",
 		);
-	const env = envOf(model.local.schemes);
+	const env = envOf(model.local.schemes, model.remote.schemes);
 	return describeChange(
 		q.base === undefined ? undefined : parseSurface(q.base.text, env).draft,
 		parseSurface(q.source, env).draft,
 	);
 }
 
-/** Whether GitHub already has a file at a path. */
-const taken = (model: Model, path: Path): boolean =>
-	path in model.remote.questions || path in model.remote.schemes;
+/**
+ * Whether a path is already GitHub's or another working file's. A changed file
+ * deleted on GitHub keeps its base, so it still claims its path though `remote` no
+ * longer has it.
+ */
+const taken = (model: Model, path: Path, self?: Id): boolean =>
+	path in model.remote.questions ||
+	path in model.remote.schemes ||
+	allFiles(model.local).some((f) => f.id !== self && claimOf(f) === path);
 
 /**
  * Why a name cannot be given to a new scheme file, or undefined when it can. The
@@ -533,8 +554,20 @@ const withoutCreating = (browser: Model["browser"]): Model["browser"] =>
 const current = (model: Model): Entry | undefined =>
 	model.screen.kind === "editing" ? fileOf(model, model.screen.id) : undefined;
 
-const canWrite = (model: Model): boolean =>
-	model.session.kind === "connected" && model.session.canWrite;
+/**
+ * Why nothing can be written to GitHub right now, or undefined when it can. One rule
+ * for `update`, which refuses on it, and for the view, which says it on the buttons.
+ * Before this session's load, `remote` is only "last known, as of each base": a file
+ * in conflict would look merely unsaved, so a save then would act on a wrong picture.
+ */
+export function writeBlocked(model: Model): string | undefined {
+	if (model.session.kind !== "connected") return "Connect to the bank to save";
+	if (!model.session.canWrite) return "Read access only: download instead";
+	if (model.loading.kind !== "loaded") return "Checking GitHub…";
+	return undefined;
+}
+
+const canWrite = (model: Model): boolean => writeBlocked(model) === undefined;
 
 const failed = (failure: Failure) => ({ kind: "failed" as const, failure });
 

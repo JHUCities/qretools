@@ -13,6 +13,7 @@ import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
 import { fileOf, type Id, type Question, type SchemeEntry } from "../model.js";
 import { isUnsaved } from "../sync.js";
+import { writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
@@ -60,7 +61,7 @@ function useActions(id: Id) {
 function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const { evaluations, effects } = useApp();
 	const agency = useModel((m) => m.agency);
-	const session = useModel((m) => m.session);
+	const blocked = useModel(writeBlocked);
 	const ddiSchema = useModel((m) => m.ddiSchema);
 	const questions = useModel((m) => m.local.questions);
 	const activity = useModel((m) => m.activity);
@@ -95,7 +96,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				name={ev.draft.name}
 				unsaved={isUnsaved(q)}
 				activity={activity[q.id]}
-				session={session}
+				blocked={blocked}
 				on={on}
 			/>
 			<div className="split">
@@ -144,7 +145,7 @@ const SINGULAR: Readonly<Record<SchemeEntry["kind"], string>> = {
 
 function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const { evaluations } = useApp();
-	const session = useModel((m) => m.session);
+	const blocked = useModel(writeBlocked);
 	const questions = useModel((m) => m.local.questions);
 	const activity = useModel((m) => m.activity);
 	const agency = useModel((m) => m.agency);
@@ -176,7 +177,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				kind={SINGULAR[e.kind]}
 				unsaved={isUnsaved(e)}
 				activity={activity[e.id]}
-				session={session}
+				blocked={blocked}
 				on={{ ...on, downloadDdi: undefined }}
 			/>
 			<div className="split">

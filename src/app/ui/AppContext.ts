@@ -22,5 +22,6 @@ export function useModel<T>(select: (model: Model) => T): T {
 export function useEnv(): Env {
 	const { evaluations } = useApp();
 	const schemes = useModel((m) => m.local.schemes);
-	return evaluations.env(schemes);
+	const remoteSchemes = useModel((m) => m.remote.schemes);
+	return evaluations.env(schemes, remoteSchemes);
 }

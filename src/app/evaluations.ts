@@ -16,11 +16,12 @@ import {
 	type Id,
 	type Local,
 	type Question,
+	type Remote,
 	type SchemeEntry,
 } from "./model.js";
 
 export interface Evaluations {
-	env(schemes: Local["schemes"]): Env;
+	env(schemes: Local["schemes"], remoteSchemes: Remote["schemes"]): Env;
 	get(q: Question, agency: string, env: Env): Evaluation;
 	scheme(e: SchemeEntry, env: Env): SchemeEvaluation;
 	schema(env: Env): Record<string, unknown>;
@@ -33,14 +34,17 @@ export function createEvaluations(): Evaluations {
 		{ source: string; env: Env; ev: SchemeEvaluation }
 	>();
 	let envOfSlice: Local["schemes"] | undefined;
+	let envOfRemote: Remote["schemes"] | undefined;
 	let lastEnv: Env | undefined;
 	let schemaEnv: Env | undefined;
 	let lastSchema: Record<string, unknown> | undefined;
 	return {
-		env(schemes) {
-			if (lastEnv && envOfSlice === schemes) return lastEnv;
+		env(schemes, remoteSchemes) {
+			if (lastEnv && envOfSlice === schemes && envOfRemote === remoteSchemes)
+				return lastEnv;
 			envOfSlice = schemes;
-			lastEnv = envOf(schemes);
+			envOfRemote = remoteSchemes;
+			lastEnv = envOf(schemes, remoteSchemes);
 			return lastEnv;
 		},
 		get(q, agency, env) {

@@ -1,7 +1,7 @@
 /** The open file's header: identity, state, and the actions on it. */
 import { DownloadIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label } from "@primer/react";
-import type { Activity, Entry, Session } from "../model.js";
+import type { Activity, Entry } from "../model.js";
 import { inlineCode } from "./Previews.js";
 
 export interface HeaderActions {
@@ -19,7 +19,7 @@ export function FileHeader({
 	kind,
 	unsaved,
 	activity,
-	session,
+	blocked,
 	on,
 }: {
 	q: Entry;
@@ -28,18 +28,13 @@ export function FileHeader({
 	/** What the file is, when it is not a question: "scale", "universe", … */
 	kind?: string;
 	unsaved: boolean;
-	session: Session;
+	/** Why nothing can be written now (`writeBlocked`), or undefined. */
+	blocked: string | undefined;
 	on: HeaderActions;
 }) {
-	const canWrite = session.kind === "connected" && session.canWrite;
+	const canWrite = blocked === undefined;
 	const saveTitle =
-		session.kind !== "connected"
-			? "Connect to the bank to save"
-			: !canWrite
-				? "Read access only: download instead"
-				: unsaved
-					? "Save to the bank"
-					: "Nothing to save";
+		blocked ?? (unsaved ? "Save to the bank" : "Nothing to save");
 	return (
 		<div className="qhead">
 			<div className="qhead-row">
@@ -77,6 +72,7 @@ export function FileHeader({
 					variant="danger"
 					leadingVisual={TrashIcon}
 					disabled={q.base !== undefined && !canWrite}
+					title={q.base !== undefined ? blocked : undefined}
 					onClick={on.remove}
 				>
 					Delete…
