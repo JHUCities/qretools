@@ -426,7 +426,15 @@ parse to Draft + findings; (2) core: elaborate to DDI 4.0 + schema validation;
 (3) core: lints and render models; (4) shell: editor with schema completion, live
 preview, findings as diagnostics; (5) shell: CRUD, upload, download, DDI export.
 
-Steps 0 to 7 are done (5 last, against the `sandbox` branch). Notes for step 5 from the step 4 review: identify questions by a
+Steps 0 to 7 are done (5 last, against the `sandbox` branch).
+
+**Step 8 (decided 2026-09-24): schemes.** Shared elements as DDI models them, one
+mechanism: the parser takes an environment of schemes (`parseSurface(text, env)`), a
+reference position resolves against its scheme or is a hole, and each scheme gets a
+section in the tree with "used by" derived from the loaded questions. Populate all four:
+scales (exists), missing-value codes (one bank-level file), universes, instructions.
+Syntax decides reference versus prose: a bare identifier is a name, anything else is
+text. Concepts and sources stay free text; categories are never surfaced. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
