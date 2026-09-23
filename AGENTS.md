@@ -236,6 +236,27 @@ emit a Universe item and resolve the link in role 2.
   fine-grained personal access token (not a classic one) limited to the bank repository,
   with Contents read and write, Pull requests read and write, and an expiry, and pastes
   it into the app. The GitHub App flow swaps in later behind the same messages.
+- **JHED login (JHU single sign-on): considered and declined, 2026-09-21.** The owner
+  does not want the tool tied to JHU; GitHub OAuth is enough. The facts agree: JHU's
+  identity provider (Shibboleth with OIDC) allows only secret-based clients, so a static
+  site could not complete the login; and it proves who someone is at JHU while granting
+  nothing on GitHub, so it would have needed a backend that writes to the bank as a bot,
+  a real trust boundary holding two secrets. Revisit only if students turn out not to
+  have GitHub accounts. The tool stays usable by any survey team with a GitHub repo.
+- **Requirement, 2026-09-21: a user who picks GitHub and has access may CRUD the
+  question bank through git.** The app offers a choice of store (this browser, or
+  GitHub). It implements no authorisation of its own: GitHub decides, and the app
+  detects. Verified: `GET /repos/{owner}/{repo}` returns `permissions` for the token's
+  user, and **organisation membership alone does not grant write access**: the owner's
+  own account is an active JHUCities member with `push: false` on the bank repo. So the
+  capability rule is the repository permission: `push` gives full CRUD, `pull` gives a
+  read-only bank plus local drafts, neither gives local only. An organisation admin
+  grants write, typically through a team. Also verified: one GraphQL request returns
+  every file in a folder with its text and blob id, and the GraphQL endpoint accepts
+  browser cross-origin calls, so loading a bank is one request. Writes use the contents
+  API with the blob id as a precondition, so a stale save is refused, not merged
+  silently. Owner, repo, branch and folder are settings, not constants: nothing is
+  hard-coded to JHUCities.
 - **Notes for role 2 from the step reviews.** `elaborate` returns a whole document;
   an instrument is many questions plus constructs, so split out
   `elaborateItems(draft, agency): Item[]` and call `documentOf` once at the edge
@@ -299,3 +320,14 @@ debouncing happens in `exec`, never in `update`; `editor.sync` must take the que
 id and reset editor state when it changes, or undo history leaks from one question into
 another; normalise `\r\n` to `\n` at the upload boundary, or diagnostics drift;
 `parseAgency` at the shell boundary for a readable message.
+
+**Added 2026-09-23, ahead of step 5.** The question bank is migrating from the v1 repo
+into `JHUCities/bas-question-bank` (plan and decisions: that repo's
+`migration/README.md`; the v2 checkout is at `../bas-question-bank`). Steps, in order:
+(6) surface extensions the bank needs: `title`, `note`, a verbatim `legacy` block that
+lints, named shared scales (`responses: agree4`, scales as a parse input, names
+completed and hovered in the editor, resolved in previews), and select-many as one
+variable per option; (7) the importer, a pure v1-record-to-surface function plus a
+script living in the bank repo's `migration/`, with a per-question report; then (5)
+storage and CRUD against GitHub. Migration edits nothing programmatically: `intent`
+stays a hole on every migrated question, and unmapped fields go under `legacy`.
