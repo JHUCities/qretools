@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
-import {
-	bankFindings,
-	explainUnsaved,
-	indexOf,
-	symbolsOf,
-	usedBy,
-} from "./symbols.js";
+import { bankFindings, indexOf, symbolsOf, usedBy } from "./symbols.js";
 
 const symbols = (text: string) => symbolsOf(parseSurface(text, EMPTY_ENV));
 
@@ -53,24 +47,5 @@ describe("the bank index", () => {
 			/also defined by b/,
 		);
 		expect(bankFindings("a", bank.a, index, label)).toEqual([]);
-	});
-
-	it("a hole naming a scheme file not saved yet says so", () => {
-		const parsed = parseSurface(
-			"name: q\nuniverse: renters\nopen:\n",
-			EMPTY_ENV,
-		);
-		const out = explainUnsaved(
-			parsed.findings,
-			parsed.mentions,
-			new Set(["universe:renters"]),
-		);
-		expect(out.find((f) => f.path === "universe")).toMatchObject({
-			severity: "hole",
-			message: "`renters` is not saved yet.",
-		});
-		expect(explainUnsaved(parsed.findings, parsed.mentions, new Set())).toEqual(
-			parsed.findings,
-		);
 	});
 });

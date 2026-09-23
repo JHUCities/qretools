@@ -18,9 +18,9 @@ export function useModel<T>(select: (model: Model) => T): T {
 	return useStore(store, (s) => select(s.model));
 }
 
-/** The environment questions are read against. Keeps its identity until a saved scheme changes; see evaluations.ts. */
+/** The environment questions are read against. Keeps its identity until a scheme file changes; see evaluations.ts. */
 export function useEnv(): Env {
 	const { evaluations } = useApp();
-	const files = useModel((m) => m.files);
-	return evaluations.env(files);
+	const schemes = useModel((m) => m.local.schemes);
+	return evaluations.env(schemes);
 }

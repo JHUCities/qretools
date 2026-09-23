@@ -9,16 +9,10 @@ import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
 } from "../../core/surface/schema.js";
-import {
-	bankFindings,
-	explainUnsaved,
-	type Index,
-	mentionKey,
-	usedBy,
-} from "../../core/symbols.js";
+import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
-import { isUnsaved } from "../merge.js";
-import type { Id, Question, SchemeEntry } from "../model.js";
+import { fileOf, type Id, type Question, type SchemeEntry } from "../model.js";
+import { isUnsaved } from "../sync.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
@@ -37,7 +31,7 @@ const SCHEME_SCHEMAS = {
 };
 
 export function Editing({ id, index }: { id: Id; index: Index<Id> }) {
-	const entry = useModel((m) => m.files[id]);
+	const entry = useModel((m) => fileOf(m, id));
 	if (!entry) return null;
 	return entry.kind === "question" ? (
 		<QuestionEditing q={entry} index={index} />
@@ -68,36 +62,24 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const agency = useModel((m) => m.agency);
 	const session = useModel((m) => m.session);
 	const ddiSchema = useModel((m) => m.ddiSchema);
-	const files = useModel((m) => m.files);
+	const questions = useModel((m) => m.local.questions);
+	const activity = useModel((m) => m.activity);
 	const env = useEnv();
 	const { onTarget, on } = useActions(q.id);
 	const ev = evaluations.get(q, agency, env);
 	const findings = useMemo(() => {
 		// Another file's name, as a bank-level finding cites it.
 		const label = (id: Id): string => {
-			const other = files[id];
+			const other = questions[id];
 			if (!other) return "?";
-			if (other.kind !== "question") return other.name;
 			return (
 				evaluations.get(other, agency, env).draft.name ??
-				(other.origin.kind === "bank" ? other.origin.path : `draft ${id}`)
+				other.base?.path ??
+				`draft ${id}`
 			);
 		};
-		// Scheme files that exist here but not on GitHub, which questions cannot yet use.
-		const unsaved = new Set(
-			Object.values(files).flatMap((e) =>
-				e.kind !== "question" &&
-				e.kind !== "missing" &&
-				e.origin.kind === "draft"
-					? [mentionKey(e.kind, e.name)]
-					: [],
-			),
-		);
-		return [
-			...explainUnsaved(ev.findings, ev.symbols.mentions, unsaved),
-			...bankFindings(q.id, ev.symbols, index, label),
-		];
-	}, [ev, index, q.id, files, evaluations, agency, env]);
+		return [...ev.findings, ...bankFindings(q.id, ev.symbols, index, label)];
+	}, [ev, index, q.id, questions, evaluations, agency, env]);
 	const diagnostics = useMemo(
 		() => toDiagnostics(findings, ev.ranges),
 		[findings, ev.ranges],
@@ -112,6 +94,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				q={q}
 				name={ev.draft.name}
 				unsaved={isUnsaved(q)}
+				activity={activity[q.id]}
 				session={session}
 				on={on}
 			/>
@@ -162,7 +145,8 @@ const SINGULAR: Readonly<Record<SchemeEntry["kind"], string>> = {
 function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const { evaluations } = useApp();
 	const session = useModel((m) => m.session);
-	const files = useModel((m) => m.files);
+	const questions = useModel((m) => m.local.questions);
+	const activity = useModel((m) => m.activity);
 	const agency = useModel((m) => m.agency);
 	const env = useEnv();
 	const { dispatch, onTarget, on } = useActions(e.id);
@@ -175,8 +159,8 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 		e.kind === "missing"
 			? undefined
 			: [...new Set(usedBy(index, e.kind, e.name).map((s) => s.key))];
-	const saved = e.origin.kind === "bank" && !isUnsaved(e);
-	// Whether questions naming this file resolve: only a saved, readable file is in effect.
+	const unsaved = isUnsaved(e);
+	// Whether questions naming this file resolve: it must read as its kind.
 	const inEffect =
 		e.kind === "missing"
 			? env.missing.length > 0
@@ -191,6 +175,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				name={e.name}
 				kind={SINGULAR[e.kind]}
 				unsaved={isUnsaved(e)}
+				activity={activity[e.id]}
 				session={session}
 				on={{ ...on, downloadDdi: undefined }}
 			/>
@@ -234,13 +219,10 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									))}
 								</ul>
 							)}
-							{!saved && (
+							{unsaved && (
 								<p className="quiet">
-									Questions read the saved version
-									{e.origin.kind === "draft"
-										? "; this one is not saved yet"
-										: ""}
-									. Save to share this change with them.
+									Questions here already use this version. The bank gets it when
+									you save.
 								</p>
 							)}
 						</div>
@@ -258,19 +240,18 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 								<p className="quiet">No question names it.</p>
 							) : !inEffect ? (
 								<p className="fg-attention">
-									Not in effect (never saved, or its saved version does not
-									read), so each of these shows a hole where it names{" "}
-									<code>{e.name}</code>.
+									This file does not read yet, so each of these shows a hole
+									where it names <code>{e.name}</code>.
 								</p>
 							) : null}
 							{users !== undefined && users.length > 0 && (
 								<ul className="used-by">
 									{users.map((id) => {
-										const q = files[id];
+										const q = questions[id];
 										const name =
-											q?.kind === "question"
-												? evaluations.get(q, agency, env).draft.name
-												: undefined;
+											q === undefined
+												? undefined
+												: evaluations.get(q, agency, env).draft.name;
 										return (
 											<li key={id}>
 												<button

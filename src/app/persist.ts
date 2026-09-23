@@ -8,7 +8,7 @@ import { z } from "zod";
 import { err, ok, type Result } from "../core/result.js";
 import type { Failure, TokenStore } from "./storage.js";
 
-export const OriginSchema = z.discriminatedUnion("kind", [
+const OriginSchema = z.discriminatedUnion("kind", [
 	z.strictObject({ kind: z.literal("draft") }),
 	z.strictObject({
 		kind: z.literal("bank"),
@@ -25,53 +25,116 @@ const SettingsSchema = z.strictObject({
 	remember: z.boolean(),
 });
 
-const FileSchema = z.discriminatedUnion("kind", [
-	z.strictObject({
-		id: z.int().positive(),
-		kind: z.literal("question"),
-		source: z.string(),
-		origin: OriginSchema,
-	}),
-	z.strictObject({
-		id: z.int().positive(),
-		kind: z.enum(["scale", "universe", "instruction", "missing"]),
-		name: z.string(),
-		source: z.string(),
-		origin: OriginSchema,
-	}),
-]);
+const BaseSchema = z.strictObject({
+	path: z.string(),
+	sha: z.string(),
+	text: z.string(),
+});
 
+const SCHEME_KIND = z.enum(["scale", "universe", "instruction", "missing"]);
+
+/**
+ * Version 3: working copies split by kind, each with the base it started from. The
+ * remote slice is not stored: on load it is rebuilt from the bases, which record
+ * exactly the last GitHub state this browser knew.
+ */
 export const PersistedSchema = z.strictObject({
-	version: z.literal(2),
+	version: z.literal(3),
 	nextId: z.int().positive(),
-	files: z.array(FileSchema),
+	questions: z.array(
+		z.strictObject({
+			kind: z.literal("question"),
+			id: z.int().positive(),
+			source: z.string(),
+			base: BaseSchema.optional(),
+		}),
+	),
+	schemes: z.array(
+		z.strictObject({
+			kind: SCHEME_KIND,
+			name: z.string(),
+			id: z.int().positive(),
+			source: z.string(),
+			base: BaseSchema.optional(),
+		}),
+	),
 	settings: SettingsSchema,
 });
 
-/** Version 1 held only questions; read it as version 2, so saved drafts survive the upgrade. */
-const V1Schema = z
-	.strictObject({
-		version: z.literal(1),
-		nextId: z.int().positive(),
-		questions: z.array(
+type V3 = z.infer<typeof PersistedSchema>;
+
+const baseOf = (origin: z.infer<typeof OriginSchema>) =>
+	origin.kind === "bank"
+		? { base: { path: origin.path, sha: origin.sha, text: origin.original } }
+		: {};
+
+/** Version 2: one list of files, each with an origin. */
+const V2Schema = z.strictObject({
+	version: z.literal(2),
+	nextId: z.int().positive(),
+	files: z.array(
+		z.discriminatedUnion("kind", [
 			z.strictObject({
 				id: z.int().positive(),
+				kind: z.literal("question"),
 				source: z.string(),
 				origin: OriginSchema,
 			}),
-		),
-		settings: SettingsSchema,
-	})
-	.transform(
-		({ nextId, questions, settings }): z.infer<typeof PersistedSchema> => ({
-			version: 2,
-			nextId,
-			files: questions.map((q) => ({ ...q, kind: "question" as const })),
-			settings,
-		}),
-	);
+			z.strictObject({
+				id: z.int().positive(),
+				kind: SCHEME_KIND,
+				name: z.string(),
+				source: z.string(),
+				origin: OriginSchema,
+			}),
+		]),
+	),
+	settings: SettingsSchema,
+});
 
-const StoredSchema = z.union([PersistedSchema, V1Schema]);
+const v2ToV3 = ({ nextId, files, settings }: z.infer<typeof V2Schema>): V3 => ({
+	version: 3,
+	nextId,
+	questions: files.flatMap(({ origin, ...f }) =>
+		f.kind === "question" ? [{ ...f, kind: f.kind, ...baseOf(origin) }] : [],
+	),
+	schemes: files.flatMap(({ origin, ...f }) =>
+		f.kind !== "question" ? [{ ...f, ...baseOf(origin) }] : [],
+	),
+	settings,
+});
+
+/** Version 1 held only questions. */
+const V1Schema = z.strictObject({
+	version: z.literal(1),
+	nextId: z.int().positive(),
+	questions: z.array(
+		z.strictObject({
+			id: z.int().positive(),
+			source: z.string(),
+			origin: OriginSchema,
+		}),
+	),
+	settings: SettingsSchema,
+});
+
+const v1ToV2 = ({
+	nextId,
+	questions,
+	settings,
+}: z.infer<typeof V1Schema>): z.infer<typeof V2Schema> => ({
+	version: 2,
+	nextId,
+	files: questions.map((q) => ({ ...q, kind: "question" as const })),
+	settings,
+});
+
+/** Every version this code has written, each upgraded one step at a time to the current one. */
+const StoredSchema = z.union([
+	PersistedSchema,
+	V2Schema.transform(v2ToV3),
+	V1Schema.transform((v1) => v2ToV3(v1ToV2(v1))),
+]);
 
 export type Persisted = z.infer<typeof PersistedSchema>;
 

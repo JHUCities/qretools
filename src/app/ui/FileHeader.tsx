@@ -1,7 +1,7 @@
 /** The open file's header: identity, state, and the actions on it. */
 import { DownloadIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label } from "@primer/react";
-import type { Entry, Session } from "../model.js";
+import type { Activity, Entry, Session } from "../model.js";
 import { inlineCode } from "./Previews.js";
 
 export interface HeaderActions {
@@ -18,10 +18,12 @@ export function FileHeader({
 	name,
 	kind,
 	unsaved,
+	activity,
 	session,
 	on,
 }: {
 	q: Entry;
+	activity: Activity | undefined;
 	name: string | undefined;
 	/** What the file is, when it is not a question: "scale", "universe", … */
 	kind?: string;
@@ -45,14 +47,14 @@ export function FileHeader({
 				<span className="qname">
 					{name ?? <span className="quiet">(no name yet)</span>}
 				</span>
-				{q.origin.kind === "bank" ? (
+				{q.base !== undefined ? (
 					<Label>in bank</Label>
 				) : (
 					<Label variant="attention">draft</Label>
 				)}
 				{unsaved && <Label variant="attention">unsaved</Label>}
-				{q.activity.kind === "saving" && <Label>saving…</Label>}
-				{q.activity.kind === "deleting" && <Label>deleting…</Label>}
+				{activity?.kind === "saving" && <Label>saving…</Label>}
+				{activity?.kind === "deleting" && <Label>deleting…</Label>}
 				<span className="spacer" />
 				<Button
 					size="small"
@@ -74,7 +76,7 @@ export function FileHeader({
 					size="small"
 					variant="danger"
 					leadingVisual={TrashIcon}
-					disabled={q.origin.kind === "bank" && !canWrite}
+					disabled={q.base !== undefined && !canWrite}
 					onClick={on.remove}
 				>
 					Delete…
@@ -82,24 +84,24 @@ export function FileHeader({
 				<Button
 					size="small"
 					variant="primary"
-					disabled={!canWrite || !unsaved || q.activity.kind === "saving"}
+					disabled={!canWrite || !unsaved || activity?.kind === "saving"}
 					title={saveTitle}
 					onClick={on.save}
 				>
 					Save
 				</Button>
 			</div>
-			{q.activity.kind === "failed" && (
+			{activity?.kind === "failed" && (
 				<Banner
 					variant="critical"
-					title={q.activity.failure.message}
+					title={activity.failure.message}
 					description={
-						q.activity.failure.hint === undefined
+						activity.failure.hint === undefined
 							? undefined
-							: inlineCode(q.activity.failure.hint)
+							: inlineCode(activity.failure.hint)
 					}
 					primaryAction={
-						q.activity.failure.kind === "stale" && q.origin.kind === "bank" ? (
+						activity.failure.kind === "stale" && q.base !== undefined ? (
 							<Banner.PrimaryAction
 								leadingVisual={SyncIcon}
 								onClick={on.reload}

@@ -14,15 +14,8 @@ import {
 	type SchemeKind,
 } from "../core/schemes.js";
 import { type Index, usedBy } from "../core/symbols.js";
-import { isUnsaved } from "./merge.js";
-import {
-	type Entry,
-	type Id,
-	isScheme,
-	type Model,
-	type Question,
-	type SchemeEntry,
-} from "./model.js";
+import type { Entry, Id, Model, Question, SchemeEntry } from "./model.js";
+import { isUnsaved } from "./sync.js";
 
 export const UNFILED = "(unfiled)";
 
@@ -47,8 +40,8 @@ export const folderOfQuestion = (
 	q: Question,
 	name: string | undefined,
 ): string =>
-	q.origin.kind === "bank"
-		? (q.origin.path.split("/")[1] ?? UNFILED)
+	q.base !== undefined
+		? (q.base.path.split("/")[1] ?? UNFILED)
 		: name === undefined
 			? UNFILED
 			: folderOf(name);
@@ -61,11 +54,10 @@ export function treeOf(
 	const open = model.screen.kind === "editing" ? model.screen.id : undefined;
 	const byFolder = new Map<string, Leaf[]>();
 	const holds = new Set<string>();
-	for (const q of Object.values(model.files)) {
-		if (q.kind !== "question") continue;
+	for (const q of Object.values(model.local.questions)) {
 		const ev = evaluate(q);
 		const leaf: Leaf = {
-			...marks(q),
+			...marks(model, q),
 			name: ev.draft.name,
 			title: ev.draft.title ?? ev.draft.concept,
 			status: status(ev.findings),
@@ -95,13 +87,16 @@ export function treeOf(
 		}));
 }
 
-const marks = (e: Entry) => ({
-	id: e.id,
-	unsaved: isUnsaved(e),
-	draft: e.origin.kind === "draft",
-	failed: e.activity.kind === "failed",
-	busy: e.activity.kind === "saving" || e.activity.kind === "deleting",
-});
+const marks = (model: Model, e: Entry) => {
+	const activity = model.activity[e.id];
+	return {
+		id: e.id,
+		unsaved: isUnsaved(e),
+		draft: e.base === undefined,
+		failed: activity?.kind === "failed",
+		busy: activity?.kind === "saving" || activity?.kind === "deleting",
+	};
+};
 
 export interface SchemeLeaf extends Omit<Leaf, "name" | "title"> {
 	readonly name: string;
@@ -137,14 +132,14 @@ export function schemeSections(
 ): readonly SchemeSection[] {
 	const filter = model.browser.filter.trim().toLowerCase();
 	const open = model.screen.kind === "editing" ? model.screen.id : undefined;
-	const entries = Object.values(model.files).filter(isScheme);
+	const entries = Object.values(model.local.schemes);
 	return SCHEME_KINDS.flatMap((kind) => {
 		const mine = entries.filter((e) => e.kind === kind);
 		const leaves = mine
 			.filter((e) => filter === "" || e.name.toLowerCase().includes(filter))
 			.map(
 				(e): SchemeLeaf => ({
-					...marks(e),
+					...marks(model, e),
 					name: e.name,
 					status: status(evaluate(e).findings),
 					...(e.kind !== "missing" && {
@@ -174,11 +169,7 @@ export function schemeSections(
 export const bankFolders = (model: Model): readonly string[] =>
 	[
 		...new Set(
-			Object.values(model.files).flatMap((q) =>
-				q.kind === "question" && q.origin.kind === "bank"
-					? [q.origin.path.split("/")[1] ?? ""]
-					: [],
-			),
+			Object.keys(model.remote.questions).map((p) => p.split("/")[1] ?? ""),
 		),
 	]
 		.filter((f) => f !== "")

@@ -7,6 +7,7 @@
  * a question is unsaved follows from its text and origin; what a question shows
  * follows from its text.
  */
+import { compact } from "../core/compact.js";
 import type { Finding, Range, Target } from "../core/findings.js";
 import type { Result } from "../core/result.js";
 import { type SchemeKind, schemeEnv } from "../core/schemes.js";
@@ -21,41 +22,68 @@ import type { BankSettings, Failure, File } from "./storage.js";
 
 export type Id = number;
 
-export type Origin =
-	| { readonly kind: "draft" }
-	| {
-			readonly kind: "bank";
-			readonly path: string;
-			readonly sha: string;
-			readonly original: string;
-	  };
+/** A repository path: GitHub's identity for a file. */
+export type Path = string;
 
+/** A file as GitHub has it: its blob sha and its text. */
+export interface Blob {
+	readonly sha: string;
+	readonly text: string;
+}
+
+/**
+ * What a working copy started from on GitHub. Needed besides `remote`, which moves
+ * on every load: telling "you changed it" from "GitHub changed it" takes three
+ * versions, as in git. No base means a draft, never saved.
+ */
+export interface Base extends Blob {
+	readonly path: Path;
+}
+
+/** What is happening to a file. Absent from `Model.activity` means idle. */
 export type Activity =
-	| { readonly kind: "idle" }
 	| { readonly kind: "saving" }
 	| { readonly kind: "deleting" }
 	| { readonly kind: "failed"; readonly failure: Failure };
 
-interface FileState {
+/** A question: its name is in its text, and may be a hole. Content only. */
+export interface Question {
+	readonly kind: "question";
 	readonly id: Id;
 	readonly source: string;
-	readonly origin: Origin;
-	readonly activity: Activity;
-}
-
-/** A question: its name is in its text, and may be a hole. */
-export interface Question extends FileState {
-	readonly kind: "question";
+	readonly base?: Base;
 }
 
 /** A scheme file: its name is its filename, chosen when it is created and never a hole. */
-export interface SchemeEntry extends FileState {
+export interface SchemeEntry {
 	readonly kind: SchemeKind;
 	readonly name: string;
+	readonly id: Id;
+	readonly source: string;
+	readonly base?: Base;
 }
 
 /** Everything the bank browser holds. */
 export type Entry = Question | SchemeEntry;
+
+/**
+ * The working copies, split by kind. The split is structural, not cosmetic: the
+ * local environment is built from `schemes` alone, so editing a question, which
+ * replaces only `questions`, can never change it.
+ */
+export interface Local {
+	readonly questions: Readonly<Record<Id, Question>>;
+	readonly schemes: Readonly<Record<Id, SchemeEntry>>;
+}
+
+/**
+ * GitHub as last loaded or saved, by path, split by kind for the same reason: a
+ * question saved or reloaded must not replace the scheme slice.
+ */
+export interface Remote {
+	readonly questions: Readonly<Record<Path, Blob>>;
+	readonly schemes: Readonly<Record<Path, Blob>>;
+}
 
 export type Screen =
 	| { readonly kind: "blank" }
@@ -97,13 +125,22 @@ export type DdiSchema =
 	| { readonly kind: "failed"; readonly finding: Finding };
 
 export interface Model {
-	readonly files: Readonly<Record<Id, Entry>>;
+	readonly local: Local;
+	/** The author's branch: bases, sync states, conflicts and commits are against it. */
+	readonly remote: Remote;
+	/**
+	 * `main`, the bank itself: "not in the bank yet" is against it. The same object as
+	 * `remote` while the author has no branch of their own (step 9d adds branches).
+	 */
+	readonly bank: Remote;
+	/** Per file; content never carries it, so marking a scale "saving" leaves the environment alone. */
+	readonly activity: Readonly<Record<Id, Activity>>;
 	readonly nextId: Id;
 	readonly screen: Screen;
 	readonly browser: Browser;
 	readonly session: Session;
 	readonly settings: BankSettings;
-	readonly bank: Bank;
+	readonly loading: Bank;
 	readonly failures: readonly Failure[];
 	readonly agency: string;
 	readonly ddiSchema: DdiSchema;
@@ -276,30 +313,37 @@ export interface Flags {
 	readonly hasToken: boolean;
 }
 
+export const EMPTY_REMOTE: Remote = { questions: {}, schemes: {} };
+
 export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	const stored = flags.stored.ok ? flags.stored.value : undefined;
-	const { files, nextId } = stored
+	// First run: an empty list. A template is one click away; seeded example drafts
+	// would sit beside bank questions of the same name.
+	// Zod types an absent optional as possibly-undefined; `compact` makes it absent.
+	const local: Local = stored
 		? {
-				files: Object.fromEntries(
-					stored.files.map((f) => [
-						f.id,
-						{ ...f, activity: { kind: "idle" } as const },
-					]),
+				questions: Object.fromEntries(
+					stored.questions.map((q) => [q.id, compact(q) as Question]),
 				),
-				nextId: stored.nextId,
+				schemes: Object.fromEntries(
+					stored.schemes.map((e) => [e.id, compact(e) as SchemeEntry]),
+				),
 			}
-		: // First run: an empty list. "New question" and "New from <example>" are one click
-			// away; seeded example drafts would sit beside bank questions of the same name.
-			{ files: {}, nextId: 1 };
+		: { questions: {}, schemes: {} };
+	const remote = remoteOfBases(local);
 	const settings = stored?.settings ?? DEFAULT_SETTINGS;
 	const model: Model = {
-		files,
-		nextId,
+		local,
+		// The last GitHub state this browser knew is exactly what its bases record.
+		remote,
+		bank: remote,
+		activity: {},
+		nextId: stored?.nextId ?? 1,
 		screen: { kind: "blank" },
 		browser: { filter: "", expanded: [], settingsOpen: false },
 		session: flags.hasToken ? { kind: "connecting" } : { kind: "anonymous" },
 		settings,
-		bank: { kind: "bundled" },
+		loading: { kind: "bundled" },
 		failures: flags.stored.ok ? [] : [flags.stored.error],
 		agency: AGENCY,
 		ddiSchema: { kind: "loading" },
@@ -313,48 +357,51 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	];
 }
 
-export const isScheme = (e: Entry): e is SchemeEntry => e.kind !== "question";
-
-/**
- * The saved bank version of every scheme file, in id order: what questions are read
- * against. Unsaved edits and never-saved drafts do not count (owner, 2026-09-24): a
- * question resolves only against what is on GitHub, so its export references only
- * that. With no scheme files at all (no bank yet), the bundled example scales stand in.
- */
-export function savedSchemes(
-	files: Readonly<Record<Id, Entry>>,
-): readonly (SchemeEntry & { readonly origin: { readonly kind: "bank" } })[] {
-	return Object.values(files).flatMap((e) =>
-		isScheme(e) && e.origin.kind === "bank" ? [{ ...e, origin: e.origin }] : [],
-	);
+export function remoteOfBases(local: Local): Remote {
+	const blobs = (files: readonly Entry[]): Record<Path, Blob> =>
+		Object.fromEntries(
+			files.flatMap((f) =>
+				f.base === undefined
+					? []
+					: [[f.base.path, { sha: f.base.sha, text: f.base.text }]],
+			),
+		);
+	return {
+		questions: blobs(Object.values(local.questions)),
+		schemes: blobs(Object.values(local.schemes)),
+	};
 }
 
-export function envOf(files: Readonly<Record<Id, Entry>>): Env {
-	const saved = savedSchemes(files);
-	return saved.length === 0
+export const isScheme = (e: Entry): e is SchemeEntry => e.kind !== "question";
+
+/** A working file by id, whichever slice holds it. */
+export const fileOf = (model: Model, id: Id): Entry | undefined =>
+	model.local.questions[id] ?? model.local.schemes[id];
+
+export const allFiles = (local: Local): readonly Entry[] => [
+	...Object.values(local.questions),
+	...Object.values(local.schemes),
+];
+
+/**
+ * The environment built from the working scheme files: what questions are shown
+ * against, so a scale edit updates its questions live and a new universe is usable at
+ * once (owner, step 9). With no scheme files at all (no bank yet), the bundled example
+ * scales stand in.
+ */
+export function envOf(schemes: Readonly<Record<Id, SchemeEntry>>): Env {
+	const files = Object.values(schemes);
+	return files.length === 0
 		? { ...EMPTY_ENV, scales: EXAMPLE_SCALES }
 		: schemeEnv(
-				saved.map((e) => ({
-					kind: e.kind,
-					name: e.name,
-					text: e.origin.original,
-				})),
+				files.map((e) => ({ kind: e.kind, name: e.name, text: e.source })),
 			);
 }
 
 export const toPersisted = (model: Model): Persisted => ({
-	version: 2,
+	version: 3,
 	nextId: model.nextId,
-	files: Object.values(model.files).map((e) =>
-		isScheme(e)
-			? {
-					id: e.id,
-					kind: e.kind,
-					name: e.name,
-					source: e.source,
-					origin: e.origin,
-				}
-			: { id: e.id, kind: e.kind, source: e.source, origin: e.origin },
-	),
+	questions: Object.values(model.local.questions),
+	schemes: Object.values(model.local.schemes),
 	settings: model.settings,
 });

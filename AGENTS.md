@@ -610,7 +610,48 @@ request; publish is the merge, governed by GitHub (branch protection and review 
 "propose a change as a pull request" into step 9. Open for the step 9 design: branch
 granularity (one per user or one per proposal), which remote each comparison uses
 (`main` or the user's branch), and read-only contributors (forks, or write access with
-`main` protected). Notes for step 5 from the step 4 review: identify questions by a
+`main` protected).
+
+**Step 9 design (before-pass and addendum, 2026-09-24), adopted.** One branch per user,
+`qretools/<login>`, with one pull request to `main`; after a merge the app deletes the
+branch (blob shas are content addresses, so every base stays valid and `remote`
+becomes `bank` again); a pull request closed unmerged leaves the branch alone (resetting
+would silently fast-forward the author's saved work away). A branch per proposal is
+backlog; the cost accepted: anything saved while a proposal is in review joins it.
+Contributors get write access through a team, with `main` protected by a ruleset
+(require a pull request, block force-push and deletion); forks were rejected (a
+fine-grained token has one resource owner, unverified; private forks need org settings).
+Merging is GitHub's job, never the app's. Model: `local` (working copies by `Id`, split
+by kind), `remote` (the user's branch, by path, split by kind), `bank` (`main`, the same
+object as `remote` while the user has no branch), `activity` beside the content.
+Against `remote`: bases, sync states, rebase, conflicts, commits. Against `bank`: "not in
+the bank yet", "changes N questions in the bank", the DDI note, a "proposed" badge.
+Sub-steps: (9a) layout; (9b) sync states and resolution (`takeGitHubs`, `keepMine`);
+(9c) change-set commits to the user's branch through the Git Data API (create the branch
+on first save; one retry on a lost fast-forward) and the bank-disagreement findings;
+(9d) branch lifecycle: load branch and pull request state, "proposed" and "behind the
+bank", open the proposal, update from the bank (merges API; a 409 is a real conflict,
+resolved on GitHub), reset after a merge. **For the owner to check before 9d:** protecting
+`main` on a private repository needs a paid GitHub plan (Team or above); whether
+"update from the bank" runs automatically on load (proposed) or by a button.
+
+**Step 9a built (2026-09-24).** `Model.local {questions, schemes}` by `Id`; `remote` and
+`bank` `{questions, schemes}` by path (`Blob {sha, text}`); each working file has an
+optional `base {path, sha, text}` in place of `origin` (none means a draft);
+`activity: Record<Id, Activity>` (absent means idle). `sync.ts` replaces `merge.ts`:
+`syncOf` (draft, inSync, unsaved, behind, conflict, deletedOnGitHub, from the three
+versions), `claimOf`, `remoteOf` (keeps a slice's reference when its shas match) and
+`rebase` (fast-forwards what only GitHub changed, drops clean deletions, keeps changed
+files with their base, adds unclaimed paths; keeps references when nothing changes).
+`update` writes `local` only through `withFile`/`add`/`without`, so a question edit
+replaces only `local.questions` (tested with `toBe` on every other slice). The Env is
+`envOf(local.schemes)`, memoised on that reference; the sha-keyed cache and
+`explainUnsaved` are gone. Persisted state is version 3 (working copies only; `remote`
+is rebuilt from the bases, which record the last GitHub state this browser knew); v2 and
+v1 upgrade step by step, verified in the running app. Until 9d a save still writes to
+the branch in the settings through the contents API, and `bank` moves with `remote`.
+Measured: typing in `agree4` (re-evaluating the bank per keystroke) takes about 30 ms a
+keystroke with no long task, so no debounce. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

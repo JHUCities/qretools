@@ -10,7 +10,7 @@ import {
 import { useMemo } from "react";
 import { SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
-import { type Id, TEMPLATES } from "../model.js";
+import { fileOf, type Id, TEMPLATES } from "../model.js";
 import { bankFolders, SCHEME_LABELS, schemeSections, treeOf } from "../tree.js";
 import { schemeNameProblem } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
@@ -33,18 +33,12 @@ export function App() {
 	const index = useMemo(
 		() =>
 			indexOf(
-				Object.values(model.files).flatMap((q) =>
-					q.kind === "question"
-						? [
-								{
-									key: q.id,
-									symbols: evaluations.get(q, model.agency, env).symbols,
-								},
-							]
-						: [],
-				),
+				Object.values(model.local.questions).map((q) => ({
+					key: q.id,
+					symbols: evaluations.get(q, model.agency, env).symbols,
+				})),
 			),
-		[model.files, model.agency, evaluations, env],
+		[model.local.questions, model.agency, evaluations, env],
 	);
 	const sections = useMemo(
 		() => schemeSections(model, (e) => evaluations.scheme(e, env), index),
@@ -55,11 +49,11 @@ export function App() {
 		model.screen.kind === "editing" ? model.screen.id : undefined;
 	const saving = model.browser.saving;
 	const savingQuestion =
-		saving === undefined ? undefined : model.files[saving.id];
+		saving === undefined ? undefined : model.local.questions[saving.id];
 	const confirm =
 		model.browser.confirmDelete === undefined
 			? undefined
-			: model.files[model.browser.confirmDelete];
+			: fileOf(model, model.browser.confirmDelete);
 	const confirmName =
 		confirm === undefined
 			? undefined
@@ -170,7 +164,7 @@ export function App() {
 				<BankDialog
 					settings={model.settings}
 					session={model.session}
-					bank={model.bank}
+					bank={model.loading}
 					failures={model.failures}
 					dispatch={dispatch}
 				/>
@@ -183,23 +177,19 @@ export function App() {
 					dispatch={dispatch}
 				/>
 			)}
-			{saving && savingQuestion?.kind === "question" && (
+			{saving && savingQuestion && (
 				<SaveDialog
 					draft={evaluations.get(savingQuestion, model.agency, env).draft}
 					folder={saving.folder}
 					folders={bankFolders(model)}
-					taken={(path) =>
-						Object.values(model.files).some(
-							(o) => o.origin.kind === "bank" && o.origin.path === path,
-						)
-					}
+					taken={(path) => path in model.remote.questions}
 					dispatch={dispatch}
 				/>
 			)}
 			{confirm && (
 				<ConfirmationDialog
 					title={
-						confirm.origin.kind === "draft"
+						confirm.base === undefined
 							? "Delete this draft?"
 							: "Delete from the bank?"
 					}
@@ -213,9 +203,9 @@ export function App() {
 						)
 					}
 				>
-					{confirm.origin.kind === "draft"
+					{confirm.base === undefined
 						? `The draft ${confirmName ?? "(no name)"} is only in this browser and cannot be recovered.`
-						: `${confirmName ?? confirm.origin.path} will be deleted from the repository in a commit under your name. Git keeps the history.`}
+						: `${confirmName ?? confirm.base.path} will be deleted from the repository in a commit under your name. Git keeps the history.`}
 					{confirmUsers > 0 &&
 						` ${confirmUsers} question${confirmUsers === 1 ? " names" : "s name"} it; each will show a hole there until it is changed.`}
 				</ConfirmationDialog>

@@ -86,28 +86,3 @@ export function bankFindings<K>(
 		];
 	});
 }
-
-/**
- * Questions read the saved version of each scheme file, so a name the author has
- * just created but not saved is a hole. Its hint lists what exists and would leave
- * them wondering why their own file is not among them; say why instead. `unsaved`
- * holds `mentionKey`s of scheme files that exist only in this browser.
- */
-export function explainUnsaved(
-	findings: readonly Finding[],
-	mentions: readonly Mention[],
-	unsaved: ReadonlySet<string>,
-): readonly Finding[] {
-	return findings.map((f) => {
-		const m = mentions.find((x) => x.path === f.path);
-		return f.severity === "hole" &&
-			m !== undefined &&
-			unsaved.has(mentionKey(m.scheme, m.name))
-			? {
-					...f,
-					message: `\`${m.name}\` is not saved yet.`,
-					hint: `Questions read saved versions only. Save the ${m.scheme} \`${m.name}\` to use it here.`,
-				}
-			: f;
-	});
-}

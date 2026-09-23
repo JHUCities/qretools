@@ -21,32 +21,32 @@ const bank = (
 	id,
 	kind: "question",
 	source,
-	origin: { kind: "bank", path, sha: "s", original: text },
-	activity: { kind: "idle" },
+	base: { path, sha: "s", text },
 });
 const draft = (id: number, source: string): Question => ({
 	id,
 	kind: "question",
 	source,
-	origin: { kind: "draft" },
-	activity: { kind: "idle" },
 });
 const base = init({ stored: ok(undefined), hasToken: false })[0];
 const model: Model = {
 	...base,
-	files: {
-		1: bank(
-			1,
-			"questions/nhd/nhd_sat.yaml",
-			"name: nhd_sat\ntitle: Satisfaction\n",
-		),
-		2: bank(2, "questions/svy/dem_latx.yaml", "name: dem_latx\n"),
-		3: draft(3, "name: att_new\n"),
-		4: draft(4, "text: nameless\n"),
+	local: {
+		schemes: {},
+		questions: {
+			1: bank(
+				1,
+				"questions/nhd/nhd_sat.yaml",
+				"name: nhd_sat\ntitle: Satisfaction\n",
+			),
+			2: bank(2, "questions/svy/dem_latx.yaml", "name: dem_latx\n"),
+			3: draft(3, "name: att_new\n"),
+			4: draft(4, "text: nameless\n"),
+		},
 	},
 };
 const tree = (m: Model) =>
-	treeOf(m, (q) => evaluate(q.source, m.agency, envOf(m.files)));
+	treeOf(m, (q) => evaluate(q.source, m.agency, envOf(m.local.schemes)));
 
 describe("treeOf", () => {
 	it("files bank questions by their path, drafts by name prefix, unnamed drafts last", () => {
@@ -86,14 +86,17 @@ describe("treeOf", () => {
 	it("marks drafts, unsaved bank files and the status verdict", () => {
 		const t = tree({
 			...model,
-			files: {
-				...model.files,
-				1: bank(
-					1,
-					"questions/nhd/nhd_sat.yaml",
-					"name: nhd_sat\n",
-					"name: nhd_sat\ntext: edited\n",
-				),
+			local: {
+				...model.local,
+				questions: {
+					...model.local.questions,
+					1: bank(
+						1,
+						"questions/nhd/nhd_sat.yaml",
+						"name: nhd_sat\n",
+						"name: nhd_sat\ntext: edited\n",
+					),
+				},
 			},
 		});
 		const nhd = t.find((f) => f.name === "nhd")?.leaves[0];
@@ -119,47 +122,43 @@ describe("schemeSections", () => {
 		kind,
 		name,
 		source: text,
-		origin: {
-			kind: "bank",
-			path: schemePath(kind, name),
-			sha: "s",
-			original: text,
-		},
-		activity: { kind: "idle" },
+		base: { path: schemePath(kind, name), sha: "s", text },
 	});
 	const m: Model = {
 		...model,
-		files: {
-			...model.files,
-			5: bank(
-				5,
-				"questions/nhd/nhd_a.yaml",
-				"name: nhd_a\nresponses: agree4\n",
-			),
-			// Names a scale that does not exist: still counted as a use.
-			6: bank(6, "questions/nhd/nhd_b.yaml", "name: nhd_b\nresponses: gone\n"),
-			10: scheme(10, "scale", "agree4", "labels:\n  1: Agree\n"),
-			11: scheme(11, "scale", "unused", "labels:\n  1: X\n"),
-			12: scheme(12, "missing", "missing", 'labels:\n  "-8": NR\n'),
+		local: {
+			questions: {
+				...model.local.questions,
+				5: bank(
+					5,
+					"questions/nhd/nhd_a.yaml",
+					"name: nhd_a\nresponses: agree4\n",
+				),
+				// Names a scale that does not exist: still counted as a use.
+				6: bank(
+					6,
+					"questions/nhd/nhd_b.yaml",
+					"name: nhd_b\nresponses: gone\n",
+				),
+			},
+			schemes: {
+				10: scheme(10, "scale", "agree4", "labels:\n  1: Agree\n"),
+				11: scheme(11, "scale", "unused", "labels:\n  1: X\n"),
+				12: scheme(12, "missing", "missing", 'labels:\n  "-8": NR\n'),
+			},
 		},
 	};
 	const index = (mm: Model) =>
 		indexOf(
-			Object.values(mm.files).flatMap((q) =>
-				q.kind === "question"
-					? [
-							{
-								key: q.id,
-								symbols: evaluate(q.source, mm.agency, envOf(mm.files)).symbols,
-							},
-						]
-					: [],
-			),
+			Object.values(mm.local.questions).map((q) => ({
+				key: q.id,
+				symbols: evaluate(q.source, mm.agency, envOf(mm.local.schemes)).symbols,
+			})),
 		);
 	const sections = (mm: Model) =>
 		schemeSections(
 			mm,
-			(e) => evaluateScheme(e.kind, e.source, envOf(mm.files)),
+			(e) => evaluateScheme(e.kind, e.source, envOf(mm.local.schemes)),
 			index(mm),
 		);
 
