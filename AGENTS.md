@@ -456,7 +456,25 @@ codebook prints the bank's missing line. Until 8(b) the shell builds the Env fro
 `model.scales` alone (`envOf`, memoised by `useEnv` so the evaluation cache holds).
 Verified against the bank: 332 questions, 0 errors, all DDI-valid with missing values;
 no question references a universe or instruction by name yet (they are prose; the bank
-is never rewritten programmatically). Notes for step 5 from the step 4 review: identify questions by a
+is never rewritten programmatically).
+
+**Step 8(a) after-pass (2026-09-24).** `elaborate`'s `missing` is required (a default
+would let a caller silently export without missing values). In single-choice, number
+and open questions the missing representation is emitted but unreferenced: kept so the
+bank's list travels with every export, and decided together with the open owner
+question above. Measured: of 24 bank questions with inline `responses`, `matches-scale`
+fires on 0 (no de-facto duplicates of shared scales at question level); one full-bank
+evaluation (332 questions: parse, lint, elaborate) takes about 30 ms warm, so a scale
+edit re-evaluating the whole bank needs no debounce yet. **Carried into 8(b):**
+(1) reverse references come from the names *written*, not resolved: `Parsed` gains
+`mentions: {scheme, name}[]`, filled whether or not the name resolves, so "used by"
+survives a broken or deleted entry ("used by 12, unresolved"); (2) Env identity is a
+performance contract: derive it from the scheme entries' `(id, source)` only, never from
+all `files`, and test that editing a question leaves it referentially equal;
+(3) `missing-code` belongs on the scale file's own evaluation, not per question;
+(4) owner question: is the Env built from an entry's local source (live: edit a scale,
+watch its questions change; a DDI export may then reference a scale only this browser
+has) or from its bank original? Recommended: local. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

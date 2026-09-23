@@ -38,7 +38,7 @@ describe("elaborate", () => {
 		(name) => {
 			const { draft, findings } = parseSurface(example(name), EMPTY_ENV);
 			expect(findings).toEqual([]);
-			expect(validate(elaborate(draft, AGENCY))).toEqual([]);
+			expect(validate(elaborate(draft, AGENCY, []))).toEqual([]);
 		},
 	);
 
@@ -49,14 +49,14 @@ describe("elaborate", () => {
 			"responses:\n",
 			"name: q\nselect: many\nresponses:\n  1:\n",
 		]) {
-			const doc = elaborate(parseSurface(text, EMPTY_ENV).draft, AGENCY);
+			const doc = elaborate(parseSurface(text, EMPTY_ENV).draft, AGENCY, []);
 			expect(validate(doc)).toEqual([]);
 			expect(Object.keys(doc.QuestionItem ?? {})).toHaveLength(1);
 		}
 	});
 
 	it("uses a placeholder ID while name is a hole, and does not leak it into the name", () => {
-		const q = question(elaborate({ text: "Q?" }, AGENCY), "untitled");
+		const q = question(elaborate({ text: "Q?" }, AGENCY, []), "untitled");
 		expect(q.ID).toBe("untitled");
 		expect(q.QuestionItemName).toBeUndefined();
 	});
@@ -65,6 +65,7 @@ describe("elaborate", () => {
 		const doc = elaborate(
 			parseSurface(example("nhd_sat"), EMPTY_ENV).draft,
 			AGENCY,
+			[],
 		);
 		const q = question(doc, "nhd_sat");
 		expect(q.URN).toBe("urn:ddi:org.example:nhd_sat:1");
@@ -115,7 +116,7 @@ describe("elaborate", () => {
 			EMPTY_ENV,
 		);
 		expect(
-			(question(elaborate(draft, AGENCY), "q").ResponseDomain as JsonObject)
+			(question(elaborate(draft, AGENCY, []), "q").ResponseDomain as JsonObject)
 				.ResponseCardinality,
 		).toEqual({
 			MaximumResponses: 3,
@@ -124,7 +125,7 @@ describe("elaborate", () => {
 
 	it("maps number and open domains", () => {
 		const n = question(
-			elaborate(parseSurface(example("nhd_nyrs"), EMPTY_ENV).draft, AGENCY),
+			elaborate(parseSurface(example("nhd_nyrs"), EMPTY_ENV).draft, AGENCY, []),
 			"nhd_nyrs",
 		);
 		expect(n.ResponseDomain).toEqual({
@@ -143,6 +144,7 @@ describe("elaborate", () => {
 				parseSurface("name: q\nnumber:\n  min: 0\n  decimals: 2\n", EMPTY_ENV)
 					.draft,
 				AGENCY,
+				[],
 			),
 			"q",
 		);
@@ -156,6 +158,7 @@ describe("elaborate", () => {
 			elaborate(
 				parseSurface("name: q\nopen:\n  max_length: 200\n", EMPTY_ENV).draft,
 				AGENCY,
+				[],
 			),
 			"q",
 		);
@@ -170,7 +173,7 @@ describe("shared scales and select-many", () => {
 	it("a named scale is one CodeList for the bank, identified by the scale, and validates", () => {
 		const { draft, findings } = parseSurface(nhdCohes1, env);
 		expect(findings).toEqual([]);
-		const doc = elaborate(draft, AGENCY);
+		const doc = elaborate(draft, AGENCY, []);
 		expect(validate(doc)).toEqual([]);
 		expect(Object.keys(doc.CodeList ?? {})).toEqual([
 			`${AGENCY}:scale-agree4.codes:1`,
@@ -192,7 +195,7 @@ describe("shared scales and select-many", () => {
 	it("select-many yields one yes/no Variable per option, referencing the question", () => {
 		const { draft, findings } = parseSurface(demRace, EMPTY_ENV);
 		expect(findings).toEqual([]);
-		const doc = elaborate(draft, AGENCY);
+		const doc = elaborate(draft, AGENCY, []);
 		expect(validate(doc)).toEqual([]);
 		expect(Object.keys(doc.Variable ?? {})).toEqual(
 			["wh", "bl", "am", "as", "ot"].map((c) => `${AGENCY}:dem_race_${c}:1`),
@@ -219,7 +222,7 @@ describe("shared scales and select-many", () => {
 			"select: many\nresponses:\n  a: A\n  b: B\n",
 			EMPTY_ENV,
 		);
-		expect(elaborate(draft, AGENCY).Variable).toBeUndefined();
+		expect(elaborate(draft, AGENCY, []).Variable).toBeUndefined();
 	});
 });
 

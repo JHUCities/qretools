@@ -46,7 +46,7 @@ const MISSING_ID = "missing";
 export function elaborate(
 	draft: Draft,
 	agency: string,
-	missing: readonly Code[] = [],
+	missing: readonly Code[],
 ): DdiDocument {
 	const qid = draft.name ?? UNTITLED;
 	const questionId = identity(agency, qid);
@@ -145,7 +145,9 @@ function instructionItem(
  * variable's representation. So the bank's list becomes one
  * ManagedMissingValuesRepresentation over a CodeList whose categories are marked
  * missing, referenced from every select-many variable, and its codes are stamped
- * on every response domain.
+ * on every response domain. In a single-choice, number or open question nothing
+ * references it yet (only variables can); it is emitted anyway so the bank's list
+ * travels with every export. Whether to stamp only variables is open with the owner.
  */
 function missingValueItems(
 	agency: string,
