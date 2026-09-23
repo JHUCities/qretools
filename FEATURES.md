@@ -233,3 +233,8 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 - *`Object.freeze` on drafts.* Readonly types are the guarantee, as in Elm.
 - *A findings slot on `elaborate`.* It would always be empty.
 - *Did-you-mean for unknown fields.* The hint lists the eleven fields; enough for now.
+
+- **Bank-wide duplicate variable check.** Two questions must not declare the same
+  variable name; today `con_nhdkfp` and `con_nhdkdmo` are each claimed by `con_nhddk`,
+  `con_nhdnc` and `con_nhdsc`. Needs 8(b)'s bank-level view; fixing the three files is
+  the owner's edit.

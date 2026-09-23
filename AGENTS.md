@@ -477,7 +477,31 @@ bank version (`origin.original`), not its local edits.** A question never resolv
 against a scale that exists only in this browser, so a DDI export only references what
 is on GitHub; an unsaved scheme edit shows its effect on questions once saved. (The
 reviewer had recommended local, live evaluation; declined.) A consequence that helps:
-the Env changes only on bank load and save, never per keystroke. Notes for step 5 from the step 4 review: identify questions by a
+the Env changes only on bank load and save, never per keystroke.
+
+**A Variable for every question (decided by the owner 2026-09-24).** This settles the
+missing-values question. Select one, number and open questions each emit one
+`Variable` named like the question; select-many keeps one per option. A variable's
+value representation is the question's domain without `ResponseCardinality` (how many
+may be chosen is about asking, not data). It references its question, the universe
+(the first real home a universe has had in 4.0) and the concept (on both the variable and
+the question), and the bank's `missing` representation; the instruction stays on the
+question. Missing values attach only through variables: the `MissingValue` string on
+response domains is gone, and the representation is emitted only when a variable
+references it. A variable's label is the author's `title` or nothing (DDI does not
+invent one). No name or no domain means no variable. Variable IDs are `variable-<name>`,
+keyed by the variable's own name, never its question's (26 option variables are
+unrelated to their question's name); `NAME_PATTERN` has no hyphen, so hyphenated
+prefixes are namespaces that cannot collide with a question ID, and the one dot hangs
+parts off a base. **For role 2:** the default "variable named like the question" is a
+role-1 convenience meaning "one question asked once"; when a construct asks a question
+again, role 2 names another variable pointing at the same QuestionItem
+(`QuestionReference` is an array), and `elaborateItems` must rename or suppress the
+default. Bank regression: 332 questions give 502 variables, every one DDI-valid. **Two
+variable names are claimed by three questions:** `con_nhdkfp` and `con_nhdkdmo` are
+declared by `con_nhddk`, `con_nhdnc` and `con_nhdsc` (a v1 slip, also in the migration
+report). This is bank content for the owner to fix; a bank-wide "duplicate variable" check
+belongs with 8(b)'s bank-level evaluation. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

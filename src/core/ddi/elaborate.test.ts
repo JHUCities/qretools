@@ -198,9 +198,23 @@ describe("shared scales and select-many", () => {
 		const doc = elaborate(draft, AGENCY, []);
 		expect(validate(doc)).toEqual([]);
 		expect(Object.keys(doc.Variable ?? {})).toEqual(
-			["wh", "bl", "am", "as", "ot"].map((c) => `${AGENCY}:dem_race_${c}:1`),
+			["wh", "bl", "am", "as", "ot"].map(
+				(c) => `${AGENCY}:variable-dem_race_${c}:1`,
+			),
 		);
-		const wh = itemOf(doc, "Variable", "dem_race_wh");
+		const wh = itemOf(doc, "Variable", "variable-dem_race_wh");
+		expect(wh.VariableName).toEqual([
+			{
+				String: [
+					{
+						MultilingualStringValue: {
+							LanguageTag: "en",
+							Value: "dem_race_wh",
+						},
+					},
+				],
+			},
+		]);
 		expect(wh.QuestionReference).toEqual([
 			{ $type: "QuestionItem", value: [AGENCY, "dem_race", "1"] },
 		]);
@@ -239,8 +253,7 @@ describe("validate", () => {
 });
 
 describe("schemes", () => {
-	it("a universe or instruction reference is one shared item named as the bank names it", async () => {
-		const { EMPTY_ENV } = await import("../surface/env.js");
+	it("a universe or instruction reference is one shared item named as the bank names it", () => {
 		const env = {
 			...EMPTY_ENV,
 			universes: { renters: { text: "Renters" } },
@@ -268,34 +281,111 @@ describe("schemes", () => {
 		]);
 	});
 
-	it("missing values become one managed representation, stamped on domains and referenced from variables", async () => {
-		const { EMPTY_ENV } = await import("../surface/env.js");
-		const { parseScale } = await import("../surface/scales.js");
-		const missing =
-			parseScale('labels:\n  "-8": Item non-response\n  "-7": Skipped\n').scale
-				?.codes ?? [];
-		const env = { ...EMPTY_ENV, missing };
-		const { draft } = parseSurface(demRace, env);
+	const missing =
+		parseScale('labels:\n  "-8": Item non-response\n  "-7": Skipped\n').scale
+			?.codes ?? [];
+	const missingRef = {
+		$type: "ManagedMissingValuesRepresentation",
+		value: [AGENCY, "missing", "1"],
+	};
+
+	it("every question has its variable: named like it, holding its answers, with the bank's missing values", () => {
+		const env = {
+			...EMPTY_ENV,
+			universes: { renters: { text: "Renters" } },
+			missing,
+		};
+		const { draft } = parseSurface(
+			`${nhdSat}title: Neighborhood satisfaction\nuniverse: renters\n`.replace(
+				"universe: All respondents\n",
+				"",
+			),
+			env,
+		);
 		const doc = elaborate(draft, AGENCY, missing);
 		expect(validate(doc)).toEqual([]);
-		expect(Object.keys(doc.ManagedMissingValuesRepresentation ?? {})).toEqual([
-			`${AGENCY}:missing:1`,
+		expect(Object.keys(doc.Variable ?? {})).toEqual([
+			`${AGENCY}:variable-nhd_sat:1`,
 		]);
+		const v = itemOf(doc, "Variable", "variable-nhd_sat");
+		expect(v.Label).toEqual(question(doc, "nhd_sat").Label);
+		expect(v.Label).toBeDefined();
+		expect(v.QuestionReference).toEqual([
+			{ $type: "QuestionItem", value: [AGENCY, "nhd_sat", "1"] },
+		]);
+		expect(v.UniverseReference).toEqual([
+			{ $type: "Universe", value: [AGENCY, "universe-renters", "1"] },
+		]);
+		expect(v.ConceptReference).toEqual(
+			question(doc, "nhd_sat").ConceptReference,
+		);
+		// The variable holds one code; how many may be chosen is the question's business.
+		expect(v.VariableRepresentation).toEqual({
+			ValueRepresentation: {
+				$type: "CodeDomain",
+				CodeListReference: {
+					$type: "CodeList",
+					value: [AGENCY, "nhd_sat.codes", "1"],
+				},
+			},
+			MissingValuesReference: missingRef,
+		});
+		// Missing values attach through variables only.
 		expect(
-			(question(doc, "dem_race").ResponseDomain as JsonObject).MissingValue,
-		).toBe("-8 -7");
-		const wh = itemOf(doc, "Variable", "dem_race_wh");
+			(question(doc, "nhd_sat").ResponseDomain as JsonObject).MissingValue,
+		).toBeUndefined();
+		expect(itemOf(doc, "Category", "missing.cat-0").IsMissing).toBe(true);
+	});
+
+	it("number and open questions get a variable with the question's domain, no label unless titled", () => {
+		const doc = elaborate(
+			parseSurface(nhdNyrs, EMPTY_ENV).draft,
+			AGENCY,
+			missing,
+		);
+		expect(validate(doc)).toEqual([]);
+		const v = itemOf(doc, "Variable", "variable-nhd_nyrs");
+		expect(v.Label).toBeUndefined();
+		expect(
+			(v.VariableRepresentation as JsonObject).ValueRepresentation,
+		).toEqual(question(doc, "nhd_nyrs").ResponseDomain);
+		const open = itemOf(
+			elaborate(parseSurface("name: q\nopen:\n", EMPTY_ENV).draft, AGENCY, []),
+			"Variable",
+			"variable-q",
+		);
+		expect(open.VariableRepresentation).toEqual({
+			ValueRepresentation: { $type: "TextDomain" },
+		});
+	});
+
+	it("select-many option variables reference the bank's missing values", () => {
+		const doc = elaborate(
+			parseSurface(demRace, EMPTY_ENV).draft,
+			AGENCY,
+			missing,
+		);
+		expect(validate(doc)).toEqual([]);
+		const wh = itemOf(doc, "Variable", "variable-dem_race_wh");
 		expect(
 			(wh.VariableRepresentation as JsonObject).MissingValuesReference,
-		).toEqual({
-			$type: "ManagedMissingValuesRepresentation",
-			value: [AGENCY, "missing", "1"],
-		});
-		const cat = itemOf(doc, "Category", "missing.cat-0");
-		expect(cat.IsMissing).toBe(true);
-		// no bank list, nothing emitted
+		).toEqual(missingRef);
+	});
+
+	it("no name or no domain: no variable, and so no missing values to reference", () => {
+		for (const text of ["text: Q?\nopen:\n", "name: q\ntext: Q?\n"]) {
+			const doc = elaborate(
+				parseSurface(text, EMPTY_ENV).draft,
+				AGENCY,
+				missing,
+			);
+			expect(doc.Variable).toBeUndefined();
+			expect(doc.ManagedMissingValuesRepresentation).toBeUndefined();
+			expect(validate(doc)).toEqual([]);
+		}
 		expect(
-			elaborate(draft, AGENCY, []).ManagedMissingValuesRepresentation,
+			elaborate(parseSurface(nhdSat, EMPTY_ENV).draft, AGENCY, [])
+				.ManagedMissingValuesRepresentation,
 		).toBeUndefined();
 	});
 });
