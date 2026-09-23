@@ -10,10 +10,10 @@
 import type { Finding, Range, Target } from "../core/findings.js";
 import type { Result } from "../core/result.js";
 import { parseScale, type Scales } from "../core/surface/scales.js";
-import demRace from "../examples/dem_race.yaml?raw";
-import nhdCohes1 from "../examples/nhd_cohes1.yaml?raw";
-import nhdNyrs from "../examples/nhd_nyrs.yaml?raw";
-import nhdSat from "../examples/nhd_sat.yaml?raw";
+import choiceTemplate from "../templates/choice.yaml?raw";
+import numberTemplate from "../templates/number.yaml?raw";
+import scaleTemplate from "../templates/scale.yaml?raw";
+import selectManyTemplate from "../templates/select-many.yaml?raw";
 import type { Persisted } from "./persist.js";
 import type { BankSettings, Failure, File } from "./storage.js";
 
@@ -202,14 +202,20 @@ export type Cmd =
 
 export type Dispatch = (msg: Msg) => void;
 
-export const EXAMPLES: ReadonlyArray<{
+/**
+ * Starting points for a new question, one per response domain. They are named for
+ * the shape they show, not for any question in the bank: a template must not
+ * arrive carrying a real variable name, which would collide with the bank's copy.
+ * Every required field is left empty, so a new question opens as a list of holes.
+ */
+export const TEMPLATES: ReadonlyArray<{
 	readonly label: string;
 	readonly text: string;
 }> = [
-	{ label: "nhd_sat (choice)", text: nhdSat },
-	{ label: "nhd_nyrs (number)", text: nhdNyrs },
-	{ label: "nhd_cohes1 (shared scale)", text: nhdCohes1 },
-	{ label: "dem_race (select many)", text: demRace },
+	{ label: "Single choice", text: choiceTemplate },
+	{ label: "Shared scale", text: scaleTemplate },
+	{ label: "Number", text: numberTemplate },
+	{ label: "Select all that apply", text: selectManyTemplate },
 ];
 
 /** The DDI agency identifier for this bank: Johns Hopkins 21st Century Cities. */

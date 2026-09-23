@@ -51,6 +51,15 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 
 ## Bank and storage (cut from step 5, port shape unchanged)
 
+- **A typo in the name silently creates a topic folder.** The folder comes from the name
+  prefix and git creates any missing path, so `nhdd_sat` makes a new `nhdd` beside `nhd`
+  with no warning. The loaded bank knows its folders: warn at save when the prefix is not
+  one of them, naming the existing topics. **S**.
+- **Choosing a folder that the name does not imply.** The bank has `dem_latx` in `svy/`,
+  which the tool cannot express for a new question. A folder field, or letting the author
+  pick at save, would. **S**.
+- **Templates could live in the bank repo** so the survey team curates them, rather than
+  being bundled with the tool. **S**.
 - **The open question in the URL** (asked for 2026-09-24), so links to a question can be
   shared: `#questions/<topic>/<name>.yaml` for bank files, which have a stable identity;
   drafts do not until named. In the architecture the URL is an effect: `update` decides

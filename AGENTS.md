@@ -258,6 +258,20 @@ emit a Universe item and resolve the link in role 2.
   Msg). Vite plugin: `@vitejs/plugin-react` 6 (oxc-based); `plugin-react-oxc` does not
   install against Vite 8. Measured: the bundle grew from 368 KB to 559 KB gzipped.
 
+- **Templates, not examples, start a new question (2026-09-24).** `src/templates/*.yaml`
+  are named for the shape they show (single choice, shared scale, number, select all
+  that apply), never for a question in the bank: a template carrying a real variable
+  name produced a draft that collided with the bank's copy and could not be saved. Every
+  required field is empty, so a new question opens as a list of holes. `src/examples/`
+  stays as test fixtures.
+- **Where a question lands is decided at save, by its name**: `folderOf(name)` gives
+  `questions/<prefix>/<name>.yaml`. Git has no directories, so a name with an unseen
+  prefix simply creates the folder; a typo therefore creates a topic silently (see
+  FEATURES.md). A bank file always saves back to the path it was opened at.
+- **Save commits directly to the branch in the Bank panel**, one commit per save,
+  attributed to the token's owner, refused only when the file changed on GitHub since it
+  was opened. No review step exists yet; "propose a change" as a pull request is backlog.
+
 ## Principles from PL research (how features are judged)
 
 - **Total error localization.** Every draft, however broken, elaborates. Missing or

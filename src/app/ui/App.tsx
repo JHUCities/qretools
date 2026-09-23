@@ -11,7 +11,7 @@ import { useMemo } from "react";
 import { status } from "../../core/findings.js";
 import { toDiagnostics } from "../diagnostics.js";
 import { isUnsaved } from "./../merge.js";
-import { EXAMPLES, type Id } from "../model.js";
+import { type Id, TEMPLATES } from "../model.js";
 import { treeOf } from "../tree.js";
 import { useApp, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
@@ -69,14 +69,15 @@ export function App() {
 										Blank question
 									</ActionList.Item>
 									<ActionList.Divider />
-									{EXAMPLES.map((e) => (
+									<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
+									{TEMPLATES.map((t) => (
 										<ActionList.Item
-											key={e.label}
+											key={t.label}
 											onSelect={() =>
-												dispatch({ kind: "questionCreated", text: e.text })
+												dispatch({ kind: "questionCreated", text: t.text })
 											}
 										>
-											From {e.label}
+											{t.label}
 										</ActionList.Item>
 									))}
 								</ActionList>
