@@ -49,6 +49,24 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
   `versions`, `restricted_access`, markdown emphasis and `{{fills}}` in question text.
   An importer from the v1 files would measure the gap across all 294 questions. **M**.
 
+## Bank and storage (cut from step 5, port shape unchanged)
+
+- **"Propose a change" by pull request** for read-only users and for review: a second
+  adapter behind the same `Store`/Msgs. **M**.
+- **GitHub App sign-in** with the small token-exchange Worker (decided, deferred by the
+  owner). Replaces token paste behind `connectRequested`. **M**.
+- **Rename a bank question.** Today a bank file saves to the path it was opened at even
+  if `name` changed; needs delete-and-create in one step. **S**.
+- **Auto-refresh and presence.** No polling; a stale save is the only signal that
+  someone else changed a file. **M**.
+- **Seeded example drafts** duplicate bank questions by name once connected; a
+  "New from example" only, or dropping unmodified seeds on first connect, would be
+  cleaner. **S**.
+- **Keyboard navigation and better search** in the list. **S**.
+- **`parseAgency`** at the shell boundary when the agency becomes a setting. **S**.
+- **A `Store` fake for a mount smoke test** in jsdom; today update and the adapter are
+  unit-tested and the flow is verified in a real browser by a scratch script. **M**.
+
 ## Editor experience
 
 - **Precise spans: key, value, whole.** The ranges index holds one span per path, from

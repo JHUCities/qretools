@@ -217,3 +217,338 @@ export function ddiBadge(
 					: `${problems.length} schema problems`,
 			);
 }
+
+// ---- Step 5: the list, the question header, and the bank status ----------------
+
+import type { Activity, Bank, Id, Origin, Screen, Session } from "./model.js";
+import type { Failure } from "./storage.js";
+
+/** One row of the list: data computed in `view`, drawn here. */
+export interface Row {
+	readonly id: Id;
+	readonly name: string | undefined;
+	readonly title: string | undefined;
+	readonly folder: string | undefined;
+	readonly status: Status;
+	readonly unsaved: boolean;
+	readonly origin: Origin["kind"];
+	readonly activity: Activity;
+}
+
+export interface ListActions {
+	readonly open: (id: Id) => void;
+	readonly remove: (id: Id) => void;
+	readonly cancelRemove: () => void;
+	readonly filter: (text: string, folder: string | undefined) => void;
+}
+
+export function viewFailure(
+	f: Failure,
+	...maybeActions: readonly (HTMLElement | false | undefined)[]
+): HTMLElement {
+	const actions = maybeActions.filter(
+		(a): a is HTMLElement => a instanceof HTMLElement,
+	);
+	return h(
+		"div",
+		{ class: "failure", role: "alert" },
+		h("span", { class: "msg" }, ...inlineCode(f.message)),
+		f.hint !== undefined && h("span", { class: "hint" }, ...inlineCode(f.hint)),
+		actions.length > 0 && h("span", { class: "actions" }, ...actions),
+	);
+}
+
+export function viewList(
+	rows: readonly Row[],
+	screen: Extract<Screen, { kind: "list" }>,
+	canWrite: boolean,
+	on: ListActions,
+): HTMLElement {
+	const folders = [
+		...new Set(rows.flatMap((r) => (r.folder === undefined ? [] : [r.folder]))),
+	].sort();
+	const shown = rows.filter(
+		(r) =>
+			(screen.folder === undefined || r.folder === screen.folder) &&
+			(screen.text === "" ||
+				`${r.name ?? ""} ${r.title ?? ""}`
+					.toLowerCase()
+					.includes(screen.text.toLowerCase())),
+	);
+	return h(
+		"div",
+		{ class: "list" },
+		h(
+			"div",
+			{ class: "toolbar" },
+			h("input", {
+				type: "search",
+				placeholder: "Filter by name or title",
+				value: screen.text,
+				"aria-label": "Filter",
+				onInput: (e) =>
+					on.filter((e.target as HTMLInputElement).value, screen.folder),
+			}),
+			h(
+				"select",
+				{
+					"aria-label": "Topic",
+					onChange: (e) =>
+						on.filter(
+							screen.text,
+							(e.target as HTMLSelectElement).value || undefined,
+						),
+				},
+				h("option", { value: "" }, "All topics"),
+				...folders.map((f) =>
+					h("option", { value: f, selected: f === screen.folder }, f),
+				),
+			),
+			h("span", { class: "count" }, `${shown.length} of ${rows.length}`),
+		),
+		shown.length === 0
+			? h("p", { class: "quiet" }, "No questions match.")
+			: h(
+					"table",
+					{ class: "rows" },
+					h(
+						"thead",
+						{},
+						h(
+							"tr",
+							{},
+							h("th", {}, "Name"),
+							h("th", {}, "Title"),
+							h("th", {}, "Topic"),
+							h("th", {}, "Status"),
+							h("th", {}, ""),
+						),
+					),
+					h(
+						"tbody",
+						{},
+						...shown.map((r) =>
+							h(
+								"tr",
+								{ class: r.unsaved ? "unsaved" : "" },
+								h(
+									"td",
+									{},
+									h(
+										"button",
+										{
+											type: "button",
+											class: "link",
+											onClick: () => on.open(r.id),
+										},
+										r.name ?? h("span", { class: "quiet" }, "(no name)"),
+									),
+								),
+								h("td", {}, r.title ?? ""),
+								h("td", {}, r.folder ?? ""),
+								h(
+									"td",
+									{},
+									statusBadge(r.status),
+									r.unsaved &&
+										h(
+											"span",
+											{ class: "badge hole" },
+											r.origin === "draft" ? "draft" : "unsaved",
+										),
+									r.activity.kind === "failed" &&
+										h("span", { class: "badge error" }, "failed"),
+								),
+								h(
+									"td",
+									{ class: "row-actions" },
+									...(screen.confirmDelete === r.id
+										? [
+												h(
+													"button",
+													{
+														type: "button",
+														class: "danger",
+														onClick: () => on.remove(r.id),
+													},
+													r.origin === "draft"
+														? "Delete draft"
+														: "Delete from bank",
+												),
+												h(
+													"button",
+													{ type: "button", onClick: () => on.cancelRemove() },
+													"Keep",
+												),
+											]
+										: [
+												h(
+													"button",
+													{
+														type: "button",
+														disabled: r.origin === "bank" && !canWrite,
+														title:
+															r.origin === "bank" && !canWrite
+																? "Read access only"
+																: "Delete",
+														onClick: () => on.remove(r.id),
+													},
+													"Delete…",
+												),
+											]),
+								),
+							),
+						),
+					),
+				),
+	);
+}
+
+export interface HeaderActions {
+	readonly back: () => void;
+	readonly save: () => void;
+	readonly reload: () => void;
+	readonly downloadYaml: () => void;
+	readonly downloadDdi: () => void;
+}
+
+export function viewQuestionHeader(
+	q: {
+		readonly name: string | undefined;
+		readonly origin: Origin;
+		readonly activity: Activity;
+		readonly unsaved: boolean;
+	},
+	session: Session,
+	on: HeaderActions,
+): HTMLElement {
+	const canWrite = session.kind === "connected" && session.canWrite;
+	const saveTitle =
+		session.kind !== "connected"
+			? "Connect to the bank to save"
+			: !canWrite
+				? "Read access only: download instead"
+				: q.unsaved
+					? "Save to the bank"
+					: "Nothing to save";
+	return h(
+		"div",
+		{ class: "qhead" },
+		h("button", { type: "button", onClick: on.back }, "← Questions"),
+		h(
+			"span",
+			{ class: "qname" },
+			q.name ?? h("span", { class: "quiet" }, "(no name yet)"),
+		),
+		q.origin.kind === "bank"
+			? h("span", { class: "badge" }, "in bank")
+			: h("span", { class: "badge hole" }, "draft"),
+		q.unsaved && h("span", { class: "badge hole" }, "unsaved"),
+		q.activity.kind === "saving" && h("span", { class: "badge" }, "saving…"),
+		q.activity.kind === "deleting" &&
+			h("span", { class: "badge" }, "deleting…"),
+		h("span", { class: "spacer" }),
+		h("button", { type: "button", onClick: on.downloadYaml }, "Download YAML"),
+		h("button", { type: "button", onClick: on.downloadDdi }, "Download DDI"),
+		h(
+			"button",
+			{
+				type: "button",
+				class: "primary",
+				disabled: !canWrite || !q.unsaved || q.activity.kind === "saving",
+				title: saveTitle,
+				onClick: on.save,
+			},
+			"Save",
+		),
+		q.activity.kind === "failed" &&
+			viewFailure(
+				q.activity.failure,
+				q.activity.failure.kind === "stale" &&
+					q.origin.kind === "bank" &&
+					h(
+						"button",
+						{ type: "button", onClick: on.reload },
+						"Reload from GitHub",
+					),
+			),
+	);
+}
+
+export interface BankActions {
+	readonly dismiss: (index: number) => void;
+	readonly disconnect: () => void;
+}
+
+export function viewBankStatus(
+	session: Session,
+	bank: Bank,
+	failures: readonly Failure[],
+	on: BankActions,
+): HTMLElement {
+	const line = (): HTMLElement => {
+		switch (session.kind) {
+			case "anonymous":
+				return h(
+					"p",
+					{ class: "quiet" },
+					"Not connected. Working with local drafts and the bundled scales.",
+				);
+			case "connecting":
+				return h("p", {}, "Connecting…");
+			case "failed":
+				return viewFailure(session.failure);
+			case "connected":
+				return h(
+					"p",
+					{},
+					`Connected as ${session.login}, `,
+					session.canWrite
+						? "with write access."
+						: "read access only: you can browse, draft and download.",
+					" ",
+					h("button", { type: "button", onClick: on.disconnect }, "Disconnect"),
+				);
+			default:
+				return session satisfies never;
+		}
+	};
+	const bankLine =
+		bank.kind === "loading"
+			? h("p", {}, "Loading the bank…")
+			: bank.kind === "loaded"
+				? h(
+						"div",
+						{},
+						h(
+							"p",
+							{},
+							`Bank loaded; ${bank.scaleFindings.length === 0 ? "all scales read cleanly." : "some scale files need attention:"}`,
+						),
+						...bank.scaleFindings.map((s) =>
+							h(
+								"p",
+								{ class: "finding warning" },
+								h("b", {}, `${s.name}: `),
+								s.findings.map((f) => f.message).join("; "),
+							),
+						),
+					)
+				: null;
+	return h(
+		"div",
+		{ class: "bank-status" },
+		line(),
+		bankLine,
+		...failures.map((f, i) =>
+			viewFailure(
+				f,
+				h(
+					"button",
+					{ type: "button", onClick: () => on.dismiss(i) },
+					"Dismiss",
+				),
+			),
+		),
+	);
+}

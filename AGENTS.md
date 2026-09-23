@@ -200,6 +200,26 @@ emit a Universe item and resolve the link in role 2.
 - **`title`/`variable` on an option under `select: one`** get an `ignored-key` warning
   rather than being dropped silently. "Other, specify" stays under `legacy` for now.
 
+- **Step 5 (storage and CRUD), 2026-09-23.** The bank is read and written through a
+  storage port (`src/app/storage.ts`) with one adapter, GitHub with a pasted
+  fine-grained token (`github.ts`): one GraphQL request loads the whole bank, the
+  contents API writes and deletes with the blob sha as a precondition, and a 409/422
+  with a sha presented is a *stale* failure with a "Reload from GitHub" action, never a
+  merge. The token lives in `mount`'s closure and in session storage (local storage only
+  when "remember" is ticked); it never enters the Model or a Msg. `Failure` is a shell
+  type: HTTP is not the core's vocabulary. Capability is GitHub's `permissions.push`.
+  Questions are keyed by a numeric `Id`; a question's origin is `draft` or
+  `bank{path, sha, original}` and "unsaved" is derived, never stored. New drafts file
+  under `questions/<prefix>/<name>.yaml` (core `bankPath`); bank files keep the path
+  they were opened at. Commit messages come from core `describeChange`. `update`
+  refuses to save a draft over a bank path that another question occupies. Local
+  persistence is a `persist` Cmd debounced in `exec`; the stored value is validated by
+  a Zod schema and an unreadable one becomes a failure and is kept aside. `mergeBank`
+  (shell, pure, tested) reconciles a loaded bank with local state: unmodified files
+  refresh, modified ones stay, gone-and-modified become drafts. The editor resets its
+  state when the open question changes. Development writes go to the throwaway
+  `sandbox` branch through the branch setting; `main` stays untouched until trusted.
+
 ## Principles from PL research (how features are judged)
 
 - **Total error localization.** Every draft, however broken, elaborates. Missing or
@@ -338,7 +358,7 @@ parse to Draft + findings; (2) core: elaborate to DDI 4.0 + schema validation;
 (3) core: lints and render models; (4) shell: editor with schema completion, live
 preview, findings as diagnostics; (5) shell: CRUD, upload, download, DDI export.
 
-Steps 0 to 4 are done. Notes for step 5 from the step 4 review: identify questions by a
+Steps 0 to 7 are done (5 last, against the `sandbox` branch). Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

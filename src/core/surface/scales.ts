@@ -48,3 +48,27 @@ export function parseScale(text: string): ParsedScale {
 		? { findings: [...syntax, ...read.findings] }
 		: { scale: { codes: read.value }, findings: [...syntax, ...read.findings] };
 }
+
+export interface ParsedScales {
+	readonly scales: Scales;
+	/** Findings of the scales that did not parse cleanly, by name. */
+	readonly findings: readonly {
+		readonly name: string;
+		readonly findings: readonly Finding[];
+	}[];
+}
+
+/** The bank's scale files, by name. A scale that yields findings is reported and, if unusable, absent. */
+export function parseScales(
+	files: readonly { readonly name: string; readonly text: string }[],
+): ParsedScales {
+	const scales: Record<string, Scale> = {};
+	const findings: { name: string; findings: readonly Finding[] }[] = [];
+	for (const f of files) {
+		const parsed = parseScale(f.text);
+		if (parsed.scale !== undefined) scales[f.name] = parsed.scale;
+		if (parsed.findings.length > 0)
+			findings.push({ name: f.name, findings: parsed.findings });
+	}
+	return { scales, findings };
+}

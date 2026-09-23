@@ -8,7 +8,7 @@
 import { startCompletion } from "@codemirror/autocomplete";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
-import { Annotation, Prec } from "@codemirror/state";
+import { Annotation, EditorState, Prec } from "@codemirror/state";
 import { hoverTooltip, keymap } from "@codemirror/view";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
@@ -20,6 +20,8 @@ import { schemaCompletion } from "./complete.js";
 const external = Annotation.define<boolean>();
 
 export interface EditorInputs {
+	/** Which question is open. A change resets editor state, so undo history never leaks between questions. */
+	readonly id: number;
 	readonly text: string;
 	readonly diagnostics: readonly Diagnostic[];
 	readonly schema: object;
@@ -35,29 +37,35 @@ export function createEditor(
 	onEdit: (text: string) => void,
 ): Editor {
 	let schema: object | undefined;
-	const view = new EditorView({
-		parent,
-		extensions: [
-			basicSetup,
-			yaml(),
-			// We compose the schema features ourselves. The package's bundled extension
-			// adds its own linter, which would double-report and call holes errors.
-			yamlLanguage.data.of({ autocomplete: yamlCompletion() }),
-			yamlLanguage.data.of({ autocomplete: schemaCompletion }),
-			hoverTooltip(yamlSchemaHover()),
-			stateExtensions(),
-			macCompletionKeys,
-			EditorView.lineWrapping,
-			holeTheme,
-			// `docChanged` is essential: setDiagnostics also triggers this listener.
-			EditorView.updateListener.of((u) => {
-				if (u.docChanged && !u.transactions.some((t) => t.annotation(external)))
-					onEdit(u.state.doc.toString());
-			}),
-		],
-	});
+	let current: number | undefined;
+	const extensions = [
+		basicSetup,
+		yaml(),
+		// We compose the schema features ourselves. The package's bundled extension
+		// adds its own linter, which would double-report and call holes errors.
+		yamlLanguage.data.of({ autocomplete: yamlCompletion() }),
+		yamlLanguage.data.of({ autocomplete: schemaCompletion }),
+		hoverTooltip(yamlSchemaHover()),
+		stateExtensions(),
+		macCompletionKeys,
+		EditorView.lineWrapping,
+		holeTheme,
+		// `docChanged` is essential: setDiagnostics also triggers this listener.
+		EditorView.updateListener.of((u) => {
+			if (u.docChanged && !u.transactions.some((t) => t.annotation(external)))
+				onEdit(u.state.doc.toString());
+		}),
+	];
+	const view = new EditorView({ parent, extensions });
 	return {
-		sync({ text, diagnostics, schema: next }) {
+		sync({ id, text, diagnostics, schema: next }) {
+			if (id !== current) {
+				// A fresh state: new document, empty undo history, and the schema state
+				// starts over, so it must be pushed again below.
+				current = id;
+				schema = undefined;
+				view.setState(EditorState.create({ doc: text, extensions }));
+			}
 			if (next !== schema) {
 				schema = next;
 				updateSchema(view, next as never);
