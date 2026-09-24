@@ -260,3 +260,19 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   `missing.yaml`) is this tool's own format. Open question for the owner: does "any
   DDI-conformant bank" also mean reading banks that exist only as DDI (3.3 XML or 4.0
   JSON), i.e. an importer from DDI into the surface language?
+
+- **Fill holes with a language model, given what is in scope (after the Cloudflare
+  Worker).** Prior art: *Statically Contextualizing Large Language Models with Typed
+  Holes* (Blinn et al., OOPSLA 2024, https://arxiv.org/abs/2409.00921), which gives the
+  model the hole's expected type and typing context from Hazel's language server rather
+  than nearby text. Here: draft a hole (first `intent`, of which the migrated bank has
+  330) from the question's text, concept, universe and resolved scale labels, plus the
+  field's description from the surface schema. The draft is a suggestion the author
+  accepts or edits, never written silently; the bank is never edited programmatically.
+  Needs a model call, so it goes through the Worker. Raised 2026-09-24.
+- **8(c) as a cursor inspector (proposed, not decided).** Hazel's idiom: a pane that
+  follows the cursor and reports the element under it (a name's binding and "used by",
+  what belongs in a hole and the names in scope, an unresolved name with "New universe
+  `renters`"). Pure core function from cursor path to view; "go to definition" and
+  "create it" are a link and a button in it. Livelits/projectors and structure editing
+  are beyond a text editor's horizon and are not planned.
