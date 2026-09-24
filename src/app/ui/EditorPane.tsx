@@ -14,8 +14,10 @@ export function EditorPane(inputs: EditorInputs) {
 	const { dispatch, effects } = useApp();
 	useLayoutEffect(() => {
 		if (!host.current) return;
-		const e = createEditor(host.current, (text) =>
-			dispatch({ kind: "edited", text }),
+		const e = createEditor(
+			host.current,
+			(text) => dispatch({ kind: "edited", text }),
+			(offset) => dispatch({ kind: "cursorMoved", offset }),
 		);
 		editor.current = e;
 		effects.registerEditor(e);

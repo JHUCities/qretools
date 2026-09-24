@@ -37,6 +37,7 @@ export interface Editor {
 export function createEditor(
 	parent: HTMLElement,
 	onEdit: (text: string) => void,
+	onCursor: (offset: number) => void,
 ): Editor {
 	let schema: object | undefined;
 	let current: number | undefined;
@@ -56,6 +57,10 @@ export function createEditor(
 		EditorView.updateListener.of((u) => {
 			if (u.docChanged && !u.transactions.some((t) => t.annotation(external)))
 				onEdit(u.state.doc.toString());
+			// Only when the caret actually moved, so a message is never sent for nothing.
+			const head = u.state.selection.main.head;
+			if (u.selectionSet && head !== u.startState.selection.main.head)
+				onCursor(head);
 		}),
 	];
 	const view = new EditorView({ parent, extensions });

@@ -153,6 +153,11 @@ export interface Model {
 	 * each base", so writing waits for the load.
 	 */
 	readonly remote: Remote;
+	/**
+	 * Where the caret is, for the inspector. Plain data, never persisted; ignored when
+	 * it belongs to another file, and clamped where used (a reload may shorten the text).
+	 */
+	readonly cursor?: { readonly id: Id; readonly offset: number };
 	/** Per file; content never carries it, so marking a scale "saving" leaves the environment alone. */
 	readonly activity: Readonly<Record<Id, Activity>>;
 	readonly nextId: Id;
@@ -169,6 +174,7 @@ export interface Model {
 export type Msg =
 	| { readonly kind: "edited"; readonly text: string }
 	| { readonly kind: "locationClicked"; readonly target: Target }
+	| { readonly kind: "cursorMoved"; readonly offset: number }
 	| { readonly kind: "ddiSchemaLoaded"; readonly result: DdiSchema }
 	| { readonly kind: "listOpened" }
 	| { readonly kind: "fileOpened"; readonly id: Id }
@@ -180,7 +186,12 @@ export type Msg =
 	| { readonly kind: "settingsToggled"; readonly open: boolean }
 	| { readonly kind: "questionCreated"; readonly text: string }
 	/** New scheme file: `missing` is created at once (it has one name); the others ask for a name. */
-	| { readonly kind: "schemeCreateOpened"; readonly scheme: SchemeKind }
+	| {
+			readonly kind: "schemeCreateOpened";
+			readonly scheme: SchemeKind;
+			/** Prefilled, as when the inspector offers to create a name a question already uses. */
+			readonly name?: string;
+	  }
 	| { readonly kind: "schemeNameChanged"; readonly name: string }
 	| { readonly kind: "schemeCreateConfirmed" }
 	| { readonly kind: "schemeCreateCancelled" }

@@ -270,7 +270,7 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   field's description from the surface schema. The draft is a suggestion the author
   accepts or edits, never written silently; the bank is never edited programmatically.
   Needs a model call, so it goes through the Worker. Raised 2026-09-24.
-- **8(c) as a cursor inspector (proposed, not decided).** Hazel's idiom: a pane that
+- **8(c) as a cursor inspector (built 2026-09-24; see AGENTS.md).** Hazel's idiom: a pane that
   follows the cursor and reports the element under it (a name's binding and "used by",
   what belongs in a hole and the names in scope, an unresolved name with "New universe
   `renters`"). Pure core function from cursor path to view; "go to definition" and

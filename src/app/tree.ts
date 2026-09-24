@@ -15,6 +15,13 @@ import {
 } from "../core/schemes.js";
 import { type Index, usedBy } from "../core/symbols.js";
 import type { Entry, Id, Model, Question, SchemeEntry } from "./model.js";
+
+/** What the tree is drawn from. Not the whole Model: a caret move must not redraw it. */
+export type TreeInput = Pick<
+	Model,
+	"local" | "browser" | "screen" | "activity"
+>;
+
 import { isUnsaved } from "./sync.js";
 
 export const UNFILED = "(unfiled)";
@@ -47,7 +54,7 @@ export const folderOfQuestion = (
 			: folderOf(name);
 
 export function treeOf(
-	model: Model,
+	model: TreeInput,
 	evaluate: (q: Question) => Evaluation,
 ): readonly Folder[] {
 	const filter = model.browser.filter.trim().toLowerCase();
@@ -87,7 +94,7 @@ export function treeOf(
 		}));
 }
 
-const marks = (model: Model, e: Entry) => {
+const marks = (model: TreeInput, e: Entry) => {
 	const activity = model.activity[e.id];
 	return {
 		id: e.id,
@@ -126,7 +133,7 @@ export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
  * folder: toggled by the user, holding the open file, or while filtering.
  */
 export function schemeSections(
-	model: Model,
+	model: TreeInput,
 	evaluate: (e: SchemeEntry) => SchemeEvaluation,
 	index: Index<Id>,
 ): readonly SchemeSection[] {

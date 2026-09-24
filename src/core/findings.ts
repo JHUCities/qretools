@@ -80,6 +80,26 @@ export function locate(
 	return finding.severity === "hole" ? [whole[1], whole[1]] : whole;
 }
 
+/**
+ * `locate`'s inverse: the path of the smallest range holding an offset, or `""` for
+ * the document itself. Smallest range, never most dots: a response code may contain one.
+ */
+export function pathAt(
+	ranges: Readonly<Record<string, Range>>,
+	offset: number,
+): string {
+	let best = "";
+	let width = Number.POSITIVE_INFINITY;
+	for (const [path, [from, to]] of Object.entries(ranges)) {
+		if (path === "" || offset < from || offset > to) continue;
+		if (to - from < width) {
+			best = path;
+			width = to - from;
+		}
+	}
+	return best;
+}
+
 /** What a click points at, in the document's own terms; resolved to a range only when acted on. */
 export type Target = Pick<Finding, "path" | "severity"> & {
 	readonly range?: Range;

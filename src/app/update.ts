@@ -56,6 +56,14 @@ export function update(model: Model, msg: Msg): Step {
 			];
 		}
 
+		case "cursorMoved":
+			return model.screen.kind === "editing"
+				? [
+						{ ...model, cursor: { id: model.screen.id, offset: msg.offset } },
+						[],
+					]
+				: [model, []];
+
 		case "ddiSchemaLoaded":
 			return [{ ...model, ddiSchema: msg.result }, []];
 
@@ -99,7 +107,7 @@ export function update(model: Model, msg: Msg): Step {
 						...model,
 						browser: {
 							...model.browser,
-							creating: { kind: msg.scheme, name: "" },
+							creating: { kind: msg.scheme, name: msg.name ?? "" },
 						},
 					},
 					[],

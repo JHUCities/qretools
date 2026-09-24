@@ -43,6 +43,22 @@ body {
 	font-size: 13px;
 	white-space: nowrap;
 }
+.inspector {
+	border-top: 1px solid var(--borderColor-default);
+	padding: 8px 12px;
+	font-size: 13px;
+	background: var(--bgColor-muted);
+}
+.inspector p {
+	margin: 2px 0;
+}
+.insp-hole,
+.insp-warning {
+	color: var(--fgColor-attention);
+}
+.insp-error {
+	color: var(--fgColor-danger);
+}
 .browser-heading {
 	margin: 8px 0 0;
 	font-size: 12px;
@@ -107,11 +123,12 @@ body {
 	min-height: 0;
 	border-right: 1px solid var(--borderColor-default);
 	display: flex;
+	flex-direction: column;
 }
 .editor {
 	flex: 1;
 	min-width: 0;
-	height: 100%;
+	min-height: 0;
 }
 .editor .cm-editor {
 	height: 100%;

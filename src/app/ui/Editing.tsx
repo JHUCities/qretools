@@ -4,7 +4,9 @@
  * twice) come from the index and are shown on the file like any other finding.
  */
 import { useMemo } from "react";
+import type { Evaluation } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
+import { inspect } from "../../core/inspect.js";
 import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
@@ -21,6 +23,7 @@ import {
 	Codebook,
 	Ddi,
 	Findings,
+	inlineCode,
 	Respondent,
 	StatusBadge,
 } from "./Previews.js";
@@ -107,6 +110,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						diagnostics={diagnostics}
 						schema={evaluations.schema(env)}
 					/>
+					<Inspector q={q} ev={ev} index={index} />
 				</section>
 				<section className="right">
 					<article className="pane">
@@ -272,5 +276,101 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				</section>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * Hazel's cursor inspector: what is at the caret. The core says what the field is and
+ * what a name there names; this adds what needs the bank: who else uses the name, the
+ * file to open, and the file to create when nothing has that name yet.
+ */
+function Inspector({
+	q,
+	ev,
+	index,
+}: {
+	q: Question;
+	ev: Evaluation;
+	index: Index<Id>;
+}) {
+	const { dispatch } = useApp();
+	const env = useEnv();
+	const cursor = useModel((m) => m.cursor);
+	const schemes = useModel((m) => m.local.schemes);
+	const at = cursor?.id === q.id ? inspect(ev, env, cursor.offset) : undefined;
+	if (at === undefined)
+		return (
+			<aside className="inspector quiet" aria-label="At the cursor">
+				Put the cursor in a field to see what it is for.
+			</aside>
+		);
+	const m = at.mention;
+	const file =
+		m === undefined
+			? undefined
+			: Object.values(schemes).find(
+					(e) => e.kind === m.scheme && e.name === m.name,
+				);
+	const users =
+		m === undefined
+			? 0
+			: new Set(usedBy(index, m.scheme, m.name).map((s) => s.key)).size;
+	return (
+		<aside className="inspector" aria-label="At the cursor">
+			<p>
+				<code>{at.path}</code> {at.description}
+			</p>
+			{m !== undefined &&
+				(m.value !== undefined ? (
+					<p>
+						<code>{m.name}</code> is the {m.scheme}{" "}
+						{"codes" in m.value
+							? m.value.codes.map((c) => `${c.code} ${c.label}`).join(" · ")
+							: `“${m.value.text}”`}
+						, used by {users} question{users === 1 ? "" : "s"}.{" "}
+						{file && (
+							<button
+								type="button"
+								className="linklike"
+								onClick={() => dispatch({ kind: "fileOpened", id: file.id })}
+							>
+								Open it
+							</button>
+						)}
+					</p>
+				) : (
+					// The hole below says the name is unknown; this offers the fix.
+					<p>
+						<button
+							type="button"
+							className="linklike"
+							onClick={() =>
+								dispatch({
+									kind: "schemeCreateOpened",
+									scheme: m.scheme,
+									name: m.name,
+								})
+							}
+						>
+							New {m.scheme} <code>{m.name}</code>
+						</button>
+					</p>
+				))}
+			{at.names !== undefined && m === undefined && (
+				<p className="quiet">
+					{at.names.length === 0
+						? "No shared names of this kind yet."
+						: `Or name a shared one: ${at.names.slice(0, 12).join(", ")}${at.names.length > 12 ? ", …" : ""}.`}
+				</p>
+			)}
+			{at.findings.map((f) => (
+				<p
+					key={`${f.code}:${f.path}`}
+					className={`insp-finding insp-${f.severity}`}
+				>
+					{inlineCode(f.message)}
+				</p>
+			))}
+		</aside>
 	);
 }

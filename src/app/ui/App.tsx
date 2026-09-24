@@ -24,9 +24,15 @@ export function App() {
 	const { dispatch, evaluations } = useApp();
 	const model = useModel((m) => m);
 	const env = useEnv();
+	const { local, browser, screen, activity } = model;
+	// The tree is drawn from these slices only, so a caret move does not redraw it.
+	const treeInput = useMemo(
+		() => ({ local, browser, screen, activity }),
+		[local, browser, screen, activity],
+	);
 	const folders = useMemo(
-		() => treeOf(model, (q) => evaluations.get(q, model.agency, env)),
-		[model, evaluations, env],
+		() => treeOf(treeInput, (q) => evaluations.get(q, model.agency, env)),
+		[treeInput, model.agency, evaluations, env],
 	);
 	// The bank's symbol table: which variables each question defines and which
 	// scheme names it writes. Rebuilt from cached evaluations, so cheap per keystroke.
@@ -41,8 +47,8 @@ export function App() {
 		[model.local.questions, model.agency, evaluations, env],
 	);
 	const sections = useMemo(
-		() => schemeSections(model, (e) => evaluations.scheme(e, env), index),
-		[model, evaluations, env, index],
+		() => schemeSections(treeInput, (e) => evaluations.scheme(e, env), index),
+		[treeInput, evaluations, env, index],
 	);
 	const creating = model.browser.creating;
 	const open: Id | undefined =

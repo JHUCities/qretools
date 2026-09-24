@@ -735,7 +735,21 @@ for a larger discussion; the Cloudflare Worker login comes after this tranche.
   `location.replace`, and `hashchange` becomes a Msg. No router library.
 - Branch granularity: per person, as built.
 - GitHub settings are done by the owner: automatic deletion of merged head branches, and
-  `main` protected. Notes for step 5 from the step 4 review: identify questions by a
+  `main` protected.
+
+**Step 8(c) built as Hazel's cursor inspector (2026-09-24).** Core `inspect(ev, env,
+offset)` returns one record or undefined: the path at the caret (`pathAt`, `locate`'s
+inverse in findings.ts: the smallest range holding the offset, so dotted codes stay
+whole), its field and the schema's description of it, the findings underlined there
+(the same `locate` rule as the editor), the names in scope for a reference field, and
+the name written there with its value from the Env (absent means nothing has that
+name). The shell adds what needs the bank: "used by N", "Open it", and "New universe
+`renters`" (`schemeCreateOpened` with a prefilled name). The caret is Model state
+(`cursor: {id, offset}`, never persisted, ignored for another file, clamped where used);
+the editor sends `cursorMoved` only when the caret actually moved. The tree is derived
+from `TreeInput` (the slices it reads), so a caret move does not redraw it. "Go to
+definition" and "create it" are a link and a button in the inspector; no editor
+plumbing. Livelits, projectors and structure editing are beyond a text editor's horizon. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

@@ -740,3 +740,25 @@ describe("the author's own branch", () => {
 		expect(after[0]).toMatchObject({ target: { branch: "qretools/iain" } });
 	});
 });
+
+describe("the cursor inspector's messages", () => {
+	it("records where the caret is in the open file, and never persists it", () => {
+		const [m] = update(fresh(), { kind: "questionCreated", text: "name: q\n" });
+		const [moved, cmds] = update(m, { kind: "cursorMoved", offset: 3 });
+		expect(moved.cursor).toEqual({ id: firstId(m), offset: 3 });
+		expect(cmds).toEqual([]);
+		expect(
+			update(fresh(), { kind: "cursorMoved", offset: 3 })[0].cursor,
+		).toBeUndefined();
+	});
+
+	it("creating a name a question already uses starts the dialog with it", () => {
+		const [m] = update(fresh(), {
+			kind: "schemeCreateOpened",
+			scheme: "universe",
+			name: "renters",
+		});
+		expect(m.browser.creating).toEqual({ kind: "universe", name: "renters" });
+		expect(schemeNameProblem(m, "universe", "renters")).toBeUndefined();
+	});
+});
