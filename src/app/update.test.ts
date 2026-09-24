@@ -206,15 +206,20 @@ describe("saving", () => {
 		expect(m.activity[1]).toEqual({ kind: "saving" });
 		expect(cmds).toEqual([
 			{
-				kind: "writeFile",
-				id: 1,
+				kind: "commit",
 				target: {
 					...{ owner: "JHUCities", repo: "bas-question-bank" },
 					branch: "qretools/iain",
 					defaultBranch: "main",
 				},
-				path: "questions/svy/nhd_new.yaml",
-				text: m.local.questions[1]?.source,
+				changes: [
+					{
+						id: 1,
+						path: "questions/svy/nhd_new.yaml",
+						expected: null,
+						text: m.local.questions[1]?.source,
+					},
+				],
 				message: "Add nhd_new",
 			},
 		]);
@@ -265,11 +270,16 @@ describe("saving", () => {
 			id: 1,
 		});
 		const [m2, cmds] = update(m1, {
-			kind: "saveFinished",
-			id: 1,
-			path: "questions/nhd/nhd_new.yaml",
-			text: m1.local.questions[1]?.source ?? "",
-			result: ok({ sha: "new" }),
+			kind: "committed",
+			changes: [
+				{
+					id: 1,
+					path: "questions/nhd/nhd_new.yaml",
+					expected: null,
+					text: m1.local.questions[1]?.source ?? "",
+				},
+			],
+			result: ok({ shas: { "questions/nhd/nhd_new.yaml": "new" } }),
 		});
 		expect(m2.local.questions[1]?.base).toEqual({
 			path: "questions/nhd/nhd_new.yaml",
@@ -293,22 +303,36 @@ describe("saving", () => {
 		]);
 		const [, cmds] = update(bank, { kind: "saveRequested", id: 1 });
 		expect(cmds[0]).toMatchObject({
-			kind: "writeFile",
-			path: "questions/svy/nhd_sat.yaml",
-			sha: "s1",
+			kind: "commit",
+			changes: [{ path: "questions/svy/nhd_sat.yaml", expected: "s1" }],
 			message: "Update nhd_sat: text",
 		});
+		// GitHub moved the file meanwhile: take what it has, and say so on the file.
 		const [m2] = update(bank, {
-			kind: "saveFinished",
-			id: 1,
-			path: "questions/svy/nhd_sat.yaml",
-			text: "x",
-			result: { ok: false, error: { kind: "stale", message: "changed" } },
+			kind: "committed",
+			changes: [
+				{
+					id: 1,
+					path: "questions/svy/nhd_sat.yaml",
+					expected: "s1",
+					text: "x",
+				},
+			],
+			result: {
+				ok: false,
+				error: {
+					failure: { kind: "stale", message: "changed" },
+					seen: { "questions/svy/nhd_sat.yaml": { sha: "s2", text: "theirs" } },
+				},
+			},
 		});
 		expect(m2.activity[1]).toEqual({
 			kind: "failed",
 			failure: { kind: "stale", message: "changed" },
 		});
+		expect(m2.remote.questions["questions/svy/nhd_sat.yaml"]?.sha).toBe("s2");
+		// The author's text stays; it now shows as a conflict to resolve by reloading.
+		expect(m2.local.questions[1]?.source).toBe("name: nhd_sat\ntext: New?\n");
 		const [, reload] = update(m2, { kind: "reloadRequested", id: 1 });
 		expect(reload[0]).toMatchObject({
 			kind: "readFile",
@@ -515,8 +539,8 @@ describe("scheme files", () => {
 		const id = firstId(made);
 		const [, cmds] = update(made, { kind: "saveRequested", id });
 		expect(cmds[0]).toMatchObject({
-			kind: "writeFile",
-			path: "universes/renters.yaml",
+			kind: "commit",
+			changes: [{ path: "universes/renters.yaml", expected: null }],
 			message: "Add universe renters",
 		});
 		const saved: Model = {
@@ -541,7 +565,8 @@ describe("scheme files", () => {
 			{ kind: "deleteRequested", id },
 		);
 		expect(del[0]).toMatchObject({
-			kind: "deleteFile",
+			kind: "commit",
+			changes: [{ path: "universes/renters.yaml", text: null }],
 			message: "Delete universe renters",
 		});
 	});
@@ -710,11 +735,16 @@ describe("the author's own branch", () => {
 			],
 		);
 		const [saved] = update(m, {
-			kind: "saveFinished",
-			id: 1,
-			path: "questions/q/q.yaml",
-			text: "name: q\ntext: x\n",
-			result: ok({ sha: "n" }),
+			kind: "committed",
+			changes: [
+				{
+					id: 1,
+					path: "questions/q/q.yaml",
+					expected: "s",
+					text: "name: q\ntext: x\n",
+				},
+			],
+			result: ok({ shas: { "questions/q/q.yaml": "n" } }),
 		});
 		expect(saved.loading).toEqual({
 			...LOADED,
@@ -760,5 +790,115 @@ describe("the cursor inspector's messages", () => {
 		});
 		expect(m.browser.creating).toEqual({ kind: "universe", name: "renters" });
 		expect(schemeNameProblem(m, "universe", "renters")).toBeUndefined();
+	});
+});
+
+describe("change sets", () => {
+	const scale = (
+		id: number,
+		name: string,
+		text: string,
+		base?: string,
+	): SchemeEntry => ({
+		kind: "scale",
+		id,
+		name,
+		source: text,
+		...(base !== undefined && {
+			base: { path: `scales/${name}.yaml`, sha: `s-${name}`, text: base },
+		}),
+	});
+	const withScales = (m: Model, scales: SchemeEntry[]): Model => {
+		const local = {
+			...m.local,
+			schemes: Object.fromEntries(scales.map((e) => [e.id, e])),
+		};
+		return { ...m, local, remote: remoteOfBases(local) };
+	};
+	const bank = () =>
+		withScales(
+			withBank(connected(fresh()), [
+				bankQuestion(
+					1,
+					"questions/q/q.yaml",
+					"name: q\nresponses: yn\n",
+					"name: q\nresponses: yn\n",
+				),
+			]),
+			[scale(10, "yn", "labels:\n  1: Yes\n  2: No\n", "labels:\n  1: Yes\n")],
+		);
+
+	it("a question takes along the unsaved scale it names, in one commit", () => {
+		const [m, cmds] = update(bank(), { kind: "saveRequested", id: 1 });
+		const cmd = cmds[0];
+		expect(
+			cmd?.kind === "commit" &&
+				cmd.changes.map((c) => [c.id, c.path, c.expected]),
+		).toEqual([
+			[1, "questions/q/q.yaml", "s"],
+			[10, "scales/yn.yaml", "s-yn"],
+		]);
+		expect(cmd?.kind === "commit" && cmd.message).toMatch(
+			/With:\n- Update scale yn/,
+		);
+		expect(m.activity[10]).toEqual({ kind: "saving" });
+		// One commit at a time.
+		expect(writeBlocked(m)).toBe("Saving…");
+	});
+
+	it("a named scale GitHub also changed stops the save before any request, naming it", () => {
+		const m = bank();
+		const moved: Model = {
+			...m,
+			remote: {
+				...m.remote,
+				schemes: {
+					"scales/yn.yaml": { sha: "theirs", text: "labels:\n  1: Y\n" },
+				},
+			},
+		};
+		const [refused, cmds] = update(moved, { kind: "saveRequested", id: 1 });
+		expect(cmds).toEqual([]);
+		expect(
+			refused.activity[1]?.kind === "failed" &&
+				refused.activity[1].failure.message,
+		).toMatch(/`yn`/);
+	});
+
+	it("after the commit each base is the committed text, even if typing went on meanwhile", () => {
+		const [saving, cmds] = update(bank(), { kind: "saveRequested", id: 1 });
+		const cmd = cmds[0];
+		if (cmd?.kind !== "commit") throw new Error("expected a commit");
+		const [typed] = update(
+			{ ...saving, screen: { kind: "editing", id: 1 } },
+			{ kind: "edited", text: "name: q\nresponses: yn\nnote: later\n" },
+		);
+		const [done] = update(typed, {
+			kind: "committed",
+			changes: cmd.changes,
+			result: ok({
+				shas: { "questions/q/q.yaml": "q2", "scales/yn.yaml": "yn2" },
+			}),
+		});
+		expect(done.local.questions[1]?.base?.text).toBe(
+			"name: q\nresponses: yn\n",
+		);
+		expect(done.local.questions[1]?.source).toMatch(/note: later/);
+		expect(done.local.schemes[10]?.base).toMatchObject({ sha: "yn2" });
+		expect(done.activity).toEqual({});
+	});
+
+	it("a delete is a one-change set with no text", () => {
+		const [, cmds] = run(
+			bank(),
+			{ kind: "deleteRequested", id: 1 },
+			{ kind: "deleteRequested", id: 1 },
+		);
+		expect(cmds[0]).toMatchObject({
+			kind: "commit",
+			changes: [
+				{ id: 1, path: "questions/q/q.yaml", expected: "s", text: null },
+			],
+		});
 	});
 });

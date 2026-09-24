@@ -14,7 +14,7 @@ import {
 import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
 import { fileOf, type Id, type Question, type SchemeEntry } from "../model.js";
-import { isUnsaved } from "../sync.js";
+import { alsoSaves, isUnsaved } from "../sync.js";
 import { writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
@@ -77,6 +77,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const blocked = useModel(writeBlocked);
 	const ddiSchema = useModel((m) => m.ddiSchema);
 	const questions = useModel((m) => m.local.questions);
+	const local = useModel((m) => m.local);
+	const remote = useModel((m) => m.remote);
 	const activity = useModel((m) => m.activity);
 	const env = useEnv();
 	const { onTarget, on } = useActions(q.id);
@@ -98,6 +100,15 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		() => toDiagnostics(findings, ev.ranges),
 		[findings, ev.ranges],
 	);
+	const also = useMemo(
+		() =>
+			alsoSaves(local, remote, ev.symbols.mentions, (e) =>
+				e.kind === "missing"
+					? []
+					: usedBy(index, e.kind, e.name).map((s) => s.key),
+			),
+		[local, remote, ev.symbols.mentions, index],
+	);
 	// Schema validation runs over the whole document: only when the document changes,
 	// never on a caret move.
 	const problems = useMemo(
@@ -115,6 +126,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				unsaved={isUnsaved(q)}
 				activity={activity[q.id]}
 				blocked={blocked}
+				also={also}
 				on={on}
 			/>
 			<div className="split">

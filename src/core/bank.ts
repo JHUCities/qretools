@@ -100,3 +100,15 @@ export const describeSchemeChange = (
 	op: "add" | "update" | "delete",
 ): string =>
 	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${kind === "missing" ? "missing values" : `${kind} ${name}`}`;
+
+/**
+ * The message for a commit of several files: the main file's line as the subject, the
+ * others listed in the body, so the history reads by what the author meant to change.
+ */
+export const describeChangeSet = (
+	subject: string,
+	others: readonly string[],
+): string =>
+	others.length === 0
+		? subject
+		: `${subject}\n\nWith:\n${others.map((o) => `- ${o}`).join("\n")}`;

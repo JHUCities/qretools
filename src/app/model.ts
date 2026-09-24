@@ -11,7 +11,7 @@ import { compact } from "../core/compact.js";
 import type { Finding, Range, Target } from "../core/findings.js";
 import type { Result } from "../core/result.js";
 import { type SchemeKind, schemeEnv } from "../core/schemes.js";
-import { EMPTY_ENV, type Env, type NamedScheme } from "../core/surface/env.js";
+import type { Env, NamedScheme } from "../core/surface/env.js";
 import { parseScale, type Scales } from "../core/surface/scales.js";
 import choiceTemplate from "../templates/choice.yaml?raw";
 import numberTemplate from "../templates/number.yaml?raw";
@@ -21,6 +21,9 @@ import type { Persisted } from "./persist.js";
 import type {
 	BankSettings,
 	BranchTarget,
+	Change,
+	CommitFailure,
+	Committed,
 	Failure,
 	File,
 	Loaded,
@@ -208,17 +211,11 @@ export type Msg =
 	| { readonly kind: "saveFolderChanged"; readonly folder: string }
 	| { readonly kind: "saveConfirmed" }
 	| { readonly kind: "saveCancelled" }
+	/** A change set's commit came back; the changes are echoed, so nothing is looked up by path. */
 	| {
-			readonly kind: "saveFinished";
-			readonly id: Id;
-			readonly path: string;
-			readonly text: string;
-			readonly result: Result<{ readonly sha: string }, Failure>;
-	  }
-	| {
-			readonly kind: "deleteFinished";
-			readonly id: Id;
-			readonly result: Result<void, Failure>;
+			readonly kind: "committed";
+			readonly changes: readonly Change[];
+			readonly result: Result<Committed, CommitFailure>;
 	  }
 	| { readonly kind: "reloadRequested"; readonly id: Id }
 	| {
@@ -255,21 +252,11 @@ export type Cmd =
 			readonly target: BranchTarget;
 			readonly path: string;
 	  }
+	/** Every save and delete: one commit of a change set on the author's branch. */
 	| {
-			readonly kind: "writeFile";
-			readonly id: Id;
+			readonly kind: "commit";
 			readonly target: BranchTarget;
-			readonly path: string;
-			readonly text: string;
-			readonly sha?: string;
-			readonly message: string;
-	  }
-	| {
-			readonly kind: "deleteFile";
-			readonly id: Id;
-			readonly target: BranchTarget;
-			readonly path: string;
-			readonly sha: string;
+			readonly changes: readonly Change[];
 			readonly message: string;
 	  }
 	| {

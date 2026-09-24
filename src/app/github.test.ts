@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decode, encode, makeGitHubStore } from "./github.js";
+import { makeGitHubStore } from "./github.js";
 import type { BranchTarget } from "./storage.js";
 
 type Seen = { url: string; method: string; body: Record<string, unknown> };
@@ -42,14 +42,6 @@ const target: BranchTarget = {
 };
 
 describe("GitHub adapter (Octokit)", () => {
-	it("encodes UTF-8 as base64 both ways", () => {
-		const text = "text: “Curly” quotes – and an en dash, rôle\n";
-		expect(decode(encode(text))).toBe(text);
-		expect(
-			decode(`${encode(text).slice(0, 10)}\n${encode(text).slice(10)}`),
-		).toBe(text);
-	});
-
 	it("whoAmI reads the login, the permission and the default branch in one request", async () => {
 		const { s, seen } = store(() =>
 			json({
@@ -83,15 +75,11 @@ describe("GitHub adapter (Octokit)", () => {
 		});
 	});
 
-	it("maps a rejected token, a stale write and no network to failures", async () => {
+	it("maps a rejected token and no network to failures", async () => {
 		const auth = await store(() =>
 			json({ message: "Bad credentials" }, 401),
 		).s.whoAmI();
 		expect(!auth.ok && auth.error.kind).toBe("auth");
-		const stale = await store(() =>
-			json({ message: "sha mismatch" }, 409),
-		).s.write(target, "questions/a/a.yaml", "x", "m", "old");
-		expect(!stale.ok && stale.error.kind).toBe("stale");
 		const down = makeGitHubStore(
 			{ owner: "o", repo: "r" },
 			"tok",
@@ -104,47 +92,161 @@ describe("GitHub adapter (Octokit)", () => {
 		expect(!net.ok && net.error.kind).toBe("network");
 	});
 
-	it("writes to the author's branch with the sha, keeping the path's slashes, and returns the new sha", async () => {
-		const { s, seen } = store(() => json({ content: { sha: "new" } }));
-		expect(
-			await s.write(
-				target,
-				"questions/nhd/nhd_sat.yaml",
-				"name: nhd_sat\n",
-				"Update nhd_sat: text",
-				"old",
-			),
-		).toEqual({ ok: true, value: { sha: "new" } });
-		expect(seen[0]?.url).toBe(
-			"https://api.github.com/repos/JHUCities/bas-question-bank/contents/questions/nhd/nhd_sat.yaml",
-		);
-		expect(seen[0]?.body).toMatchObject({
-			message: "Update nhd_sat: text",
-			sha: "old",
-			branch: "qretools/iain",
+	/**
+	 * A fake GitHub for commits: the branch head holds `files` (path → sha), or no
+	 * branch at all; blobs are named by their text; the ref update answers `patch`
+	 * in turn.
+	 */
+	function github(opts: {
+		files: Record<string, string>;
+		branch?: boolean;
+		patch?: number[];
+	}) {
+		let exists = opts.branch ?? true;
+		const patches = [...(opts.patch ?? [200])];
+		return store(({ url, method, body }) => {
+			if (url.endsWith("/graphql")) {
+				const vars = body.variables as Record<string, string>;
+				if (!exists) return json({ data: { repository: { head: null } } });
+				const target: Record<string, unknown> = {
+					oid: "head",
+					tree: { oid: "tree" },
+				};
+				for (const [k, path] of Object.entries(vars))
+					if (/^p\d+$/.test(k))
+						target[k] =
+							opts.files[path] === undefined
+								? null
+								: { oid: opts.files[path], object: { text: "old" } };
+				return json({ data: { repository: { head: { target } } } });
+			}
+			if (url.endsWith("/git/ref/heads/main"))
+				return json({ object: { sha: "main-head" } });
+			if (url.endsWith("/git/refs") && method === "POST") {
+				exists = true;
+				return json({ ref: "x" }, 201);
+			}
+			if (url.endsWith("/git/blobs"))
+				return json({ sha: `blob:${body.content}` }, 201);
+			if (url.endsWith("/git/trees")) return json({ sha: "tree2" }, 201);
+			if (url.endsWith("/git/commits")) return json({ sha: "commit2" }, 201);
+			if (method === "PATCH") {
+				const status = patches.shift() ?? 200;
+				return json(
+					status === 200
+						? { object: { sha: "commit2" } }
+						: { message: "Update is not a fast forward" },
+					status,
+				);
+			}
+			return json({ message: "unexpected" }, 500);
 		});
-		expect(decode(seen[0]?.body.content as string)).toBe("name: nhd_sat\n");
+	}
+	const change = (
+		path: string,
+		expected: string | null,
+		text: string | null,
+	) => ({
+		id: 1,
+		path,
+		expected,
+		text,
 	});
 
-	it("a first save creates the author's branch from the default branch, then writes", async () => {
-		let puts = 0;
-		const { s, seen } = store(({ url, method }) => {
-			if (method === "PUT")
-				return puts++ === 0
-					? json({ message: "Branch qretools/iain not found" }, 404)
-					: json({ content: { sha: "new" } });
-			if (url.endsWith("/git/ref/heads/main"))
-				return json({ object: { sha: "head-of-main" } });
-			if (url.endsWith("/git/refs")) return json({ ref: "x" }, 201);
-			return json({}, 500);
+	it("commits a change set in one commit on the branch head, never forcing the update", async () => {
+		const { s, seen } = github({ files: { "scales/a.yaml": "s1" } });
+		const r = await s.commit(
+			target,
+			[
+				change("scales/a.yaml", "s1", "new a"),
+				change("questions/q/q.yaml", null, "q"),
+			],
+			"Update q",
+		);
+		expect(r).toEqual({
+			ok: true,
+			value: {
+				shas: { "scales/a.yaml": "blob:new a", "questions/q/q.yaml": "blob:q" },
+			},
 		});
-		const r = await s.write(target, "questions/a/a.yaml", "x", "Add a");
-		expect(r).toEqual({ ok: true, value: { sha: "new" } });
-		expect(seen.map((q) => q.method)).toEqual(["PUT", "GET", "POST", "PUT"]);
-		expect(seen[2]?.body).toEqual({
+		const tree = seen.find((q) => q.url.endsWith("/git/trees"));
+		expect(tree?.body).toMatchObject({ base_tree: "tree" });
+		const commit = seen.find((q) => q.url.endsWith("/git/commits"));
+		expect(commit?.body).toMatchObject({
+			parents: ["head"],
+			message: "Update q",
+		});
+		const patch = seen.find((q) => q.method === "PATCH");
+		expect(patch?.url).toMatch(/git\/refs\/heads\/qretools\/iain$/);
+		expect(patch?.body).toMatchObject({ sha: "commit2", force: false });
+	});
+
+	it("refuses a change set when any path moved on GitHub, writing nothing", async () => {
+		const { s, seen } = github({ files: { "scales/a.yaml": "s2" } });
+		const r = await s.commit(
+			target,
+			[change("scales/a.yaml", "s1", "mine")],
+			"m",
+		);
+		expect(!r.ok && r.error.failure.kind).toBe("stale");
+		expect(!r.ok && r.error.seen).toEqual({
+			"scales/a.yaml": { sha: "s2", text: "old" },
+		});
+		expect(
+			seen.filter((q) => q.method !== "POST" || !q.url.endsWith("/graphql")),
+		).toEqual([]);
+	});
+
+	it("a first save creates the branch from the default branch, then commits on it", async () => {
+		const { s, seen } = github({ files: {}, branch: false });
+		const r = await s.commit(
+			target,
+			[change("questions/q/q.yaml", null, "q")],
+			"Add q",
+		);
+		expect(r.ok).toBe(true);
+		const made = seen.find(
+			(q) => q.url.endsWith("/git/refs") && q.method === "POST",
+		);
+		expect(made?.body).toEqual({
 			ref: "refs/heads/qretools/iain",
-			sha: "head-of-main",
+			sha: "main-head",
 		});
+	});
+
+	it("a delete is a tree entry with no sha; a change that changes nothing makes no commit", async () => {
+		const del = github({ files: { "questions/q/q.yaml": "s1" } });
+		await del.s.commit(
+			target,
+			[change("questions/q/q.yaml", "s1", null)],
+			"Delete q",
+		);
+		const tree = del.seen.find((q) => q.url.endsWith("/git/trees"));
+		expect(tree?.body.tree).toEqual([
+			{ path: "questions/q/q.yaml", mode: "100644", type: "blob", sha: null },
+		]);
+		const same = github({ files: { "scales/a.yaml": "blob:same" } });
+		const r = await same.s.commit(
+			target,
+			[change("scales/a.yaml", "blob:same", "same")],
+			"m",
+		);
+		expect(r).toEqual({
+			ok: true,
+			value: { shas: { "scales/a.yaml": "blob:same" } },
+		});
+		expect(same.seen.some((q) => q.url.endsWith("/git/commits"))).toBe(false);
+	});
+
+	it("a lost fast-forward starts over from the read once; twice is a failure", async () => {
+		const once = github({ files: {}, patch: [422, 200] });
+		expect(
+			(await once.s.commit(target, [change("a.yaml", null, "a")], "m")).ok,
+		).toBe(true);
+		expect(once.seen.filter((q) => q.method === "PATCH")).toHaveLength(2);
+		const twice = github({ files: {}, patch: [422, 422] });
+		const r = await twice.s.commit(target, [change("a.yaml", null, "a")], "m");
+		expect(!r.ok && r.error.failure.kind).toBe("stale");
 	});
 
 	it("a branch another tab created meanwhile counts as created", async () => {
@@ -271,11 +373,17 @@ describe("GitHub adapter (Octokit)", () => {
 		expect(!r.ok && r.error.kind).toBe("unreadable");
 	});
 
-	it("reads only the branch it is given: a 404 is not answered from the bank", async () => {
-		const { s, seen } = store(() => json({ message: "Not Found" }, 404));
+	it("reads a file from the branch it is given, and says so when it is not there", async () => {
+		const { s, seen } = store(() =>
+			json({ data: { repository: { file: null } } }),
+		);
 		const r = await s.read(target, "questions/a/a.yaml");
 		expect(!r.ok && r.error.status).toBe(404);
 		expect(seen).toHaveLength(1);
+		const variables = seen[0]?.body.variables as
+			| Record<string, string>
+			| undefined;
+		expect(variables?.at).toBe("qretools/iain:questions/a/a.yaml");
 	});
 
 	it("a secondary rate limit is a rate limit, and a bug is not an outage", async () => {

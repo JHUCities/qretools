@@ -5,6 +5,7 @@
  * three; nothing about it is stored.
  */
 import { kindAt, schemePath } from "../core/schemes.js";
+import type { Mention } from "../core/surface/env.js";
 import type {
 	Blob,
 	Entry,
@@ -197,4 +198,51 @@ export function rebase(
 				: { questions, schemes },
 		nextId: id,
 	};
+}
+
+/**
+ * The scheme files a question names that are not in sync with the author's branch.
+ * Saving the question includes the unsaved ones (`include`: drafts and local edits), so
+ * the question never lands on the branch reading differently from how it reads here;
+ * one that GitHub also changed (`blocked`) stops the save until it is reloaded.
+ */
+export function dependencies(
+	local: Local,
+	remote: Remote,
+	mentions: readonly Mention[],
+): { include: readonly SchemeEntry[]; blocked: readonly SchemeEntry[] } {
+	const named = new Set<SchemeEntry>();
+	for (const m of mentions)
+		for (const e of Object.values(local.schemes))
+			if (e.kind === m.scheme && e.name === m.name) named.add(e);
+	const include: SchemeEntry[] = [];
+	const blocked: SchemeEntry[] = [];
+	for (const e of named) {
+		const sync = syncOf(e, remoteBlob(remote, e));
+		if (sync === "draft" || sync === "unsaved") include.push(e);
+		else if (sync === "conflict" || sync === "deletedOnGitHub") blocked.push(e);
+	}
+	return { include, blocked };
+}
+
+/**
+ * What saving a question also saves, as the author should see it: each unsaved scheme
+ * file it names, and how many questions already on the branch read differently once
+ * that file is saved there. `usersOf` gives the ids of questions naming a file.
+ */
+export function alsoSaves(
+	local: Local,
+	remote: Remote,
+	mentions: readonly Mention[],
+	usersOf: (e: SchemeEntry) => readonly Id[],
+): readonly string[] {
+	return dependencies(local, remote, mentions).include.map((e) => {
+		const saved = usersOf(e).filter((id) => {
+			const q = local.questions[id];
+			return q !== undefined && syncOf(q, remoteBlob(remote, q)) === "inSync";
+		}).length;
+		return saved === 0
+			? `${e.kind} ${e.name}`
+			: `${e.kind} ${e.name} (changes ${saved} saved question${saved === 1 ? "" : "s"})`;
+	});
 }

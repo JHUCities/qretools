@@ -1,6 +1,7 @@
 import {
 	bankLocation,
 	describeChange,
+	describeChangeSet,
 	describeSchemeChange,
 } from "../core/bank.js";
 import { compact } from "../core/compact.js";
@@ -27,8 +28,16 @@ import {
 	type SchemeEntry,
 	toPersisted,
 } from "./model.js";
-import type { BranchTarget, Failure } from "./storage.js";
-import { claimOf, rebase, remoteOf, sliceOf } from "./sync.js";
+import type { BranchTarget, Change, Failure } from "./storage.js";
+import {
+	claimOf,
+	dependencies,
+	rebase,
+	remoteBlob,
+	remoteOf,
+	sliceOf,
+	syncOf,
+} from "./sync.js";
 
 type Step = readonly [Model, readonly Cmd[]];
 
@@ -184,11 +193,16 @@ export function update(model: Model, msg: Msg): Step {
 				withActivity(cleared, msg.id, { kind: "deleting" }),
 				[
 					{
-						kind: "deleteFile",
-						id: msg.id,
+						kind: "commit",
 						target: targetOf(model.settings, as),
-						path: q.base.path,
-						sha: q.base.sha,
+						changes: [
+							{
+								id: msg.id,
+								path: q.base.path,
+								expected: q.base.sha,
+								text: null,
+							},
+						],
 						message:
 							q.kind === "question"
 								? describeChange(
@@ -301,35 +315,55 @@ export function update(model: Model, msg: Msg): Step {
 			return write(closed, as, saving.id, q, where.value.path);
 		}
 
-		case "saveFinished": {
-			const q = fileOf(model, msg.id);
-			if (!msg.result.ok)
-				return [withActivity(model, msg.id, failed(msg.result.error)), []];
-			const blob = { sha: msg.result.value.sha, text: msg.text };
-			// The base becomes what was written, not what is in the editor now: typing
-			// during the save correctly shows as unsaved.
-			const saved = q
-				? withFile(model, { ...q, base: { path: msg.path, ...blob } })
-				: model;
-			return persist([
-				withActivity(
-					committed(withGitHub(saved, msg.path, blob)),
-					msg.id,
-					undefined,
-				),
-				[],
-			]);
-		}
-
-		case "deleteFinished": {
-			if (!msg.result.ok)
-				return [withActivity(model, msg.id, failed(msg.result.error)), []];
-			const path = fileOf(model, msg.id)?.base?.path;
-			const gone = without(model, msg.id);
-			return persist([
-				path === undefined ? gone : withGitHub(gone, path, undefined),
-				[],
-			]);
+		case "committed": {
+			const ids = msg.changes.map((c) => c.id);
+			const primary = ids[0];
+			const idle = ids.reduce<Model>(
+				(m, id) => withActivity(m, id, undefined),
+				model,
+			);
+			if (!msg.result.ok) {
+				const { failure, seen } = msg.result.error;
+				// Stale: take what GitHub has at each touched path, so the files show as
+				// changed on GitHub, with "Reload from GitHub" to take their version.
+				const absorbed =
+					seen === undefined
+						? idle
+						: Object.entries(seen).reduce<Model>(
+								(m, [path, blob]) => withGitHub(m, path, blob ?? undefined),
+								idle,
+							);
+				const { local, nextId } = rebase(
+					absorbed.local,
+					absorbed.remote,
+					absorbed.nextId,
+				);
+				const failedAt =
+					primary === undefined
+						? { ...absorbed, local, nextId }
+						: withActivity(
+								{ ...absorbed, local, nextId },
+								primary,
+								failed(failure),
+							);
+				return seen === undefined ? [failedAt, []] : persist([failedAt, []]);
+			}
+			const { shas } = msg.result.value;
+			const done = msg.changes.reduce<Model>((m, c) => {
+				if (c.text === null)
+					return withGitHub(without(m, c.id), c.path, undefined);
+				const sha = shas[c.path];
+				if (sha === undefined) return m;
+				const blob = { sha, text: c.text };
+				const f = fileOf(m, c.id);
+				// The base becomes what was committed, not what is in the editor now:
+				// typing during the save correctly shows as unsaved.
+				const based = f
+					? withFile(m, { ...f, base: { path: c.path, ...blob } })
+					: m;
+				return withGitHub(based, c.path, blob);
+			}, idle);
+			return persist([committed(done), []]);
 		}
 
 		case "reloadRequested": {
@@ -501,7 +535,12 @@ export function update(model: Model, msg: Msg): Step {
 	}
 }
 
-/** Emit the write for a file whose path is settled. */
+/**
+ * Emit the commit for a file whose path is settled. A question takes along the unsaved
+ * scheme files it names (owner, 2026-09-24); one GitHub also changed stops the save
+ * before any request, naming the file to reload. Nothing is sent that GitHub would
+ * refuse anyway.
+ */
 function write(
 	model: Model,
 	as: Connected,
@@ -509,17 +548,68 @@ function write(
 	q: Entry,
 	path: string,
 ): Step {
+	const own = syncOf(q, remoteBlob(model.remote, q));
+	if (own === "conflict")
+		return [
+			refuse(
+				model,
+				id,
+				"This file changed on GitHub since you started.",
+				"Download your version first if you want to keep it, then reload from GitHub.",
+			),
+			[],
+		];
+	const env = envOf(model.local.schemes, model.remote.schemes);
+	const deps =
+		q.kind === "question"
+			? dependencies(
+					model.local,
+					model.remote,
+					parseSurface(q.source, env).mentions,
+				)
+			: { include: [], blocked: [] };
+	const [stuck] = deps.blocked;
+	if (stuck !== undefined)
+		return [
+			refuse(
+				model,
+				id,
+				`The ${stuck.kind} \`${stuck.name}\` this question names changed on GitHub since you started.`,
+				`Open \`${stuck.name}\` and reload it from GitHub, then save again.`,
+			),
+			[],
+		];
+	const changes: Change[] = [
+		{ id, path, expected: q.base?.sha ?? null, text: q.source },
+		...deps.include.flatMap((e) => {
+			const at = claimOf(e);
+			return at === undefined
+				? []
+				: [
+						{
+							id: e.id,
+							path: at,
+							expected: e.base?.sha ?? null,
+							text: e.source,
+						},
+					];
+		}),
+	];
+	const busy = changes.reduce<Model>(
+		(m, c) => withActivity(m, c.id, { kind: "saving" }),
+		model,
+	);
 	return [
-		withActivity(model, id, { kind: "saving" }),
+		busy,
 		[
 			{
-				kind: "writeFile",
-				id,
+				kind: "commit",
 				target: targetOf(model.settings, as),
-				path,
-				text: q.source,
-				...(q.base !== undefined && { sha: q.base.sha }),
-				message: messageOf(model, q),
+				changes,
+				message: describeChangeSet(
+					messageOf(model, q),
+					deps.include.map((e) => messageOf(model, e)),
+				),
 			},
 		],
 	];
@@ -600,6 +690,14 @@ export function writeBlocked(model: Model): string | undefined {
 	if (model.session.kind !== "connected") return "Connect to the bank to save";
 	if (!model.session.canWrite) return "Read access only: download instead";
 	if (model.loading.kind !== "loaded") return "Checking GitHub…";
+	// One commit at a time: two in flight naming the same file would make the second
+	// look stale for a save that worked. Commits to one branch are serial anyway.
+	if (
+		Object.values(model.activity).some(
+			(a) => a.kind === "saving" || a.kind === "deleting",
+		)
+	)
+		return "Saving…";
 	// The bank changes only through a pull request: never save straight to it.
 	if (model.session.branch === model.session.defaultBranch)
 		return `Saves go to your own branch, not ${model.session.defaultBranch}: clear the branch in the Bank panel`;

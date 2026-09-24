@@ -59,6 +59,9 @@ body {
 .insp-error {
 	color: var(--fgColor-danger);
 }
+.save-also {
+	font-size: 12px;
+}
 .browser-heading {
 	margin: 8px 0 0;
 	font-size: 12px;

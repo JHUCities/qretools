@@ -20,6 +20,7 @@ export function FileHeader({
 	unsaved,
 	activity,
 	blocked,
+	also = [],
 	on,
 }: {
 	q: Entry;
@@ -30,6 +31,8 @@ export function FileHeader({
 	unsaved: boolean;
 	/** Why nothing can be written now (`writeBlocked`), or undefined. */
 	blocked: string | undefined;
+	/** Unsaved shared files this save takes along (`alsoSaves`). */
+	also?: readonly string[];
 	on: HeaderActions;
 }) {
 	const canWrite = blocked === undefined;
@@ -77,10 +80,17 @@ export function FileHeader({
 				>
 					Delete…
 				</Button>
+				{also.length > 0 && (
+					<span className="quiet save-also">with {also.join(", ")}</span>
+				)}
 				<Button
 					size="small"
 					variant="primary"
-					disabled={!canWrite || !unsaved || activity?.kind === "saving"}
+					disabled={
+						!canWrite ||
+						(!unsaved && also.length === 0) ||
+						activity?.kind === "saving"
+					}
 					title={saveTitle}
 					onClick={on.save}
 				>

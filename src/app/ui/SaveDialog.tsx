@@ -14,12 +14,15 @@ export function SaveDialog({
 	folder,
 	folders,
 	taken,
+	also,
 	dispatch,
 }: {
 	readonly draft: Draft;
 	readonly folder: string;
 	readonly folders: readonly string[];
 	readonly taken: (path: string) => boolean;
+	/** Unsaved shared files saved with it, in the same commit. */
+	readonly also: readonly string[];
 	readonly dispatch: Dispatch;
 }) {
 	const where = bankLocation(draft, folder);
@@ -67,6 +70,9 @@ export function SaveDialog({
 					</span>
 				)}
 			</p>
+			{also.length > 0 && (
+				<p>Also saves, in the same commit: {also.join(", ")}.</p>
+			)}
 			{isTaken && (
 				<p className="fg-danger">
 					<AlertIcon size={14} /> A question already exists there. Choose

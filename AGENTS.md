@@ -753,7 +753,32 @@ plumbing. Livelits, projectors and structure editing are beyond a text editor's 
 and at the end of the text the inspector reports the document itself (`key` absent),
 with the holes of absent required fields, which `locate` places at the end, where the
 author will type them. A caret move re-renders only the inspector: `Editing` and the
-DDI pane are memoised, and schema validation runs only when the DDI document changes. Notes for step 5 from the step 4 review: identify questions by a
+DDI pane are memoised, and schema validation runs only when the DDI document changes.
+
+**Step 9c built (2026-09-24): every save is one commit of a change set.** Store
+`commit(target, changes, message)` replaces write and remove; `Change {id, path,
+expected (base sha, or null for a file that must not exist yet), text (null deletes)}`.
+The adapter reads the branch head and every touched path at that one commit
+(GraphQL `Commit.file(path:)`, verified; a missing path is null with an error scoped to
+it), creating the branch from the default branch first when it does not exist; if any
+path's sha differs from `expected`, nothing is written and the failure carries what
+the head has (`seen`). Then blobs (`encoding: utf-8`), a tree on the head's tree, a
+commit with the head as parent, and `PATCH` of the ref with `force: false`, run once;
+a lost fast-forward (422) starts over from the read, once. A change whose blob already
+is at its path makes no commit of its own. `octokit-commit-multiple-files` was read and
+rejected: it forces the ref update and has no per-file precondition. The contents API
+and base64 are gone; `read` is GraphQL. In `update`: `write` builds the change set, a
+question taking along the unsaved scheme files it names (`dependencies` in sync.ts:
+drafts and local edits are included; one GitHub also changed stops the save before any
+request, naming it); the commit message is `describeChangeSet` (subject from the main
+file, the others listed). `committed` sets each base to the committed text (typing
+during a save shows as unsaved), updates `remote`, and removes deleted files; on a stale
+failure it absorbs `seen` and rebases, so the file shows as changed on GitHub with
+"Reload from GitHub". One commit at a time: `writeBlocked` says "Saving…" while one is in
+flight. The header shows "with scale agree4 (changes 5 saved questions)" beside Save,
+and the new-question dialog lists the same (`alsoSaves`). The missing-value list is never
+named by a question, so it is never included implicitly. Not yet verified live: a real
+commit through the Git Data API. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

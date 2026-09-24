@@ -131,38 +131,16 @@ export function createEffects(deps: Deps): Effects {
 					);
 					return;
 				}
-				case "writeFile": {
+				case "commit": {
 					const s = storeFor(cmd.target);
 					if (!s)
 						return dispatch({
-							kind: "saveFinished",
-							id: cmd.id,
-							path: cmd.path,
-							text: cmd.text,
-							result: err(NO_TOKEN),
+							kind: "committed",
+							changes: cmd.changes,
+							result: err({ failure: NO_TOKEN }),
 						});
-					s.write(cmd.target, cmd.path, cmd.text, cmd.message, cmd.sha).then(
-						(result) =>
-							dispatch({
-								kind: "saveFinished",
-								id: cmd.id,
-								path: cmd.path,
-								text: cmd.text,
-								result,
-							}),
-					);
-					return;
-				}
-				case "deleteFile": {
-					const s = storeFor(cmd.target);
-					if (!s)
-						return dispatch({
-							kind: "deleteFinished",
-							id: cmd.id,
-							result: err(NO_TOKEN),
-						});
-					s.remove(cmd.target, cmd.path, cmd.sha, cmd.message).then((result) =>
-						dispatch({ kind: "deleteFinished", id: cmd.id, result }),
+					s.commit(cmd.target, cmd.changes, cmd.message).then((result) =>
+						dispatch({ kind: "committed", changes: cmd.changes, result }),
 					);
 					return;
 				}

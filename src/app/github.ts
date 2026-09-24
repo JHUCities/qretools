@@ -3,16 +3,28 @@
  * its retry and throttling plugins. Octokit throws; this file is where exceptions
  * become Results, and HTTP becomes the shell's Failure. Nothing here throws.
  *
- * Retries: reads are retried on transient server errors; content writes are not. A
- * write that reached GitHub but whose reply was lost would, retried, present its old
- * sha and be refused as stale: a false conflict for a save that worked.
+ * Every save is one commit of a change set through the Git Data API: read the branch
+ * head and every touched path at one commit, check each against the sha the author
+ * started from, then blobs, a tree on the head's tree, a commit, and a fast-forward of
+ * the branch (never forced). Blobs, trees and commits are content-addressed, so a
+ * retried creation is harmless; the branch update runs once, and a lost fast-forward
+ * (someone pushed meanwhile) starts over from the read, once.
  */
 import { Octokit } from "@octokit/core";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 import { RequestError } from "@octokit/request-error";
 import { err, ok, type Result } from "../core/result.js";
-import type { BranchTarget, Failure, File, Repo, Store } from "./storage.js";
+import type {
+	BranchTarget,
+	Change,
+	CommitFailure,
+	Committed,
+	Failure,
+	File,
+	Repo,
+	Store,
+} from "./storage.js";
 
 const GitHub = Octokit.plugin(retry, throttling);
 
@@ -45,12 +57,11 @@ export const makeGitHubStore = (
 	/** Run a request; turn what Octokit throws into a Failure. */
 	async function run<T>(
 		request: () => Promise<T>,
-		stale = false,
 	): Promise<Result<T, Failure>> {
 		try {
 			return ok(await request());
 		} catch (e) {
-			return err(failureOf(e, stale));
+			return err(failureOf(e));
 		}
 	}
 
@@ -81,7 +92,7 @@ export const makeGitHubStore = (
 				if (onlyTolerated && partial.data) return ok({ data: partial.data });
 				return err({ kind: "unreadable", message: e.message });
 			}
-			return err(failureOf(e, false));
+			return err(failureOf(e));
 		}
 	}
 
@@ -108,18 +119,162 @@ export const makeGitHubStore = (
 		return made.ok || made.error.status === 422 ? ok(undefined) : made;
 	};
 
-	/**
-	 * Run a write; if GitHub says the branch does not exist (a first save), create it
-	 * from the default branch and run the write once more.
-	 */
-	async function onBranch<T>(
+	type Head = {
+		oid: string;
+		tree: string;
+		files: Record<string, { sha: string; text: string } | null>;
+	};
+
+	/** The branch head and every touched path, read at that one commit; null if no branch. */
+	async function readHead(
+		branch: string,
+		paths: readonly string[],
+	): Promise<Result<Head | null, Failure>> {
+		const vars: Record<string, string> = {
+			owner,
+			repo,
+			ref: `refs/heads/${branch}`,
+		};
+		const fields = paths
+			.map((p, i) => {
+				vars[`p${i}`] = p;
+				return `p${i}: file(path: $p${i}) { oid object { ... on Blob { text } } }`;
+			})
+			.join(" ");
+		const params = paths.map((_, i) => `, $p${i}: String!`).join("");
+		const r = await graphql<{
+			repository: {
+				head: {
+					target: {
+						oid: string;
+						tree: { oid: string };
+						[p: string]: unknown;
+					};
+				} | null;
+			} | null;
+		}>(
+			`query Head($owner: String!, $repo: String!, $ref: String!${params}) {
+  repository(owner: $owner, name: $repo) {
+    head: ref(qualifiedName: $ref) { target { ... on Commit { oid tree { oid } ${fields} } } }
+  }
+}`,
+			vars,
+			"head",
+		);
+		if (!r.ok) return r;
+		const head = r.value.data?.repository?.head;
+		if (!head) return ok(null);
+		const files: Head["files"] = {};
+		paths.forEach((p, i) => {
+			const f = head.target[`p${i}`] as
+				| { oid: string; object: { text?: string } | null }
+				| null
+				| undefined;
+			files[p] = f ? { sha: f.oid, text: f.object?.text ?? "" } : null;
+		});
+		return ok({ oid: head.target.oid, tree: head.target.tree.oid, files });
+	}
+
+	/** One attempt at the commit; `lost` means the fast-forward lost a race. */
+	async function attempt(
 		target: BranchTarget,
-		attempt: () => Promise<Result<T, Failure>>,
-	): Promise<Result<T, Failure>> {
-		const first = await attempt();
-		if (first.ok || !isMissingBranch(first.error)) return first;
-		const made = await ensureBranch(target);
-		return made.ok ? attempt() : made;
+		changes: readonly Change[],
+		message: string,
+	): Promise<Result<Committed, CommitFailure> | "lost"> {
+		const paths = changes.map((c) => c.path);
+		let head = await readHead(target.branch, paths);
+		if (head.ok && head.value === null) {
+			// The author's first save: their branch starts at the bank's head.
+			const made = await ensureBranch(target);
+			if (!made.ok) return err({ failure: made.error });
+			head = await readHead(target.branch, paths);
+		}
+		if (!head.ok) return err({ failure: head.error });
+		if (head.value === null)
+			return err({
+				failure: {
+					kind: "unreadable",
+					message: "The branch could not be created.",
+				},
+			});
+		const { oid, tree, files } = head.value;
+		const stale = changes.filter(
+			(c) => (files[c.path]?.sha ?? null) !== c.expected,
+		);
+		if (stale.length > 0)
+			return err({
+				failure: {
+					kind: "stale",
+					message: `Changed on GitHub since you started: ${stale.map((c) => `\`${c.path}\``).join(", ")}.`,
+					hint: "Download your version first if you want to keep it, then reload from GitHub.",
+				},
+				seen: Object.fromEntries(paths.map((p) => [p, files[p] ?? null])),
+			});
+		const blobs = await Promise.all(
+			changes.map((c) =>
+				c.text === null
+					? Promise.resolve(ok(null))
+					: run(() =>
+							octokit.request("POST /repos/{owner}/{repo}/git/blobs", {
+								owner,
+								repo,
+								content: c.text as string,
+								encoding: "utf-8",
+							}),
+						).then((r) => (r.ok ? ok(r.value.data.sha) : r)),
+			),
+		);
+		const failed = blobs.find((b) => !b.ok);
+		if (failed && !failed.ok) return err({ failure: failed.error });
+		const shas: Record<string, string> = {};
+		// A change that leaves its path as it is makes no commit of its own.
+		const entries = changes.flatMap((c, i) => {
+			const b = blobs[i];
+			const sha = b?.ok ? b.value : null;
+			if (sha === (files[c.path]?.sha ?? null)) {
+				if (sha !== null) shas[c.path] = sha;
+				return [];
+			}
+			if (sha !== null) shas[c.path] = sha;
+			return [
+				{ path: c.path, mode: "100644" as const, type: "blob" as const, sha },
+			];
+		});
+		if (entries.length === 0) return ok({ shas });
+		const newTree = await run(() =>
+			octokit.request("POST /repos/{owner}/{repo}/git/trees", {
+				owner,
+				repo,
+				base_tree: tree,
+				tree: entries,
+			}),
+		);
+		if (!newTree.ok) return err({ failure: newTree.error });
+		const commit = await run(() =>
+			octokit.request("POST /repos/{owner}/{repo}/git/commits", {
+				owner,
+				repo,
+				message,
+				tree: newTree.value.data.sha,
+				parents: [oid],
+			}),
+		);
+		if (!commit.ok) return err({ failure: commit.error });
+		const moved = await run(() =>
+			octokit.request("PATCH /repos/{owner}/{repo}/git/refs/{+ref}", {
+				owner,
+				repo,
+				ref: `heads/${target.branch}`,
+				sha: commit.value.data.sha,
+				force: false,
+				...ONCE,
+			}),
+		);
+		if (!moved.ok)
+			return moved.error.status === 422
+				? "lost"
+				: err({ failure: moved.error });
+		return ok({ shas });
 	}
 
 	/** The files at a branch, whether the branch exists, and how it compares with the bank. */
@@ -231,87 +386,49 @@ export const makeGitHubStore = (
 		},
 
 		async read(target, path) {
-			const at = (ref: string) =>
-				run(() =>
-					octokit.request("GET /repos/{owner}/{repo}/contents/{+path}", {
-						owner,
-						repo,
-						path,
-						ref,
-					}),
-				);
-			// The caller names the branch to read: the author's, or, before their first save,
-			// the default branch. Never a fallback on a 404, which would bring back a file the
-			// author deleted on their branch.
-			const r = await at(target.branch);
+			const r = await graphql<{
+				repository: {
+					file: { oid: string; text: string | null } | null;
+				} | null;
+			}>(
+				`query Read($owner: String!, $repo: String!, $at: String!) {
+  repository(owner: $owner, name: $repo) { file: object(expression: $at) { ... on Blob { oid text } } }
+}`,
+				{ owner, repo, at: `${target.branch}:${path}` },
+			);
 			if (!r.ok) return r;
-			const file = r.value.data as { sha?: string; content?: string };
-			return file.sha === undefined || file.content === undefined
-				? err({ kind: "unreadable", message: `\`${path}\` is not a file.` })
-				: ok({ path, sha: file.sha, text: decode(file.content) });
+			const file = r.value.data?.repository?.file;
+			return file?.text === undefined || file.text === null
+				? err({
+						kind: "http",
+						status: 404,
+						message: `\`${path}\` is not on ${target.branch}.`,
+					})
+				: ok({ path, sha: file.oid, text: file.text });
 		},
 
-		write(target, path, text, message, sha) {
-			return onBranch(target, async () => {
-				const r = await run(
-					() =>
-						octokit.request("PUT /repos/{owner}/{repo}/contents/{+path}", {
-							owner,
-							repo,
-							path,
-							message,
-							content: encode(text),
-							branch: target.branch,
-							...(sha !== undefined && { sha }),
-							...ONCE,
-						}),
-					// 409/422 means "stale" only when we presented a sha; without one the path is
-					// already taken, which update() prevents before it gets here.
-					sha !== undefined,
-				);
-				if (!r.ok) return r;
-				const written = r.value.data.content?.sha;
-				return written === undefined
-					? err({
-							kind: "unreadable",
-							message: "GitHub did not say what it wrote.",
-						})
-					: ok({ sha: written });
-			});
-		},
-
-		remove(target, path, sha, message) {
-			return onBranch(target, async () => {
-				const r = await run(
-					() =>
-						octokit.request("DELETE /repos/{owner}/{repo}/contents/{+path}", {
-							owner,
-							repo,
-							path,
-							message,
-							sha,
-							branch: target.branch,
-							...ONCE,
-						}),
-					true,
-				);
-				return r.ok ? ok(undefined) : r;
-			});
+		async commit(target, changes, message) {
+			const first = await attempt(target, changes, message);
+			if (first !== "lost") return first;
+			// Someone pushed between our read and our update: read again and retry, once.
+			const second = await attempt(target, changes, message);
+			return second !== "lost"
+				? second
+				: err({
+						failure: {
+							kind: "stale",
+							message: "The branch kept moving while saving.",
+							hint: "Reload from GitHub, then save again.",
+						},
+					});
 		},
 
 		ensureBranch,
 	};
 };
 
-/**
- * GitHub's answer to a write on a branch that does not exist, verified 2026-09-24:
- * 404 with the message "Branch qretools/… not found".
- */
-const isMissingBranch = (f: Failure): boolean =>
-	f.status === 404 && /branch .* not found/i.test(f.message);
-
 /** What Octokit threw, as the shell's Failure. */
-function failureOf(e: unknown, stale: boolean): Failure {
+function failureOf(e: unknown): Failure {
 	const error = e as {
 		status?: number;
 		message?: string;
@@ -341,13 +458,6 @@ function failureOf(e: unknown, stale: boolean): Failure {
 			message: "GitHub did not accept the token.",
 			hint: "It may have expired, or lack access to this repository.",
 		};
-	if (stale && (status === 409 || status === 422))
-		return {
-			kind: "stale",
-			status,
-			message: "This file changed on GitHub since you opened it.",
-			hint: "Download your version first if you want to keep it, then reload from GitHub.",
-		};
 	const headers = error.response.headers ?? {};
 	// The primary limit says so in its headers; a secondary one sends retry-after.
 	if (
@@ -366,8 +476,7 @@ function failureOf(e: unknown, stale: boolean): Failure {
 			message: `GitHub's rate limit is exhausted until ${when}.`,
 		};
 	}
-	// Keep GitHub's own words for a missing branch: `isMissingBranch` reads them.
-	if (status === 404 && !/branch .* not found/i.test(message))
+	if (status === 404)
 		return {
 			kind: "http",
 			status,
@@ -451,19 +560,4 @@ function blobFile(path: string, e: Entry): File[] {
 	)
 		return [];
 	return [{ path, sha: o.oid, text: o.text }];
-}
-
-/** Base64 of the UTF-8 bytes. `btoa` on raw text would corrupt curly quotes and en dashes, which the bank has. */
-export function encode(text: string): string {
-	const bytes = new TextEncoder().encode(text);
-	let binary = "";
-	for (let i = 0; i < bytes.length; i += 0x8000)
-		binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-	return btoa(binary);
-}
-
-export function decode(base64: string): string {
-	const binary = atob(base64.replace(/\s/g, ""));
-	const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-	return new TextDecoder().decode(bytes);
 }

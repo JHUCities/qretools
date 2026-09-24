@@ -78,22 +78,41 @@ export interface Store {
 	/** Every file the tool reads, from the target branch, or the default branch while it does not exist. */
 	loadBank(target: BranchTarget): Promise<Result<Loaded, Failure>>;
 	read(target: BranchTarget, path: string): Promise<Result<File, Failure>>;
-	/** Writes create the target branch from the default branch when it does not exist yet. */
-	write(
+	/**
+	 * One commit of a change set on the target branch, creating the branch from the
+	 * default branch first if it does not exist. Every change states the blob sha it
+	 * expects at its path (null: nothing there); if any differs at the branch head,
+	 * nothing is written and the failure carries what the head has at each path.
+	 */
+	commit(
 		target: BranchTarget,
-		path: string,
-		text: string,
+		changes: readonly Change[],
 		message: string,
-		sha?: string,
-	): Promise<Result<{ sha: string }, Failure>>;
-	remove(
-		target: BranchTarget,
-		path: string,
-		sha: string,
-		message: string,
-	): Promise<Result<void, Failure>>;
+	): Promise<Result<Committed, CommitFailure>>;
 	/** Create the target branch at the default branch's head; an existing branch is success. */
 	ensureBranch(target: BranchTarget): Promise<Result<void, Failure>>;
+}
+
+/** One file in a change set. `text: null` deletes it. `id` is the caller's, echoed back. */
+export interface Change {
+	readonly id: number;
+	readonly path: string;
+	/** The blob sha the author started from; null for a file that must not exist yet. */
+	readonly expected: string | null;
+	readonly text: string | null;
+}
+
+/** The new blob sha of every written path. Deleted paths are absent. */
+export interface Committed {
+	readonly shas: Readonly<Record<string, string>>;
+}
+
+export interface CommitFailure {
+	readonly failure: Failure;
+	/** On a stale change set: what the branch head has at each touched path (null: nothing). */
+	readonly seen?: Readonly<
+		Record<string, { sha: string; text: string } | null>
+	>;
 }
 
 export type MakeStore = (repo: Repo, token: string) => Store;

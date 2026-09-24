@@ -11,6 +11,7 @@ import { useMemo } from "react";
 import { SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
+import { alsoSaves } from "../sync.js";
 import { bankFolders, SCHEME_LABELS, schemeSections, treeOf } from "../tree.js";
 import { schemeNameProblem } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
@@ -190,6 +191,15 @@ export function App() {
 					folder={saving.folder}
 					folders={bankFolders(model)}
 					taken={(path) => path in model.remote.questions}
+					also={alsoSaves(
+						model.local,
+						model.remote,
+						evaluations.get(savingQuestion, model.agency, env).symbols.mentions,
+						(e) =>
+							e.kind === "missing"
+								? []
+								: usedBy(index, e.kind, e.name).map((s) => s.key),
+					)}
 					dispatch={dispatch}
 				/>
 			)}
