@@ -17,6 +17,7 @@ import {
 	remoteOfBases,
 	type SchemeEntry,
 } from "./model.js";
+import type { File } from "./storage.js";
 import { schemeNameProblem, update, writeBlocked } from "./update.js";
 
 const fresh = (): Model => init({ stored: ok(undefined), hasToken: false })[0];
@@ -25,11 +26,26 @@ const run = (model: Model, ...msgs: Msg[]) =>
 		([m], msg) => update(m, msg),
 		[model, []],
 	);
+const LOADED = {
+	kind: "loaded",
+	from: "branch",
+	aheadBy: 0,
+	behindBy: 0,
+} as const;
+/** A load of these files from the author's branch. */
+const loadOf = (files: readonly File[]) =>
+	ok({ files, from: "branch" as const, aheadBy: 0, behindBy: 0 });
 /** Connected, with this session's load done: the state in which writing is allowed. */
 const connected = (model: Model, canWrite = true): Model => ({
 	...model,
-	session: { kind: "connected", login: "iain", canWrite },
-	loading: { kind: "loaded" },
+	session: {
+		kind: "connected",
+		login: "iain",
+		canWrite,
+		branch: "qretools/iain",
+		defaultBranch: "main",
+	},
+	loading: LOADED,
 });
 const firstId = (model: Model): Id =>
 	Number(
@@ -58,7 +74,7 @@ const withBank = (model: Model, questions: readonly Question[]): Model => {
 		},
 	};
 	const remote = remoteOfBases(local);
-	return { ...model, local, remote, bank: remote };
+	return { ...model, local, remote };
 };
 
 describe("init", () => {
@@ -88,10 +104,12 @@ describe("init", () => {
 		expect(model.local.questions[3]?.base).toEqual(stored.questions[0]?.base);
 		// GitHub as this browser last knew it is what the bases record.
 		expect(model.remote.questions["questions/q/q.yaml"]?.sha).toBe("abc");
-		expect(model.bank).toBe(model.remote);
 		expect(model.nextId).toBe(9);
 		expect(model.session.kind).toBe("connecting");
-		expect(cmds.at(-1)).toEqual({ kind: "connect", settings: stored.settings });
+		expect(cmds.at(-1)).toEqual({
+			kind: "connect",
+			repo: { owner: "JHUCities", repo: "bas-question-bank" },
+		});
 	});
 
 	it("keeps an unreadable store as a failure, not a crash", () => {
@@ -190,7 +208,11 @@ describe("saving", () => {
 			{
 				kind: "writeFile",
 				id: 1,
-				settings: DEFAULT_SETTINGS,
+				target: {
+					...{ owner: "JHUCities", repo: "bas-question-bank" },
+					branch: "qretools/iain",
+					defaultBranch: "main",
+				},
 				path: "questions/svy/nhd_new.yaml",
 				text: m.local.questions[1]?.source,
 				message: "Add nhd_new",
@@ -254,9 +276,8 @@ describe("saving", () => {
 			sha: "new",
 			text: m1.local.questions[1]?.source,
 		});
-		// GitHub's copy is what was written; the bank moves with it until branches exist.
+		// GitHub's copy of the author's branch is what was written.
 		expect(m2.remote.questions["questions/nhd/nhd_new.yaml"]?.sha).toBe("new");
-		expect(m2.bank).toBe(m2.remote);
 		expect(cmds.at(-1)?.kind).toBe("persist");
 	});
 
@@ -332,17 +353,17 @@ describe("connecting", () => {
 		expect(m1.session.kind).toBe("connecting");
 		expect(c1[0]).toEqual({
 			kind: "connect",
-			settings: { ...DEFAULT_SETTINGS, branch: "sandbox" },
+			repo: { owner: "JHUCities", repo: "bas-question-bank" },
 		});
 		const [m2, c2] = update(m1, {
 			kind: "connected",
-			result: ok({ login: "iain", canWrite: true }),
+			result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
 		});
 		expect(m2.loading.kind).toBe("loading");
 		expect(c2[0]?.kind).toBe("loadBank");
 		const [m3] = update(m2, {
 			kind: "bankLoaded",
-			result: ok([
+			result: loadOf([
 				{
 					path: "questions/nhd/nhd_x.yaml",
 					sha: "a",
@@ -381,7 +402,7 @@ describe("connecting", () => {
 	it("reads questions against the working scheme files, so an edit shows at once", () => {
 		const [m] = update(fresh(), {
 			kind: "bankLoaded",
-			result: ok([
+			result: loadOf([
 				{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
 			]),
 		});
@@ -529,7 +550,7 @@ describe("scheme files", () => {
 describe("the environment's identity", () => {
 	const loaded = update(fresh(), {
 		kind: "bankLoaded",
-		result: ok([
+		result: loadOf([
 			{ path: "questions/a/a.yaml", sha: "q", text: "name: a\n" },
 			{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
 		]),
@@ -564,7 +585,7 @@ describe("the environment's identity", () => {
 	it("a load that brings nothing new keeps every slice", () => {
 		const [again] = update(loaded, {
 			kind: "bankLoaded",
-			result: ok([
+			result: loadOf([
 				{ path: "questions/a/a.yaml", sha: "q", text: "name: a\n" },
 				{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
 			]),
@@ -597,7 +618,7 @@ describe("writing waits for this session's load", () => {
 				{ kind: "deleteRequested", id: 1 },
 			)[1],
 		).toEqual([]);
-		expect(writeBlocked({ ...m, loading: { kind: "loaded" } })).toBeUndefined();
+		expect(writeBlocked({ ...m, loading: LOADED })).toBeUndefined();
 	});
 
 	it("a path a working file still claims is taken, though GitHub deleted it", () => {
@@ -612,7 +633,6 @@ describe("writing waits for this session's load", () => {
 		const m: Model = {
 			...base,
 			remote: { questions: {}, schemes: {} },
-			bank: { questions: {}, schemes: {} },
 		};
 		const [made] = update(m, { kind: "questionCreated", text: "name: q\n" });
 		const id = made.nextId - 1;
@@ -634,5 +654,68 @@ describe("writing waits for this session's load", () => {
 		);
 		const env = envOf(m.local.schemes, m.remote.schemes);
 		expect(Object.keys(env.scales)).toContain("agree4");
+	});
+});
+
+describe("the author's own branch", () => {
+	it("connecting resolves an empty branch setting to qretools/<login>, and loads it", () => {
+		const [m, cmds] = update(
+			{ ...fresh(), settings: { ...fresh().settings, branch: "" } },
+			{
+				kind: "connected",
+				result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
+			},
+		);
+		expect(m.session).toMatchObject({
+			branch: "qretools/iain",
+			defaultBranch: "main",
+		});
+		expect(cmds[0]).toEqual({
+			kind: "loadBank",
+			target: {
+				owner: "JHUCities",
+				repo: "bas-question-bank",
+				branch: "qretools/iain",
+				defaultBranch: "main",
+			},
+		});
+	});
+
+	it("never saves straight to the bank's default branch", () => {
+		const m = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q.yaml", "name: q\n", "name: q\ntext: x\n"),
+		]);
+		const onMain: Model = {
+			...m,
+			session: {
+				...(m.session as Extract<Model["session"], { kind: "connected" }>),
+				branch: "main",
+			},
+		};
+		expect(writeBlocked(onMain)).toMatch(/your own branch/);
+		expect(update(onMain, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
+		expect(writeBlocked(m)).toBeUndefined();
+	});
+
+	it("a save is one more commit on the branch, which now exists", () => {
+		const m = withBank(
+			{ ...connected(fresh()), loading: { ...LOADED, from: "default" } },
+			[
+				bankQuestion(
+					1,
+					"questions/q/q.yaml",
+					"name: q\n",
+					"name: q\ntext: x\n",
+				),
+			],
+		);
+		const [saved] = update(m, {
+			kind: "saveFinished",
+			id: 1,
+			path: "questions/q/q.yaml",
+			text: "name: q\ntext: x\n",
+			result: ok({ sha: "n" }),
+		});
+		expect(saved.loading).toEqual({ ...LOADED, from: "branch", aheadBy: 1 });
 	});
 });

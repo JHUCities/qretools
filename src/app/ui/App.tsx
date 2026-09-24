@@ -10,7 +10,7 @@ import {
 import { useMemo } from "react";
 import { SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
-import { fileOf, type Id, TEMPLATES } from "../model.js";
+import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { bankFolders, SCHEME_LABELS, schemeSections, treeOf } from "../tree.js";
 import { schemeNameProblem } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
@@ -78,8 +78,9 @@ export function App() {
 						<span className="quiet">question bank</span>
 						<span className="quiet session">
 							{model.session.kind === "connected" &&
-								`${model.session.login} · ${model.settings.owner}/${model.settings.repo}@${model.settings.branch}${model.session.canWrite ? "" : " (read only)"}`}
+								`${model.session.login} · ${model.settings.owner}/${model.settings.repo} · ${model.session.branch}${model.session.canWrite ? "" : " (read only)"}`}
 						</span>
+						<BranchLinks model={model} />
 						<span className="spacer" />
 						<ActionMenu>
 							<ActionMenu.Anchor>
@@ -209,6 +210,44 @@ export function App() {
 					{confirmUsers > 0 &&
 						` ${confirmUsers} question${confirmUsers === 1 ? " names" : "s name"} it; each will show a hole there until it is changed.`}
 				</ConfirmationDialog>
+			)}
+		</>
+	);
+}
+
+/**
+ * What the author's branch holds that the bank does not, as links to GitHub, which
+ * does the rest: the pull request, review, updating the branch, merging. The app
+ * states facts and links; it never recreates GitHub's interface.
+ */
+function BranchLinks({ model }: { model: Model }) {
+	const { session, loading, settings } = model;
+	if (session.kind !== "connected" || loading.kind !== "loaded") return null;
+	const repo = `https://github.com/${settings.owner}/${settings.repo}`;
+	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(session.branch)}?expand=1`;
+	const pulls = `${repo}/pulls?q=${encodeURIComponent(`is:pr head:${session.branch}`)}`;
+	return (
+		<>
+			{loading.aheadBy > 0 && (
+				<a
+					className="topbar-link"
+					href={compare}
+					target="_blank"
+					rel="noreferrer"
+				>
+					Propose {loading.aheadBy} change{loading.aheadBy === 1 ? "" : "s"} on
+					GitHub
+				</a>
+			)}
+			{loading.behindBy > 0 && (
+				<a
+					className="topbar-link quiet"
+					href={pulls}
+					target="_blank"
+					rel="noreferrer"
+				>
+					{loading.behindBy} behind {session.defaultBranch}: update on GitHub
+				</a>
 			)}
 		</>
 	);

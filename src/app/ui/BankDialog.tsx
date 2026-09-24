@@ -85,12 +85,18 @@ export function BankDialog({
 					/>
 				</FormControl>
 				<FormControl>
-					<FormControl.Label>Branch</FormControl.Label>
+					<FormControl.Label>Your branch</FormControl.Label>
 					<TextInput
 						block
 						value={branch}
+						placeholder="qretools/<your login>"
 						onChange={(e) => setBranch(e.target.value)}
 					/>
+					<FormControl.Caption>
+						Saves go here, never to the bank's default branch; the bank changes
+						when you propose and the pull request is merged on GitHub. Leave it
+						empty for your own branch, created on your first save.
+					</FormControl.Caption>
 				</FormControl>
 				<FormControl>
 					<FormControl.Label>Token</FormControl.Label>

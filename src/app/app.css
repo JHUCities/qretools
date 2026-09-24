@@ -39,6 +39,10 @@ body {
 	flex-direction: column;
 	gap: 8px;
 }
+.topbar-link {
+	font-size: 13px;
+	white-space: nowrap;
+}
 .browser-heading {
 	margin: 8px 0 0;
 	font-size: 12px;

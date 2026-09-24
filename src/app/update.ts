@@ -27,7 +27,7 @@ import {
 	type SchemeEntry,
 	toPersisted,
 } from "./model.js";
-import type { Failure } from "./storage.js";
+import type { BranchTarget, Failure } from "./storage.js";
 import { claimOf, rebase, remoteOf, sliceOf } from "./sync.js";
 
 type Step = readonly [Model, readonly Cmd[]];
@@ -177,7 +177,7 @@ export function update(model: Model, msg: Msg): Step {
 					{
 						kind: "deleteFile",
 						id: msg.id,
-						settings: model.settings,
+						target: writeTarget(model),
 						path: q.base.path,
 						sha: q.base.sha,
 						message:
@@ -301,7 +301,11 @@ export function update(model: Model, msg: Msg): Step {
 				? withFile(model, { ...q, base: { path: msg.path, ...blob } })
 				: model;
 			return persist([
-				withActivity(withGitHub(saved, msg.path, blob), msg.id, undefined),
+				withActivity(
+					committed(withGitHub(saved, msg.path, blob)),
+					msg.id,
+					undefined,
+				),
 				[],
 			]);
 		}
@@ -319,14 +323,15 @@ export function update(model: Model, msg: Msg): Step {
 
 		case "reloadRequested": {
 			const q = fileOf(model, msg.id);
-			if (q?.base === undefined) return [model, []];
+			if (q?.base === undefined || model.session.kind !== "connected")
+				return [model, []];
 			return [
 				model,
 				[
 					{
 						kind: "readFile",
 						id: msg.id,
-						settings: model.settings,
+						target: targetOf(model.settings, model.session),
 						path: q.base.path,
 					},
 				],
@@ -403,7 +408,12 @@ export function update(model: Model, msg: Msg): Step {
 					failures: [],
 					browser: { ...model.browser, settingsOpen: false },
 				},
-				[{ kind: "connect", settings: msg.settings }],
+				[
+					{
+						kind: "connect",
+						repo: { owner: msg.settings.owner, repo: msg.settings.repo },
+					},
+				],
 			]);
 
 		case "connected":
@@ -412,14 +422,20 @@ export function update(model: Model, msg: Msg): Step {
 					{ ...model, session: { kind: "failed", failure: msg.result.error } },
 					[],
 				];
-			return [
-				{
-					...model,
-					session: { kind: "connected", ...msg.result.value },
-					loading: { kind: "loading" },
-				},
-				[{ kind: "loadBank", settings: model.settings }],
-			];
+			{
+				const { login, canWrite, defaultBranch } = msg.result.value;
+				const session = {
+					kind: "connected" as const,
+					login,
+					canWrite,
+					defaultBranch,
+					branch: model.settings.branch.trim() || ownBranch(login),
+				};
+				return [
+					{ ...model, session, loading: { kind: "loading" } },
+					[{ kind: "loadBank", target: targetOf(model.settings, session) }],
+				];
+			}
 
 		case "bankLoaded": {
 			if (!msg.result.ok)
@@ -431,17 +447,19 @@ export function update(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
-			// No branches yet (step 9d): the author's branch is the bank, one object.
-			const remote = remoteOf(model.remote, msg.result.value);
+			// Before the author's first save their branch does not exist, and `remote` is
+			// the bank they will branch from; the bases stay valid either way, since blob
+			// shas are content addresses.
+			const { files, from, aheadBy, behindBy } = msg.result.value;
+			const remote = remoteOf(model.remote, files);
 			const { local, nextId } = rebase(model.local, remote, model.nextId);
 			return persist([
 				{
 					...model,
 					local,
 					remote,
-					bank: remote,
 					nextId,
-					loading: { kind: "loaded" },
+					loading: { kind: "loaded", from, aheadBy, behindBy },
 				},
 				[],
 			]);
@@ -479,7 +497,7 @@ function write(model: Model, id: Id, q: Entry, path: string): Step {
 			{
 				kind: "writeFile",
 				id,
-				settings: model.settings,
+				target: writeTarget(model),
 				path,
 				text: q.source,
 				...(q.base !== undefined && { sha: q.base.sha }),
@@ -564,8 +582,32 @@ export function writeBlocked(model: Model): string | undefined {
 	if (model.session.kind !== "connected") return "Connect to the bank to save";
 	if (!model.session.canWrite) return "Read access only: download instead";
 	if (model.loading.kind !== "loaded") return "Checking GitHub…";
+	// The bank changes only through a pull request: never save straight to it.
+	if (model.session.branch === model.session.defaultBranch)
+		return `Saves go to your own branch, not ${model.session.defaultBranch}: clear the branch in the Bank panel`;
 	return undefined;
 }
+
+/** The author's own branch: each author works apart and proposes with a pull request. */
+export const ownBranch = (login: string): string => `qretools/${login}`;
+
+type Connected = Extract<Model["session"], { kind: "connected" }>;
+
+const targetOf = (
+	settings: Model["settings"],
+	session: Connected,
+): BranchTarget => ({
+	owner: settings.owner,
+	repo: settings.repo,
+	branch: session.branch,
+	defaultBranch: session.defaultBranch,
+});
+
+/** Only called once `writeBlocked` has passed, so the session is connected. */
+const writeTarget = (model: Model): BranchTarget =>
+	model.session.kind === "connected"
+		? targetOf(model.settings, model.session)
+		: { owner: "", repo: "", branch: "", defaultBranch: "" };
 
 const canWrite = (model: Model): boolean => writeBlocked(model) === undefined;
 
@@ -614,17 +656,23 @@ function withActivity(
 	};
 }
 
-/**
- * Record what a write, delete or reload told us about GitHub. While the author has no
- * branch of their own (until step 9d), their branch is the bank, and both move together.
- */
+/** Record what a write, delete or reload told us about the author's branch. */
 function withGitHub(model: Model, path: Path, blob: Blob | undefined): Model {
-	const remote = withBlob(model.remote, path, blob);
-	return {
-		...model,
-		remote,
-		bank: model.bank === model.remote ? remote : model.bank,
-	};
+	return { ...model, remote: withBlob(model.remote, path, blob) };
+}
+
+/** A write or delete made one more commit on the author's branch, which now exists. */
+function committed(model: Model): Model {
+	return model.loading.kind === "loaded"
+		? {
+				...model,
+				loading: {
+					...model.loading,
+					from: "branch",
+					aheadBy: model.loading.aheadBy + 1,
+				},
+			}
+		: model;
 }
 
 /** GitHub's copy at one path, set or removed, in the slice the path belongs to. */

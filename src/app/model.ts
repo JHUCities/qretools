@@ -18,7 +18,15 @@ import numberTemplate from "../templates/number.yaml?raw";
 import scaleTemplate from "../templates/scale.yaml?raw";
 import selectManyTemplate from "../templates/select-many.yaml?raw";
 import type { Persisted } from "./persist.js";
-import type { BankSettings, Failure, File } from "./storage.js";
+import type {
+	BankSettings,
+	BranchTarget,
+	Failure,
+	File,
+	Loaded,
+	Repo,
+	Who,
+} from "./storage.js";
 
 export type Id = number;
 
@@ -110,13 +118,24 @@ export type Session =
 			readonly kind: "connected";
 			readonly login: string;
 			readonly canWrite: boolean;
+			/** Where saves go, resolved: the settings' branch, or `qretools/<login>`. */
+			readonly branch: string;
+			/** The bank: the repository's default branch, which only pull requests change. */
+			readonly defaultBranch: string;
 	  }
 	| { readonly kind: "failed"; readonly failure: Failure };
 
 export type Bank =
 	| { readonly kind: "bundled" }
 	| { readonly kind: "loading" }
-	| { readonly kind: "loaded" };
+	| {
+			readonly kind: "loaded";
+			/** Whether the author's branch exists yet, or the bank was read instead. */
+			readonly from: "branch" | "default";
+			/** Commits on the author's branch not in the bank (something to propose), and the reverse. */
+			readonly aheadBy: number;
+			readonly behindBy: number;
+	  };
 
 /** The official DDI schema is 900KB and loads lazily. The compiled validator lives in the shell. */
 export type DdiSchema =
@@ -126,13 +145,13 @@ export type DdiSchema =
 
 export interface Model {
 	readonly local: Local;
-	/** The author's branch: bases, sync states, conflicts and commits are against it. */
-	readonly remote: Remote;
 	/**
-	 * `main`, the bank itself: "not in the bank yet" is against it. The same object as
-	 * `remote` while the author has no branch of their own (step 9d adds branches).
+	 * The author's branch as last loaded or saved (before its first save, the bank's
+	 * default branch, which it will be created from): bases, sync states, conflicts and
+	 * commits are against it. Before this session's load it is only "last known, as of
+	 * each base", so writing waits for the load.
 	 */
-	readonly bank: Remote;
+	readonly remote: Remote;
 	/** Per file; content never carries it, so marking a scale "saving" leaves the environment alone. */
 	readonly activity: Readonly<Record<Id, Activity>>;
 	readonly nextId: Id;
@@ -203,14 +222,11 @@ export type Msg =
 	| { readonly kind: "connectRequested"; readonly settings: BankSettings }
 	| {
 			readonly kind: "connected";
-			readonly result: Result<
-				{ readonly login: string; readonly canWrite: boolean },
-				Failure
-			>;
+			readonly result: Result<Who, Failure>;
 	  }
 	| {
 			readonly kind: "bankLoaded";
-			readonly result: Result<readonly File[], Failure>;
+			readonly result: Result<Loaded, Failure>;
 	  }
 	| { readonly kind: "disconnected" }
 	| { readonly kind: "failureDismissed"; readonly index: number };
@@ -219,18 +235,18 @@ export type Cmd =
 	| { readonly kind: "revealRange"; readonly range: Range }
 	| { readonly kind: "loadDdiSchema" }
 	| { readonly kind: "persist"; readonly data: Persisted }
-	| { readonly kind: "connect"; readonly settings: BankSettings }
-	| { readonly kind: "loadBank"; readonly settings: BankSettings }
+	| { readonly kind: "connect"; readonly repo: Repo }
+	| { readonly kind: "loadBank"; readonly target: BranchTarget }
 	| {
 			readonly kind: "readFile";
 			readonly id: Id;
-			readonly settings: BankSettings;
+			readonly target: BranchTarget;
 			readonly path: string;
 	  }
 	| {
 			readonly kind: "writeFile";
 			readonly id: Id;
-			readonly settings: BankSettings;
+			readonly target: BranchTarget;
 			readonly path: string;
 			readonly text: string;
 			readonly sha?: string;
@@ -239,7 +255,7 @@ export type Cmd =
 	| {
 			readonly kind: "deleteFile";
 			readonly id: Id;
-			readonly settings: BankSettings;
+			readonly target: BranchTarget;
 			readonly path: string;
 			readonly sha: string;
 			readonly message: string;
@@ -287,7 +303,8 @@ const AGENCY = "edu.jhu.21cc";
 export const DEFAULT_SETTINGS: BankSettings = {
 	owner: "JHUCities",
 	repo: "bas-question-bank",
-	branch: "main",
+	// Empty: the author's own branch, `qretools/<login>`.
+	branch: "",
 	remember: false,
 };
 
@@ -332,11 +349,11 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		: { questions: {}, schemes: {} };
 	const remote = remoteOfBases(local);
 	const settings = stored?.settings ?? DEFAULT_SETTINGS;
+	const repo = { owner: settings.owner, repo: settings.repo };
 	const model: Model = {
 		local,
 		// The last GitHub state this browser knew is exactly what its bases record.
 		remote,
-		bank: remote,
 		activity: {},
 		nextId: stored?.nextId ?? 1,
 		screen: { kind: "blank" },
@@ -352,7 +369,7 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		model,
 		[
 			{ kind: "loadDdiSchema" },
-			...(flags.hasToken ? [{ kind: "connect", settings } as const] : []),
+			...(flags.hasToken ? [{ kind: "connect", repo } as const] : []),
 		],
 	];
 }

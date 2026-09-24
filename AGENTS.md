@@ -680,7 +680,30 @@ is removed: nothing reads it any more. Owner settings on GitHub, not in the app:
 "Automatically delete head branches" (so a merged branch is recreated fresh from the
 bank on the next save), and a ruleset on the default branch requiring a pull request.
 Bringing a branch up to date with the bank is GitHub's "Update branch" on the pull
-request. Per user or per question remains open; either is a branch name. Notes for step 5 from the step 4 review: identify questions by a
+request. Per user or per question remains open; either is a branch name.
+
+**Own branch built, and Octokit (2026-09-24).** The GitHub adapter is now Octokit
+(`@octokit/core` with `plugin-retry` and `plugin-throttling`), GitHub's official client:
+prior art that should have been raised at step 5. It stays behind the `Store` port;
+`github.ts` turns Octokit's exceptions into Results and its HTTP errors into the shell's
+`Failure`. Content writes run with retries off (a write that succeeded but whose reply
+was lost would, retried, be refused as stale: a false conflict); reads retry; rate
+limits are waited out once; writes are spaced about a second apart (GitHub's guidance;
+`pacing=false` in tests). TanStack Query, the React standard for server state, was
+considered and declined: it would run a second, hidden fetch-and-cache loop beside the
+Elm loop, which AGENTS.md forbids. The resolved branch lives in the Session
+(`connected {login, canWrite, branch, defaultBranch}`): the Bank panel's "Your branch"
+left empty means `qretools/<login>`; `whoAmI` is one GraphQL request (login, permission,
+default branch, never hard-coded). Commands carry a `BranchTarget` (never the unresolved
+setting). The load reads the author's branch and its comparison with the default branch
+in one request, or, before the first save, the default branch; `loading: loaded {from,
+aheadBy, behindBy}`. A write to a branch that does not exist gets GitHub's 404 "Branch …
+not found" (verified): `ensureBranch` creates it at the default branch's head (a 422 means
+it exists, which is fine) and the write runs once more. `writeBlocked` refuses saving to
+the default branch. The top bar links "Propose N changes on GitHub" (the compare page)
+when ahead, and "N behind main: update on GitHub" when behind. `Model.bank` is gone.
+Verified live, read only: both modes load (2 and 3 GraphQL requests). The bundle grew
+from 563 KB to 582 KB gzipped. Not yet verified live: a first save creating the branch. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

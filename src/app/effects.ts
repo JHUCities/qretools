@@ -15,7 +15,7 @@ import { err } from "../core/result.js";
 import type { Editor } from "./editor.js";
 import type { Cmd, Dispatch } from "./model.js";
 import { STORAGE_KEY } from "./persist.js";
-import type { BankSettings, MakeStore, Store, TokenStore } from "./storage.js";
+import type { MakeStore, Repo, Store, TokenStore } from "./storage.js";
 
 export interface Deps {
 	readonly makeStore: MakeStore;
@@ -41,20 +41,17 @@ export function createEffects(deps: Deps): Effects {
 	let validator: Validator | undefined;
 	let token: string | null = deps.tokenStore.load();
 	let store: Store | undefined;
-	let settingsInUse: BankSettings | undefined;
+	let repoInUse: string | undefined;
 	let tokenInUse: string | null = null;
 	let editor: Editor | undefined;
 	const persist = debouncedPersist();
 
-	const storeFor = (settings: BankSettings): Store | undefined => {
+	const storeFor = (repo: Repo): Store | undefined => {
 		if (token === null) return undefined;
-		if (
-			!store ||
-			token !== tokenInUse ||
-			JSON.stringify(settings) !== JSON.stringify(settingsInUse)
-		) {
-			store = deps.makeStore(settings, token);
-			settingsInUse = settings;
+		const key = `${repo.owner}/${repo.repo}`;
+		if (!store || token !== tokenInUse || key !== repoInUse) {
+			store = deps.makeStore(repo, token);
+			repoInUse = key;
 			tokenInUse = token;
 		}
 		return store;
@@ -107,35 +104,35 @@ export function createEffects(deps: Deps): Effects {
 					persist(JSON.stringify(cmd.data));
 					return;
 				case "connect": {
-					const s = storeFor(cmd.settings);
+					const s = storeFor(cmd.repo);
 					if (!s) return dispatch({ kind: "connected", result: err(NO_TOKEN) });
 					s.whoAmI().then((result) => dispatch({ kind: "connected", result }));
 					return;
 				}
 				case "loadBank": {
-					const s = storeFor(cmd.settings);
+					const s = storeFor(cmd.target);
 					if (!s)
 						return dispatch({ kind: "bankLoaded", result: err(NO_TOKEN) });
-					s.loadBank().then((result) =>
+					s.loadBank(cmd.target).then((result) =>
 						dispatch({ kind: "bankLoaded", result }),
 					);
 					return;
 				}
 				case "readFile": {
-					const s = storeFor(cmd.settings);
+					const s = storeFor(cmd.target);
 					if (!s)
 						return dispatch({
 							kind: "fileReloaded",
 							id: cmd.id,
 							result: err(NO_TOKEN),
 						});
-					s.read(cmd.path).then((result) =>
+					s.read(cmd.target, cmd.path).then((result) =>
 						dispatch({ kind: "fileReloaded", id: cmd.id, result }),
 					);
 					return;
 				}
 				case "writeFile": {
-					const s = storeFor(cmd.settings);
+					const s = storeFor(cmd.target);
 					if (!s)
 						return dispatch({
 							kind: "saveFinished",
@@ -144,26 +141,27 @@ export function createEffects(deps: Deps): Effects {
 							text: cmd.text,
 							result: err(NO_TOKEN),
 						});
-					s.write(cmd.path, cmd.text, cmd.message, cmd.sha).then((result) =>
-						dispatch({
-							kind: "saveFinished",
-							id: cmd.id,
-							path: cmd.path,
-							text: cmd.text,
-							result,
-						}),
+					s.write(cmd.target, cmd.path, cmd.text, cmd.message, cmd.sha).then(
+						(result) =>
+							dispatch({
+								kind: "saveFinished",
+								id: cmd.id,
+								path: cmd.path,
+								text: cmd.text,
+								result,
+							}),
 					);
 					return;
 				}
 				case "deleteFile": {
-					const s = storeFor(cmd.settings);
+					const s = storeFor(cmd.target);
 					if (!s)
 						return dispatch({
 							kind: "deleteFinished",
 							id: cmd.id,
 							result: err(NO_TOKEN),
 						});
-					s.remove(cmd.path, cmd.sha, cmd.message).then((result) =>
+					s.remove(cmd.target, cmd.path, cmd.sha, cmd.message).then((result) =>
 						dispatch({ kind: "deleteFinished", id: cmd.id, result }),
 					);
 					return;
