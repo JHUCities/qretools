@@ -234,6 +234,10 @@ Size: **S** under an hour, **M** a step, **L** more than one step.
 - *A findings slot on `elaborate`.* It would always be empty.
 - *Did-you-mean for unknown fields.* The hint lists the eleven fields; enough for now.
 
+- **Fix the duplicate `con_` variables in the bank (owner's edit).** `con_nhdkfp` and
+  `con_nhdkdmo` are each declared by `con_nhddk`, `con_nhdnc` and `con_nhdsc`; rename them
+  per question (for example `con_nhddkfp`, `con_nhdncfp`, `con_nhdscfp`). The app now
+  flags them on each of the three questions.
 - **Bank-wide duplicate variable check.** Two questions must not declare the same
   variable name; today `con_nhdkfp` and `con_nhdkdmo` are each claimed by `con_nhddk`,
   `con_nhdnc` and `con_nhdsc`. Needs 8(b)'s bank-level view; fixing the three files is

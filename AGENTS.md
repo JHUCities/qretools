@@ -714,7 +714,28 @@ link goes to the compare page too. Errors other than Octokit's `RequestError` ar
 `unreadable` (a bug is not an outage); a secondary rate limit (`retry-after`) is
 `rateLimited`. Writes take the connected session after `writeBlocked`, not a
 made-up fallback target. For 9c: the change-set staleness check must run after
-`ensureBranch`, against the head of the branch it commits to. Notes for step 5 from the step 4 review: identify questions by a
+`ensureBranch`, against the head of the branch it commits to.
+
+**Decisions for the rest of this tranche (owner, 2026-09-24).** Order: 9c, then links to
+a question, then moving a question; 8(c) (hover, go to definition, "create it") is paused
+for a larger discussion; the Cloudflare Worker login comes after this tranche.
+- 9b needs no code: a refused save keeps "Reload from GitHub" as its only action (no
+  "keep mine"), and `editor.sync` already replaces the document when the Model's text
+  changes from outside, so a fast-forward shows in the open editor.
+- 9c: saving a question automatically includes the unsaved scheme files it names (the
+  dialog lists them); every GitHub call goes through Octokit.
+- Links: the address names repository, branch and file in the hash
+  (`#repo=…&branch=…&file=…`), built from `location`, so it works wherever the app is
+  served (Vite's `base` covers a sub-path such as GitHub Pages). Opening a link to
+  another author's branch fetches that file and shows their version; editing it adopts
+  their text into the viewer's own working copy (asking first if that copy has unsaved
+  edits), so saves always go to the viewer's own branch. The URL follows what is open.
+  **Navigation uses the browser, never our own history management:** opening a file sets
+  `location.hash` (the browser records history), an in-place update uses
+  `location.replace`, and `hashchange` becomes a Msg. No router library.
+- Branch granularity: per person, as built.
+- GitHub settings are done by the owner: automatic deletion of merged head branches, and
+  `main` protected. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
