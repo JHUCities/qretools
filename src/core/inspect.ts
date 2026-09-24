@@ -9,13 +9,18 @@ import type { Evaluation } from "./evaluate.js";
 import { type Finding, locate, pathAt } from "./findings.js";
 import type { Env, NamedScheme, TextEntry } from "./surface/env.js";
 import type { Scale } from "./surface/scales.js";
-import { describe, KNOWN_KEYS, type SurfaceKey } from "./surface/schema.js";
+import {
+	describe,
+	KNOWN_KEYS,
+	QuestionSchema,
+	type SurfaceKey,
+} from "./surface/schema.js";
 
 export interface Inspection {
 	/** The most specific path at the caret, e.g. `responses.2`. */
 	readonly path: string;
-	/** Its field, e.g. `responses`. */
-	readonly key: SurfaceKey;
+	/** Its field, e.g. `responses`; absent at the document level (a blank line, the end). */
+	readonly key?: SurfaceKey;
 	readonly description: string;
 	/** Findings underlined at the caret: the ones the editor marks there. */
 	readonly findings: readonly Finding[];
@@ -45,7 +50,11 @@ const inScope = (
 			? env.universes
 			: env.instructions;
 
-/** What is at `offset` in the evaluated text; undefined outside any field. The offset is clamped. */
+/**
+ * What is at `offset` in the evaluated text; undefined only inside a key the surface
+ * does not know. Between fields and at the end is the document itself, where the holes
+ * of absent required fields are placed: where the author will type them. Clamped.
+ */
 export function inspect(
 	ev: Evaluation,
 	env: Env,
@@ -55,13 +64,21 @@ export function inspect(
 	const at = Math.min(Math.max(0, offset), end);
 	const path = pathAt(ev.ranges, at);
 	const top = path.split(".")[0] ?? "";
-	if (!(KNOWN_KEYS as readonly string[]).includes(top)) return undefined;
-	const key = top as SurfaceKey;
-	const scheme = SCHEME_OF[key];
+	// The findings the editor underlines at the caret. An absent field's hole is placed
+	// at the end of the text, so it shows exactly where the author will type the field.
 	const findings = ev.findings.filter((f) => {
 		const [from, to] = locate(f, ev.ranges);
 		return from <= at && at <= to;
 	});
+	if (path === "")
+		return {
+			path,
+			description: QuestionSchema.description ?? "",
+			findings,
+		};
+	if (!(KNOWN_KEYS as readonly string[]).includes(top)) return undefined;
+	const key = top as SurfaceKey;
+	const scheme = SCHEME_OF[key];
 	const written = ev.symbols.mentions.find((m) => m.path === path);
 	const value =
 		written === undefined

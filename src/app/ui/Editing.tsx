@@ -3,7 +3,7 @@
  * everything derived from it beside it. Bank-level findings (a variable defined
  * twice) come from the index and are shown on the file like any other finding.
  */
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { Evaluation } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
 import { inspect } from "../../core/inspect.js";
@@ -34,7 +34,17 @@ const SCHEME_SCHEMAS = {
 	text: textEntryJsonSchema(),
 };
 
-export function Editing({ id, index }: { id: Id; index: Index<Id> }) {
+/**
+ * Memoised on `id` and `index`, neither of which a caret move changes: moving the caret
+ * re-renders only the inspector, which is the one component that reads the cursor.
+ */
+export const Editing = memo(function Editing({
+	id,
+	index,
+}: {
+	id: Id;
+	index: Index<Id>;
+}) {
 	const entry = useModel((m) => fileOf(m, id));
 	if (!entry) return null;
 	return entry.kind === "question" ? (
@@ -42,7 +52,7 @@ export function Editing({ id, index }: { id: Id; index: Index<Id> }) {
 	) : (
 		<SchemeEditing e={entry} index={index} />
 	);
-}
+});
 
 function useActions(id: Id) {
 	const { dispatch } = useApp();
@@ -88,10 +98,15 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		() => toDiagnostics(findings, ev.ranges),
 		[findings, ev.ranges],
 	);
-	const problems =
-		ddiSchema.kind === "failed"
-			? [ddiSchema.finding]
-			: (effects.validate(ev.ddi) ?? []);
+	// Schema validation runs over the whole document: only when the document changes,
+	// never on a caret move.
+	const problems = useMemo(
+		() =>
+			ddiSchema.kind === "failed"
+				? [ddiSchema.finding]
+				: (effects.validate(ev.ddi) ?? []),
+		[ev.ddi, ddiSchema, effects],
+	);
 	return (
 		<div className="editing">
 			<FileHeader
@@ -318,7 +333,8 @@ function Inspector({
 	return (
 		<aside className="inspector" aria-label="At the cursor">
 			<p>
-				<code>{at.path}</code> {at.description}
+				{at.key === undefined ? <b>Question. </b> : <code>{at.path}</code>}{" "}
+				{at.description}
 			</p>
 			{m !== undefined &&
 				(m.value !== undefined ? (

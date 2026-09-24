@@ -6,7 +6,7 @@ import {
 	IssueOpenedIcon,
 } from "@primer/octicons-react";
 import { Label } from "@primer/react";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Status, Target } from "../../core/findings.js";
 import type {
@@ -235,7 +235,8 @@ export function Findings({
 	);
 }
 
-export function Ddi({
+/** Memoised: stringifying the whole DDI document must not ride every caret move. */
+export const Ddi = memo(function Ddi({
 	document,
 	schema,
 	problems,
@@ -272,7 +273,7 @@ export function Ddi({
 			</div>
 		</details>
 	);
-}
+});
 
 /** Shared text shows the scheme name it came from, so the author sees it is not theirs to reword here. */
 function ResolvedText({ value }: { value: Resolved }) {

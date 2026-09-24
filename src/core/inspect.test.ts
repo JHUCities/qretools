@@ -50,6 +50,12 @@ describe("inspect", () => {
 		expect(text).toMatchObject({ key: "text" });
 		expect(text?.names).toBeUndefined();
 		expect(() => inspect(ev, env, 10_000)).not.toThrow();
-		expect(inspect(evaluate("", "org.example", env), env, 0)).toBeUndefined();
+	});
+
+	it("between fields and at the end is the document, with the holes of absent fields", () => {
+		const text = "name: a\ntext: hi\n";
+		const doc = inspect(evaluate(text, "org.example", env), env, text.length);
+		expect(doc?.key).toBeUndefined();
+		expect(doc?.findings.map((f) => f.path).sort()).toEqual(["", "intent"]);
 	});
 });

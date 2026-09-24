@@ -749,7 +749,11 @@ name). The shell adds what needs the bank: "used by N", "Open it", and "New univ
 the editor sends `cursorMoved` only when the caret actually moved. The tree is derived
 from `TreeInput` (the slices it reads), so a caret move does not redraw it. "Go to
 definition" and "create it" are a link and a button in the inspector; no editor
-plumbing. Livelits, projectors and structure editing are beyond a text editor's horizon. Notes for step 5 from the step 4 review: identify questions by a
+plumbing. Livelits, projectors and structure editing are beyond a text editor's horizon. After-pass: between fields
+and at the end of the text the inspector reports the document itself (`key` absent),
+with the holes of absent required fields, which `locate` places at the end, where the
+author will type them. A caret move re-renders only the inspector: `Editing` and the
+DDI pane are memoised, and schema validation runs only when the DDI document changes. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
