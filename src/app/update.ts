@@ -170,14 +170,15 @@ export function update(model: Model, msg: Msg): Step {
 				];
 			const cleared = { ...model, browser: withoutConfirm(model.browser) };
 			if (q.base === undefined) return persist([without(cleared, msg.id), []]);
-			if (!canWrite(model)) return [cleared, []];
+			const as = writable(model);
+			if (as === undefined) return [cleared, []];
 			return [
 				withActivity(cleared, msg.id, { kind: "deleting" }),
 				[
 					{
 						kind: "deleteFile",
 						id: msg.id,
-						target: writeTarget(model),
+						target: targetOf(model.settings, as),
 						path: q.base.path,
 						sha: q.base.sha,
 						message:
@@ -200,12 +201,13 @@ export function update(model: Model, msg: Msg): Step {
 
 		case "saveRequested": {
 			const q = fileOf(model, msg.id);
-			if (!q || !canWrite(model)) return [model, []];
+			const as = writable(model);
+			if (!q || as === undefined) return [model, []];
 			// A bank file goes back to the path it was opened at. A draft's path is chosen
 			// once, deliberately: it decides the topic folder, and git would create an
 			// unseen folder without a word. A scheme file's path follows from its kind
 			// and the name it was given at creation.
-			if (q.base !== undefined) return write(model, msg.id, q, q.base.path);
+			if (q.base !== undefined) return write(model, as, msg.id, q, q.base.path);
 			if (q.kind !== "question") {
 				const path = schemePath(q.kind, q.name);
 				return taken(model, path, msg.id)
@@ -218,7 +220,7 @@ export function update(model: Model, msg: Msg): Step {
 							),
 							[],
 						]
-					: write(model, msg.id, q, path);
+					: write(model, as, msg.id, q, path);
 			}
 			const where = bankLocation(
 				parseSurface(q.source, envOf(model.local.schemes, model.remote.schemes))
@@ -262,7 +264,8 @@ export function update(model: Model, msg: Msg): Step {
 			const saving = model.browser.saving;
 			const q =
 				saving === undefined ? undefined : model.local.questions[saving.id];
-			if (saving === undefined || q === undefined || !canWrite(model))
+			const as = writable(model);
+			if (saving === undefined || q === undefined || as === undefined)
 				return [model, []];
 			const closed = { ...model, browser: withoutSaving(model.browser) };
 			const where = bankLocation(
@@ -287,7 +290,7 @@ export function update(model: Model, msg: Msg): Step {
 					[],
 				];
 			}
-			return write(closed, saving.id, q, where.value.path);
+			return write(closed, as, saving.id, q, where.value.path);
 		}
 
 		case "saveFinished": {
@@ -331,7 +334,7 @@ export function update(model: Model, msg: Msg): Step {
 					{
 						kind: "readFile",
 						id: msg.id,
-						target: targetOf(model.settings, model.session),
+						target: readTarget(model, model.session),
 						path: q.base.path,
 					},
 				],
@@ -451,6 +454,7 @@ export function update(model: Model, msg: Msg): Step {
 			// the bank they will branch from; the bases stay valid either way, since blob
 			// shas are content addresses.
 			const { files, from, aheadBy, behindBy } = msg.result.value;
+			const proposable = aheadBy > 0;
 			const remote = remoteOf(model.remote, files);
 			const { local, nextId } = rebase(model.local, remote, model.nextId);
 			return persist([
@@ -459,7 +463,7 @@ export function update(model: Model, msg: Msg): Step {
 					local,
 					remote,
 					nextId,
-					loading: { kind: "loaded", from, aheadBy, behindBy },
+					loading: { kind: "loaded", from, proposable, behindBy },
 				},
 				[],
 			]);
@@ -490,14 +494,20 @@ export function update(model: Model, msg: Msg): Step {
 }
 
 /** Emit the write for a file whose path is settled. */
-function write(model: Model, id: Id, q: Entry, path: string): Step {
+function write(
+	model: Model,
+	as: Connected,
+	id: Id,
+	q: Entry,
+	path: string,
+): Step {
 	return [
 		withActivity(model, id, { kind: "saving" }),
 		[
 			{
 				kind: "writeFile",
 				id,
-				target: writeTarget(model),
+				target: targetOf(model.settings, as),
 				path,
 				text: q.source,
 				...(q.base !== undefined && { sha: q.base.sha }),
@@ -603,13 +613,19 @@ const targetOf = (
 	defaultBranch: session.defaultBranch,
 });
 
-/** Only called once `writeBlocked` has passed, so the session is connected. */
-const writeTarget = (model: Model): BranchTarget =>
-	model.session.kind === "connected"
-		? targetOf(model.settings, model.session)
-		: { owner: "", repo: "", branch: "", defaultBranch: "" };
+/** Where to read a file: the author's branch, or, before their first save, the bank. */
+const readTarget = (model: Model, session: Connected): BranchTarget => {
+	const target = targetOf(model.settings, session);
+	return model.loading.kind === "loaded" && model.loading.from === "default"
+		? { ...target, branch: target.defaultBranch }
+		: target;
+};
 
-const canWrite = (model: Model): boolean => writeBlocked(model) === undefined;
+/** Whom to write as, once `writeBlocked` has passed; undefined means it has not. */
+const writable = (model: Model): Connected | undefined =>
+	writeBlocked(model) === undefined && model.session.kind === "connected"
+		? model.session
+		: undefined;
 
 const failed = (failure: Failure) => ({ kind: "failed" as const, failure });
 
@@ -661,16 +677,12 @@ function withGitHub(model: Model, path: Path, blob: Blob | undefined): Model {
 	return { ...model, remote: withBlob(model.remote, path, blob) };
 }
 
-/** A write or delete made one more commit on the author's branch, which now exists. */
+/** A save made a commit on the author's branch: it exists now, with something to propose. */
 function committed(model: Model): Model {
 	return model.loading.kind === "loaded"
 		? {
 				...model,
-				loading: {
-					...model.loading,
-					from: "branch",
-					aheadBy: model.loading.aheadBy + 1,
-				},
+				loading: { ...model.loading, from: "branch", proposable: true },
 			}
 		: model;
 }

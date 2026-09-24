@@ -10,6 +10,7 @@
 import { Octokit } from "@octokit/core";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
+import { RequestError } from "@octokit/request-error";
 import { err, ok, type Result } from "../core/result.js";
 import type { BranchTarget, Failure, File, Repo, Store } from "./storage.js";
 
@@ -54,22 +55,31 @@ export const makeGitHubStore = (
 	}
 
 	/**
-	 * A GraphQL query. GitHub answers some questions with data and errors together (a
-	 * comparison with a branch that does not exist yet); the data is what counts.
+	 * A GraphQL query. GitHub answers one question here with data and an error together:
+	 * comparing the bank with a branch that does not exist yet. Only errors under
+	 * `tolerated` keep the data; any other error is a failure, because a folder that
+	 * failed to load would otherwise read as empty and its clean files as deleted.
 	 */
 	async function graphql<T>(
 		query: string,
 		variables: Record<string, string>,
+		tolerated?: string,
 	): Promise<Result<{ data?: T; error?: string }, Failure>> {
 		try {
 			return ok({ data: await octokit.graphql<T>(query, variables) });
 		} catch (e) {
 			if (e instanceof Error && e.name === "GraphqlResponseError") {
-				const partial = e as Error & { data?: T };
-				return ok({
-					...(partial.data && { data: partial.data }),
-					error: e.message,
-				});
+				const partial = e as Error & {
+					data?: T;
+					errors?: readonly { path?: readonly (string | number)[] }[];
+				};
+				const onlyTolerated =
+					tolerated !== undefined &&
+					(partial.errors ?? []).every(
+						(x) => x.path?.[0] === "repository" && x.path?.[1] === tolerated,
+					);
+				if (onlyTolerated && partial.data) return ok({ data: partial.data });
+				return err({ kind: "unreadable", message: e.message });
 			}
 			return err(failureOf(e, false));
 		}
@@ -122,18 +132,22 @@ export const makeGitHubStore = (
 			Failure
 		>
 	> {
-		const r = await graphql<BankData>(BANK_QUERY, {
-			owner,
-			repo,
-			ref: `refs/heads/${ref}`,
-			bank: `refs/heads/${target.defaultBranch}`,
-			head: ref,
-			questions: `${ref}:questions`,
-			scales: `${ref}:scales`,
-			universes: `${ref}:universes`,
-			instructions: `${ref}:instructions`,
-			missing: `${ref}:missing.yaml`,
-		});
+		const r = await graphql<BankData>(
+			BANK_QUERY,
+			{
+				owner,
+				repo,
+				ref: `refs/heads/${ref}`,
+				bank: `refs/heads/${target.defaultBranch}`,
+				head: ref,
+				questions: `${ref}:questions`,
+				scales: `${ref}:scales`,
+				universes: `${ref}:universes`,
+				instructions: `${ref}:instructions`,
+				missing: `${ref}:missing.yaml`,
+			},
+			"bankRef",
+		);
 		if (!r.ok) return r;
 		const data = r.value.data?.repository;
 		if (!data)
@@ -226,9 +240,10 @@ export const makeGitHubStore = (
 						ref,
 					}),
 				);
-			let r = await at(target.branch);
-			// Before the first save the branch does not exist; the file is the bank's.
-			if (!r.ok && r.error.status === 404) r = await at(target.defaultBranch);
+			// The caller names the branch to read: the author's, or, before their first save,
+			// the default branch. Never a fallback on a 404, which would bring back a file the
+			// author deleted on their branch.
+			const r = await at(target.branch);
 			if (!r.ok) return r;
 			const file = r.value.data as { sha?: string; content?: string };
 			return file.sha === undefined || file.content === undefined
@@ -288,7 +303,10 @@ export const makeGitHubStore = (
 	};
 };
 
-/** GitHub's answer to a write on a branch that does not exist: 404 "Branch … not found". */
+/**
+ * GitHub's answer to a write on a branch that does not exist, verified 2026-09-24:
+ * 404 with the message "Branch qretools/… not found".
+ */
 const isMissingBranch = (f: Failure): boolean =>
 	f.status === 404 && /branch .* not found/i.test(f.message);
 
@@ -306,10 +324,16 @@ function failureOf(e: unknown, stale: boolean): Failure {
 		(error.response?.data as { message?: string } | undefined)?.message ??
 		error.message ??
 		String(e);
+	// Anything but Octokit's own error is a bug here, not an outage: say so.
+	if (!(e instanceof RequestError))
+		return {
+			kind: "unreadable",
+			message: `GitHub's reply was not understood: ${message}`,
+		};
 	// Octokit reports a request that never got an answer as status 500 with no response.
-	if (error.status === undefined || error.response === undefined)
+	if (error.response === undefined)
 		return { kind: "network", message: `Could not reach GitHub: ${message}` };
-	const status = error.status;
+	const status = e.status;
 	if (status === 401)
 		return {
 			kind: "auth",
@@ -325,9 +349,12 @@ function failureOf(e: unknown, stale: boolean): Failure {
 			hint: "Download your version first if you want to keep it, then reload from GitHub.",
 		};
 	const headers = error.response.headers ?? {};
+	// The primary limit says so in its headers; a secondary one sends retry-after.
 	if (
 		(status === 403 || status === 429) &&
-		String(headers["x-ratelimit-remaining"]) === "0"
+		(String(headers["x-ratelimit-remaining"]) === "0" ||
+			headers["retry-after"] !== undefined ||
+			/secondary rate limit/i.test(message))
 	) {
 		const reset = Number(headers["x-ratelimit-reset"]);
 		const when = Number.isFinite(reset)

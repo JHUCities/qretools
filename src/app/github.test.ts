@@ -236,7 +236,12 @@ describe("GitHub adapter (Octokit)", () => {
 			return variables.ref === "refs/heads/qretools/iain"
 				? json({
 						data: { repository: repository(false) },
-						errors: [{ message: "Could not resolve head ref" }],
+						errors: [
+							{
+								message: "Could not resolve head ref",
+								path: ["repository", "bankRef", "compare"],
+							},
+						],
 					})
 				: json({ data: { repository: repository(true) } });
 		});
@@ -254,5 +259,35 @@ describe("GitHub adapter (Octokit)", () => {
 			}),
 		).s.loadBank(target);
 		expect(!r.ok && r.error.kind).toBe("unreadable");
+	});
+
+	it("any other error in the reply is a failure, not an empty folder", async () => {
+		const r = await store(() =>
+			json({
+				data: { repository: { ...repository(true), questions: null } },
+				errors: [{ message: "timeout", path: ["repository", "questions"] }],
+			}),
+		).s.loadBank(target);
+		expect(!r.ok && r.error.kind).toBe("unreadable");
+	});
+
+	it("reads only the branch it is given: a 404 is not answered from the bank", async () => {
+		const { s, seen } = store(() => json({ message: "Not Found" }, 404));
+		const r = await s.read(target, "questions/a/a.yaml");
+		expect(!r.ok && r.error.status).toBe(404);
+		expect(seen).toHaveLength(1);
+	});
+
+	it("a secondary rate limit is a rate limit, and a bug is not an outage", async () => {
+		const limited = await store(() =>
+			json({ message: "You have exceeded a secondary rate limit" }, 403, {
+				"retry-after": "60",
+			}),
+		).s.read(target, "questions/a/a.yaml");
+		expect(!limited.ok && limited.error.kind).toBe("rateLimited");
+		const odd = await store(() => json({ unexpected: true })).s.ensureBranch(
+			target,
+		);
+		expect(!odd.ok && odd.error.kind).toBe("unreadable");
 	});
 });

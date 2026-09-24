@@ -32,6 +32,9 @@ importers:
       '@octokit/plugin-throttling':
         specifier: ^11.0.5
         version: 11.0.5(@octokit/core@7.0.8)
+      '@octokit/request-error':
+        specifier: ^7.1.2
+        version: 7.1.2
       '@primer/octicons-react':
         specifier: ^19.38.0
         version: 19.38.0(react@19.3.0)

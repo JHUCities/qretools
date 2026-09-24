@@ -132,8 +132,9 @@ export type Bank =
 			readonly kind: "loaded";
 			/** Whether the author's branch exists yet, or the bank was read instead. */
 			readonly from: "branch" | "default";
-			/** Commits on the author's branch not in the bank (something to propose), and the reverse. */
-			readonly aheadBy: number;
+			/** The author's branch has commits the bank does not: something to propose. */
+			readonly proposable: boolean;
+			/** Commits on the bank not in the author's branch, as GitHub counted them. */
 			readonly behindBy: number;
 	  };
 

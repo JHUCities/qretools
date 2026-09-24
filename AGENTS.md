@@ -703,7 +703,18 @@ it exists, which is fine) and the write runs once more. `writeBlocked` refuses s
 the default branch. The top bar links "Propose N changes on GitHub" (the compare page)
 when ahead, and "N behind main: update on GitHub" when behind. `Model.bank` is gone.
 Verified live, read only: both modes load (2 and 3 GraphQL requests). The bundle grew
-from 563 KB to 582 KB gzipped. Not yet verified live: a first save creating the branch. Notes for step 5 from the step 4 review: identify questions by a
+from 563 KB to 582 KB gzipped. Not yet verified live: a first save creating the branch. After-pass fixes: GraphQL data that
+comes with errors is kept only when every error is under `repository.bankRef` (the
+comparison with a branch not yet created); any other error is a failure, since a folder
+that failed to load would read as empty and its clean files as deleted. `read` reads
+only the branch it is given, and `update` gives it the branch the load read (a 404
+fallback to the bank would bring back a file the author deleted). "Propose" is a
+boolean (`proposable`: ahead on load, or any save since), not a commit count; the behind
+link goes to the compare page too. Errors other than Octokit's `RequestError` are
+`unreadable` (a bug is not an outage); a secondary rate limit (`retry-after`) is
+`rateLimited`. Writes take the connected session after `writeBlocked`, not a
+made-up fallback target. For 9c: the change-set staleness check must run after
+`ensureBranch`, against the head of the branch it commits to. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

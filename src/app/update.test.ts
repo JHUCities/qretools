@@ -29,7 +29,7 @@ const run = (model: Model, ...msgs: Msg[]) =>
 const LOADED = {
 	kind: "loaded",
 	from: "branch",
-	aheadBy: 0,
+	proposable: false,
 	behindBy: 0,
 } as const;
 /** A load of these files from the author's branch. */
@@ -716,6 +716,27 @@ describe("the author's own branch", () => {
 			text: "name: q\ntext: x\n",
 			result: ok({ sha: "n" }),
 		});
-		expect(saved.loading).toEqual({ ...LOADED, from: "branch", aheadBy: 1 });
+		expect(saved.loading).toEqual({
+			...LOADED,
+			from: "branch",
+			proposable: true,
+		});
+	});
+
+	it("reload reads where the load read: the bank before the first save, the branch after", () => {
+		const bank = (from: "branch" | "default") =>
+			withBank({ ...connected(fresh()), loading: { ...LOADED, from } }, [
+				bankQuestion(1, "questions/q/q.yaml", "name: q\n"),
+			]);
+		const [, before] = update(bank("default"), {
+			kind: "reloadRequested",
+			id: 1,
+		});
+		expect(before[0]).toMatchObject({ target: { branch: "main" } });
+		const [, after] = update(bank("branch"), {
+			kind: "reloadRequested",
+			id: 1,
+		});
+		expect(after[0]).toMatchObject({ target: { branch: "qretools/iain" } });
 	});
 });

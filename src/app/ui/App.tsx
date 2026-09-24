@@ -225,24 +225,22 @@ function BranchLinks({ model }: { model: Model }) {
 	if (session.kind !== "connected" || loading.kind !== "loaded") return null;
 	const repo = `https://github.com/${settings.owner}/${settings.repo}`;
 	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(session.branch)}?expand=1`;
-	const pulls = `${repo}/pulls?q=${encodeURIComponent(`is:pr head:${session.branch}`)}`;
 	return (
 		<>
-			{loading.aheadBy > 0 && (
+			{loading.proposable && (
 				<a
 					className="topbar-link"
 					href={compare}
 					target="_blank"
 					rel="noreferrer"
 				>
-					Propose {loading.aheadBy} change{loading.aheadBy === 1 ? "" : "s"} on
-					GitHub
+					Propose your changes on GitHub
 				</a>
 			)}
 			{loading.behindBy > 0 && (
 				<a
 					className="topbar-link quiet"
-					href={pulls}
+					href={compare}
 					target="_blank"
 					rel="noreferrer"
 				>
