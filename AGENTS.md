@@ -665,7 +665,22 @@ the claimed paths first, as a value. The example scales stand in while no bank i
 known (`remote.schemes` empty), beneath local ones, so one local draft does not blank
 questions on an example scale. `envOf` runs uncached inside `update` on the save and
 delete paths, by design (a comment says so). Carried into 9b: when a fast-forward
-replaces the open file's text, the editor document must be replaced. Notes for step 5 from the step 4 review: identify questions by a
+replaces the open file's text, the editor document must be replaced.
+
+**Do not recreate GitHub's interface (owner, 2026-09-24).** Review, pull request
+state, merging, history, and conflicts between branches happen on GitHub; the app
+links there and does nothing more. This replaces step 9d's lifecycle (loading pull
+request state, "proposed" badges, "not in the bank yet", update-from-bank, branch reset)
+with the minimum that makes save-is-not-publish real: saves go to the author's own
+branch `qretools/<login>` (the Bank panel's branch field, left empty, means that), the
+app creates it from the repository's default branch on the first save if it does not
+exist, it loads from that branch or, if it does not exist yet, from the default branch,
+and a "Propose" link opens GitHub's compare page for it. The `bank` snapshot of `main`
+is removed: nothing reads it any more. Owner settings on GitHub, not in the app:
+"Automatically delete head branches" (so a merged branch is recreated fresh from the
+bank on the next save), and a ruleset on the default branch requiring a pull request.
+Bringing a branch up to date with the bank is GitHub's "Update branch" on the pull
+request. Per user or per question remains open; either is a branch name. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
