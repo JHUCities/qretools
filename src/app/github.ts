@@ -270,8 +270,12 @@ export const makeGitHubStore = (
 				...ONCE,
 			}),
 		);
+		// 422 "Update is not a fast forward" (someone pushed) or "Reference does not exist"
+		// (the branch was merged and deleted mid-save): read again and retry, which
+		// recreates the branch if need be. Any other 422 is reported as itself.
 		if (!moved.ok)
-			return moved.error.status === 422
+			return moved.error.status === 422 &&
+				/fast forward|does not exist/i.test(moved.error.message)
 				? "lost"
 				: err({ failure: moved.error });
 		return ok({ shas });

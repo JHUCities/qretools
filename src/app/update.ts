@@ -367,9 +367,19 @@ export function update(model: Model, msg: Msg): Step {
 		}
 
 		case "reloadRequested": {
+			// "Reload from GitHub" takes GitHub's version of the file: its text, or, if
+			// GitHub deleted it, its absence. Read at the path the file claims, which covers
+			// a draft GitHub also added.
 			const q = fileOf(model, msg.id);
-			if (q?.base === undefined || model.session.kind !== "connected")
+			const path = q === undefined ? undefined : claimOf(q);
+			if (
+				q === undefined ||
+				path === undefined ||
+				model.session.kind !== "connected"
+			)
 				return [model, []];
+			if (q.base !== undefined && remoteBlob(model.remote, q) === undefined)
+				return persist([without(model, msg.id), []]);
 			return [
 				model,
 				[
@@ -377,7 +387,7 @@ export function update(model: Model, msg: Msg): Step {
 						kind: "readFile",
 						id: msg.id,
 						target: readTarget(model, model.session),
-						path: q.base.path,
+						path,
 					},
 				],
 			];
@@ -579,6 +589,7 @@ function write(
 			),
 			[],
 		];
+	// The file being saved comes first: a refused commit reports on `changes[0]`.
 	const changes: Change[] = [
 		{ id, path, expected: q.base?.sha ?? null, text: q.source },
 		...deps.include.flatMap((e) => {

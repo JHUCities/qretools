@@ -778,7 +778,15 @@ failure it absorbs `seen` and rebases, so the file shows as changed on GitHub wi
 flight. The header shows "with scale agree4 (changes 5 saved questions)" beside Save,
 and the new-question dialog lists the same (`alsoSaves`). The missing-value list is never
 named by a question, so it is never included implicitly. Not yet verified live: a real
-commit through the Git Data API. Notes for step 5 from the step 4 review: identify questions by a
+commit through the Git Data API. After-pass: "Reload from GitHub" shows on a file
+because of its own state (`syncOf` is conflict or deleted on GitHub, after this session's
+load), never because a refused save reported on it: a stale scale in a question's
+change set now puts Reload on the scale, not the question, whose edits it would have
+discarded. Reload reads at the path the file claims (a draft GitHub also added has no
+base) and, for a file GitHub deleted, takes the deletion. The file being saved is first
+in the change set, where a refusal reports. Only 422 "not a fast forward" or "Reference
+does not exist" (a branch merged and deleted mid-save) retries; other 422s report as
+themselves. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

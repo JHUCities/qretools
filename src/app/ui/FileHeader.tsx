@@ -21,6 +21,7 @@ export function FileHeader({
 	activity,
 	blocked,
 	also = [],
+	stale = false,
 	on,
 }: {
 	q: Entry;
@@ -33,9 +34,20 @@ export function FileHeader({
 	blocked: string | undefined;
 	/** Unsaved shared files this save takes along (`alsoSaves`). */
 	also?: readonly string[];
+	/**
+	 * GitHub changed this file since the author started (a conflict, or deleted there):
+	 * "Reload from GitHub" belongs here, decided by the file's own state, never by which
+	 * file a refused save happened to report on.
+	 */
+	stale?: boolean;
 	on: HeaderActions;
 }) {
 	const canWrite = blocked === undefined;
+	const reload = (
+		<Banner.PrimaryAction leadingVisual={SyncIcon} onClick={on.reload}>
+			Reload from GitHub
+		</Banner.PrimaryAction>
+	);
 	const saveTitle =
 		blocked ?? (unsaved ? "Save to the bank" : "Nothing to save");
 	return (
@@ -106,16 +118,15 @@ export function FileHeader({
 							? undefined
 							: inlineCode(activity.failure.hint)
 					}
-					primaryAction={
-						activity.failure.kind === "stale" && q.base !== undefined ? (
-							<Banner.PrimaryAction
-								leadingVisual={SyncIcon}
-								onClick={on.reload}
-							>
-								Reload from GitHub
-							</Banner.PrimaryAction>
-						) : undefined
-					}
+					primaryAction={stale ? reload : undefined}
+				/>
+			)}
+			{stale && activity?.kind !== "failed" && (
+				<Banner
+					variant="warning"
+					title="This file changed on GitHub since you started."
+					description="Download your version first if you want to keep it, then reload from GitHub."
+					primaryAction={reload}
 				/>
 			)}
 		</div>

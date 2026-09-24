@@ -18,6 +18,7 @@ import {
 	type SchemeEntry,
 } from "./model.js";
 import type { File } from "./storage.js";
+import { remoteBlob, syncOf } from "./sync.js";
 import { schemeNameProblem, update, writeBlocked } from "./update.js";
 
 const fresh = (): Model => init({ stored: ok(undefined), hasToken: false })[0];
@@ -899,6 +900,64 @@ describe("change sets", () => {
 			changes: [
 				{ id: 1, path: "questions/q/q.yaml", expected: "s", text: null },
 			],
+		});
+	});
+
+	it("a stale scale in the change set leaves the scale in conflict, not the question", () => {
+		const [saving, cmds] = update(bank(), { kind: "saveRequested", id: 1 });
+		const cmd = cmds[0];
+		if (cmd?.kind !== "commit") throw new Error("expected a commit");
+		const [m] = update(saving, {
+			kind: "committed",
+			changes: cmd.changes,
+			result: {
+				ok: false,
+				error: {
+					failure: {
+						kind: "stale",
+						message: "Changed on GitHub: `scales/yn.yaml`.",
+					},
+					seen: {
+						"questions/q/q.yaml": {
+							sha: "s",
+							text: "name: q\nresponses: yn\n",
+						},
+						"scales/yn.yaml": { sha: "theirs", text: "labels:\n  1: Y\n" },
+					},
+				},
+			},
+		});
+		const q = m.local.questions[1];
+		const yn = m.local.schemes[10];
+		expect(q && syncOf(q, remoteBlob(m.remote, q))).not.toBe("conflict");
+		expect(yn && syncOf(yn, remoteBlob(m.remote, yn))).toBe("conflict");
+		// Reload on the scale reads it where it lives; nothing touches the question.
+		const [, reload] = update(m, { kind: "reloadRequested", id: 10 });
+		expect(reload[0]).toMatchObject({
+			kind: "readFile",
+			path: "scales/yn.yaml",
+		});
+	});
+
+	it("reload on a file GitHub deleted takes the deletion; a draft GitHub also added reloads from its path", () => {
+		const m = bank();
+		const gone: Model = { ...m, remote: { ...m.remote, schemes: {} } };
+		const [after] = update(gone, { kind: "reloadRequested", id: 10 });
+		expect(after.local.schemes[10]).toBeUndefined();
+		const drafted = withScales(connected(fresh()), [
+			scale(11, "new1", "labels:\n  1: A\n"),
+		]);
+		const both: Model = {
+			...drafted,
+			remote: {
+				...drafted.remote,
+				schemes: { "scales/new1.yaml": { sha: "t", text: "x" } },
+			},
+		};
+		const [, cmds] = update(both, { kind: "reloadRequested", id: 11 });
+		expect(cmds[0]).toMatchObject({
+			kind: "readFile",
+			path: "scales/new1.yaml",
 		});
 	});
 });

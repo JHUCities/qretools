@@ -276,3 +276,8 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   `renters`"). Pure core function from cursor path to view; "go to definition" and
   "create it" are a link and a button in it. Livelits/projectors and structure editing
   are beyond a text editor's horizon and are not planned.
+
+- **Mark questions that read differently from the author's branch, in the tree
+  (candidate).** A question naming a scheme file with unsaved edits shows "with …" beside
+  Save, but nothing marks it in the bank browser. Suggested by the 9c after-pass; not
+  built.

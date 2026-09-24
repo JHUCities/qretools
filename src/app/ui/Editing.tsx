@@ -14,7 +14,7 @@ import {
 import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
 import { fileOf, type Id, type Question, type SchemeEntry } from "../model.js";
-import { alsoSaves, isUnsaved } from "../sync.js";
+import { alsoSaves, isUnsaved, remoteBlob, syncOf } from "../sync.js";
 import { writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
@@ -54,6 +54,15 @@ export const Editing = memo(function Editing({
 	);
 });
 
+/** Whether GitHub changed a file since its author started; shown only after this session's load. */
+function useStale(f: Question | SchemeEntry): boolean {
+	const remote = useModel((m) => m.remote);
+	const loaded = useModel((m) => m.loading.kind === "loaded");
+	if (!loaded) return false;
+	const sync = syncOf(f, remoteBlob(remote, f));
+	return sync === "conflict" || sync === "deletedOnGitHub";
+}
+
 function useActions(id: Id) {
 	const { dispatch } = useApp();
 	return {
@@ -82,6 +91,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const activity = useModel((m) => m.activity);
 	const env = useEnv();
 	const { onTarget, on } = useActions(q.id);
+	const stale = useStale(q);
 	const ev = evaluations.get(q, agency, env);
 	const findings = useMemo(() => {
 		// Another file's name, as a bank-level finding cites it.
@@ -127,6 +137,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				activity={activity[q.id]}
 				blocked={blocked}
 				also={also}
+				stale={stale}
 				on={on}
 			/>
 			<div className="split">
@@ -182,6 +193,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const agency = useModel((m) => m.agency);
 	const env = useEnv();
 	const { dispatch, onTarget, on } = useActions(e.id);
+	const eStale = useStale(e);
 	const ev = evaluations.scheme(e, env);
 	const diagnostics = useMemo(
 		() => toDiagnostics(ev.findings, ev.ranges),
@@ -209,6 +221,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				unsaved={isUnsaved(e)}
 				activity={activity[e.id]}
 				blocked={blocked}
+				stale={eStale}
 				on={{ ...on, downloadDdi: undefined }}
 			/>
 			<div className="split">
