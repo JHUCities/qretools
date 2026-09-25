@@ -260,7 +260,7 @@ export const Ddi = memo(function Ddi({
 	return (
 		<details className="pane">
 			<summary>
-				<h2>DDI-Lifecycle 4.0 {badge}</h2>
+				<h3>DDI-Lifecycle 4.0 {badge}</h3>
 			</summary>
 			<div className="pane-body">
 				{problems.map((f, i) => (

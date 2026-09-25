@@ -161,16 +161,6 @@ body {
 	flex-direction: column;
 	gap: 8px;
 }
-.qhead-row {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
-}
-.qname {
-	font-family: var(--fontStack-monospace);
-	font-weight: 600;
-}
 .split {
 	flex: 1;
 	min-height: 0;
@@ -201,7 +191,7 @@ body {
 	border: 1px solid var(--borderColor-default);
 	border-radius: 8px;
 }
-.pane h2 {
+.pane h3 {
 	margin: 0;
 	padding: 8px 12px;
 	font-size: 12px;
@@ -213,7 +203,7 @@ body {
 	gap: 8px;
 	align-items: center;
 }
-.pane h2 > * {
+.pane h3 > * {
 	margin-left: auto;
 	text-transform: none;
 	letter-spacing: 0;
@@ -228,7 +218,7 @@ details.pane > summary {
 details.pane > summary::-webkit-details-marker {
 	display: none;
 }
-details.pane:not([open]) > summary h2 {
+details.pane:not([open]) > summary h3 {
 	border-bottom: 0;
 }
 .hole {

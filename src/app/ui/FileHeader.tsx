@@ -1,6 +1,7 @@
 /** The open file's header: identity, state, and the actions on it. */
 import { DownloadIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
-import { Banner, Button, Label } from "@primer/react";
+import { Banner, Button, Label, PageHeader, Stack } from "@primer/react";
+import { useId } from "react";
 import type { Activity, Entry } from "../model.js";
 import { inlineCode } from "./Previews.js";
 
@@ -45,82 +46,108 @@ export function FileHeader({
 	on: HeaderActions;
 }) {
 	const canWrite = blocked === undefined;
+	const statusId = useId();
 	const reload = (
 		<Banner.PrimaryAction leadingVisual={SyncIcon} onClick={on.reload}>
 			Reload from GitHub
 		</Banner.PrimaryAction>
 	);
-	const saveTitle =
-		blocked ?? (unsaved ? "Save to the bank" : "Nothing to save");
+	const saving = activity?.kind === "saving";
+	const nothing = !unsaved && also.length === 0;
+	// Why a write cannot happen now, said in visible text that the inactive buttons
+	// point to: a disabled button can neither be focused nor explain itself.
+	const status =
+		blocked ??
+		(nothing
+			? "All changes saved."
+			: also.length > 0
+				? `Saving also saves ${also.join(", ")}.`
+				: "Unsaved changes.");
+	// An inactive button stays focusable and announced; its click does nothing.
+	const when =
+		(ok: boolean, f: () => void): (() => void) =>
+		() => {
+			if (ok) f();
+		};
 	return (
 		<div className="qhead">
-			<div className="qhead-row">
-				{kind !== undefined && <span className="quiet">{kind}</span>}
-				<span className="qname">
-					{name ?? <span className="quiet">(no name yet)</span>}
-				</span>
-				{q.base !== undefined ? (
-					<Label>in bank</Label>
-				) : (
-					<Label variant="attention">draft</Label>
-				)}
-				{unsaved && <Label variant="attention">unsaved</Label>}
-				{activity?.kind === "saving" && <Label>saving…</Label>}
-				{activity?.kind === "deleting" && <Label>deleting…</Label>}
-				<span className="spacer" />
-				<Button
-					size="small"
-					leadingVisual={DownloadIcon}
-					onClick={on.downloadYaml}
-				>
-					YAML
-				</Button>
-				{on.downloadDdi !== undefined && (
+			<PageHeader>
+				<PageHeader.TitleArea variant="subtitle">
+					<PageHeader.Title as="h2">
+						{kind !== undefined && <span className="quiet">{kind} </span>}
+						{name ?? <span className="quiet">(no name yet)</span>}
+					</PageHeader.Title>
+					<PageHeader.TrailingVisual>
+						<Stack direction="horizontal" gap="condensed">
+							{q.base !== undefined ? (
+								<Label>in bank</Label>
+							) : (
+								<Label variant="attention">draft</Label>
+							)}
+							{unsaved && <Label variant="attention">unsaved</Label>}
+						</Stack>
+					</PageHeader.TrailingVisual>
+				</PageHeader.TitleArea>
+				<PageHeader.Actions>
 					<Button
 						size="small"
 						leadingVisual={DownloadIcon}
-						onClick={on.downloadDdi}
+						onClick={on.downloadYaml}
 					>
-						DDI
+						YAML
 					</Button>
-				)}
-				{on.move !== undefined && (
+					{on.downloadDdi !== undefined && (
+						<Button
+							size="small"
+							leadingVisual={DownloadIcon}
+							onClick={on.downloadDdi}
+						>
+							DDI
+						</Button>
+					)}
+					{on.move !== undefined && (
+						<Button
+							size="small"
+							inactive={q.base === undefined || !canWrite}
+							aria-disabled={q.base === undefined || !canWrite || undefined}
+							aria-describedby={statusId}
+							onClick={when(q.base !== undefined && canWrite, on.move)}
+						>
+							Move…
+						</Button>
+					)}
 					<Button
 						size="small"
-						disabled={q.base === undefined || !canWrite}
-						title={blocked}
-						onClick={on.move}
+						variant="danger"
+						leadingVisual={TrashIcon}
+						inactive={q.base !== undefined && !canWrite}
+						aria-disabled={(q.base !== undefined && !canWrite) || undefined}
+						aria-describedby={statusId}
+						loading={activity?.kind === "deleting"}
+						loadingAnnouncement="Deleting"
+						onClick={when(q.base === undefined || canWrite, on.remove)}
 					>
-						Move…
+						Delete…
 					</Button>
-				)}
-				<Button
-					size="small"
-					variant="danger"
-					leadingVisual={TrashIcon}
-					disabled={q.base !== undefined && !canWrite}
-					title={q.base !== undefined ? blocked : undefined}
-					onClick={on.remove}
-				>
-					Delete…
-				</Button>
-				{also.length > 0 && (
-					<span className="quiet save-also">with {also.join(", ")}</span>
-				)}
-				<Button
-					size="small"
-					variant="primary"
-					disabled={
-						!canWrite ||
-						(!unsaved && also.length === 0) ||
-						activity?.kind === "saving"
-					}
-					title={saveTitle}
-					onClick={on.save}
-				>
-					Save
-				</Button>
-			</div>
+					<Button
+						size="small"
+						variant="primary"
+						inactive={!canWrite || nothing}
+						aria-disabled={!canWrite || nothing || undefined}
+						aria-describedby={statusId}
+						loading={saving}
+						loadingAnnouncement="Saving"
+						onClick={when(canWrite && !nothing && !saving, on.save)}
+					>
+						Save
+					</Button>
+				</PageHeader.Actions>
+				<PageHeader.Description>
+					<span id={statusId} className="quiet qhead-status">
+						{status}
+					</span>
+				</PageHeader.Description>
+			</PageHeader>
 			{activity?.kind === "failed" && (
 				<Banner
 					variant="critical"

@@ -3,7 +3,7 @@
  * everything derived from it beside it. Bank-level findings (a variable defined
  * twice) come from the index and are shown on the file like any other finding.
  */
-import { Label } from "@primer/react";
+import { Button, Label, PageHeader } from "@primer/react";
 import { memo, useMemo } from "react";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
@@ -169,21 +169,21 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				</section>
 				<section className="right">
 					<article className="pane">
-						<h2>
+						<h3>
 							Findings <StatusBadge status={status(findings)} />
-						</h2>
+						</h3>
 						<div className="pane-body">
 							<Findings findings={findings} onTarget={onTarget} />
 						</div>
 					</article>
 					<article className="pane">
-						<h2>As the respondent sees it</h2>
+						<h3>As the respondent sees it</h3>
 						<div className="pane-body">
 							<Respondent view={ev.respondent} onTarget={onTarget} />
 						</div>
 					</article>
 					<article className="pane">
-						<h2>Codebook entry</h2>
+						<h3>Codebook entry</h3>
 						<div className="pane-body">
 							<Codebook view={ev.codebook} onTarget={onTarget} />
 						</div>
@@ -257,15 +257,15 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				</section>
 				<section className="right">
 					<article className="pane">
-						<h2>
+						<h3>
 							Findings <StatusBadge status={status(ev.findings)} />
-						</h2>
+						</h3>
 						<div className="pane-body">
 							<Findings findings={ev.findings} onTarget={onTarget} />
 						</div>
 					</article>
 					<article className="pane">
-						<h2>{SINGULAR[e.kind]}</h2>
+						<h3>{SINGULAR[e.kind]}</h3>
 						<div className="pane-body">
 							{ev.value === undefined ? (
 								<p className="quiet">Nothing readable yet.</p>
@@ -291,9 +291,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						</div>
 					</article>
 					<article className="pane">
-						<h2>
+						<h3>
 							{users === undefined ? "Used by" : `Used by ${users.length}`}
-						</h2>
+						</h3>
 						<div className="pane-body">
 							{users === undefined ? (
 								<p className="quiet">
@@ -487,21 +487,27 @@ export function ForeignView({
 	return (
 		<div className="editing">
 			<div className="qhead">
-				<div className="qhead-row">
-					<span className="quiet">{whose(screen.branch)}</span>
-					<span className="qname">{screen.path}</span>
-					<Label>read only</Label>
-					<span className="spacer" />
+				<PageHeader>
+					<PageHeader.TitleArea variant="subtitle">
+						<PageHeader.Title as="h2">
+							<span className="quiet">{whose(screen.branch)} of </span>
+							{screen.path}
+						</PageHeader.Title>
+						<PageHeader.TrailingVisual>
+							<Label>read only</Label>
+						</PageHeader.TrailingVisual>
+					</PageHeader.TitleArea>
 					{own !== undefined && (
-						<button
-							type="button"
-							className="linklike"
-							onClick={() => dispatch({ kind: "fileOpened", id: own.id })}
-						>
-							Open your copy
-						</button>
+						<PageHeader.Actions>
+							<Button
+								size="small"
+								onClick={() => dispatch({ kind: "fileOpened", id: own.id })}
+							>
+								Open your copy
+							</Button>
+						</PageHeader.Actions>
 					)}
-				</div>
+				</PageHeader>
 			</div>
 			{file === undefined ? (
 				<p className="quiet blank">
@@ -527,9 +533,9 @@ export function ForeignView({
 					</section>
 					<section className="right">
 						<article className="pane">
-							<h2>
+							<h3>
 								Findings <StatusBadge status={status(findings)} />
-							</h2>
+							</h3>
 							<div className="pane-body">
 								<Findings findings={findings} onTarget={() => {}} />
 							</div>
@@ -537,13 +543,13 @@ export function ForeignView({
 						{ev && (
 							<>
 								<article className="pane">
-									<h2>As the respondent sees it</h2>
+									<h3>As the respondent sees it</h3>
 									<div className="pane-body">
 										<Respondent view={ev.respondent} onTarget={() => {}} />
 									</div>
 								</article>
 								<article className="pane">
-									<h2>Codebook entry</h2>
+									<h3>Codebook entry</h3>
 									<div className="pane-body">
 										<Codebook view={ev.codebook} onTarget={() => {}} />
 									</div>

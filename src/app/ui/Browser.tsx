@@ -37,6 +37,7 @@ export function Browser({
 					dispatch({ kind: "filterChanged", text: e.target.value })
 				}
 			/>
+			<h2 className="browser-heading">Questions</h2>
 			{folders.length === 0 ? (
 				<p className="quiet" aria-live="polite">
 					{loading
