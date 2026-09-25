@@ -375,6 +375,12 @@ export interface Flags {
 	readonly stored: Result<Persisted | undefined, Failure>;
 	/** Whether a token is on hand, so connecting can start at once. */
 	readonly hasToken: boolean;
+	/**
+	 * A return from GitHub that was refused (a stale or replayed callback, a cancel). Only
+	 * a message: it never touches the session or credentials already held, since Back
+	 * through GitHub's redirect replays a callback after a successful sign-in.
+	 */
+	readonly signInFailure?: Failure;
 }
 
 export const EMPTY_REMOTE: Remote = { questions: {}, schemes: {} };
@@ -408,7 +414,10 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		session: flags.hasToken ? { kind: "connecting" } : { kind: "anonymous" },
 		settings,
 		loading: { kind: "bundled" },
-		failures: flags.stored.ok ? [] : [flags.stored.error],
+		failures: [
+			...(flags.stored.ok ? [] : [flags.stored.error]),
+			...(flags.signInFailure === undefined ? [] : [flags.signInFailure]),
+		],
 		agency: AGENCY,
 		ddiSchema: { kind: "loading" },
 	};

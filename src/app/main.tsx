@@ -44,12 +44,28 @@ if (root) {
 		location.origin,
 		import.meta.env.BASE_URL,
 	);
-	const returned = config === undefined ? undefined : cameBackFromGitHub();
+	// Any code in the address is taken out, configured or not; only a build with sign-in
+	// set up redeems it.
+	const back = cameBackFromGitHub();
+	const returned =
+		config !== undefined && back?.ok === true ? back.value : undefined;
+	const refused =
+		back === undefined
+			? undefined
+			: !back.ok
+				? back.error
+				: config === undefined
+					? {
+							kind: "auth" as const,
+							message: "Sign-in is not set up for this build.",
+						}
+					: undefined;
 	const app = createApp(
 		{
 			stored,
 			hasToken:
 				browserCredentialStore.load() !== null || returned !== undefined,
+			...(refused !== undefined && { signInFailure: refused }),
 		},
 		{
 			makeStore: makeGitHubStore,

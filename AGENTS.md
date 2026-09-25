@@ -892,7 +892,16 @@ five minutes before expiry, once for concurrent callers, under a Web Lock
 `update` (`sessionLapsed`): any reply failing with `auth` ends the session, forgets the
 credentials and clears a pending link; working copies stay. The Bank panel offers "Sign
 in with GitHub"; "Connect with token" only under the flag. Fixed on the way: clearing
-"Your branch" now means the author's own branch instead of keeping the old value. Notes for step 5 from the step 4 review: identify questions by a
+"Your branch" now means the author's own branch instead of keeping the old value. After-pass: Back through GitHub's redirect replays a
+callback after a successful sign-in (same state, record already used), so **a refused
+callback is only a message** (`Flags.signInFailure`, listed in `failures`): it never
+touches the session or credentials already held; the effects receive only an accepted
+code. The address loses any `?code`/`?error` whether or not sign-in is set up for the
+build. Settling a redemption clears on either outcome (`then(clear, clear)`) and a lock
+that fails is a transient failure, never a thrown error. The sign-in configuration is
+read once at startup and reaches the view through the app context, never from `location`
+or `import.meta.env` in a component; `TOKEN_PASTE` stays a static import so the minifier
+can drop it. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

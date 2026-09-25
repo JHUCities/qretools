@@ -7,6 +7,7 @@
 
 import { devtools } from "zustand/middleware";
 import { createStore, type StoreApi } from "zustand/vanilla";
+import type { SignInConfig } from "./config.js";
 import { createEffects, type Deps, type Effects } from "./effects.js";
 import { createEvaluations, type Evaluations } from "./evaluations.js";
 import { type Dispatch, type Flags, init, type Model } from "./model.js";
@@ -17,6 +18,8 @@ export interface App {
 	readonly dispatch: Dispatch;
 	readonly effects: Effects;
 	readonly evaluations: Evaluations;
+	/** Sign-in with GitHub for this build, if configured: read once, at startup. */
+	readonly signIn?: SignInConfig;
 }
 
 export function createApp(flags: Flags, deps: Deps): App {
@@ -31,5 +34,11 @@ export function createApp(flags: Flags, deps: Deps): App {
 		for (const c of cmds) effects.exec(c, dispatch);
 	};
 	for (const c of first) effects.exec(c, dispatch);
-	return { store, dispatch, effects, evaluations: createEvaluations() };
+	return {
+		store,
+		dispatch,
+		effects,
+		evaluations: createEvaluations(),
+		...(deps.signIn !== undefined && { signIn: deps.signIn.config }),
+	};
 }

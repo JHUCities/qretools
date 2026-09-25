@@ -1289,3 +1289,21 @@ describe("signing in", () => {
 		expect(cmds).not.toContainEqual({ kind: "forgetToken" });
 	});
 });
+
+describe("a refused return from GitHub", () => {
+	it("is only a message: an existing sign-in is kept and connects as usual", () => {
+		const refused = {
+			kind: "auth" as const,
+			message: "This sign-in did not start here, or has already been used.",
+		};
+		const [m, cmds] = init({
+			stored: ok(undefined),
+			hasToken: true,
+			signInFailure: refused,
+		});
+		expect(m.failures).toEqual([refused]);
+		expect(m.session).toEqual({ kind: "connecting" });
+		expect(cmds.map((c) => c.kind)).toContain("connect");
+		expect(cmds.map((c) => c.kind)).not.toContain("forgetToken");
+	});
+});

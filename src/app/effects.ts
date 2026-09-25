@@ -42,8 +42,8 @@ export interface Deps {
 	/** Sign-in with GitHub, when this build is configured for it. */
 	readonly signIn?: {
 		readonly config: SignInConfig;
-		/** The author just came back from GitHub: the code to redeem, or why not. */
-		readonly returned?: Result<Callback, Failure>;
+		/** The author just came back from GitHub with a code to redeem. */
+		readonly returned?: Callback;
 	};
 	readonly now?: () => number;
 	readonly fetch?: typeof fetch;
@@ -120,6 +120,17 @@ export function createEffects(deps: Deps): Effects {
 	const fetcher =
 		deps.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
 	const lock = deps.lock ?? nativeLock;
+	/** A lock that could not be had is a transient failure, never a thrown error. */
+	const lockSafely = (
+		name: string,
+		f: () => Promise<Result<Credentials, Failure>>,
+	): Promise<Result<Credentials, Failure>> =>
+		lock(name, f).catch((e: unknown) =>
+			err({
+				kind: "network",
+				message: `Could not renew the sign-in: ${e instanceof Error ? e.message : String(e)}`,
+			}),
+		);
 	let validator: Validator | undefined;
 	const loaded = deps.credentialStore.load();
 	let credentials = loaded?.credentials ?? null;
@@ -146,20 +157,20 @@ export function createEffects(deps: Deps): Effects {
 			return r;
 		});
 		const settled = pending;
-		settled.finally(() => {
+		// Clear on either outcome, never leaving an unhandled rejection behind.
+		const clear = () => {
 			if (pending === settled) pending = undefined;
-		});
+		};
+		settled.then(clear, clear);
 		return settled;
 	};
 
-	// Back from GitHub: redeem the code at once; the first request waits for it.
+	// Back from GitHub: constructing the effects starts this I/O. The code is redeemed at
+	// once (it is single use and short-lived); the first request waits for it.
 	const returned = deps.signIn?.returned;
 	if (returned !== undefined && deps.signIn !== undefined) {
-		const config = deps.signIn.config;
-		if (returned.ok) {
-			remember = returned.value.remember;
-			settle(exchange(config, returned.value, now, fetcher));
-		} else pending = Promise.resolve(returned);
+		remember = returned.remember;
+		settle(exchange(deps.signIn.config, returned, now, fetcher));
 	}
 
 	/**
@@ -180,7 +191,7 @@ export function createEffects(deps: Deps): Effects {
 		if (c.refreshExpiresAt !== undefined && c.refreshExpiresAt < now())
 			throw new AuthError(ENDED);
 		const renewed = await settle(
-			lock("qretools.auth", async () => {
+			lockSafely("qretools.auth", async () => {
 				// Another tab may have renewed while this one waited for the lock.
 				const theirs = deps.credentialStore.load()?.credentials;
 				if (theirs && !stale(theirs, now())) return ok(theirs);

@@ -13,7 +13,6 @@ import {
 	TextInput,
 } from "@primer/react";
 import { useState } from "react";
-import { signInConfig } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import type { Bank, Dispatch, Session } from "../model.js";
 import type { BankSettings, Failure } from "../storage.js";
@@ -33,7 +32,7 @@ export function BankDialog({
 	failures: readonly Failure[];
 	dispatch: Dispatch;
 }) {
-	const { effects } = useApp();
+	const { effects, signIn: signInSetUp } = useApp();
 	const [owner, setOwner] = useState(settings.owner);
 	const [repo, setRepo] = useState(settings.repo);
 	const [branch, setBranch] = useState(settings.branch);
@@ -54,11 +53,7 @@ export function BankDialog({
 		setToken("");
 		dispatch({ kind: "connectRequested", settings: next() });
 	};
-	const config = signInConfig(
-		import.meta.env,
-		location.origin,
-		import.meta.env.BASE_URL,
-	);
+	const config = signInSetUp;
 	const upload = async (files: FileList | null) => {
 		const read = await Promise.all(
 			[...(files ?? [])].map(async (f) => ({
