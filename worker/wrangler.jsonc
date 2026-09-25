@@ -1,0 +1,12 @@
+{
+	// qretools' token exchange. The secret is never here: `wrangler secret put CLIENT_SECRET`.
+	"name": "qretools-auth",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-01",
+	"vars": {
+		// The GitHub App's client id (public): fill in after creating the App.
+		"CLIENT_ID": "",
+		// Exact origins the app is served from, comma separated.
+		"ALLOWED_ORIGINS": "http://localhost:5199"
+	}
+}

@@ -4,7 +4,14 @@
 		"enabled": false
 	},
 	"files": {
-		"includes": ["src/**", "*.ts", "*.json", "!node_modules", "!dist"]
+		"includes": [
+			"src/**",
+			"worker/src/**",
+			"*.ts",
+			"*.json",
+			"!node_modules",
+			"!dist"
+		]
 	},
 	"formatter": {
 		"enabled": true,
