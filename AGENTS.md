@@ -881,6 +881,16 @@ paste stays as a fallback behind a feature flag, off in production. Tailscale wa
 considered and rejected (it would need an always-on machine); Sveltia CMS's auth Worker
 is the prior art to read first.
 
+**Saves always go to `qretools/<login>` (owner, 2026-09-25).** The Bank panel's branch
+field is gone: the branch is not a choice, it follows from who is signed in; a branch
+stored by an older version is read and dropped. Development and headless checks use the
+checker's own branch, never `sandbox`. The token-paste fallback is off in
+`.env.development`; `pnpm dev:verify` (`vite --mode verify`, port 5299, `.env.verify`)
+turns it on for scripted checks only. The top bar shows the branch as Primer's
+`BranchName` (linking to it on GitHub once it exists), "N behind main" as a muted link,
+and "Propose changes" as a small `LinkButton` with the pull-request icon, the way
+github.com offers "Compare & pull request".
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; on in development through `.env.development`, set

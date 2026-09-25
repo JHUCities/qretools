@@ -1,11 +1,20 @@
 /** The page: a split layout with the bank tree in the pane and the open file in the content. */
-import { GearIcon, PlusIcon } from "@primer/octicons-react";
+import {
+	GearIcon,
+	GitBranchIcon,
+	GitPullRequestIcon,
+	LinkExternalIcon,
+	PlusIcon,
+} from "@primer/octicons-react";
 import {
 	ActionList,
 	ActionMenu,
+	BranchName,
 	Button,
 	ConfirmationDialog,
+	LinkButton,
 	Stack,
+	VisuallyHidden,
 } from "@primer/react";
 import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
@@ -284,18 +293,41 @@ function BranchLinks({ model }: { model: Model }) {
 	const repo = `https://github.com/${settings.owner}/${settings.repo}`;
 	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(session.branch)}?expand=1`;
 	return (
-		<>
-			{loading.proposable && (
-				<ExternalLink href={compare}>
-					Propose your changes on GitHub
-				</ExternalLink>
+		<Stack direction="horizontal" align="center" gap="condensed" wrap="wrap">
+			{/* Before the first save the branch does not exist yet: named, not linked. */}
+			{loading.from === "branch" ? (
+				<BranchName
+					href={`${repo}/tree/${encodeURI(session.branch)}`}
+					target="_blank"
+					rel="noreferrer"
+				>
+					<GitBranchIcon size={12} aria-hidden /> {session.branch}
+					<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+				</BranchName>
+			) : (
+				<BranchName as="span">
+					<GitBranchIcon size={12} aria-hidden /> {session.branch}
+				</BranchName>
 			)}
 			{loading.behindBy > 0 && (
 				<ExternalLink href={compare} muted>
-					{loading.behindBy} behind {session.defaultBranch}: update on GitHub
+					{loading.behindBy} behind {session.defaultBranch}
 				</ExternalLink>
 			)}
-		</>
+			{loading.proposable && (
+				<LinkButton
+					size="small"
+					href={compare}
+					target="_blank"
+					rel="noreferrer"
+					leadingVisual={GitPullRequestIcon}
+					trailingVisual={LinkExternalIcon}
+				>
+					Propose changes
+					<VisuallyHidden> on GitHub (opens in a new tab)</VisuallyHidden>
+				</LinkButton>
+			)}
+		</Stack>
 	);
 }
 
@@ -312,7 +344,7 @@ function sessionLine(model: Model): string {
 		case "connected":
 			return loading.kind === "loading"
 				? "Loading the bank from GitHub…"
-				: `${session.login} · ${settings.owner}/${settings.repo} · ${session.branch}${session.canWrite ? "" : " (read only)"}`;
+				: `${session.login} · ${settings.owner}/${settings.repo}${session.canWrite ? "" : " (read only)"}`;
 	}
 }
 

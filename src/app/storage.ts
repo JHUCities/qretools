@@ -33,12 +33,6 @@ export interface Failure {
 export interface BankSettings {
 	readonly owner: string;
 	readonly repo: string;
-	/**
-	 * Where saves go. Empty means the author's own branch, `qretools/<login>`, resolved
-	 * when connecting; a name is for development (`sandbox`). Never the default branch:
-	 * the bank changes only through a pull request.
-	 */
-	readonly branch: string;
 	/** Keep the token on this device (localStorage) rather than for this tab (sessionStorage). */
 	readonly remember: boolean;
 }

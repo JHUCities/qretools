@@ -633,7 +633,9 @@ function step(model: Model, msg: Msg): Step {
 					login,
 					canWrite,
 					defaultBranch,
-					branch: model.settings.branch.trim() || ownBranch(login),
+					// Saves always go to the author's own branch; the bank changes only
+					// through a pull request (AGENTS.md, save is not publish).
+					branch: ownBranch(login),
 				};
 				return [
 					{ ...model, session, loading: { kind: "loading" } },

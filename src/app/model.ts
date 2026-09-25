@@ -350,8 +350,6 @@ const AGENCY = "edu.jhu.21cc";
 export const DEFAULT_SETTINGS: BankSettings = {
 	owner: "JHUCities",
 	repo: "bas-question-bank",
-	// Empty: the author's own branch, `qretools/<login>`.
-	branch: "",
 	remember: false,
 };
 

@@ -14,7 +14,8 @@
 		"lint": "biome check .",
 		"format": "biome format --write .",
 		"check": "pnpm typecheck && pnpm lint && pnpm test",
-		"check:worker": "pnpm --dir worker check"
+		"check:worker": "pnpm --dir worker check",
+		"dev:verify": "vite --mode verify --port 5299 --strictPort"
 	},
 	"dependencies": {
 		"@codemirror/autocomplete": "^6.20.3",

@@ -106,7 +106,7 @@ describe("init", () => {
 				},
 			],
 			schemes: [],
-			settings: { ...DEFAULT_SETTINGS, branch: "sandbox" },
+			settings: DEFAULT_SETTINGS,
 		};
 		const [model, cmds] = init({ stored: ok(stored), hasToken: true });
 		expect(model.local.questions[3]?.base).toEqual(stored.questions[0]?.base);
@@ -382,7 +382,7 @@ describe("connecting", () => {
 	it("connect, then load the bank, then merge it: every file becomes an entry of the kind its path says", () => {
 		const [m1, c1] = update(fresh(), {
 			kind: "connectRequested",
-			settings: { ...DEFAULT_SETTINGS, branch: "sandbox" },
+			settings: DEFAULT_SETTINGS,
 		});
 		expect(m1.session.kind).toBe("connecting");
 		expect(c1[0]).toEqual({
@@ -693,14 +693,11 @@ describe("writing waits for this session's load", () => {
 });
 
 describe("the author's own branch", () => {
-	it("connecting resolves an empty branch setting to qretools/<login>, and loads it", () => {
-		const [m, cmds] = update(
-			{ ...fresh(), settings: { ...fresh().settings, branch: "" } },
-			{
-				kind: "connected",
-				result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
-			},
-		);
+	it("saves always go to qretools/<login>, resolved on connecting, and the bank loads from it", () => {
+		const [m, cmds] = update(fresh(), {
+			kind: "connected",
+			result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
+		});
 		expect(m.session).toMatchObject({
 			branch: "qretools/iain",
 			defaultBranch: "main",

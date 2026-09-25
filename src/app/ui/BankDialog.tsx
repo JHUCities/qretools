@@ -37,15 +37,12 @@ export function BankDialog({
 	const { effects, signIn: signInSetUp } = useApp();
 	const [owner, setOwner] = useState(settings.owner);
 	const [repo, setRepo] = useState(settings.repo);
-	const [branch, setBranch] = useState(settings.branch);
 	const [token, setToken] = useState("");
 	const [remember, setRemember] = useState(settings.remember);
 	const close = () => dispatch({ kind: "settingsToggled", open: false });
-	// An empty branch means the author's own branch: it must stay empty, not fall back.
 	const next = (): BankSettings => ({
 		owner: owner.trim() || settings.owner,
 		repo: repo.trim() || settings.repo,
-		branch: branch.trim(),
 		remember,
 	});
 	const signIn = () => dispatch({ kind: "signInRequested", settings: next() });
@@ -110,20 +107,12 @@ export function BankDialog({
 						onChange={(e) => setRepo(e.target.value)}
 					/>
 				</FormControl>
-				<FormControl>
-					<FormControl.Label>Your branch</FormControl.Label>
-					<TextInput
-						block
-						value={branch}
-						placeholder="qretools/<your login>"
-						onChange={(e) => setBranch(e.target.value)}
-					/>
-					<FormControl.Caption>
-						Saves go here, never to the bank's default branch; the bank changes
-						when you propose and the pull request is merged on GitHub. Leave it
-						empty for your own branch, created on your first save.
-					</FormControl.Caption>
-				</FormControl>
+				<p className="quiet">
+					Saves go to your own branch, <code className="code">qretools/</code>{" "}
+					followed by your GitHub login, never to the bank itself: the bank
+					changes when you propose your changes and the pull request is merged
+					on GitHub.
+				</p>
 				{config?.appSlug !== undefined && (
 					<p className="quiet">
 						Signing in works for repositories where the{" "}

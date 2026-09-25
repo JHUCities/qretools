@@ -20,12 +20,18 @@ const OriginSchema = z.discriminatedUnion("kind", [
 	}),
 ]);
 
-const SettingsSchema = z.strictObject({
-	owner: z.string(),
-	repo: z.string(),
-	branch: z.string(),
-	remember: z.boolean(),
-});
+/**
+ * The Bank panel's settings. Older versions also stored a branch; saves now always go
+ * to the author's own branch, so a stored one is read and dropped.
+ */
+const SettingsSchema = z
+	.strictObject({
+		owner: z.string(),
+		repo: z.string(),
+		branch: z.string().optional(),
+		remember: z.boolean(),
+	})
+	.transform(({ owner, repo, remember }) => ({ owner, repo, remember }));
 
 const BaseSchema = z.strictObject({
 	path: z.string(),

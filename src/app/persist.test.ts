@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readPersisted } from "./persist.js";
 
-const settings = { owner: "o", repo: "r", branch: "b", remember: false };
+const settings = { owner: "o", repo: "r", remember: false };
 const base = { path: "questions/q/q.yaml", sha: "abc", text: "name: q\n" };
 
 describe("readPersisted", () => {
@@ -85,6 +85,20 @@ describe("readPersisted", () => {
 				schemes: [],
 				settings,
 			},
+		});
+	});
+
+	it("drops a branch an older version stored: saves always go to the author's own", () => {
+		const stored = {
+			version: 3,
+			nextId: 1,
+			questions: [],
+			schemes: [],
+			settings: { ...settings, branch: "sandbox" },
+		};
+		expect(readPersisted(JSON.stringify(stored))).toEqual({
+			ok: true,
+			value: { ...stored, settings },
 		});
 	});
 });
