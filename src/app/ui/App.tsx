@@ -25,7 +25,7 @@ import { useMemo } from "react";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
-import { alsoSaves } from "../sync.js";
+import { alsoSaves, isUnsaved } from "../sync.js";
 import {
 	bankFolders,
 	SCHEME_SINGULAR,
@@ -100,12 +100,16 @@ export function App() {
 		model.browser.confirmDelete === undefined
 			? undefined
 			: fileOf(model, model.browser.confirmDelete);
+	// A saved file is named by the path the commit deletes (the filename follows the
+	// name), never by unsaved edits that may have renamed it; a draft by its text.
 	const confirmName =
 		confirm === undefined
 			? undefined
-			: confirm.kind === "question"
-				? evaluations.get(confirm, model.agency, env).draft.name
-				: confirm.name;
+			: confirm.base !== undefined
+				? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
+				: confirm.kind === "question"
+					? evaluations.get(confirm, model.agency, env).draft.name
+					: confirm.name;
 	// Deleting a scheme file others name turns each of those names into a hole: say how many.
 	const confirmUsers =
 		confirm === undefined ||
@@ -324,7 +328,7 @@ export function App() {
 					title={
 						confirm.base === undefined
 							? "Delete this draft?"
-							: "Delete from the bank?"
+							: `Delete ${confirmName}?`
 					}
 					confirmButtonType="danger"
 					confirmButtonContent="Delete"
@@ -336,9 +340,13 @@ export function App() {
 						)
 					}
 				>
+					{/* Where the deletion goes: the author's branch, never the bank directly. */}
 					{confirm.base === undefined
-						? `The draft ${confirmName ?? "(no name)"} is only in this browser and cannot be recovered.`
-						: `${confirmName ?? confirm.base.path} will be deleted from the repository in a commit under your name. Git keeps the history.`}
+						? `${confirmName ?? "This draft"} exists only in this browser and cannot be recovered.`
+						: `It is removed from your branch${model.session.kind === "connected" ? `, ${ownBranch(model.session.login)},` : ""} in a commit. The bank is unchanged until your pull request is merged.`}
+					{confirm.base !== undefined &&
+						isUnsaved(confirm) &&
+						" Your unsaved changes to it are discarded."}
 					{confirmUsers > 0 &&
 						` ${confirmUsers} question${confirmUsers === 1 ? " names" : "s name"} it; each will show a hole there until it is changed.`}
 				</ConfirmationDialog>

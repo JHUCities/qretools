@@ -311,3 +311,17 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   (pull request required, no force-push or deletion), "Automatically delete head
   branches" on, and the qretools GitHub App installed, plus a short README of those
   steps. The dialog then links to it once.
+
+- **One-click delete with Restore.** A saved file's delete is a commit on the author's
+  branch, so it can be undone: delete in one click and show a banner "x was deleted
+  from your branch" with **Restore**, which commits the last saved version back
+  (`base.text` at `base.path`, `expected: null`); github.com's branch deletion does the
+  same. Needs the deleted entry kept in the Model until the banner is dismissed. A
+  draft keeps its confirmation: its delete is the only irreversible one. Unsaved edits
+  to a saved file are still lost on delete, so say so or keep the confirmation then.
+  Also: a confirm that lands after the session lapsed or a save started does nothing
+  silently; and deleting a file GitHub already changed is refused only after
+  confirming (the dialog could say so first, from `syncOf`).
+- **Question for the owner: deleting a question already asked.** A question fielded in
+  a survey (the migrated `legacy.surveys_used`) is part of that survey's record. Warn
+  more strongly before deleting it, or refuse? (A policy decision, not a lint.)
