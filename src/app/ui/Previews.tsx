@@ -26,8 +26,16 @@ type OnTarget = ((target: Target) => void) | undefined;
 export function inlineCode(text: string): ReactNode[] {
 	const out: ReactNode[] = [];
 	text.split("`").forEach((part, i) => {
-		// biome-ignore lint/suspicious/noArrayIndexKey: the pieces of a split string have no identity but their position
-		out.push(i % 2 === 1 ? <code key={i}>{part}</code> : part);
+		out.push(
+			i % 2 === 1 ? (
+				// biome-ignore lint/suspicious/noArrayIndexKey: the pieces of a split string have no identity but their position
+				<code key={i} className="code">
+					{part}
+				</code>
+			) : (
+				part
+			),
+		);
 	});
 	return out;
 }
@@ -224,13 +232,14 @@ export function Findings({
 				// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
 				<li key={i}>
 					{onTarget === undefined ? (
-						<div className={`finding ${f.severity}`}>
+						<div className="finding" data-severity={f.severity}>
 							<FindingBody f={f} />
 						</div>
 					) : (
 						<button
 							type="button"
-							className={`finding ${f.severity}`}
+							className="finding"
+							data-severity={f.severity}
 							onClick={() => onTarget(f)}
 						>
 							<FindingBody f={f} />
@@ -272,7 +281,7 @@ export const Ddi = memo(function Ddi({
 			<div className="pane-body">
 				{problems.map((f, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: schema problems are positional and can repeat
-					<p className="finding error" key={i}>
+					<p className="finding" data-severity="error" key={i}>
 						{inlineCode(f.message)}
 					</p>
 				))}

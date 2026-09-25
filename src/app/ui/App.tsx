@@ -6,6 +6,7 @@ import {
 	Button,
 	ConfirmationDialog,
 } from "@primer/react";
+import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
 import { SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
@@ -93,10 +94,10 @@ export function App() {
 				<header className="topbar">
 					<h1>qretools</h1>
 					<span className="quiet">question bank</span>
-					<span className="quiet session">
-						{model.session.kind === "connected" &&
-							`${model.session.login} · ${model.settings.owner}/${model.settings.repo} · ${model.session.branch}${model.session.canWrite ? "" : " (read only)"}`}
-					</span>
+					{/* A live region: connecting, loading and signing out are announced. */}
+					<AriaStatus as="span" className="quiet session">
+						{sessionLine(model)}
+					</AriaStatus>
 					<BranchLinks model={model} />
 					<span className="spacer" />
 					<ActionMenu>
@@ -279,4 +280,21 @@ function BranchLinks({ model }: { model: Model }) {
 			)}
 		</>
 	);
+}
+
+/** Who is connected to which bank, or what the connection is doing: said, and announced. */
+function sessionLine(model: Model): string {
+	const { session, settings, loading } = model;
+	switch (session.kind) {
+		case "anonymous":
+			return "";
+		case "connecting":
+			return "Connecting to GitHub…";
+		case "failed":
+			return session.failure.message;
+		case "connected":
+			return loading.kind === "loading"
+				? "Loading the bank from GitHub…"
+				: `${session.login} · ${settings.owner}/${settings.repo} · ${session.branch}${session.canWrite ? "" : " (read only)"}`;
+	}
 }

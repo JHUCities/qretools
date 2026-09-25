@@ -66,8 +66,9 @@ export function MoveDialog({
 						}
 					/>
 					<FormControl.Caption>
-						<code>{from}</code> → <code>{to}</code>. The saved version moves;
-						unsaved edits stay unsaved. In the bank: {folders.join(", ")}.
+						<code className="code">{from}</code> →{" "}
+						<code className="code">{to}</code>. The saved version moves; unsaved
+						edits stay unsaved. In the bank: {folders.join(", ")}.
 					</FormControl.Caption>
 					{problem !== undefined && (
 						<FormControl.Validation variant="error">

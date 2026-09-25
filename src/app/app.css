@@ -59,21 +59,25 @@ body {
 }
 .topbar {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: var(--base-size-12);
+	gap: var(--base-size-8) var(--base-size-12);
 	padding: var(--base-size-12) var(--base-size-16);
 	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
 }
 .topbar h1 {
 	margin: 0;
-	font-size: 18px;
+	font-size: var(--text-title-size-small);
 }
 .topbar .session {
-	font-size: 13px;
+	font-size: var(--text-body-size-small);
+	overflow-wrap: anywhere;
 }
 .spacer {
 	flex: 1;
 }
+
+/* Colour utilities: Primer's functional tokens, one set. */
 .quiet {
 	color: var(--fgColor-muted);
 }
@@ -89,50 +93,43 @@ body {
 .fg-danger {
 	color: var(--fgColor-danger);
 }
+
+/* Inline code of our own; scoped by class so Primer's components keep theirs. */
+.code {
+	font-family: var(--fontStack-monospace);
+	font-size: var(--text-codeInline-size);
+	background: var(--bgColor-muted);
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-small);
+	padding: 0 var(--base-size-4);
+}
+
+/* The bank tree. */
 .browser {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-}
-.inspector {
-	border-top: 1px solid var(--borderColor-default);
-	padding: 8px 12px;
-	font-size: 13px;
-	background: var(--bgColor-muted);
-}
-.inspector p {
-	margin: 2px 0;
-}
-.insp-hole,
-.insp-warning {
-	color: var(--fgColor-attention);
-}
-.insp-error {
-	color: var(--fgColor-danger);
-}
-.save-also {
-	font-size: 12px;
+	gap: var(--base-size-8);
 }
 .browser-heading {
-	margin: 8px 0 0;
-	font-size: 12px;
-	font-weight: 600;
+	margin: var(--base-size-8) 0 0;
+	font-size: var(--text-body-size-small);
+	font-weight: var(--base-text-weight-semibold);
 	color: var(--fgColor-muted);
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-}
-.used-by {
-	margin: 0;
-	padding-left: 18px;
 }
 .leaf-marks {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--base-size-4);
+}
+.used-by {
+	margin: 0;
+	padding-left: var(--base-size-20);
 }
 .blank {
-	padding: 40px;
+	padding: var(--base-size-40);
 }
+
+/* The open file: header, then source beside previews. */
 .editing {
 	flex: 1;
 	min-height: 0;
@@ -140,11 +137,11 @@ body {
 	flex-direction: column;
 }
 .qhead {
-	border-bottom: 1px solid var(--borderColor-default);
-	padding: 8px 16px;
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	padding: var(--base-size-8) var(--base-size-16);
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--base-size-8);
 }
 .split {
 	flex: 1;
@@ -152,9 +149,20 @@ body {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
+/* Narrow: the source above its previews, each scrolling on its own. */
+@media (--viewportRange-narrow) {
+	.split {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+	}
+	.left {
+		border-right: none;
+		border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	}
+}
 .left {
 	min-height: 0;
-	border-right: 1px solid var(--borderColor-default);
+	border-right: var(--borderWidth-thin) solid var(--borderColor-default);
 	display: flex;
 	flex-direction: column;
 }
@@ -163,243 +171,235 @@ body {
 	min-width: 0;
 	min-height: 0;
 }
+/* The previews: the one scroll region beside the editor's own. */
 .right {
 	min-height: 0;
 	overflow: auto;
-	padding: 14px 16px 40px;
+	padding: var(--base-size-16) var(--base-size-16) var(--base-size-40);
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
+	gap: var(--base-size-16);
 }
+.inspector {
+	border-top: var(--borderWidth-thin) solid var(--borderColor-default);
+	padding: var(--base-size-8) var(--base-size-12);
+	font-size: var(--text-body-size-small);
+	background: var(--bgColor-muted);
+}
+.inspector p {
+	margin: var(--base-size-2) 0;
+}
+
+/* Preview panels. */
 .pane {
 	background: var(--bgColor-default);
-	border: 1px solid var(--borderColor-default);
-	border-radius: 8px;
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-medium);
 }
 .pane h3 {
 	margin: 0;
-	padding: 8px 12px;
-	font-size: 12px;
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-	color: var(--fgColor-muted);
-	border-bottom: 1px solid var(--borderColor-default);
+	padding: var(--base-size-8) var(--base-size-12);
+	font-size: var(--text-body-size-medium);
+	font-weight: var(--base-text-weight-semibold);
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
 	display: flex;
-	gap: 8px;
+	gap: var(--base-size-8);
 	align-items: center;
-}
-.pane h3 > * {
-	margin-left: auto;
-	text-transform: none;
-	letter-spacing: 0;
+	justify-content: space-between;
 }
 .pane-body {
-	padding: 12px;
+	padding: var(--base-size-12);
 }
 details.pane > summary {
 	cursor: pointer;
-	list-style: none;
-}
-details.pane > summary::-webkit-details-marker {
-	display: none;
 }
 details.pane:not([open]) > summary h3 {
 	border-bottom: 0;
 }
+
+/* A hole in a preview: dashed and tinted, an invitation, never an error. */
 .hole {
 	display: inline-block;
 	text-align: left;
-	border: 2px dashed var(--fgColor-attention);
+	border: var(--borderWidth-thick) dashed var(--fgColor-attention);
 	background: var(--bgColor-attention-muted);
 	color: var(--fgColor-default);
-	border-radius: 6px;
-	padding: 4px 8px;
+	border-radius: var(--borderRadius-medium);
+	padding: var(--base-size-4) var(--base-size-8);
 	font: inherit;
-	font-size: 13px;
+	font-size: var(--text-body-size-small);
 	max-width: 100%;
+}
+button.hole {
 	cursor: pointer;
 }
+
+/* As the respondent sees it: native form controls, as a respondent would get them. */
 .respondent {
 	border: 0;
 	margin: 0;
 	padding: 0;
 }
 .respondent legend {
-	font-size: 17px;
-	font-weight: 600;
+	font-size: var(--text-title-size-small);
+	font-weight: var(--base-text-weight-semibold);
 	padding: 0;
-	margin-bottom: 6px;
+	margin-bottom: var(--base-size-6);
 }
 .instruction {
-	margin: 0 0 8px;
+	margin: 0 0 var(--base-size-8);
 	color: var(--fgColor-muted);
 	font-style: italic;
 }
 .options {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: var(--base-size-4);
 }
-.number input {
+.respondent .number input {
 	width: 8em;
 	font: inherit;
-	padding: 4px 6px;
+	padding: var(--base-size-4) var(--base-size-6);
 }
-textarea {
+.respondent textarea {
 	width: 100%;
 	font: inherit;
-	padding: 6px;
+	padding: var(--base-size-6);
 }
+
+/* The codebook entry, in the BAS codebook's own style (its uppercase titles included). */
 .codebook {
-	font-size: 14px;
+	font-size: var(--text-body-size-medium);
 }
 .cb-title {
-	margin: 0 0 4px;
-	font-weight: 700;
-	letter-spacing: 0.03em;
+	margin: 0 0 var(--base-size-4);
+	font-weight: var(--base-text-weight-semibold);
 	text-transform: uppercase;
 }
 .cb-var {
-	font-weight: 400;
+	font-weight: var(--base-text-weight-normal);
 	color: var(--fgColor-muted);
 	font-family: var(--fontStack-monospace);
-	font-size: 13px;
-	margin-left: 6px;
+	font-size: var(--text-codeBlock-size);
+	margin-left: var(--base-size-6);
 }
 .cb-title .cb-var,
 .cb-title .hole {
 	text-transform: none;
 }
 .cb-text {
-	margin: 0 0 8px;
+	margin: 0 0 var(--base-size-8);
 	font-style: italic;
 }
 .cb-values {
 	list-style: none;
-	margin: 0 0 8px;
+	margin: 0 0 var(--base-size-8);
 	padding: 0;
 	font-family: var(--fontStack-monospace);
-	font-size: 13px;
+	font-size: var(--text-codeBlock-size);
 }
 .ref {
-	margin-left: 6px;
-	padding: 0 4px;
-	border-radius: 4px;
+	margin-left: var(--base-size-6);
+	padding: 0 var(--base-size-4);
+	border-radius: var(--borderRadius-small);
 	background: var(--bgColor-neutral-muted);
 	font-family: var(--fontStack-monospace);
-	font-size: 12px;
+	font-size: var(--text-caption-size);
 	font-style: normal;
 }
 .cb-meta {
-	margin: 2px 0;
+	margin: var(--base-size-2) 0;
 	color: var(--fgColor-muted);
-	font-size: 13px;
+	font-size: var(--text-body-size-small);
 }
+
+/* Findings: severity is data, carried by the label and the edge, never by colour alone. */
 .findings {
 	list-style: none;
 	margin: 0;
 	padding: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: var(--base-size-6);
 }
 .finding {
+	--edge: var(--borderColor-default);
 	width: 100%;
 	text-align: left;
 	display: grid;
-	grid-template-columns: 64px 1fr;
-	column-gap: 8px;
-	border: 1px solid var(--borderColor-default);
-	border-left-width: 4px;
-	border-radius: 6px;
+	grid-template-columns: auto 1fr;
+	column-gap: var(--base-size-8);
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-left: var(--borderWidth-thicker) solid var(--edge);
+	border-radius: var(--borderRadius-medium);
 	background: var(--bgColor-default);
 	color: var(--fgColor-default);
-	padding: 6px 8px;
+	padding: var(--base-size-6) var(--base-size-8);
 	margin: 0;
 	font: inherit;
+}
+button.finding {
 	cursor: pointer;
 }
-.finding:hover {
+button.finding:hover {
 	background: var(--bgColor-muted);
 }
 .finding .sev {
-	font-size: 11px;
+	min-width: 4em;
+	color: var(--edge);
+	font-size: var(--text-caption-size);
 	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	padding-top: 2px;
+	padding-top: var(--base-size-2);
 }
 .finding .hint {
 	grid-column: 2;
 	color: var(--fgColor-muted);
-	font-size: 13px;
+	font-size: var(--text-body-size-small);
 	white-space: pre-wrap;
 }
-.finding.hole {
-	border-left-color: var(--fgColor-attention);
+.finding[data-severity="hole"] {
+	--edge: var(--fgColor-attention);
 	border-left-style: dashed;
 }
-.finding.hole .sev {
-	color: var(--fgColor-attention);
+.finding[data-severity="error"] {
+	--edge: var(--fgColor-danger);
 }
-.finding.error {
-	border-left-color: var(--fgColor-danger);
+.finding[data-severity="warning"] {
+	--edge: var(--fgColor-attention);
 }
-.finding.error .sev {
-	color: var(--fgColor-danger);
-}
-.finding.warning {
-	border-left-color: var(--fgColor-attention);
-}
-.finding.warning .sev {
-	color: var(--fgColor-attention);
-}
-.finding.info {
-	border-left-color: var(--fgColor-accent);
-}
-.finding.info .sev {
-	color: var(--fgColor-accent);
+.finding[data-severity="info"] {
+	--edge: var(--fgColor-accent);
 }
 p.finding {
 	display: block;
 }
-span.finding.warning {
-	display: block;
-	color: var(--fgColor-attention);
-}
+/* The DDI JSON scrolls with the previews; no scroll region of its own. */
 .json {
 	margin: 0;
-	max-height: 360px;
-	overflow: auto;
-	font: 12px / 1.45 var(--fontStack-monospace);
-}
-code {
 	font-family: var(--fontStack-monospace);
-	font-size: 0.92em;
-	background: var(--bgColor-muted);
-	border: 1px solid var(--borderColor-default);
-	border-radius: 4px;
-	padding: 0 4px;
+	font-size: var(--text-caption-size);
+	line-height: var(--text-codeBlock-lineHeight);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
+
+/* The Bank dialog. */
 .bank-form {
 	display: grid;
-	gap: 12px;
+	gap: var(--base-size-12);
 }
 .bank-status {
-	margin-top: 16px;
+	margin-top: var(--base-size-16);
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--base-size-8);
 }
 .upload {
 	display: inline-flex;
-	gap: 6px;
+	gap: var(--base-size-6);
 	align-items: center;
-	font-size: 13px;
+	font-size: var(--text-body-size-small);
 }
-
 .save-path {
-	margin: 12px 0 4px;
-}
-.save-path code {
-	font-size: 13px;
+	margin: var(--base-size-12) 0 var(--base-size-4);
 }

@@ -4,6 +4,7 @@
  * twice) come from the index and are shown on the file like any other finding.
  */
 import { Button, Label, Link, PageHeader } from "@primer/react";
+import { ScrollableRegion } from "@primer/react/experimental";
 import { memo, type ReactNode, useMemo } from "react";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
@@ -167,7 +168,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 					/>
 					<Inspector q={q} ev={ev} index={index} />
 				</section>
-				<section className="right">
+				<ScrollableRegion className="right" aria-label="Previews">
 					<article className="pane">
 						<h3>
 							Findings <StatusBadge status={status(findings)} />
@@ -189,7 +190,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						</div>
 					</article>
 					<Ddi document={ev.ddi} schema={ddiSchema} problems={problems} />
-				</section>
+				</ScrollableRegion>
 			</div>
 		</div>
 	);
@@ -255,7 +256,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						label={`${SINGULAR[e.kind]} ${e.name}: source (YAML)`}
 					/>
 				</section>
-				<section className="right">
+				<ScrollableRegion className="right" aria-label="Previews">
 					<article className="pane">
 						<h3>
 							Findings <StatusBadge status={status(ev.findings)} />
@@ -277,7 +278,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 										// Codes may repeat while being edited, so the position is the key.
 										// biome-ignore lint/suspicious/noArrayIndexKey: see above
 										<li key={i}>
-											<code>{c.code}</code> {c.label}
+											<code className="code">{c.code}</code> {c.label}
 										</li>
 									))}
 								</ul>
@@ -304,7 +305,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 							) : !inEffect ? (
 								<p className="fg-attention">
 									This file does not read yet, so each of these shows a hole
-									where it names <code>{e.name}</code>.
+									where it names <code className="code">{e.name}</code>.
 								</p>
 							) : null}
 							{users !== undefined && users.length > 0 && (
@@ -330,11 +331,19 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 							)}
 						</div>
 					</article>
-				</section>
+				</ScrollableRegion>
 			</div>
 		</div>
 	);
 }
+
+/** A finding's severity as one of the colour utilities: the text says the rest. */
+const SEVERITY_COLOUR: Readonly<Record<string, string>> = {
+	hole: "fg-attention",
+	warning: "fg-attention",
+	error: "fg-danger",
+	info: "fg-accent",
+};
 
 /**
  * Hazel's cursor inspector: what is at the caret. The core says what the field is and
@@ -375,13 +384,17 @@ function Inspector({
 	return (
 		<aside className="inspector" aria-label="At the cursor">
 			<p>
-				{at.key === undefined ? <b>Question. </b> : <code>{at.path}</code>}{" "}
+				{at.key === undefined ? (
+					<b>Question. </b>
+				) : (
+					<code className="code">{at.path}</code>
+				)}{" "}
 				{at.description}
 			</p>
 			{m !== undefined &&
 				(m.value !== undefined ? (
 					<p>
-						<code>{m.name}</code> is the {m.scheme}{" "}
+						<code className="code">{m.name}</code> is the {m.scheme}{" "}
 						{"codes" in m.value
 							? m.value.codes.map((c) => `${c.code} ${c.label}`).join(" · ")
 							: `“${m.value.text}”`}
@@ -408,7 +421,7 @@ function Inspector({
 								})
 							}
 						>
-							New {m.scheme} <code>{m.name}</code>
+							New {m.scheme} <code className="code">{m.name}</code>
 						</Button>
 					</p>
 				))}
@@ -420,10 +433,7 @@ function Inspector({
 				</p>
 			)}
 			{at.findings.map((f) => (
-				<p
-					key={`${f.code}:${f.path}`}
-					className={`insp-finding insp-${f.severity}`}
-				>
+				<p key={`${f.code}:${f.path}`} className={SEVERITY_COLOUR[f.severity]}>
 					{inlineCode(f.message)}
 				</p>
 			))}
@@ -528,7 +538,7 @@ export function ForeignView({
 							label={`${whose(screen.branch)} of ${screen.path} (YAML, read only)`}
 						/>
 					</section>
-					<section className="right">
+					<ScrollableRegion className="right" aria-label="Previews">
 						<article className="pane">
 							<h3>
 								Findings <StatusBadge status={status(findings)} />
@@ -553,7 +563,7 @@ export function ForeignView({
 								</article>
 							</>
 						)}
-					</section>
+					</ScrollableRegion>
 				</div>
 			)}
 		</div>

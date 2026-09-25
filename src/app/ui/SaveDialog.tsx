@@ -79,7 +79,7 @@ export function SaveDialog({
 						}
 					/>
 					<FormControl.Caption>
-						{path !== undefined && <code>{path}</code>}{" "}
+						{path !== undefined && <code className="code">{path}</code>}{" "}
 						{folders.length === 0
 							? "The bank has no topics yet."
 							: `In the bank: ${folders.join(", ")}.`}

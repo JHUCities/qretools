@@ -143,7 +143,7 @@ export function FileHeader({
 					</Button>
 				</PageHeader.Actions>
 				<PageHeader.Description>
-					<span id={statusId} className="quiet qhead-status">
+					<span id={statusId} className="quiet">
 						{status}
 					</span>
 				</PageHeader.Description>

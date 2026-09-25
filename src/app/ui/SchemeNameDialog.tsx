@@ -69,12 +69,13 @@ export function SchemeNameDialog({
 					/>
 					<FormControl.Caption>
 						Questions use it by writing{" "}
-						<code>
+						<code className="code">
 							{kind === "scale" ? "responses" : kind}: {name || EXAMPLES[kind]}
 						</code>
 						{problem === undefined && (
 							<>
-								; it is saved as <code>{schemePath(kind, name)}</code>
+								; it is saved as{" "}
+								<code className="code">{schemePath(kind, name)}</code>
 							</>
 						)}
 						.

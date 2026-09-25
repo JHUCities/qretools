@@ -285,3 +285,20 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
 - **Old links after a move (candidate).** A link to a question's old path now finds
   nothing and says "not on that branch". A fallback could open the local question with
   the same filename in another folder, when there is exactly one. Cheap; not built.
+
+- **Front-end audit, what remains (2026-09-25).** Done: the app shell, dark mode and the
+  editor's name, PageHeader with inactive buttons and loading, links that navigate,
+  native dialog forms with Primer validation, the CSS on Primer's tokens with scoped
+  selectors, a keyboard-scrollable previews region, the session line as a live status.
+  Remaining, in rough order:
+  - Findings as a Primer `ActionList` (severity octicons as leading visuals, the hint
+    as description) instead of the bespoke list; keep holes visibly dashed.
+  - `Stack` for the remaining hand-written flex rows (top bar, tree marks, Bank status).
+  - Tree details: `CounterLabel` counts, `TreeView.TrailingVisual label` for the marks
+    and status icon (screen-reader text), `Spinner` for the busy mark, skeleton nodes
+    (`SubTree state="loading"`) while the bank loads, `Blankslate` for empty states.
+  - Narrow screens as separate views (tree, or the open file) rather than stacked.
+  - The codebook's "Universe:"/"Source:" lines as a `<dl>`; the respondent preview's
+    radio group name from `useId()`.
+  - One tree with two top-level groups instead of two TreeViews; one table of singular
+    scheme labels (App and Editing each have their own).
