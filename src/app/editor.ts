@@ -8,7 +8,7 @@
 import { startCompletion } from "@codemirror/autocomplete";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
-import { Annotation, EditorState, Prec } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, Prec } from "@codemirror/state";
 import { hoverTooltip, keymap } from "@codemirror/view";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
@@ -25,6 +25,8 @@ export interface EditorInputs {
 	readonly text: string;
 	readonly diagnostics: readonly Diagnostic[];
 	readonly schema: object;
+	/** Another author's version, from a link: shown, never edited. */
+	readonly readOnly?: boolean;
 }
 
 export interface Editor {
@@ -41,6 +43,8 @@ export function createEditor(
 ): Editor {
 	let schema: object | undefined;
 	let current: number | undefined;
+	let locked = false;
+	const readOnly = new Compartment();
 	const extensions = [
 		basicSetup,
 		yaml(),
@@ -53,6 +57,7 @@ export function createEditor(
 		macCompletionKeys,
 		EditorView.lineWrapping,
 		holeTheme,
+		readOnly.of(EditorState.readOnly.of(false)),
 		// `docChanged` is essential: setDiagnostics also triggers this listener.
 		EditorView.updateListener.of((u) => {
 			if (u.docChanged && !u.transactions.some((t) => t.annotation(external)))
@@ -65,13 +70,20 @@ export function createEditor(
 	];
 	const view = new EditorView({ parent, extensions });
 	return {
-		sync({ id, text, diagnostics, schema: next }) {
+		sync({ id, text, diagnostics, schema: next, readOnly: lock = false }) {
 			if (id !== current) {
 				// A fresh state: new document, empty undo history, and the schema state
-				// starts over, so it must be pushed again below.
+				// starts over, so it must be pushed again below. So does read-only.
 				current = id;
 				schema = undefined;
+				locked = false;
 				view.setState(EditorState.create({ doc: text, extensions }));
+			}
+			if (lock !== locked) {
+				locked = lock;
+				view.dispatch({
+					effects: readOnly.reconfigure(EditorState.readOnly.of(lock)),
+				});
 			}
 			if (next !== schema) {
 				schema = next;

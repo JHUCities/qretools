@@ -11,11 +11,18 @@ import type { DdiDocument } from "../core/ddi/document.js";
 import type { Validator } from "../core/ddi/validate.js";
 import { makeValidator } from "../core/ddi/validate.js";
 import type { Finding } from "../core/findings.js";
-import { err } from "../core/result.js";
+import { err, type Result } from "../core/result.js";
 import type { Editor } from "./editor.js";
 import type { Cmd, Dispatch } from "./model.js";
 import { STORAGE_KEY } from "./persist.js";
-import type { MakeStore, Repo, Store, TokenStore } from "./storage.js";
+import type {
+	Failure,
+	File,
+	MakeStore,
+	Repo,
+	Store,
+	TokenStore,
+} from "./storage.js";
 
 export interface Deps {
 	readonly makeStore: MakeStore;
@@ -160,6 +167,29 @@ export function createEffects(deps: Deps): Effects {
 					token = null;
 					store = undefined;
 					return;
+				case "setLink":
+					// The browser keeps the history: setting the hash adds an entry, replace()
+					// does not. Writing the address it already shows would add a duplicate.
+					if (location.hash === cmd.hash) return;
+					if (cmd.push) location.hash = cmd.hash;
+					else
+						location.replace(
+							`${location.pathname}${location.search}${cmd.hash}`,
+						);
+					return;
+				case "readAt": {
+					const s = storeFor(cmd.target);
+					const reply = (result: Result<File, Failure>) =>
+						dispatch({
+							kind: "foreignLoaded",
+							branch: cmd.target.branch,
+							path: cmd.path,
+							result,
+						});
+					if (!s) return reply(err(NO_TOKEN));
+					s.read(cmd.target, cmd.path).then(reply);
+					return;
+				}
 				default:
 					return cmd satisfies never;
 			}

@@ -11,6 +11,7 @@ import { MISSING_NAME, schemePath } from "../core/schemes.js";
 import type { NamedScheme } from "../core/surface/env.js";
 import { parseSurface, rangesOf } from "../core/surface/parse.js";
 import { NAME_PATTERN } from "../core/surface/schema.js";
+import { formatLink, type Link, parseLink } from "./link.js";
 import {
 	type Activity,
 	allFiles,
@@ -41,8 +42,23 @@ import {
 
 type Step = readonly [Model, readonly Cmd[]];
 
-/** Pure. Every state change in the app is one case here. */
+/**
+ * Pure. Every state change in the app is one case of `step`; this wrapper keeps the
+ * address bar naming what is open. A different file open adds a history entry (so
+ * Back works); anything else (a draft gets its path, a file moves) replaces it.
+ */
 export function update(model: Model, msg: Msg): Step {
+	const [next, cmds] = step(model, msg);
+	const before = linkOf(model);
+	const after = linkOf(next);
+	if (after === undefined || after === before) return [next, cmds];
+	return [
+		next,
+		[...cmds, { kind: "setLink", hash: after, push: openChanged(model, next) }],
+	];
+}
+
+function step(model: Model, msg: Msg): Step {
 	switch (msg.kind) {
 		case "edited":
 			return model.screen.kind === "editing"
@@ -72,6 +88,40 @@ export function update(model: Model, msg: Msg): Step {
 						[],
 					]
 				: [model, []];
+
+		case "hashChanged": {
+			const link = parseLink(msg.hash);
+			// Our own writes come back as hashchange events; the current link is a no-op.
+			if (link === undefined || formatLink(link) === linkOf(model))
+				return [model, []];
+			return openLink(model, link);
+		}
+
+		case "foreignLoaded": {
+			const screen = model.screen;
+			// A link opened since has moved on; this reply is stale.
+			if (
+				screen.kind !== "foreign" ||
+				screen.branch !== msg.branch ||
+				screen.path !== msg.path
+			)
+				return [model, []];
+			if (!msg.result.ok)
+				return [
+					{
+						...model,
+						screen: { kind: "blank" },
+						failures: [...model.failures, msg.result.error],
+					},
+					[],
+				];
+			const file = msg.result.value;
+			// Their version is exactly the one you started from: open your own copy.
+			const own = claimant(model, file.path);
+			if (own?.base?.sha === file.sha)
+				return [{ ...model, screen: { kind: "editing", id: own.id } }, []];
+			return [{ ...model, screen: { ...screen, file } }, []];
+		}
 
 		case "ddiSchemaLoaded":
 			return [{ ...model, ddiSchema: msg.result }, []];
@@ -495,11 +545,12 @@ export function update(model: Model, msg: Msg): Step {
 		case "bankLoaded": {
 			if (!msg.result.ok)
 				return [
-					{
+					compact({
 						...model,
-						loading: { kind: "bundled" },
+						loading: { kind: "bundled" } as const,
 						failures: [...model.failures, msg.result.error],
-					},
+						pendingLink: undefined,
+					}),
 					[],
 				];
 			// Before the author's first save their branch does not exist, and `remote` is
@@ -509,25 +560,30 @@ export function update(model: Model, msg: Msg): Step {
 			const proposable = aheadBy > 0;
 			const remote = remoteOf(model.remote, files);
 			const { local, nextId } = rebase(model.local, remote, model.nextId);
-			return persist([
-				{
-					...model,
-					local,
-					remote,
-					nextId,
-					loading: { kind: "loaded", from, proposable, behindBy },
-				},
-				[],
-			]);
+			const loaded: Model = compact({
+				...model,
+				local,
+				remote,
+				nextId,
+				loading: { kind: "loaded", from, proposable, behindBy } as const,
+				pendingLink: undefined,
+			});
+			// A link that waited for the bank opens now.
+			const [opened, cmds] =
+				model.pendingLink === undefined
+					? [loaded, []]
+					: openLink(loaded, model.pendingLink);
+			return persist([opened, cmds]);
 		}
 
 		case "disconnected":
 			return [
-				{
+				compact({
 					...model,
-					session: { kind: "anonymous" },
-					loading: { kind: "bundled" },
-				},
+					session: { kind: "anonymous" } as const,
+					loading: { kind: "bundled" } as const,
+					pendingLink: undefined,
+				}),
 				[{ kind: "forgetToken" }],
 			];
 
@@ -649,6 +705,123 @@ function messageOf(model: Model, q: Entry): string {
 		parseSurface(q.source, env).draft,
 	);
 }
+
+/**
+ * The link to what is open, as the address bar should show it; undefined while not
+ * connected (nothing to name a branch by). The branch is the one the file was read
+ * from: before the author's first save their own branch does not exist yet, so a link
+ * names the default branch, which others can open.
+ */
+export function linkOf(model: Model): string | undefined {
+	if (model.session.kind !== "connected") return undefined;
+	const repo = `${model.settings.owner}/${model.settings.repo}`;
+	const own =
+		model.loading.kind === "loaded" && model.loading.from === "default"
+			? model.session.defaultBranch
+			: model.session.branch;
+	const { screen } = model;
+	if (screen.kind === "foreign")
+		return formatLink({ repo, branch: screen.branch, file: screen.path });
+	const open = screen.kind === "editing" ? fileOf(model, screen.id) : undefined;
+	// A draft has no path on GitHub yet: the link names the branch alone.
+	const file = open?.base?.path;
+	return formatLink(
+		file === undefined ? { repo, branch: own } : { repo, branch: own, file },
+	);
+}
+
+/** Whether a different file is open: a navigation, which the browser should record. */
+const openChanged = (a: Model, b: Model): boolean =>
+	a.screen.kind !== b.screen.kind ||
+	(a.screen.kind === "editing" &&
+		b.screen.kind === "editing" &&
+		a.screen.id !== b.screen.id) ||
+	(a.screen.kind === "foreign" &&
+		b.screen.kind === "foreign" &&
+		(a.screen.branch !== b.screen.branch || a.screen.path !== b.screen.path));
+
+/** The working file that holds a path on the author's branch, if any. */
+const claimant = (model: Model, path: Path): Entry | undefined =>
+	allFiles(model.local).find((f) => f.base?.path === path);
+
+/**
+ * Open a link. Your own branch (or the default branch before your first save) opens
+ * your local copy at once; viewing never waits for the load, only writing does.
+ * Another branch shows that author's version, read only, unless it is exactly the
+ * version you started from. What cannot be resolved yet waits for the bank.
+ */
+function openLink(model: Model, link: Link): Step {
+	const repo = `${model.settings.owner}/${model.settings.repo}`;
+	if (link.repo !== repo)
+		return [
+			refused(
+				model,
+				`This link is to ${link.repo}; the Bank panel is set to ${repo}.`,
+				"Change the repository in the Bank panel to open it.",
+			),
+			[],
+		];
+	const loaded = model.loading.kind === "loaded";
+	const session =
+		model.session.kind === "connected" ? model.session : undefined;
+	const ownBranches = session
+		? [
+				session.branch,
+				...(loaded &&
+				model.loading.kind === "loaded" &&
+				model.loading.from === "default"
+					? [session.defaultBranch]
+					: []),
+			]
+		: [];
+	const own = link.file === undefined ? undefined : claimant(model, link.file);
+	// Your own copy answers any link to your branch, and, before the load, any link at all.
+	if (own !== undefined && (!loaded || ownBranches.includes(link.branch)))
+		return [
+			compact({
+				...model,
+				screen: { kind: "editing", id: own.id } as const,
+				pendingLink: undefined,
+			}),
+			[],
+		];
+	if (!loaded || session === undefined)
+		return [{ ...model, pendingLink: link }, []];
+	if (ownBranches.includes(link.branch))
+		return link.file === undefined
+			? [{ ...model, screen: { kind: "blank" } }, []]
+			: [
+					refused(
+						model,
+						`\`${link.file}\` is not on ${link.branch}.`,
+						"It may have been moved, renamed or deleted.",
+					),
+					[],
+				];
+	if (link.file === undefined) return [model, []];
+	return [
+		{
+			...model,
+			screen: { kind: "foreign", branch: link.branch, path: link.file },
+		},
+		[
+			{
+				kind: "readAt",
+				target: { ...targetOf(model.settings, session), branch: link.branch },
+				path: link.file,
+			},
+		],
+	];
+}
+
+/** A link the app declined to open: said once, in the failures. */
+const refused = (model: Model, message: string, hint?: string): Model => ({
+	...model,
+	failures: [
+		...model.failures,
+		compact({ kind: "refused" as const, message, hint }),
+	],
+});
 
 /**
  * Whether a path is already GitHub's or another working file's. A changed file

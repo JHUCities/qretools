@@ -38,6 +38,12 @@ if (root) {
 		{ stored, hasToken: browserTokenStore.load() !== null },
 		{ makeStore: makeGitHubStore, tokenStore: browserTokenStore },
 	);
+	// Links live in the hash. The address is read when the event is handled, never
+	// taken from the event: a stale event after quick navigation must not pull back.
+	const followLink = () =>
+		app.dispatch({ kind: "hashChanged", hash: location.hash });
+	window.addEventListener("hashchange", followLink);
+	followLink();
 	createRoot(root).render(
 		<StrictMode>
 			<AppContext.Provider value={app}>

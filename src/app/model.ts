@@ -17,6 +17,7 @@ import choiceTemplate from "../templates/choice.yaml?raw";
 import numberTemplate from "../templates/number.yaml?raw";
 import scaleTemplate from "../templates/scale.yaml?raw";
 import selectManyTemplate from "../templates/select-many.yaml?raw";
+import type { Link } from "./link.js";
 import type { Persisted } from "./persist.js";
 import type {
 	BankSettings,
@@ -98,7 +99,17 @@ export interface Remote {
 
 export type Screen =
 	| { readonly kind: "blank" }
-	| { readonly kind: "editing"; readonly id: Id };
+	| { readonly kind: "editing"; readonly id: Id }
+	/**
+	 * Another author's version of a file, from a link: read only, never adopted or
+	 * edited (owner, 2026-09-25); `file` is absent while it loads.
+	 */
+	| {
+			readonly kind: "foreign";
+			readonly branch: string;
+			readonly path: Path;
+			readonly file?: File;
+	  };
 
 /** The bank browser beside the open question. Effective expansion is derived in tree.ts. */
 export interface Browser {
@@ -161,6 +172,8 @@ export interface Model {
 	 * it belongs to another file, and clamped where used (a reload may shorten the text).
 	 */
 	readonly cursor?: { readonly id: Id; readonly offset: number };
+	/** A link that needs the bank (or another branch) before it can open. Never persisted. */
+	readonly pendingLink?: Link;
 	/** Per file; content never carries it, so marking a scale "saving" leaves the environment alone. */
 	readonly activity: Readonly<Record<Id, Activity>>;
 	readonly nextId: Id;
@@ -178,6 +191,14 @@ export type Msg =
 	| { readonly kind: "edited"; readonly text: string }
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "cursorMoved"; readonly offset: number }
+	/** The browser's address changed (a pasted link, Back, Forward); read when handled. */
+	| { readonly kind: "hashChanged"; readonly hash: string }
+	| {
+			readonly kind: "foreignLoaded";
+			readonly branch: string;
+			readonly path: Path;
+			readonly result: Result<File, Failure>;
+	  }
 	| { readonly kind: "ddiSchemaLoaded"; readonly result: DdiSchema }
 	| { readonly kind: "listOpened" }
 	| { readonly kind: "fileOpened"; readonly id: Id }
@@ -265,7 +286,15 @@ export type Cmd =
 			readonly text: string;
 			readonly mime: string;
 	  }
-	| { readonly kind: "forgetToken" };
+	| { readonly kind: "forgetToken" }
+	/** Put a link in the address bar: a new history entry, or in place. */
+	| { readonly kind: "setLink"; readonly hash: string; readonly push: boolean }
+	/** Read one file from another author's branch, for a link. */
+	| {
+			readonly kind: "readAt";
+			readonly target: BranchTarget;
+			readonly path: Path;
+	  };
 
 export type Dispatch = (msg: Msg) => void;
 

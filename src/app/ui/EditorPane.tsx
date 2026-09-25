@@ -27,9 +27,15 @@ export function EditorPane(inputs: EditorInputs) {
 			editor.current = null;
 		};
 	}, [dispatch, effects]);
-	const { id, text, diagnostics, schema } = inputs;
+	const { id, text, diagnostics, schema, readOnly } = inputs;
 	useEffect(() => {
-		editor.current?.sync({ id, text, diagnostics, schema });
-	}, [id, text, diagnostics, schema]);
+		editor.current?.sync({
+			id,
+			text,
+			diagnostics,
+			schema,
+			...(readOnly !== undefined && { readOnly }),
+		});
+	}, [id, text, diagnostics, schema, readOnly]);
 	return <div ref={host} className="editor" />;
 }

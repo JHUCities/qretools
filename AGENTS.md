@@ -793,7 +793,26 @@ discarded. Reload reads at the path the file claims (a draft GitHub also added h
 base) and, for a file GitHub deleted, takes the deletion. The file being saved is first
 in the change set, where a refusal reports. Only 422 "not a fast forward" or "Reference
 does not exist" (a branch merged and deleted mid-save) retries; other 422s report as
-themselves. Notes for step 5 from the step 4 review: identify questions by a
+themselves.
+
+**Links to a question built (2026-09-25).** `link.ts` formats and parses
+`#repo=…&branch=…&file=…` with URLSearchParams. `linkOf(model)` is derived (the branch
+the file was read from: the default branch before the author's first save; no `file`
+for a draft), and `update` is a wrapper around `step` that emits `setLink` whenever it
+changes: a history entry when a different file opens, a replacement otherwise (a draft
+gains its path). `exec` uses only the browser (setting `location.hash`, or
+`location.replace`) and skips writing the address already shown; `main.tsx` dispatches
+`hashChanged` with `location.hash` read at handling time, never the event's URL, and
+once at startup. `update` ignores the current link, which ends the echo loop. Opening:
+another repository is refused, naming it; a local copy answers a link to the author's
+branch at once, and any link before the load (viewing never waits, only writing does);
+otherwise the link waits for the bank (`pendingLink`, cleared on a failed load or
+disconnect; "Connect to open this link" when anonymous); a link to another branch reads
+that one file and shows it **read only** (owner, 2026-09-25: someone else's version is
+never edited or adopted, which replaces the planned "edit a copy"), unless its blob is
+the version the author started from, which opens their own copy. The editor's read-only
+mode is one CodeMirror compartment. Verified in headless Chrome against the real bank:
+links written, Back, a fresh tab, a `main` link opening the local copy. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

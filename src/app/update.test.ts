@@ -5,6 +5,7 @@ import { ok } from "../core/result.js";
 import { EMPTY_ENV } from "../core/surface/env.js";
 import { toDiagnostics } from "./diagnostics.js";
 import { createEvaluations } from "./evaluations.js";
+import { formatLink } from "./link.js";
 import {
 	DEFAULT_SETTINGS,
 	envOf,
@@ -289,7 +290,9 @@ describe("saving", () => {
 		});
 		// GitHub's copy of the author's branch is what was written.
 		expect(m2.remote.questions["questions/nhd/nhd_new.yaml"]?.sha).toBe("new");
-		expect(cmds.at(-1)?.kind).toBe("persist");
+		expect(cmds.map((c) => c.kind)).toContain("persist");
+		// The draft now has a path, so its link gains the file, in place.
+		expect(cmds.at(-1)).toMatchObject({ kind: "setLink", push: false });
 	});
 
 	it("a bank question saves to its opened path with its sha, and a stale answer is a failure with the reload path", () => {
@@ -959,5 +962,112 @@ describe("change sets", () => {
 			kind: "readFile",
 			path: "scales/new1.yaml",
 		});
+	});
+});
+
+describe("links", () => {
+	const hashFor = (file?: string, branch = "qretools/iain") =>
+		formatLink({
+			repo: "JHUCities/bas-question-bank",
+			branch,
+			...(file !== undefined && { file }),
+		});
+	const loadedBank = () =>
+		withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q.yaml", "name: q\n"),
+			bankQuestion(2, "questions/r/r.yaml", "name: r\n"),
+		]);
+
+	it("opening a file pushes its link; the same link coming back is a no-op", () => {
+		const [m, cmds] = update(loadedBank(), { kind: "fileOpened", id: 2 });
+		expect(cmds).toEqual([
+			{ kind: "setLink", hash: hashFor("questions/r/r.yaml"), push: true },
+		]);
+		expect(
+			update(m, { kind: "hashChanged", hash: hashFor("questions/r/r.yaml") }),
+		).toEqual([m, []]);
+	});
+
+	it("a link to your branch opens your copy; a stale event from quick navigation changes nothing", () => {
+		const [m] = update(loadedBank(), {
+			kind: "hashChanged",
+			hash: hashFor("questions/q/q.yaml"),
+		});
+		expect(m.screen).toEqual({ kind: "editing", id: 1 });
+	});
+
+	it("before the first save the link names the default branch, which exists", () => {
+		const m = {
+			...loadedBank(),
+			loading: { ...LOADED, from: "default" as const },
+		};
+		const [, cmds] = update(m, { kind: "fileOpened", id: 1 });
+		expect(cmds[0]).toMatchObject({
+			hash: hashFor("questions/q/q.yaml", "main"),
+		});
+	});
+
+	it("a link that needs the bank waits for it, and clears on a failed load or disconnect", () => {
+		const waiting = { ...fresh(), loading: { kind: "loading" as const } };
+		const [m] = update(waiting, {
+			kind: "hashChanged",
+			hash: hashFor("questions/q/q.yaml"),
+		});
+		expect(m.pendingLink).toMatchObject({ file: "questions/q/q.yaml" });
+		const [opened] = update(connected(m), {
+			kind: "bankLoaded",
+			result: loadOf([
+				{ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
+			]),
+		});
+		expect(opened.pendingLink).toBeUndefined();
+		expect(opened.screen.kind).toBe("editing");
+		const [gone] = update(m, { kind: "disconnected" });
+		expect(gone.pendingLink).toBeUndefined();
+	});
+
+	it("another author's version is read only; one matching your base opens your copy", () => {
+		const [m, cmds] = update(loadedBank(), {
+			kind: "hashChanged",
+			hash: hashFor("questions/q/q.yaml", "qretools/alice"),
+		});
+		expect(m.screen).toEqual({
+			kind: "foreign",
+			branch: "qretools/alice",
+			path: "questions/q/q.yaml",
+		});
+		expect(cmds[0]).toMatchObject({
+			kind: "readAt",
+			path: "questions/q/q.yaml",
+		});
+		const [theirs] = update(m, {
+			kind: "foreignLoaded",
+			branch: "qretools/alice",
+			path: "questions/q/q.yaml",
+			result: ok({
+				path: "questions/q/q.yaml",
+				sha: "other",
+				text: "name: q\nnote: hers\n",
+			}),
+		});
+		expect(theirs.screen).toMatchObject({
+			kind: "foreign",
+			file: { sha: "other" },
+		});
+		const [same] = update(m, {
+			kind: "foreignLoaded",
+			branch: "qretools/alice",
+			path: "questions/q/q.yaml",
+			result: ok({ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" }),
+		});
+		expect(same.screen).toEqual({ kind: "editing", id: 1 });
+	});
+
+	it("a link to another repository is refused, saying which", () => {
+		const [m] = update(loadedBank(), {
+			kind: "hashChanged",
+			hash: formatLink({ repo: "other/bank", branch: "main" }),
+		});
+		expect(m.failures.at(-1)?.message).toMatch(/other\/bank/);
 	});
 });

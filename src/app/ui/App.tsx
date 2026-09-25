@@ -17,7 +17,7 @@ import { schemeNameProblem } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
-import { Editing } from "./Editing.js";
+import { Editing, ForeignView } from "./Editing.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
 
@@ -156,11 +156,17 @@ export function App() {
 					/>
 				</SplitPageLayout.Pane>
 				<SplitPageLayout.Content width="full" padding="none">
-					{open === undefined ? (
+					{model.screen.kind === "foreign" ? (
+						<ForeignView screen={model.screen} />
+					) : open === undefined ? (
 						<div className="blank">
 							<p className="quiet">
-								Pick a question or a shared element in the bank, or create a new
-								one.
+								{model.pendingLink !== undefined &&
+								model.session.kind !== "connected"
+									? "Connect to the bank (Bank, above) to open this link."
+									: model.pendingLink !== undefined
+										? "Opening the link once the bank has loaded…"
+										: "Pick a question or a shared element in the bank, or create a new one."}
 							</p>
 						</div>
 					) : (

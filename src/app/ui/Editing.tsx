@@ -3,17 +3,25 @@
  * everything derived from it beside it. Bank-level findings (a variable defined
  * twice) come from the index and are shown on the file like any other finding.
  */
+import { Label } from "@primer/react";
 import { memo, useMemo } from "react";
-import type { Evaluation } from "../../core/evaluate.js";
+import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
 import { inspect } from "../../core/inspect.js";
+import { evaluateScheme, kindAt } from "../../core/schemes.js";
 import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
 } from "../../core/surface/schema.js";
 import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
-import { fileOf, type Id, type Question, type SchemeEntry } from "../model.js";
+import {
+	fileOf,
+	type Id,
+	type Model,
+	type Question,
+	type SchemeEntry,
+} from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf } from "../sync.js";
 import { writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
@@ -413,5 +421,123 @@ function Inspector({
 				</p>
 			))}
 		</aside>
+	);
+}
+
+/** Whose version a branch holds, as a person would say it. */
+const whose = (branch: string): string =>
+	branch.startsWith("qretools/")
+		? `${branch.slice("qretools/".length)}'s version`
+		: `the ${branch} version`;
+
+/**
+ * Another author's version of a file, from a link: read only (owner, 2026-09-25).
+ * Evaluated against your environment, so it reads here as it would in your bank.
+ */
+export function ForeignView({
+	screen,
+}: {
+	screen: Extract<Model["screen"], { kind: "foreign" }>;
+}) {
+	const { dispatch, evaluations } = useApp();
+	const env = useEnv();
+	const agency = useModel((m) => m.agency);
+	const own = useModel((m) =>
+		[
+			...Object.values(m.local.questions),
+			...Object.values(m.local.schemes),
+		].find((f) => f.base?.path === screen.path),
+	);
+	const file = screen.file;
+	const kind = kindAt(screen.path)?.kind;
+	const ev = useMemo(
+		() =>
+			file === undefined || kind !== "question"
+				? undefined
+				: evaluate(file.text, agency, env),
+		[file, kind, agency, env],
+	);
+	const scheme = useMemo(
+		() =>
+			file === undefined || kind === undefined || kind === "question"
+				? undefined
+				: evaluateScheme(kind, file.text, env),
+		[file, kind, env],
+	);
+	const findings = ev?.findings ?? scheme?.findings ?? [];
+	const ranges = ev?.ranges ?? scheme?.ranges ?? {};
+	const diagnostics = useMemo(
+		() => toDiagnostics(findings, ranges),
+		[findings, ranges],
+	);
+	return (
+		<div className="editing">
+			<div className="qhead">
+				<div className="qhead-row">
+					<span className="quiet">{whose(screen.branch)}</span>
+					<span className="qname">{screen.path}</span>
+					<Label>read only</Label>
+					<span className="spacer" />
+					{own !== undefined && (
+						<button
+							type="button"
+							className="linklike"
+							onClick={() => dispatch({ kind: "fileOpened", id: own.id })}
+						>
+							Open your copy
+						</button>
+					)}
+				</div>
+			</div>
+			{file === undefined ? (
+				<p className="quiet blank">
+					Loading {screen.path} from {screen.branch}…
+				</p>
+			) : (
+				<div className="split">
+					<section className="left" aria-label="Their source">
+						<EditorPane
+							id={-1}
+							text={file.text}
+							diagnostics={diagnostics}
+							schema={
+								kind === "question"
+									? evaluations.schema(env)
+									: kind === "universe" || kind === "instruction"
+										? SCHEME_SCHEMAS.text
+										: SCHEME_SCHEMAS.labels
+							}
+							readOnly
+						/>
+					</section>
+					<section className="right">
+						<article className="pane">
+							<h2>
+								Findings <StatusBadge status={status(findings)} />
+							</h2>
+							<div className="pane-body">
+								<Findings findings={findings} onTarget={() => {}} />
+							</div>
+						</article>
+						{ev && (
+							<>
+								<article className="pane">
+									<h2>As the respondent sees it</h2>
+									<div className="pane-body">
+										<Respondent view={ev.respondent} onTarget={() => {}} />
+									</div>
+								</article>
+								<article className="pane">
+									<h2>Codebook entry</h2>
+									<div className="pane-body">
+										<Codebook view={ev.codebook} onTarget={() => {}} />
+									</div>
+								</article>
+							</>
+						)}
+					</section>
+				</div>
+			)}
+		</div>
 	);
 }
