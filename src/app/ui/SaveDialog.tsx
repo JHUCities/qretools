@@ -6,14 +6,13 @@
  * A native form: Enter submits, the primary button is its submit button, and what is
  * wrong is Primer's validation message, tied to the input.
  */
-import { FileDirectoryIcon } from "@primer/octicons-react";
-import { Dialog, FormControl, TextInput } from "@primer/react";
+import { Dialog } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
 import { useId } from "react";
 import { bankLocation } from "../../core/bank.js";
 import type { Draft } from "../../core/surface/draft.js";
 import type { Dispatch } from "../model.js";
-import { inlineCode } from "./Previews.js";
+import { TopicField } from "./TopicField.js";
 
 export function SaveDialog({
 	draft,
@@ -39,7 +38,6 @@ export function SaveDialog({
 		: path !== undefined && taken(path)
 			? "A question already exists there. Choose another topic, or open the bank's copy to change it."
 			: undefined;
-	const isNew = problem === undefined && !folders.includes(folder);
 	const close = () => dispatch({ kind: "saveCancelled" });
 	return (
 		<Dialog
@@ -64,38 +62,14 @@ export function SaveDialog({
 					if (problem === undefined) dispatch({ kind: "saveConfirmed" });
 				}}
 			>
-				<FormControl>
-					<FormControl.Label>Topic folder</FormControl.Label>
-					<TextInput
-						block
-						autoFocus
-						leadingVisual={FileDirectoryIcon}
-						value={folder}
-						{...(problem !== undefined && {
-							validationStatus: "error" as const,
-						})}
-						onChange={(e) =>
-							dispatch({ kind: "saveFolderChanged", folder: e.target.value })
-						}
-					/>
-					<FormControl.Caption>
-						{path !== undefined && <code className="code">{path}</code>}{" "}
-						{folders.length === 0
-							? "The bank has no topics yet."
-							: `In the bank: ${folders.join(", ")}.`}
-					</FormControl.Caption>
-					{problem !== undefined && (
-						<FormControl.Validation variant="error">
-							{inlineCode(problem)}
-						</FormControl.Validation>
-					)}
-				</FormControl>
+				<TopicField
+					folder={folder}
+					folders={folders}
+					problem={problem}
+					onChange={(f) => dispatch({ kind: "saveFolderChanged", folder: f })}
+					caption={path !== undefined && <code className="code">{path}</code>}
+				/>
 			</form>
-			{isNew && (
-				<InlineMessage variant="warning">
-					<b>{folder}</b> is a new topic. Saving creates it.
-				</InlineMessage>
-			)}
 			{also.length > 0 && (
 				<InlineMessage variant="unavailable">
 					Also saves, in the same commit: {also.join(", ")}.

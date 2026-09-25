@@ -826,7 +826,7 @@ function stale(model: Model, msg: Msg): boolean {
 }
 
 /** The topic folder of a question path: `questions/<folder>/<name>.yaml`. */
-const folderOfPath = (path: Path): string => path.split("/")[1] ?? "";
+export const folderOfPath = (path: Path): string => path.split("/")[1] ?? "";
 const fileName = (path: Path): string =>
 	(path.split("/").at(-1) ?? path).replace(/\.yaml$/, "");
 /** Only the folder changes; the filename stays, whatever unsaved edits say the name is. */

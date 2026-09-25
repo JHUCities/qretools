@@ -33,6 +33,7 @@ import {
 	treeOf,
 } from "../tree.js";
 import {
+	folderOfPath,
 	movedPath,
 	moveProblem,
 	ownBranch,
@@ -290,6 +291,7 @@ export function App() {
 			{moving && movingQuestion?.base && (
 				<MoveDialog
 					from={movingQuestion.base.path}
+					current={folderOfPath(movingQuestion.base.path)}
 					to={movedPath(movingQuestion.base.path, moving.folder)}
 					folder={moving.folder}
 					folders={bankFolders(model)}

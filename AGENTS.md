@@ -995,6 +995,16 @@ with an inline octicon), so it shares one baseline and truncates as one; Primer'
 `BranchName` chip is gone from it (a boxed token has no text baseline and never lined
 up). "N behind main" and the pull-request icon follow as centred items.
 
+**Choosing a topic and creating one are separate (owner, 2026-09-25).** The Move and
+Save dialogs share `TopicField`: Primer's `Select` (native) of the bank's topics (the
+current one shown, not choosable), whose last option "New topic…" reveals a name
+field. A "Create 'x'" row inside filtered results (a creatable combobox) suits cheap,
+frequent things like labels; for structure every author sees, it puts creation one
+arrow key from a real topic, invites typos, and is announced as just another option.
+Primer's `Autocomplete` was built and rejected: its overlay comes only in fixed
+widths (never the field's), with a gutter on the "new" item. About a dozen topics
+need no filter; a native select's type-ahead is enough.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; on in development through `.env.development`, set

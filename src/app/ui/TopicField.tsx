@@ -1,0 +1,106 @@
+/**
+ * The topic folder a question goes in. Choosing and creating are separate: a native
+ * select (Primer's `Select`) of the bank's topics, whose last option, "New topic…",
+ * reveals a field for the new name. A new folder is rare and every author sees it,
+ * so it is a deliberate second step, never a typo one arrow key from a real topic
+ * (a creatable combobox suits cheap things like labels, not structure).
+ *
+ * The value is the Model's (the dialog dispatches it); whether it can be used is
+ * decided outside (`problem`). Which of the two controls is showing is
+ * transient input, so it is component state.
+ */
+import { FormControl, Select, Stack, TextInput } from "@primer/react";
+import { useState } from "react";
+import { inlineCode } from "./Previews.js";
+
+const NEW = "\u0000new";
+
+export function TopicField({
+	folder,
+	folders,
+	current,
+	problem,
+	caption,
+	onChange,
+}: {
+	readonly folder: string;
+	readonly folders: readonly string[];
+	/** The topic it is in now (moving), shown but not choosable. */
+	readonly current?: string;
+	/** Why this folder cannot be used, or undefined. */
+	readonly problem: string | undefined;
+	readonly caption: React.ReactNode;
+	readonly onChange: (folder: string) => void;
+}) {
+	const [creating, setCreating] = useState(
+		folders.length === 0 || (folder !== "" && !folders.includes(folder)),
+	);
+	// A usable folder the bank does not have yet: this creates it.
+	const isNew =
+		problem === undefined && folder !== "" && !folders.includes(folder);
+	// Nothing chosen yet (empty, or where it is now) is not a mistake to point at;
+	// the dialog's button stays inactive regardless.
+	const shown = folder === "" || folder === current ? undefined : problem;
+	const message = (
+		<>
+			<FormControl.Caption>
+				{folders.length === 0 && "The bank has no topics yet. "}
+				{caption}
+				{isNew && " A new topic: this creates it."}
+			</FormControl.Caption>
+			{shown !== undefined && (
+				<FormControl.Validation variant="error">
+					{inlineCode(shown)}
+				</FormControl.Validation>
+			)}
+		</>
+	);
+	return (
+		<Stack gap="normal">
+			{/* With no topics there is nothing to choose: only the name. */}
+			{folders.length > 0 && (
+				<FormControl>
+					<FormControl.Label>Topic</FormControl.Label>
+					<Select
+						block
+						autoFocus={!creating}
+						value={creating ? NEW : folder}
+						onChange={(e) => {
+							const v = e.target.value;
+							setCreating(v === NEW);
+							onChange(v === NEW ? "" : v);
+						}}
+					>
+						{!creating && !folders.includes(folder) && (
+							<Select.Option value={folder} disabled>
+								Choose a topic
+							</Select.Option>
+						)}
+						{folders.map((f) => (
+							<Select.Option key={f} value={f} disabled={f === current}>
+								{f === current ? `${f} (where it is now)` : f}
+							</Select.Option>
+						))}
+						<Select.Option value={NEW}>New topic…</Select.Option>
+					</Select>
+					{!creating && message}
+				</FormControl>
+			)}
+			{creating && (
+				<FormControl>
+					<FormControl.Label>New topic name</FormControl.Label>
+					<TextInput
+						block
+						autoFocus
+						value={folder}
+						{...(shown !== undefined && {
+							validationStatus: "error" as const,
+						})}
+						onChange={(e) => onChange(e.target.value)}
+					/>
+					{message}
+				</FormControl>
+			)}
+		</Stack>
+	);
+}

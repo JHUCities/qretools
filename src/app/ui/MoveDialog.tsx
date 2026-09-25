@@ -2,17 +2,17 @@
  * Moving a bank question to another topic folder: one commit, the saved version at the
  * new path and the old path gone, like `git mv`. Only the folder changes. Why a folder
  * cannot be used is `update`'s rule (`moveProblem`), shown as the author types, as
- * Primer's validation message on the input. A native form: Enter moves.
+ * Primer's validation message on the field. A native form: Enter in the new topic's
+ * name moves (a native select does not submit on Enter).
  */
-import { FileDirectoryIcon } from "@primer/octicons-react";
-import { Dialog, FormControl, TextInput } from "@primer/react";
-import { InlineMessage } from "@primer/react/experimental";
+import { Dialog } from "@primer/react";
 import { useId } from "react";
 import type { Dispatch } from "../model.js";
-import { inlineCode } from "./Previews.js";
+import { TopicField } from "./TopicField.js";
 
 export function MoveDialog({
 	from,
+	current,
 	to,
 	folder,
 	folders,
@@ -20,6 +20,8 @@ export function MoveDialog({
 	dispatch,
 }: {
 	readonly from: string;
+	/** The topic it is in now, by `update`'s reading of the path. */
+	readonly current: string;
 	readonly to: string;
 	readonly folder: string;
 	readonly folders: readonly string[];
@@ -51,37 +53,25 @@ export function MoveDialog({
 					if (problem === undefined) dispatch({ kind: "moveConfirmed" });
 				}}
 			>
-				<FormControl>
-					<FormControl.Label>Topic folder</FormControl.Label>
-					<TextInput
-						block
-						autoFocus
-						leadingVisual={FileDirectoryIcon}
-						value={folder}
-						{...(problem !== undefined && {
-							validationStatus: "error" as const,
-						})}
-						onChange={(e) =>
-							dispatch({ kind: "moveFolderChanged", folder: e.target.value })
-						}
-					/>
-					<FormControl.Caption>
-						<code className="code">{from}</code> →{" "}
-						<code className="code">{to}</code>. The saved version moves; unsaved
-						edits stay unsaved. In the bank: {folders.join(", ")}.
-					</FormControl.Caption>
-					{problem !== undefined && (
-						<FormControl.Validation variant="error">
-							{inlineCode(problem)}
-						</FormControl.Validation>
-					)}
-				</FormControl>
+				<TopicField
+					folder={folder}
+					folders={folders}
+					current={current}
+					problem={problem}
+					onChange={(f) => dispatch({ kind: "moveFolderChanged", folder: f })}
+					caption={
+						<>
+							{folder !== current && folder !== "" && (
+								<>
+									<code className="code">{from}</code> →{" "}
+									<code className="code">{to}</code>.{" "}
+								</>
+							)}
+							The saved version moves; unsaved edits stay unsaved.
+						</>
+					}
+				/>
 			</form>
-			{problem === undefined && !folders.includes(folder) && (
-				<InlineMessage variant="warning">
-					<b>{folder}</b> is a new topic. Moving creates it.
-				</InlineMessage>
-			)}
 		</Dialog>
 	);
 }
