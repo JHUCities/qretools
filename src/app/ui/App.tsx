@@ -5,7 +5,6 @@ import {
 	ActionMenu,
 	Button,
 	ConfirmationDialog,
-	SplitPageLayout,
 } from "@primer/react";
 import { useMemo } from "react";
 import { SCHEME_KINDS } from "../../core/schemes.js";
@@ -82,106 +81,106 @@ export function App() {
 
 	return (
 		<>
-			<SplitPageLayout>
-				<SplitPageLayout.Header>
-					<div className="topbar">
-						<h1>qretools</h1>
-						<span className="quiet">question bank</span>
-						<span className="quiet session">
-							{model.session.kind === "connected" &&
-								`${model.session.login} · ${model.settings.owner}/${model.settings.repo} · ${model.session.branch}${model.session.canWrite ? "" : " (read only)"}`}
-						</span>
-						<BranchLinks model={model} />
-						<span className="spacer" />
-						<ActionMenu>
-							<ActionMenu.Anchor>
-								<Button leadingVisual={PlusIcon}>New</Button>
-							</ActionMenu.Anchor>
-							<ActionMenu.Overlay>
-								<ActionList>
+			{/*
+			 * An app shell: the window is a grid whose header sizes itself and whose
+			 * workspace fills the rest; only the tree, the editor and the previews
+			 * scroll. Primer's PageLayout is a page layout (the document scrolls), so
+			 * the shell is the parent that constrains height, as Primer's docs advise,
+			 * and Primer's components live inside it.
+			 */}
+			<div className="shell">
+				<header className="topbar">
+					<h1>qretools</h1>
+					<span className="quiet">question bank</span>
+					<span className="quiet session">
+						{model.session.kind === "connected" &&
+							`${model.session.login} · ${model.settings.owner}/${model.settings.repo} · ${model.session.branch}${model.session.canWrite ? "" : " (read only)"}`}
+					</span>
+					<BranchLinks model={model} />
+					<span className="spacer" />
+					<ActionMenu>
+						<ActionMenu.Anchor>
+							<Button leadingVisual={PlusIcon}>New</Button>
+						</ActionMenu.Anchor>
+						<ActionMenu.Overlay>
+							<ActionList>
+								<ActionList.Item
+									onSelect={() =>
+										dispatch({ kind: "questionCreated", text: "" })
+									}
+								>
+									Blank question
+								</ActionList.Item>
+								<ActionList.Divider />
+								<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
+								{TEMPLATES.map((t) => (
 									<ActionList.Item
+										key={t.label}
 										onSelect={() =>
-											dispatch({ kind: "questionCreated", text: "" })
+											dispatch({ kind: "questionCreated", text: t.text })
 										}
 									>
-										Blank question
+										{t.label}
 									</ActionList.Item>
-									<ActionList.Divider />
-									<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
-									{TEMPLATES.map((t) => (
-										<ActionList.Item
-											key={t.label}
-											onSelect={() =>
-												dispatch({ kind: "questionCreated", text: t.text })
-											}
-										>
-											{t.label}
-										</ActionList.Item>
-									))}
-									<ActionList.Divider />
-									<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
-									{SCHEME_KINDS.map((k) => (
-										<ActionList.Item
-											key={k}
-											onSelect={() =>
-												dispatch({ kind: "schemeCreateOpened", scheme: k })
-											}
-										>
-											{k === "missing"
-												? "Missing values"
-												: SCHEME_LABELS[k].replace(/s$/, "")}
-										</ActionList.Item>
-									))}
-								</ActionList>
-							</ActionMenu.Overlay>
-						</ActionMenu>
-						<Button
-							leadingVisual={GearIcon}
-							onClick={() => dispatch({ kind: "settingsToggled", open: true })}
-						>
-							Bank
-						</Button>
-					</div>
-				</SplitPageLayout.Header>
-				<SplitPageLayout.Pane
-					position="start"
-					width="medium"
-					resizable
-					widthStorageKey="qretools.pane"
-					aria-label="Question bank"
-					sticky
-				>
-					<Browser
-						folders={folders}
-						sections={sections}
-						loading={
-							model.loading.kind === "loading" ||
-							model.session.kind === "connecting"
-						}
-						filter={model.browser.filter}
-						open={open}
-						dispatch={dispatch}
-					/>
-				</SplitPageLayout.Pane>
-				<SplitPageLayout.Content width="full" padding="none">
-					{model.screen.kind === "foreign" ? (
-						<ForeignView screen={model.screen} />
-					) : open === undefined ? (
-						<div className="blank">
-							<p className="quiet">
-								{model.pendingLink !== undefined &&
-								model.session.kind !== "connected"
-									? "Connect to the bank (Bank, above) to open this link."
-									: model.pendingLink !== undefined
-										? "Opening the link once the bank has loaded…"
-										: "Pick a question or a shared element in the bank, or create a new one."}
-							</p>
-						</div>
-					) : (
-						<Editing id={open} index={index} />
-					)}
-				</SplitPageLayout.Content>
-			</SplitPageLayout>
+								))}
+								<ActionList.Divider />
+								<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
+								{SCHEME_KINDS.map((k) => (
+									<ActionList.Item
+										key={k}
+										onSelect={() =>
+											dispatch({ kind: "schemeCreateOpened", scheme: k })
+										}
+									>
+										{k === "missing"
+											? "Missing values"
+											: SCHEME_LABELS[k].replace(/s$/, "")}
+									</ActionList.Item>
+								))}
+							</ActionList>
+						</ActionMenu.Overlay>
+					</ActionMenu>
+					<Button
+						leadingVisual={GearIcon}
+						onClick={() => dispatch({ kind: "settingsToggled", open: true })}
+					>
+						Bank
+					</Button>
+				</header>
+				<div className="workspace">
+					<nav className="sidebar" aria-label="Question bank">
+						<Browser
+							folders={folders}
+							sections={sections}
+							loading={
+								model.loading.kind === "loading" ||
+								model.session.kind === "connecting"
+							}
+							filter={model.browser.filter}
+							open={open}
+							dispatch={dispatch}
+						/>
+					</nav>
+					<main className="content">
+						{model.screen.kind === "foreign" ? (
+							<ForeignView screen={model.screen} />
+						) : open === undefined ? (
+							<div className="blank">
+								<p className="quiet">
+									{model.pendingLink !== undefined &&
+									model.session.kind !== "connected"
+										? "Connect to the bank (Bank, above) to open this link."
+										: model.pendingLink !== undefined
+											? "Opening the link once the bank has loaded…"
+											: "Pick a question or a shared element in the bank, or create a new one."}
+								</p>
+							</div>
+						) : (
+							<Editing id={open} index={index} />
+						)}
+					</main>
+				</div>
+			</div>
 			{model.browser.settingsOpen && (
 				<BankDialog
 					settings={model.settings}

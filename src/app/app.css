@@ -1,13 +1,63 @@
-/* Layout and the previews; colours and type come from Primer's tokens. */
+/* Layout and the previews; colours, spacing and type come from Primer's tokens. */
 body {
 	margin: 0;
 	background: var(--bgColor-default);
 	color: var(--fgColor-default);
 }
+
+/*
+ * The app shell (see App.tsx): the dynamic viewport height (dvh follows mobile
+ * browsers' collapsing address bar, which 100vh does not), a header row sized by its
+ * content, and a workspace that takes the rest. `minmax(0, 1fr)` lets the workspace
+ * shrink below its content, so its children scroll instead of the window.
+ */
+.shell {
+	height: 100dvh;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+}
+/* The sidebar takes Primer PageLayout's `medium` pane widths at Primer's breakpoints. */
+.workspace {
+	--sidebar-width: 256px;
+	display: grid;
+	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+	min-height: 0;
+}
+@media (min-width: 1012px) {
+	.workspace {
+		--sidebar-width: 296px;
+	}
+}
+.sidebar {
+	min-height: 0;
+	overflow: auto;
+	padding: var(--base-size-16);
+	border-right: var(--borderWidth-thin) solid var(--borderColor-default);
+}
+.content {
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+/* Narrow screens stack, as Primer's layout does below its medium breakpoint. */
+@media (max-width: calc(768px - 0.02px)) {
+	.workspace {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+	.sidebar {
+		max-height: 40dvh;
+		border-right: none;
+		border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	}
+}
 .topbar {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: var(--base-size-12);
+	padding: var(--base-size-12) var(--base-size-16);
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
 }
 .topbar h1 {
 	margin: 0;
@@ -94,10 +144,10 @@ body {
 	padding: 40px;
 }
 .editing {
+	flex: 1;
+	min-height: 0;
 	display: flex;
 	flex-direction: column;
-	height: calc(100vh - 64px);
-	min-height: 480px;
 }
 .qhead {
 	border-bottom: 1px solid var(--borderColor-default);

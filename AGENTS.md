@@ -64,6 +64,15 @@ Concretely:
 
 When a shortcut would make the code harder to reason about, take the longer path.
 
+**Front-end craft (owner, 2026-09-25).** Written as by expert front-end developers who
+love the browser's native features, semantic HTML and accessibility, and the design
+and craft evident in Primer. Primer's own documentation (components, layout
+foundations, accessibility guidance) is the first reference for how a thing should be
+built; where Primer has a component or pattern, use it as documented rather than
+approximating it; where it does not, build from native HTML and Primer's tokens. No
+jank: no magic numbers standing in for measured sizes, no layout that fights the
+component it sits in, no scroll container that is not deliberate.
+
 **Use the platform's native features, always (owner, 2026-09-25).** Before building or
 adding a library for something in the browser, use what the browser already does:
 navigation and history (`location.hash`, `hashchange`), links (`<a href>`), buttons,
@@ -72,6 +81,16 @@ no hand-managed history, no custom widget where a native element serves. Native 
 also the accessible default; where a native feature is not accessible (drag and drop:
 mouse only), leave it out rather than build around it, as long as an accessible path
 exists.
+
+**The app shell (2026-09-25).** The window is a grid (`.shell`: `100dvh`, rows `auto`
+and `minmax(0, 1fr)`) with `header`, `nav` ("Question bank") and `main` landmarks; only
+the tree, the editor and the previews scroll. It replaces Primer's `SplitPageLayout`,
+which is a page layout (the document scrolls, the pane is sticky at `100vh`): the
+editing view had filled it with `height: calc(100vh - 64px)`, a guessed header height,
+so the page scrolled past a fixed-height region and looked clipped. Primer's docs say a
+height-constrained area must be constrained by its parent; the shell is that parent.
+The sidebar uses PageLayout's `medium` pane widths (256px, 296px from 1012px) and stacks
+below Primer's medium breakpoint (768px). Lost: Primer's resizable pane.
 
 ## Three roles, one in scope
 
