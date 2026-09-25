@@ -281,3 +281,11 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   (candidate).** A question naming a scheme file with unsaved edits shows "with …" beside
   Save, but nothing marks it in the bank browser. Suggested by the 9c after-pass; not
   built.
+
+- **Drag a question onto a folder to move it (not built; evaluated 2026-09-25).**
+  "Move…" in the header, with its dialog, is the one way to move, and it works from the
+  keyboard and for screen readers. Primer's TreeView items accept the browser's native
+  drag events, so a drop could open the same dialog prefilled with no library; but native
+  drag and drop is mouse only (no keyboard, no screen reader, no touch), so it would be a
+  second, less accessible path to the same thing. dnd-kit is the accessible option if it
+  is ever wanted.

@@ -812,7 +812,16 @@ that one file and shows it **read only** (owner, 2026-09-25: someone else's vers
 never edited or adopted, which replaces the planned "edit a copy"), unless its blob is
 the version the author started from, which opens their own copy. The editor's read-only
 mode is one CodeMirror compartment. Verified in headless Chrome against the real bank:
-links written, Back, a fresh tab, a `main` link opening the local copy. Notes for step 5 from the step 4 review: identify questions by a
+links written, Back, a fresh tab, a `main` link opening the local copy.
+
+**Moving a question built (2026-09-25).** "Move…" on a bank question opens a dialog
+(folder, resulting path, "new topic" note; `moveProblem` is the one rule: valid folder,
+not the current one, not in conflict, not taken). The commit is one change set: the
+saved version (`base.text`) at the new path, and a delete of the old path with no `id`
+(`Change.id` is optional: a delete without one removes the path on GitHub only, never a
+working file). Like `git mv`, unsaved edits stay unsaved and the filename never
+changes. After the commit the base and GitHub's copy move; the link is replaced in
+place. Drag and drop was evaluated and not built (mouse only; see FEATURES.md). Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
