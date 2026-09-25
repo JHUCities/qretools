@@ -5,6 +5,7 @@ import {
 	ActionMenu,
 	Button,
 	ConfirmationDialog,
+	Stack,
 } from "@primer/react";
 import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
@@ -96,7 +97,16 @@ export function App() {
 			 * and Primer's components live inside it.
 			 */}
 			<div className="shell">
-				<header className="topbar">
+				<Stack
+					as="header"
+					className="topbar"
+					direction="horizontal"
+					align="center"
+					wrap="wrap"
+					gap="condensed"
+					paddingBlock="condensed"
+					paddingInline="normal"
+				>
 					<h1>qretools</h1>
 					<span className="quiet">question bank</span>
 					{/* A live region: connecting, loading and signing out are announced. */}
@@ -104,7 +114,7 @@ export function App() {
 						{sessionLine(model)}
 					</AriaStatus>
 					<BranchLinks model={model} />
-					<span className="spacer" />
+					<Stack.Item grow />
 					<ActionMenu>
 						<ActionMenu.Anchor>
 							<Button leadingVisual={PlusIcon}>New</Button>
@@ -151,7 +161,7 @@ export function App() {
 					>
 						Bank
 					</Button>
-				</header>
+				</Stack>
 				<div className="workspace">
 					<nav className="sidebar" aria-label="Question bank">
 						<Browser

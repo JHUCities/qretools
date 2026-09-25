@@ -10,6 +10,7 @@ import {
 	Checkbox,
 	Dialog,
 	FormControl,
+	Stack,
 	TextInput,
 } from "@primer/react";
 import { useState } from "react";
@@ -169,7 +170,7 @@ export function BankDialog({
 					<FormControl.Label>Remember on this device</FormControl.Label>
 				</FormControl>
 			</div>
-			<div className="bank-status">
+			<Stack gap="condensed" className="bank-status">
 				<SessionLine
 					session={session}
 					onDisconnect={() => dispatch({ kind: "disconnected" })}
@@ -200,7 +201,7 @@ export function BankDialog({
 						onChange={(e) => void upload(e.target.files)}
 					/>
 				</label>
-			</div>
+			</Stack>
 		</Dialog>
 	);
 }

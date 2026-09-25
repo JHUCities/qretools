@@ -58,11 +58,6 @@ body {
 	}
 }
 .topbar {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: var(--base-size-8) var(--base-size-12);
-	padding: var(--base-size-12) var(--base-size-16);
 	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
 }
 .topbar h1 {
@@ -72,9 +67,6 @@ body {
 .topbar .session {
 	font-size: var(--text-body-size-small);
 	overflow-wrap: anywhere;
-}
-.spacer {
-	flex: 1;
 }
 
 /* Colour utilities: Primer's functional tokens, one set. */
@@ -105,21 +97,11 @@ body {
 }
 
 /* The bank tree. */
-.browser {
-	display: flex;
-	flex-direction: column;
-	gap: var(--base-size-8);
-}
 .browser-heading {
 	margin: var(--base-size-8) 0 0;
 	font-size: var(--text-body-size-small);
 	font-weight: var(--base-text-weight-semibold);
 	color: var(--fgColor-muted);
-}
-.leaf-marks {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--base-size-4);
 }
 .used-by {
 	margin: 0;
@@ -384,9 +366,6 @@ p.finding {
 }
 .bank-status {
 	margin-top: var(--base-size-16);
-	display: flex;
-	flex-direction: column;
-	gap: var(--base-size-8);
 }
 .upload {
 	display: inline-flex;

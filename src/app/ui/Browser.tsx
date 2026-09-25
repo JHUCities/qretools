@@ -10,6 +10,7 @@ import {
 	FormControl,
 	Label,
 	Spinner,
+	Stack,
 	TextInput,
 	TreeView,
 } from "@primer/react";
@@ -39,7 +40,7 @@ export function Browser({
 	const questionsId = useId();
 	const sharedId = useId();
 	return (
-		<div className="browser">
+		<Stack gap="condensed">
 			<FormControl>
 				<FormControl.Label visuallyHidden>
 					Filter the bank by name or title
@@ -101,7 +102,7 @@ export function Browser({
 					</TreeView>
 				</>
 			)}
-		</div>
+		</Stack>
 	);
 }
 
@@ -232,7 +233,7 @@ function marksLabel(leaf: Leaf | SchemeLeaf): string {
 function Marks({ leaf }: { leaf: Leaf | SchemeLeaf }) {
 	const used = "usedBy" in leaf ? leaf.usedBy : undefined;
 	return (
-		<span className="leaf-marks">
+		<Stack as="span" direction="horizontal" align="center" gap="condensed">
 			{leaf.draft && (
 				<Label size="small" variant="attention">
 					draft
@@ -251,6 +252,6 @@ function Marks({ leaf }: { leaf: Leaf | SchemeLeaf }) {
 			{leaf.busy && <Spinner size="small" srText={null} />}
 			{used !== undefined && <span className="quiet">used by {used}</span>}
 			<StatusIcon status={leaf.status} />
-		</span>
+		</Stack>
 	);
 }
