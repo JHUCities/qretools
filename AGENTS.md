@@ -908,6 +908,20 @@ explanation. One label: `draft` (never saved), `unsaved` (edited), none when sav
 unchanged; "in bank" was wrong once saves went to the author's branch. The
 default-branch check in `writeBlocked` is gone: the branch is always `qretools/<login>`.
 
+**The branch band lines up with the file header (owner, 2026-09-25).** `.workspace`
+has two rows, a band and the rest (`auto minmax(0, 1fr)`); the sidebar and the content
+each span both as a subgrid, so the branch row and the open file's header share the
+band and their rules line up whatever either holds (the header grows with "Saving also
+saves…"; heights matched by padding would drift). **Rule: every direct child of
+`.sidebar` and `.content` names its `grid-row`, through exactly one class** (`.branch`/
+`.qhead` row 1; `.trees`/`.split`/`.foreign-loading` row 2; `.blank` both); two
+row-setting classes on one element resolve by stylesheet order (the after-pass caught
+ForeignView's loading line spanning over its header that way), and the
+editing views return fragments so `.qhead` and `.split` are the content's own items.
+The branch band is always drawn (a skeleton while loading, "Not signed in", "Bank not
+loaded") so its rule is always there. Consequence: the branch row no longer scrolls
+away with the tree; the filter still does.
+
 **The header follows github.com (owner, 2026-09-25).** Left: `qretools`, then
 `owner / repo` (the repository a link to GitHub; the owner hidden on narrow screens; the
 context truncates rather than wrap the row). Then the status live region

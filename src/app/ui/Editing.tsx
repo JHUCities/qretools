@@ -138,7 +138,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		[ev.ddi, ddiSchema, effects],
 	);
 	return (
-		<div className="editing">
+		<>
 			<FileHeader
 				q={q}
 				name={ev.draft.name}
@@ -191,7 +191,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 					<Ddi document={ev.ddi} schema={ddiSchema} problems={problems} />
 				</ScrollableRegion>
 			</div>
-		</div>
+		</>
 	);
 }
 
@@ -225,7 +225,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				: (e.kind === "universe" ? env.universes : env.instructions)[e.name] !==
 					undefined;
 	return (
-		<div className="editing">
+		<>
 			<FileHeader
 				q={e}
 				name={e.name}
@@ -327,7 +327,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 					</article>
 				</ScrollableRegion>
 			</div>
-		</div>
+		</>
 	);
 }
 
@@ -486,7 +486,7 @@ export function ForeignView({
 		[findings, ranges],
 	);
 	return (
-		<div className="editing">
+		<>
 			<div className="qhead">
 				<PageHeader>
 					<PageHeader.ContextArea>
@@ -521,7 +521,7 @@ export function ForeignView({
 				</PageHeader>
 			</div>
 			{file === undefined ? (
-				<p className="quiet blank">
+				<p className="quiet foreign-loading">
 					Loading {screen.path} from {screen.branch}…
 				</p>
 			) : (
@@ -570,7 +570,7 @@ export function ForeignView({
 					</ScrollableRegion>
 				</div>
 			)}
-		</div>
+		</>
 	);
 }
 

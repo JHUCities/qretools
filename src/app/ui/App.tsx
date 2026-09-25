@@ -20,7 +20,7 @@ import {
 	Stack,
 	VisuallyHidden,
 } from "@primer/react";
-import { AriaStatus } from "@primer/react/experimental";
+import { AriaStatus, SkeletonText } from "@primer/react/experimental";
 import { useMemo } from "react";
 import { SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
@@ -209,17 +209,19 @@ export function App() {
 				>
 					<nav className="sidebar" aria-label="Question bank">
 						<BranchPanel model={model} />
-						<Browser
-							folders={folders}
-							sections={sections}
-							loading={
-								model.loading.kind === "loading" ||
-								model.session.kind === "connecting"
-							}
-							filter={model.browser.filter}
-							open={open}
-							dispatch={dispatch}
-						/>
+						<div className="trees">
+							<Browser
+								folders={folders}
+								sections={sections}
+								loading={
+									model.loading.kind === "loading" ||
+									model.session.kind === "connecting"
+								}
+								filter={model.browser.filter}
+								open={open}
+								dispatch={dispatch}
+							/>
+						</div>
 					</nav>
 					<main className="content">
 						{model.screen.kind === "foreign" ? (
@@ -423,11 +425,24 @@ function Account({ model }: { model: Model }) {
  */
 function BranchPanel({ model }: { model: Model }) {
 	const { session, loading } = model;
-	if (session.kind !== "connected" || loading.kind !== "loaded") return null;
+	// The band is always drawn: it shares a row with the open file's header, and its
+	// rule lines up with the header's.
+	if (session.kind === "connecting" || loading.kind === "loading")
+		return (
+			<div className="branch">
+				<SkeletonText size="bodySmall" maxWidth="12rem" />
+			</div>
+		);
+	if (session.kind !== "connected" || loading.kind !== "loaded")
+		return (
+			<p className="branch quiet">
+				{session.kind === "connected" ? "Bank not loaded" : "Not signed in"}
+			</p>
+		);
 	const repo = repoUrl(model);
 	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(ownBranch(session.login))}?expand=1`;
 	return (
-		<Stack gap="condensed" className="branch">
+		<div className="branch">
 			<Stack direction="horizontal" align="center" gap="condensed" wrap="wrap">
 				{/* Before the first save the branch does not exist yet: named, not linked. */}
 				{loading.from === "branch" ? (
@@ -468,7 +483,7 @@ function BranchPanel({ model }: { model: Model }) {
 					</ExternalLink>
 				)}
 			</Stack>
-		</Stack>
+		</div>
 	);
 }
 
