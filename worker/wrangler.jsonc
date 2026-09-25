@@ -3,9 +3,12 @@
 	"name": "qretools-auth",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-09-01",
+	// Served at qretools-auth.<account>.workers.dev; no preview deployments are used.
+	"workers_dev": true,
+	"preview_urls": false,
 	"vars": {
 		// The GitHub App's client id (public): fill in after creating the App.
-		"CLIENT_ID": "",
+		"CLIENT_ID": "Iv23liuH12sNU6DhRz15",
 		// Exact origins the app is served from, comma separated.
 		"ALLOWED_ORIGINS": "http://localhost:5199"
 	}
