@@ -840,7 +840,30 @@ the default one included, waits, since whose version it is needs their blob. Ano
 author's question reads against their branch's scheme files, fetched with the file in
 one request (`readWithSchemes`) and turned into an environment by `envOfRemote`: the
 viewer's unsaved edits never leak into someone else's read-only view. This is the first
-use of a remote environment. Notes for step 5 from the step 4 review: identify questions by a
+use of a remote environment.
+
+**Step 10 (decided 2026-09-25): "Sign in with GitHub".** A GitHub App owned by JHUCities
+(Contents read and write, Metadata read; user tokens that expire after 8 hours and renew
+for up to 6 months; installable on any account) plus a Cloudflare Worker on the owner's
+account, the single narrow exception to "no server". Verified 2026-09-25: GitHub accepts
+PKCE for GitHub Apps (since July 2025) but still requires the client secret at the
+token exchange. The Worker holds the secret and does two things only: exchange a code
+(with its PKCE verifier) for a token, and refresh a token; it keeps no data and accepts
+calls only from the app's own origins. It knows nothing of repositories: a user token
+reaches a repository only where the App is installed and the user has access, so one
+App and Worker serve any bank whose owner installs the App, and a team that prefers its
+own runs its own from `worker/`; the App's client id and the Worker's URL are
+configuration, never constants. The token stays out of the Model, as before. Token
+paste stays as a fallback behind a feature flag, off in production. Tailscale was
+considered and rejected (it would need an always-on machine); Sveltia CMS's auth Worker
+is the prior art to read first.
+
+**Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
+`VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
+so the minifier drops disabled code; on in development through `.env.development`, set
+per deployment otherwise. OpenFeature (the CNCF standard, web and React SDKs) was
+considered: it is the step up if runtime flags are ever needed (per user, without a
+rebuild), and `flags.ts` would become its provider without touching call sites. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and
