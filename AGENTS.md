@@ -908,19 +908,19 @@ explanation. One label: `draft` (never saved), `unsaved` (edited), none when sav
 unchanged; "in bank" was wrong once saves went to the author's branch. The
 default-branch check in `writeBlocked` is gone: the branch is always `qretools/<login>`.
 
-**The branch band lines up with the file header (owner, 2026-09-25).** `.workspace`
+**The sidebar's band lines up with the file header (owner, 2026-09-25).** `.workspace`
 has two rows, a band and the rest (`auto minmax(0, 1fr)`); the sidebar and the content
-each span both as a subgrid, so the branch row and the open file's header share the
-band and their rules line up whatever either holds (the header grows with "Saving also
+each span both as a subgrid, so the sidebar's band and the open file's header share it and their rules line up whatever either holds (the header grows with "Saving also
 saves…"; heights matched by padding would drift). **Rule: every direct child of
-`.sidebar` and `.content` names its `grid-row`, through exactly one class** (`.branch`/
+`.sidebar` and `.content` names its `grid-row`, through exactly one class** (`.band`/
 `.qhead` row 1; `.trees`/`.split` row 2; `.blank` both); two
 row-setting classes on one element resolve by stylesheet order (the after-pass caught
 ForeignView's loading line spanning over its header that way), and the
 editing views return fragments so `.qhead` and `.split` are the content's own items.
-The branch band is always drawn (a skeleton while loading, "Not signed in", "Bank not
-loaded") so its rule is always there. Consequence: the branch row no longer scrolls
-away with the tree; the filter still does.
+Both
+have their own `minmax(0, 1fr)` column, or the header's unwrappable buttons size it
+(an overflow at 360px). The band holds the tree filter (`BankFilter`, split out of
+`Browser`), always there, fixed above both trees as github.com keeps "Go to file".
 
 **Loading is shown as the thing's shape (owner, 2026-09-25).** A link waiting for the
 bank, and another author's file being fetched, show `FileSkeleton`: Primer's
@@ -939,13 +939,20 @@ a reason there; empty in the steady state, always mounted so it announces). Righ
 and the account: the Primer `Avatar` (GraphQL `viewer.avatarUrl`) opening a menu with
 "Signed in as", "Your branch on GitHub", "Change bank…" and "Sign out"; "Sign in" before
 connecting, nothing while connecting. The Bank button is gone; its dialog is titled
-"Sign in" or "Change bank". The sidebar opens with the branch (`BranchName`, "N behind
-main") and, only when the branch has something to propose, a pull-request `IconButton`
+"Sign in" or "Change bank". The branch follows the repository in the header,
+`owner / repo / ⑂ qretools/<login>` (owner, 2026-09-25: it is never a choice, so it is
+context, as in VS Code's status bar or GitHub Desktop's "Current branch", not a tree
+picker as on github.com, where choosing a branch changes the tree): `BranchName`, a link
+once the branch exists, known from the login the moment the session connects (no
+skeleton); "N behind main"; and, only when the branch has something to propose, a
+pull-request `IconButton`
 link with Primer's notification dot (VS Code's badge for pending changes), named
 "Propose changes (opens in a new tab)" (the name is not shown, since `description` is
 the tooltip), its tooltip "Your saved work is not in the bank yet. Open pull request."; it opens GitHub's compare page, which is the pull request form. It
 replaced a compact `Banner` the owner found too large. Accepted loss: on touch screens
-there is no hover, so the icon and dot carry the meaning alone. Medium size, because the
+there is no hover, so the icon and dot carry the meaning alone. On narrow screens the owner,
+the branch name and "N behind main" hide (the branch is in the avatar menu; "behind"
+is then not shown at all, accepted). Medium size, because the
 dot is positioned for it (at small it covers the icon). The repository link in the
 header has no external-link icon (it sat below the baseline); the new tab is still
 said to screen readers. A bank that fails to load is

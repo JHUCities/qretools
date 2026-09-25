@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Folder } from "../tree.js";
-import { Browser } from "./Browser.js";
+import { BankFilter, Browser } from "./Browser.js";
 
 const folders: readonly Folder[] = [
 	{
@@ -62,15 +62,7 @@ describe("Browser", () => {
 
 	it("typing in the filter dispatches filterChanged with the text", () => {
 		const dispatch = vi.fn();
-		render(
-			<Browser
-				folders={folders}
-				sections={[]}
-				filter=""
-				open={undefined}
-				dispatch={dispatch}
-			/>,
-		);
+		render(<BankFilter filter="" dispatch={dispatch} />);
 		fireEvent.change(screen.getByRole("searchbox"), {
 			target: { value: "sat" },
 		});

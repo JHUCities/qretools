@@ -44,14 +44,16 @@ body {
 	grid-row: 1 / -1;
 	display: grid;
 	grid-template-rows: subgrid;
+	/* Their own column, never sized by content that cannot wrap (the header's buttons). */
+	grid-template-columns: minmax(0, 1fr);
 	min-width: 0;
 	min-height: 0;
 }
 .sidebar {
 	border-right: var(--borderWidth-thin) solid var(--borderColor-default);
 }
-/* Every item is placed, so nothing moves up a row when the band's owner is absent. */
-.branch,
+/* Every item is placed, so nothing moves up a row when no file header is there. */
+.band,
 .qhead {
 	grid-row: 1;
 }
@@ -97,10 +99,35 @@ body {
 	flex: 1 1 0;
 	min-width: 0;
 }
-.topbar h1 {
+/*
+ * The brand row gives way in order: the repository first, then the branch (to an
+ * ellipsis, its full name in a tooltip); the name, "behind" and the pull-request
+ * icon never shrink.
+ */
+/* Primer's Stack renders its children as direct DOM children, which these rely on. */
+.topbar .brand > * {
 	flex-shrink: 0;
 }
-.topbar .context {
+/* Text shares a baseline; a chip and an icon button have none of their own. */
+.topbar .brand > .branch-name,
+.topbar .brand > .propose {
+	align-self: center;
+}
+.topbar .brand > .context,
+.topbar .brand > .branch-name {
+	flex-shrink: 1;
+	min-width: 0;
+}
+.topbar .brand > .branch-name {
+	max-width: 16rem;
+}
+.topbar .branch-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.topbar .brand > .context {
 	font-size: var(--text-body-size-medium);
 	min-width: 0;
 	overflow: hidden;
@@ -111,7 +138,9 @@ body {
 	min-width: 0;
 }
 @media (--viewportRange-narrow) {
-	.topbar .owner {
+	.topbar .owner,
+	.topbar .branch-part,
+	.topbar .behind {
 		display: none;
 	}
 	.topbar .status:not(:has(.session:empty)) {
@@ -119,14 +148,12 @@ body {
 		flex-basis: 100%;
 	}
 }
-/* The branch heads the tree, where github.com keeps its branch picker. */
-.branch {
-	margin: 0;
+/* The sidebar's band: the filter, level with the open file's header and its rule. */
+.band {
 	padding: var(--base-size-8) var(--base-size-16);
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
-	font-size: var(--text-body-size-small);
 	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
 }
 /* The avatar is the button: its hover and focus take the avatar's round shape. */

@@ -41,21 +41,6 @@ export function Browser({
 	const sharedId = useId();
 	return (
 		<Stack gap="condensed">
-			<FormControl>
-				<FormControl.Label visuallyHidden>
-					Filter the bank by name or title
-				</FormControl.Label>
-				<TextInput
-					block
-					type="search"
-					leadingVisual={SearchIcon}
-					placeholder="Filter by name or title"
-					value={filter}
-					onChange={(e) =>
-						dispatch({ kind: "filterChanged", text: e.target.value })
-					}
-				/>
-			</FormControl>
 			<h2 id={questionsId} className="browser-heading">
 				Questions
 			</h2>
@@ -253,5 +238,38 @@ function Marks({ leaf }: { leaf: Leaf | SchemeLeaf }) {
 			{used !== undefined && <span className="quiet">used by {used}</span>}
 			<StatusIcon status={leaf.status} />
 		</Stack>
+	);
+}
+
+/**
+ * The filter over both trees, in the sidebar's band (which shares a row with the open
+ * file's header), fixed while the trees scroll, as github.com keeps "Go to file".
+ * Always there: local drafts are filterable without a bank.
+ */
+export function BankFilter({
+	filter,
+	dispatch,
+}: {
+	filter: string;
+	dispatch: Dispatch;
+}) {
+	return (
+		<div className="band">
+			<FormControl>
+				<FormControl.Label visuallyHidden>
+					Filter the bank by name or title
+				</FormControl.Label>
+				<TextInput
+					block
+					type="search"
+					leadingVisual={SearchIcon}
+					placeholder="Filter by name or title"
+					value={filter}
+					onChange={(e) =>
+						dispatch({ kind: "filterChanged", text: e.target.value })
+					}
+				/>
+			</FormControl>
+		</div>
 	);
 }

@@ -20,7 +20,7 @@ import {
 	Stack,
 	VisuallyHidden,
 } from "@primer/react";
-import { AriaStatus, SkeletonText } from "@primer/react/experimental";
+import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
@@ -41,7 +41,7 @@ import {
 } from "../update.js";
 import { SESSION_STATUS, useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
-import { Browser } from "./Browser.js";
+import { BankFilter, Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { ExternalLink } from "./ExternalLink.js";
 import { FileSkeleton } from "./FileSkeleton.js";
@@ -132,7 +132,7 @@ export function App() {
 					paddingBlock="condensed"
 					paddingInline="normal"
 				>
-					{/* Name and context share a baseline; the row centres the rest. */}
+					{/* Name and context share a baseline; the branch chip and the icon are centred. */}
 					<Stack
 						direction="horizontal"
 						align="baseline"
@@ -141,6 +141,7 @@ export function App() {
 					>
 						<h1>qretools</h1>
 						<Context model={model} />
+						<Branch model={model} />
 					</Stack>
 					{/*
 					 * A live region, always mounted so that what it says is announced: what
@@ -216,7 +217,7 @@ export function App() {
 					}
 				>
 					<nav className="sidebar" aria-label="Question bank">
-						<BranchPanel model={model} />
+						<BankFilter filter={model.browser.filter} dispatch={dispatch} />
 						<div className="trees">
 							<Browser
 								folders={folders}
@@ -354,7 +355,9 @@ function Context({ model }: { model: Model }) {
 	if (model.session.kind !== "connected") return null;
 	return (
 		<span className="context">
-			<span className="quiet owner">{model.settings.owner} / </span>
+			<span className="quiet owner">
+				{model.settings.owner} <span aria-hidden>/</span>{" "}
+			</span>
 			{/* No external-link icon here, as in github.com's header; still said to screen readers. */}
 			<Link href={repoUrl(model)} target="_blank" rel="noreferrer">
 				<strong>{model.settings.repo}</strong>
@@ -430,72 +433,79 @@ function Account({ model }: { model: Model }) {
 }
 
 /**
- * The author's branch at the top of the tree, where github.com keeps its branch
- * picker, and what it holds that the bank does not, as links to GitHub, which does
- * the rest: the pull request, review, updating the branch, merging. The app states
- * facts and links; it never recreates GitHub's interface.
+ * Where saves go, after the repository: the author's own branch (never a choice, so it
+ * is context, as VS Code's status bar and GitHub Desktop's "Current branch" show it),
+ * and what it holds that the bank does not, as links to GitHub, which does the rest:
+ * the pull request, review, updating the branch, merging. Known the moment the session
+ * is connected; a link to it once it exists on GitHub. Items of the header's row, so
+ * the repository gives way first, then the branch; the pull-request icon never does.
  */
-function BranchPanel({ model }: { model: Model }) {
+function Branch({ model }: { model: Model }) {
 	const { session, loading } = model;
-	// The band is always drawn: it shares a row with the open file's header, and its
-	// rule lines up with the header's.
-	if (session.kind === "connecting" || loading.kind === "loading")
-		return (
-			<div className="branch">
-				<SkeletonText size="bodySmall" maxWidth="12rem" />
-			</div>
-		);
-	if (session.kind !== "connected" || loading.kind !== "loaded")
-		return (
-			<p className="branch quiet">
-				{session.kind === "connected" ? "Bank not loaded" : "Not signed in"}
-			</p>
-		);
+	if (session.kind !== "connected") return null;
+	const branch = ownBranch(session.login);
 	const repo = repoUrl(model);
-	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(ownBranch(session.login))}?expand=1`;
+	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(branch)}?expand=1`;
+	const loaded = loading.kind === "loaded" ? loading : undefined;
+	const name = (
+		<>
+			<GitBranchIcon size={12} aria-hidden />{" "}
+			<span className="branch-text">{branch}</span>
+		</>
+	);
 	return (
-		<div className="branch">
-			<Stack direction="horizontal" align="center" gap="condensed" wrap="wrap">
-				{/* Before the first save the branch does not exist yet: named, not linked. */}
-				{loading.from === "branch" ? (
-					<BranchName
-						href={`${repo}/tree/${encodeURI(ownBranch(session.login))}`}
-						target="_blank"
-						rel="noreferrer"
-					>
-						<GitBranchIcon size={12} aria-hidden /> {ownBranch(session.login)}
-						<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-					</BranchName>
-				) : (
-					<BranchName as="span">
-						<GitBranchIcon size={12} aria-hidden /> {ownBranch(session.login)}
-					</BranchName>
-				)}
-				{/*
-				 * Something to propose: the pull-request icon with a dot, as VS Code badges
-				 * pending changes; the tooltip (Primer's, from `description`) says what the
-				 * dot means and what the link does. Absent when there is nothing.
-				 */}
-				{loading.proposable && (
-					<IconButton
-						as="a"
-						href={compare}
-						target="_blank"
-						rel="noreferrer"
-						icon={GitPullRequestIcon}
-						variant="invisible"
-						aria-label="Propose changes (opens in a new tab)"
-						description="Your saved work is not in the bank yet. Open pull request."
-						notificationIndicator="icon"
-					/>
-				)}
-				{loading.behindBy > 0 && (
+		<>
+			<span className="quiet sep branch-part" aria-hidden>
+				/
+			</span>
+			{/* Before the first save the branch does not exist yet: named, not linked. */}
+			{loaded?.from === "branch" ? (
+				<BranchName
+					className="branch-name branch-part"
+					title={branch}
+					href={`${repo}/tree/${encodeURI(branch)}`}
+					target="_blank"
+					rel="noreferrer"
+				>
+					{name}
+					<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+				</BranchName>
+			) : (
+				<BranchName
+					as="span"
+					className="branch-name branch-part"
+					title={branch}
+				>
+					{name}
+				</BranchName>
+			)}
+			{loaded !== undefined && loaded.behindBy > 0 && (
+				<span className="behind">
 					<ExternalLink href={compare} muted>
-						{loading.behindBy} behind {session.defaultBranch}
+						{loaded.behindBy} behind {session.defaultBranch}
 					</ExternalLink>
-				)}
-			</Stack>
-		</div>
+				</span>
+			)}
+			{/*
+			 * Something to propose: the pull-request icon with a dot, as VS Code badges
+			 * pending changes; the tooltip (Primer's, from `description`) says what the
+			 * dot means and what the link does. Absent when there is nothing.
+			 */}
+			{loaded?.proposable && (
+				<IconButton
+					as="a"
+					href={compare}
+					target="_blank"
+					rel="noreferrer"
+					className="propose"
+					icon={GitPullRequestIcon}
+					variant="invisible"
+					aria-label="Propose changes (opens in a new tab)"
+					description="Your saved work is not in the bank yet. Open pull request."
+					notificationIndicator="icon"
+				/>
+			)}
+		</>
 	);
 }
 
