@@ -13,6 +13,7 @@ import {
 	Button,
 	ConfirmationDialog,
 	LinkButton,
+	Spinner,
 	Stack,
 	VisuallyHidden,
 } from "@primer/react";
@@ -29,7 +30,7 @@ import {
 	treeOf,
 } from "../tree.js";
 import { movedPath, moveProblem, schemeNameProblem } from "../update.js";
-import { useApp, useEnv, useModel } from "./AppContext.js";
+import { SESSION_STATUS, useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
@@ -118,10 +119,17 @@ export function App() {
 				>
 					<h1>qretools</h1>
 					<span className="quiet">question bank</span>
-					{/* A live region: connecting, loading and signing out are announced. */}
-					<AriaStatus as="span" className="quiet session">
-						{sessionLine(model)}
-					</AriaStatus>
+					{/*
+					 * A live region: connecting, loading, saving and signing out are
+					 * announced. It is also why a file's write buttons are inactive
+					 * (they point here), since those reasons are the session's, not the file's.
+					 */}
+					<Stack direction="horizontal" align="center" gap="condensed">
+						{busy(model) && <Spinner size="small" srText={null} />}
+						<AriaStatus as="span" id={SESSION_STATUS} className="quiet session">
+							{sessionLine(model)}
+						</AriaStatus>
+					</Stack>
 					<BranchLinks model={model} />
 					<Stack.Item grow />
 					<ActionMenu>
@@ -331,20 +339,32 @@ function BranchLinks({ model }: { model: Model }) {
 	);
 }
 
-/** Who is connected to which bank, or what the connection is doing: said, and announced. */
+const saving = (model: Model): boolean =>
+	Object.values(model.activity).some(
+		(a) => a.kind === "saving" || a.kind === "deleting",
+	);
+
+const busy = (model: Model): boolean =>
+	model.session.kind === "connecting" ||
+	(model.session.kind === "connected" &&
+		(model.loading.kind === "loading" || saving(model)));
+
+/**
+ * Who is connected to which bank, or what the connection is doing: said, and
+ * announced. Every reason `writeBlocked` gives is visible here.
+ */
 function sessionLine(model: Model): string {
 	const { session, settings, loading } = model;
 	switch (session.kind) {
 		case "anonymous":
-			return "";
+			return "Not connected: drafts stay in this browser";
 		case "connecting":
 			return "Connecting to GitHub…";
 		case "failed":
 			return session.failure.message;
 		case "connected":
-			return loading.kind === "loading"
-				? "Loading the bank from GitHub…"
-				: `${session.login} · ${settings.owner}/${settings.repo}${session.canWrite ? "" : " (read only)"}`;
+			if (loading.kind !== "loaded") return "Loading the bank from GitHub…";
+			return `${session.login} · ${settings.owner}/${settings.repo}${session.canWrite ? (saving(model) ? " · saving…" : "") : " (read only)"}`;
 	}
 }
 

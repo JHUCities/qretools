@@ -25,3 +25,6 @@ export function useEnv(): Env {
 	const remoteSchemes = useModel((m) => m.remote.schemes);
 	return evaluations.env(schemes, remoteSchemes);
 }
+
+/** The top bar's status, which a file's inactive write buttons name as their reason. */
+export const SESSION_STATUS = "session-status";

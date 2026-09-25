@@ -1031,9 +1031,6 @@ export function writeBlocked(model: Model): string | undefined {
 		)
 	)
 		return "Saving…";
-	// The bank changes only through a pull request: never save straight to it.
-	if (model.session.branch === model.session.defaultBranch)
-		return `Saves go to your own branch, not ${model.session.defaultBranch}: clear the branch in the Bank panel`;
 	return undefined;
 }
 

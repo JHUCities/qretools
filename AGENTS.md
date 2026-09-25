@@ -901,6 +901,15 @@ step 5 upload and download and step 9's planned "a DDI download says when it inc
 unsaved shared elements". A DDI export, if wanted, returns as a build product of the
 bank (for example in CI), not as a button.
 
+**A file's header says only what is the file's own (owner, 2026-09-25).** Why nothing
+can be written (not connected, read only, loading, saving) is the session's, so it is
+said once, in the top bar's live status (`SESSION_STATUS`, with a spinner while busy),
+and a file's inactive Move, Delete and Save point there with `aria-describedby`. The
+header's description appears only for "Saving also saves …". Nothing to save needs no
+explanation. One label: `draft` (never saved), `unsaved` (edited), none when saved and
+unchanged; "in bank" was wrong once saves went to the author's branch. The
+default-branch check in `writeBlocked` is gone: the branch is always `qretools/<login>`.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; on in development through `.env.development`, set

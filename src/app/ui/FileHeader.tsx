@@ -3,6 +3,7 @@ import { ArrowLeftIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label, PageHeader, Stack } from "@primer/react";
 import { useId } from "react";
 import type { Activity, Entry } from "../model.js";
+import { SESSION_STATUS } from "./AppContext.js";
 import { inlineCode } from "./Previews.js";
 
 export interface HeaderActions {
@@ -53,15 +54,10 @@ export function FileHeader({
 	);
 	const saving = activity?.kind === "saving";
 	const nothing = !unsaved && also.length === 0;
-	// Why a write cannot happen now, said in visible text that the inactive buttons
-	// point to: a disabled button can neither be focused nor explain itself.
-	const status =
-		blocked ??
-		(nothing
-			? "All changes saved."
-			: also.length > 0
-				? `Saving also saves ${also.join(", ")}.`
-				: "Unsaved changes.");
+	// Why a write cannot happen now is the session's (the top bar says it); the
+	// header says only what is this file's own: which unsaved shared files a save
+	// takes along. Nothing to save needs no explanation.
+	const why = canWrite ? undefined : SESSION_STATUS;
 	// An inactive button stays focusable and announced; its click does nothing.
 	const when =
 		(ok: boolean, f: () => void): (() => void) =>
@@ -91,12 +87,12 @@ export function FileHeader({
 					</PageHeader.Title>
 					<PageHeader.TrailingVisual>
 						<Stack direction="horizontal" gap="condensed">
-							{q.base !== undefined ? (
-								<Label>in bank</Label>
-							) : (
+							{/* Saved and unchanged needs no mark; a draft is unsaved by definition. */}
+							{q.base === undefined ? (
 								<Label variant="attention">draft</Label>
+							) : (
+								unsaved && <Label variant="attention">unsaved</Label>
 							)}
-							{unsaved && <Label variant="attention">unsaved</Label>}
 						</Stack>
 					</PageHeader.TrailingVisual>
 				</PageHeader.TitleArea>
@@ -106,7 +102,7 @@ export function FileHeader({
 							size="small"
 							inactive={q.base === undefined || !canWrite}
 							aria-disabled={q.base === undefined || !canWrite || undefined}
-							aria-describedby={statusId}
+							aria-describedby={why}
 							onClick={when(q.base !== undefined && canWrite, on.move)}
 						>
 							Move…
@@ -118,7 +114,7 @@ export function FileHeader({
 						leadingVisual={TrashIcon}
 						inactive={q.base !== undefined && !canWrite}
 						aria-disabled={(q.base !== undefined && !canWrite) || undefined}
-						aria-describedby={statusId}
+						aria-describedby={why}
 						loading={activity?.kind === "deleting"}
 						loadingAnnouncement="Deleting"
 						onClick={when(q.base === undefined || canWrite, on.remove)}
@@ -130,7 +126,7 @@ export function FileHeader({
 						variant="primary"
 						inactive={!canWrite || nothing}
 						aria-disabled={!canWrite || nothing || undefined}
-						aria-describedby={statusId}
+						aria-describedby={why ?? (also.length > 0 ? statusId : undefined)}
 						loading={saving}
 						loadingAnnouncement="Saving"
 						onClick={when(canWrite && !nothing && !saving, on.save)}
@@ -138,11 +134,13 @@ export function FileHeader({
 						Save
 					</Button>
 				</PageHeader.Actions>
-				<PageHeader.Description>
-					<span id={statusId} className="quiet">
-						{status}
-					</span>
-				</PageHeader.Description>
+				{also.length > 0 && (
+					<PageHeader.Description>
+						<span id={statusId} className="quiet">
+							Saving also saves {also.join(", ")}.
+						</span>
+					</PageHeader.Description>
+				)}
 			</PageHeader>
 			{activity?.kind === "failed" && (
 				<Banner

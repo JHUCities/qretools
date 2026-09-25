@@ -701,22 +701,6 @@ describe("the author's own branch", () => {
 		});
 	});
 
-	it("never saves straight to the bank's default branch", () => {
-		const m = withBank(connected(fresh()), [
-			bankQuestion(1, "questions/q/q.yaml", "name: q\n", "name: q\ntext: x\n"),
-		]);
-		const onMain: Model = {
-			...m,
-			session: {
-				...(m.session as Extract<Model["session"], { kind: "connected" }>),
-				branch: "main",
-			},
-		};
-		expect(writeBlocked(onMain)).toMatch(/your own branch/);
-		expect(update(onMain, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
-		expect(writeBlocked(m)).toBeUndefined();
-	});
-
 	it("a save is one more commit on the branch, which now exists", () => {
 		const m = withBank(
 			{ ...connected(fresh()), loading: { ...LOADED, from: "default" } },
