@@ -14,7 +14,11 @@ import {
 	TextInput,
 	TreeView,
 } from "@primer/react";
-import { Blankslate, SkeletonText } from "@primer/react/experimental";
+import {
+	Blankslate,
+	SkeletonBox,
+	SkeletonText,
+} from "@primer/react/experimental";
 import { useId } from "react";
 import type { Status } from "../../core/findings.js";
 import type { Dispatch, Id } from "../model.js";
@@ -39,6 +43,17 @@ export function Browser({
 }) {
 	const questionsId = useId();
 	const sharedId = useId();
+	// Placeholder rows under the real headings while the bank loads, never the stale
+	// files this browser last knew; the top bar announces the load.
+	if (loading)
+		return (
+			<Stack gap="condensed">
+				<h2 className="browser-heading">Questions</h2>
+				<SkeletonText lines={6} size="bodyMedium" />
+				<h2 className="browser-heading">Shared</h2>
+				<SkeletonText lines={3} size="bodyMedium" />
+			</Stack>
+		);
 	return (
 		<Stack gap="condensed">
 			<h2 id={questionsId} className="browser-heading">
@@ -55,9 +70,6 @@ export function Browser({
 						/>
 					))}
 				</TreeView>
-			) : loading ? (
-				// Placeholder rows while the bank loads; the top bar announces it.
-				<SkeletonText lines={6} size="bodyMedium" />
 			) : (
 				<Blankslate narrow>
 					<Blankslate.Heading as="h3">
@@ -65,7 +77,7 @@ export function Browser({
 					</Blankslate.Heading>
 					<Blankslate.Description>
 						{filter === ""
-							? "Start one from New, or connect to a bank in Bank."
+							? "Start one from New."
 							: "Try another name or title."}
 					</Blankslate.Description>
 				</Blankslate>
@@ -248,28 +260,35 @@ function Marks({ leaf }: { leaf: Leaf | SchemeLeaf }) {
  */
 export function BankFilter({
 	filter,
+	loading,
 	dispatch,
 }: {
 	filter: string;
+	/** While the bank loads there is nothing to filter: the input's shape, not the input. */
+	loading: boolean;
 	dispatch: Dispatch;
 }) {
 	return (
 		<div className="band">
-			<FormControl>
-				<FormControl.Label visuallyHidden>
-					Filter the bank by name or title
-				</FormControl.Label>
-				<TextInput
-					block
-					type="search"
-					leadingVisual={SearchIcon}
-					placeholder="Filter by name or title"
-					value={filter}
-					onChange={(e) =>
-						dispatch({ kind: "filterChanged", text: e.target.value })
-					}
-				/>
-			</FormControl>
+			{loading ? (
+				<SkeletonBox height="var(--control-medium-size)" />
+			) : (
+				<FormControl>
+					<FormControl.Label visuallyHidden>
+						Filter the bank by name or title
+					</FormControl.Label>
+					<TextInput
+						block
+						type="search"
+						leadingVisual={SearchIcon}
+						placeholder="Filter by name or title"
+						value={filter}
+						onChange={(e) =>
+							dispatch({ kind: "filterChanged", text: e.target.value })
+						}
+					/>
+				</FormControl>
+			)}
 		</div>
 	);
 }

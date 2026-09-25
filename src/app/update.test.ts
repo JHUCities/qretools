@@ -22,6 +22,7 @@ import {
 import type { File } from "./storage.js";
 import { remoteBlob, syncOf } from "./sync.js";
 import {
+	bankLoading,
 	branchOwner,
 	movedPath,
 	moveProblem,
@@ -1402,6 +1403,11 @@ describe("the top bar's status", () => {
 			if (writeBlocked(m) !== undefined) expect(sessionStatus(m)).toBeDefined();
 		expect(writeBlocked(base)).toBeUndefined();
 		expect(sessionStatus(base)).toBeUndefined();
+		expect(bankLoading(base)).toBe(false);
+		expect(bankLoading({ ...base, loading: { kind: "loading" } })).toBe(true);
+		expect(bankLoading({ ...fresh(), session: { kind: "connecting" } })).toBe(
+			true,
+		);
 		// Someone else's file on its way is said there too, the one place loading is said.
 		expect(
 			sessionStatus({

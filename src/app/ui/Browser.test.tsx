@@ -62,7 +62,7 @@ describe("Browser", () => {
 
 	it("typing in the filter dispatches filterChanged with the text", () => {
 		const dispatch = vi.fn();
-		render(<BankFilter filter="" dispatch={dispatch} />);
+		render(<BankFilter filter="" loading={false} dispatch={dispatch} />);
 		fireEvent.change(screen.getByRole("searchbox"), {
 			target: { value: "sat" },
 		});

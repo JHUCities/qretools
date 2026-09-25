@@ -1062,6 +1062,14 @@ export function writeBlocked(model: Model): string | undefined {
 }
 
 /**
+ * The bank is on its way from GitHub: what this browser holds is only last known, so
+ * the sidebar shows the bank's shape rather than stale files. (An open file stays:
+ * viewing never waits, only writing does.)
+ */
+export const bankLoading = (model: Model): boolean =>
+	model.session.kind === "connecting" || model.loading.kind === "loading";
+
+/**
  * The top bar's status: what the session is doing, or why nothing can be written.
  * Empty in the steady state (connected, loaded, writable, idle), since the account
  * and the repository already say who and where. A file's inactive write buttons point

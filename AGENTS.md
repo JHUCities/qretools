@@ -929,7 +929,12 @@ headings (structure, so the outline is stable). The top bar's status is the one
 announcement (skeletons are silent divs); "Opening the link once the bank has loaded…"
 is gone. Going back to the bank stops waiting for a link (`listOpened` clears
 `pendingLink`). No flash delay: `SkeletonText` has no `delay`. Open for the owner: the
-Bank dialog's own "Loading the bank…" line.
+Bank dialog's own "Loading the bank…" line. While the bank loads (`bankLoading`), the whole sidebar is
+its shape: a `SkeletonBox` the input's size (`--control-medium-size`) in the band, and
+placeholder rows under the real "Questions" and "Shared" headings, never the stale
+files this browser last knew (owner, 2026-09-25; accepted: the author's own drafts are
+hidden for the seconds of the load). An open file stays: viewing never waits. A failed load shows the last-known tree again, by choice: the status says the
+load failed, and hiding the author's work then would cost more than it helps.
 
 **No editor without a bank (owner, 2026-09-25).** The flow starts from a repository,
 so signed out (anonymous or failed) the app is a sign-in page (Primer `Blankslate`,

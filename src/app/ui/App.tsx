@@ -33,6 +33,7 @@ import {
 	treeOf,
 } from "../tree.js";
 import {
+	bankLoading,
 	folderOfPath,
 	movedPath,
 	moveProblem,
@@ -58,6 +59,7 @@ export function App() {
 	// There is no editor without a bank: signed out is a sign-in page.
 	const signedIn =
 		model.session.kind === "connecting" || model.session.kind === "connected";
+	const loading = bankLoading(model);
 	// The tree is drawn from these slices only, so a caret move does not redraw it.
 	const treeInput = useMemo(
 		() => ({ local, browser, screen, activity }),
@@ -238,15 +240,16 @@ export function App() {
 						}
 					>
 						<nav className="sidebar" aria-label="Question bank">
-							<BankFilter filter={model.browser.filter} dispatch={dispatch} />
+							<BankFilter
+								filter={model.browser.filter}
+								loading={loading}
+								dispatch={dispatch}
+							/>
 							<div className="trees">
 								<Browser
 									folders={folders}
 									sections={sections}
-									loading={
-										model.loading.kind === "loading" ||
-										model.session.kind === "connecting"
-									}
+									loading={loading}
 									filter={model.browser.filter}
 									open={open}
 									dispatch={dispatch}
