@@ -20,7 +20,13 @@ import {
 } from "./model.js";
 import type { File } from "./storage.js";
 import { remoteBlob, syncOf } from "./sync.js";
-import { schemeNameProblem, update, writeBlocked } from "./update.js";
+import {
+	movedPath,
+	moveProblem,
+	schemeNameProblem,
+	update,
+	writeBlocked,
+} from "./update.js";
 
 const fresh = (): Model => init({ stored: ok(undefined), hasToken: false })[0];
 const run = (model: Model, ...msgs: Msg[]) =>
@@ -1069,5 +1075,109 @@ describe("links", () => {
 			hash: formatLink({ repo: "other/bank", branch: "main" }),
 		});
 		expect(m.failures.at(-1)?.message).toMatch(/other\/bank/);
+	});
+});
+
+describe("moving a question", () => {
+	const edited = () =>
+		withBank(connected(fresh()), [
+			bankQuestion(
+				1,
+				"questions/nhd/nhd_sat.yaml",
+				"name: nhd_sat\n",
+				"name: nhd_sat\nnote: unsaved\n",
+			),
+		]);
+
+	it("is one commit of the saved version at the new path, and the old path gone", () => {
+		const [asked] = update(edited(), { kind: "moveRequested", id: 1 });
+		expect(asked.browser.moving).toEqual({ id: 1, folder: "nhd" });
+		const [chosen] = update(asked, {
+			kind: "moveFolderChanged",
+			folder: "svy",
+		});
+		const [, cmds] = update(chosen, { kind: "moveConfirmed" });
+		expect(cmds[0]).toEqual({
+			kind: "commit",
+			target: {
+				owner: "JHUCities",
+				repo: "bas-question-bank",
+				branch: "qretools/iain",
+				defaultBranch: "main",
+			},
+			changes: [
+				{
+					id: 1,
+					path: "questions/svy/nhd_sat.yaml",
+					expected: null,
+					text: "name: nhd_sat\n",
+				},
+				{ path: "questions/nhd/nhd_sat.yaml", expected: "s", text: null },
+			],
+			message: "Move nhd_sat to questions/svy",
+		});
+	});
+
+	it("after the commit the file keeps its edits, its base moves, GitHub's copy moves, and the link is replaced", () => {
+		const m = { ...edited(), screen: { kind: "editing" as const, id: 1 } };
+		const [done, cmds] = update(m, {
+			kind: "committed",
+			changes: [
+				{
+					id: 1,
+					path: "questions/svy/nhd_sat.yaml",
+					expected: null,
+					text: "name: nhd_sat\n",
+				},
+				{ path: "questions/nhd/nhd_sat.yaml", expected: "s", text: null },
+			],
+			result: ok({ shas: { "questions/svy/nhd_sat.yaml": "s" } }),
+		});
+		expect(done.local.questions[1]).toMatchObject({
+			source: "name: nhd_sat\nnote: unsaved\n",
+			base: { path: "questions/svy/nhd_sat.yaml", sha: "s" },
+		});
+		expect(Object.keys(done.remote.questions)).toEqual([
+			"questions/svy/nhd_sat.yaml",
+		]);
+		expect(cmds.find((c) => c.kind === "setLink")).toMatchObject({
+			push: false,
+		});
+	});
+
+	it("refuses locally: a conflict, the same folder, a malformed or taken folder", () => {
+		const m = edited();
+		const q = m.local.questions[1] as Question;
+		expect(moveProblem(m, q, "nhd")).toMatch(/already in that folder/);
+		expect(moveProblem(m, q, "Not A Folder")).toMatch(/topic folder/);
+		const clash = withBank(m, [
+			bankQuestion(2, "questions/svy/nhd_sat.yaml", "name: x\n"),
+		]);
+		expect(
+			moveProblem(clash, clash.local.questions[1] as Question, "svy"),
+		).toMatch(/taken/);
+		const moved: Model = {
+			...m,
+			remote: {
+				...m.remote,
+				questions: {
+					"questions/nhd/nhd_sat.yaml": { sha: "theirs", text: "x" },
+				},
+			},
+		};
+		const [asked] = update(moved, {
+			kind: "moveRequested",
+			id: 1,
+			folder: "svy",
+		});
+		const [refused, cmds] = update(asked, { kind: "moveConfirmed" });
+		expect(cmds).toEqual([]);
+		expect(refused.activity[1]?.kind).toBe("failed");
+	});
+
+	it("only the folder changes, never the filename", () => {
+		expect(movedPath("questions/svy/dem_latx.yaml", "dem")).toBe(
+			"questions/dem/dem_latx.yaml",
+		);
 	});
 });

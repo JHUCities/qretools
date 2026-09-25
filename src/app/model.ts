@@ -121,6 +121,8 @@ export interface Browser {
 	readonly settingsOpen: boolean;
 	/** The save dialog for a draft: which question, and the topic folder being chosen. */
 	readonly saving?: { readonly id: Id; readonly folder: string };
+	/** The move dialog for a bank question: which one, and the topic folder being chosen. */
+	readonly moving?: { readonly id: Id; readonly folder: string };
 	/** The name dialog for a new scale, universe or instruction: a scheme file is named before it exists. */
 	readonly creating?: { readonly kind: NamedScheme; readonly name: string };
 }
@@ -232,6 +234,14 @@ export type Msg =
 	| { readonly kind: "saveFolderChanged"; readonly folder: string }
 	| { readonly kind: "saveConfirmed" }
 	| { readonly kind: "saveCancelled" }
+	| {
+			readonly kind: "moveRequested";
+			readonly id: Id;
+			readonly folder?: string;
+	  }
+	| { readonly kind: "moveFolderChanged"; readonly folder: string }
+	| { readonly kind: "moveConfirmed" }
+	| { readonly kind: "moveCancelled" }
 	/** A change set's commit came back; the changes are echoed, so nothing is looked up by path. */
 	| {
 			readonly kind: "committed";

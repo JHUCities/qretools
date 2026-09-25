@@ -98,7 +98,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const remote = useModel((m) => m.remote);
 	const activity = useModel((m) => m.activity);
 	const env = useEnv();
-	const { onTarget, on } = useActions(q.id);
+	const { dispatch, onTarget, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, agency, env);
 	const findings = useMemo(() => {
@@ -146,7 +146,14 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				blocked={blocked}
 				also={also}
 				stale={stale}
-				on={on}
+				on={
+					q.base === undefined
+						? on
+						: {
+								...on,
+								move: () => dispatch({ kind: "moveRequested", id: q.id }),
+							}
+				}
 			/>
 			<div className="split">
 				<section className="left" aria-label="Question source">

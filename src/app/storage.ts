@@ -93,9 +93,13 @@ export interface Store {
 	ensureBranch(target: BranchTarget): Promise<Result<void, Failure>>;
 }
 
-/** One file in a change set. `text: null` deletes it. `id` is the caller's, echoed back. */
+/**
+ * One file in a change set. `text: null` deletes it. `id` is the caller's working
+ * file, echoed back; a delete without one only removes the path on GitHub (the old
+ * path of a move), never a working file.
+ */
 export interface Change {
-	readonly id: number;
+	readonly id?: number;
 	readonly path: string;
 	/** The blob sha the author started from; null for a file that must not exist yet. */
 	readonly expected: string | null;

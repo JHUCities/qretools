@@ -11,6 +11,8 @@ export interface HeaderActions {
 	readonly downloadYaml: () => void;
 	/** Absent for a file that is not a question: only a question elaborates to DDI. */
 	readonly downloadDdi: (() => void) | undefined;
+	/** Absent for a file that cannot move: a draft, or a scheme file (named by its path). */
+	readonly move?: () => void;
 }
 
 export function FileHeader({
@@ -80,6 +82,16 @@ export function FileHeader({
 						onClick={on.downloadDdi}
 					>
 						DDI
+					</Button>
+				)}
+				{on.move !== undefined && (
+					<Button
+						size="small"
+						disabled={q.base === undefined || !canWrite}
+						title={blocked}
+						onClick={on.move}
+					>
+						Move…
 					</Button>
 				)}
 				<Button

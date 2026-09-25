@@ -13,11 +13,12 @@ import { indexOf, usedBy } from "../../core/symbols.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves } from "../sync.js";
 import { bankFolders, SCHEME_LABELS, schemeSections, treeOf } from "../tree.js";
-import { schemeNameProblem } from "../update.js";
+import { movedPath, moveProblem, schemeNameProblem } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
+import { MoveDialog } from "./MoveDialog.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
 
@@ -52,6 +53,9 @@ export function App() {
 		[treeInput, evaluations, env, index],
 	);
 	const creating = model.browser.creating;
+	const moving = model.browser.moving;
+	const movingQuestion =
+		moving === undefined ? undefined : model.local.questions[moving.id];
 	const open: Id | undefined =
 		model.screen.kind === "editing" ? model.screen.id : undefined;
 	const saving = model.browser.saving;
@@ -180,6 +184,16 @@ export function App() {
 					session={model.session}
 					bank={model.loading}
 					failures={model.failures}
+					dispatch={dispatch}
+				/>
+			)}
+			{moving && movingQuestion?.base && (
+				<MoveDialog
+					from={movingQuestion.base.path}
+					to={movedPath(movingQuestion.base.path, moving.folder)}
+					folder={moving.folder}
+					folders={bankFolders(model)}
+					problem={moveProblem(model, movingQuestion, moving.folder)}
 					dispatch={dispatch}
 				/>
 			)}

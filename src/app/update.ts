@@ -3,6 +3,7 @@ import {
 	describeChange,
 	describeChangeSet,
 	describeSchemeChange,
+	FOLDER_PATTERN,
 } from "../core/bank.js";
 import { compact } from "../core/compact.js";
 import { evaluate } from "../core/evaluate.js";
@@ -24,6 +25,7 @@ import {
 	type Model,
 	type Msg,
 	type Path,
+	type Question,
 	type Remote,
 	SCHEME_TEMPLATES,
 	type SchemeEntry,
@@ -365,8 +367,80 @@ function step(model: Model, msg: Msg): Step {
 			return write(closed, as, saving.id, q, where.value.path);
 		}
 
+		case "moveRequested": {
+			const q = model.local.questions[msg.id];
+			if (q?.base === undefined) return [model, []];
+			return [
+				{
+					...model,
+					browser: {
+						...model.browser,
+						moving: {
+							id: msg.id,
+							folder: msg.folder ?? folderOfPath(q.base.path),
+						},
+					},
+				},
+				[],
+			];
+		}
+
+		case "moveFolderChanged":
+			return model.browser.moving === undefined
+				? [model, []]
+				: [
+						{
+							...model,
+							browser: {
+								...model.browser,
+								moving: { ...model.browser.moving, folder: msg.folder },
+							},
+						},
+						[],
+					];
+
+		case "moveCancelled":
+			return [
+				{ ...model, browser: compact({ ...model.browser, moving: undefined }) },
+				[],
+			];
+
+		case "moveConfirmed": {
+			const moving = model.browser.moving;
+			const q =
+				moving === undefined ? undefined : model.local.questions[moving.id];
+			const as = writable(model);
+			if (moving === undefined || q?.base === undefined || as === undefined)
+				return [model, []];
+			const closed = {
+				...model,
+				browser: compact({ ...model.browser, moving: undefined }),
+			};
+			const problem = moveProblem(model, q, moving.folder);
+			if (problem !== undefined) return [refuse(closed, q.id, problem), []];
+			const to = movedPath(q.base.path, moving.folder);
+			// Like `git mv`: the saved version moves; unsaved edits stay unsaved, and a
+			// commit that says "move" hides no change of content.
+			return [
+				withActivity(closed, q.id, { kind: "saving" }),
+				[
+					{
+						kind: "commit",
+						target: targetOf(model.settings, as),
+						changes: [
+							{ id: q.id, path: to, expected: null, text: q.base.text },
+							{ path: q.base.path, expected: q.base.sha, text: null },
+						],
+						message: `Move ${fileName(q.base.path)} to questions/${moving.folder}`,
+					},
+				],
+			];
+		}
+
 		case "committed": {
-			const ids = msg.changes.map((c) => c.id);
+			const ids = msg.changes.flatMap((c) =>
+				c.id === undefined ? [] : [c.id],
+			);
 			const primary = ids[0];
 			const idle = ids.reduce<Model>(
 				(m, id) => withActivity(m, id, undefined),
@@ -400,12 +474,17 @@ function step(model: Model, msg: Msg): Step {
 			}
 			const { shas } = msg.result.value;
 			const done = msg.changes.reduce<Model>((m, c) => {
+				// A delete with no working file is the old path of a move: GitHub only.
 				if (c.text === null)
-					return withGitHub(without(m, c.id), c.path, undefined);
+					return withGitHub(
+						c.id === undefined ? m : without(m, c.id),
+						c.path,
+						undefined,
+					);
 				const sha = shas[c.path];
 				if (sha === undefined) return m;
 				const blob = { sha, text: c.text };
-				const f = fileOf(m, c.id);
+				const f = c.id === undefined ? undefined : fileOf(m, c.id);
 				// The base becomes what was committed, not what is in the editor now:
 				// typing during the save correctly shows as unsaved.
 				const based = f
@@ -663,7 +742,8 @@ function write(
 		}),
 	];
 	const busy = changes.reduce<Model>(
-		(m, c) => withActivity(m, c.id, { kind: "saving" }),
+		(m, c) =>
+			c.id === undefined ? m : withActivity(m, c.id, { kind: "saving" }),
 		model,
 	);
 	return [
@@ -704,6 +784,32 @@ function messageOf(model: Model, q: Entry): string {
 		q.base === undefined ? undefined : parseSurface(q.base.text, env).draft,
 		parseSurface(q.source, env).draft,
 	);
+}
+
+/** The topic folder of a question path: `questions/<folder>/<name>.yaml`. */
+const folderOfPath = (path: Path): string => path.split("/")[1] ?? "";
+const fileName = (path: Path): string =>
+	(path.split("/").at(-1) ?? path).replace(/\.yaml$/, "");
+/** Only the folder changes; the filename stays, whatever unsaved edits say the name is. */
+export const movedPath = (path: Path, folder: string): Path =>
+	`questions/${folder}/${path.split("/").at(-1) ?? ""}`;
+
+/** Why a bank question cannot move to `folder`, or undefined when it can. */
+export function moveProblem(
+	model: Model,
+	q: Question,
+	folder: string,
+): string | undefined {
+	if (q.base === undefined) return "Only a question in the bank can move.";
+	if (!FOLDER_PATTERN.test(folder))
+		return "A topic folder is lower case letters, digits, `_` and `-`, starting with a letter.";
+	const to = movedPath(q.base.path, folder);
+	if (to === q.base.path) return "It is already in that folder.";
+	const sync = syncOf(q, remoteBlob(model.remote, q));
+	if (sync === "conflict" || sync === "deletedOnGitHub")
+		return "This file changed on GitHub since you started; reload it first.";
+	if (taken(model, to, q.id)) return `\`${to}\` is already taken.`;
+	return undefined;
 }
 
 /**
