@@ -31,6 +31,7 @@ import { hrefOf, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
+import { FileSkeleton } from "./FileSkeleton.js";
 import {
 	Codebook,
 	Ddi,
@@ -521,9 +522,8 @@ export function ForeignView({
 				</PageHeader>
 			</div>
 			{file === undefined ? (
-				<p className="quiet foreign-loading">
-					Loading {screen.path} from {screen.branch}…
-				</p>
+				// The top bar's status says what is loading; this is its shape.
+				<FileSkeleton kind={kind ?? "question"} />
 			) : (
 				<div className="split">
 					<section className="left" aria-label="Their source">

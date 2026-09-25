@@ -914,13 +914,22 @@ each span both as a subgrid, so the branch row and the open file's header share 
 band and their rules line up whatever either holds (the header grows with "Saving also
 saves…"; heights matched by padding would drift). **Rule: every direct child of
 `.sidebar` and `.content` names its `grid-row`, through exactly one class** (`.branch`/
-`.qhead` row 1; `.trees`/`.split`/`.foreign-loading` row 2; `.blank` both); two
+`.qhead` row 1; `.trees`/`.split` row 2; `.blank` both); two
 row-setting classes on one element resolve by stylesheet order (the after-pass caught
 ForeignView's loading line spanning over its header that way), and the
 editing views return fragments so `.qhead` and `.split` are the content's own items.
 The branch band is always drawn (a skeleton while loading, "Not signed in", "Bank not
 loaded") so its rule is always there. Consequence: the branch row no longer scrolls
 away with the tree; the filter still does.
+
+**Loading is shown as the thing's shape (owner, 2026-09-25).** A link waiting for the
+bank, and another author's file being fetched, show `FileSkeleton`: Primer's
+`SkeletonText` where text will be (ragged code lines for the editor), the panes' real
+headings (structure, so the outline is stable). The top bar's status is the one
+announcement (skeletons are silent divs); "Opening the link once the bank has loaded…"
+is gone. Going back to the bank stops waiting for a link (`listOpened` clears
+`pendingLink`). No flash delay: `SkeletonText` has no `delay`. Open for the owner: the
+Bank dialog's own "Loading the bank…" line.
 
 **The header follows github.com (owner, 2026-09-25).** Left: `qretools`, then
 `owner / repo` (the repository a link to GitHub; the owner hidden on narrow screens; the

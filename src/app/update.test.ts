@@ -1215,6 +1215,10 @@ describe("links while connecting", () => {
 		const [waiting] = update(m, { kind: "hashChanged", hash: link });
 		expect(waiting.screen.kind).toBe("blank");
 		expect(waiting.pendingLink).toMatchObject({ branch: "qretools/alice" });
+		// Going back to the bank stops waiting: the link must not pull the author away later.
+		expect(
+			update(waiting, { kind: "listOpened" })[0].pendingLink,
+		).toBeUndefined();
 		const own = formatLink({
 			repo: "JHUCities/bas-question-bank",
 			branch: "qretools/iain",
@@ -1333,6 +1337,19 @@ describe("the top bar's status", () => {
 			if (writeBlocked(m) !== undefined) expect(sessionStatus(m)).toBeDefined();
 		expect(writeBlocked(base)).toBeUndefined();
 		expect(sessionStatus(base)).toBeUndefined();
+		// Someone else's file on its way is said there too, the one place loading is said.
+		expect(
+			sessionStatus({
+				...base,
+				screen: { kind: "foreign", branch: "qretools/alice", path: "q.yaml" },
+			}),
+		).toBe("Loading q.yaml from qretools/alice…");
+		expect(
+			sessionStatus({
+				...connected(fresh(), false),
+				screen: { kind: "foreign", branch: "qretools/alice", path: "q.yaml" },
+			}),
+		).toBe("Loading q.yaml from qretools/alice…");
 	});
 });
 

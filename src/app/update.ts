@@ -136,7 +136,16 @@ function step(model: Model, msg: Msg): Step {
 			return [{ ...model, ddiSchema: msg.result }, []];
 
 		case "listOpened":
-			return [{ ...model, screen: { kind: "blank" } }, []];
+			// Going back to the bank also stops waiting to open a link: it would
+			// otherwise pull the author away once the bank loads.
+			return [
+				compact({
+					...model,
+					screen: { kind: "blank" },
+					pendingLink: undefined,
+				}),
+				[],
+			];
 
 		case "fileOpened":
 			return fileOf(model, msg.id)
@@ -1054,7 +1063,10 @@ export function sessionStatus(model: Model): string | undefined {
 		case "connected":
 			return loading.kind === "failed"
 				? `The bank did not load: ${loading.failure.message}`
-				: writeBlocked(model);
+				: // What is happening now comes before a standing reason (read only).
+					model.screen.kind === "foreign" && model.screen.file === undefined
+					? `Loading ${model.screen.path} from ${model.screen.branch}…`
+					: writeBlocked(model);
 	}
 }
 

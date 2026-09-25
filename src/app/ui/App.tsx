@@ -22,7 +22,7 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonText } from "@primer/react/experimental";
 import { useMemo } from "react";
-import { SCHEME_KINDS } from "../../core/schemes.js";
+import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves } from "../sync.js";
@@ -44,6 +44,7 @@ import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { ExternalLink } from "./ExternalLink.js";
+import { FileSkeleton } from "./FileSkeleton.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
@@ -84,6 +85,11 @@ export function App() {
 		moving === undefined ? undefined : model.local.questions[moving.id];
 	const open: Id | undefined =
 		model.screen.kind === "editing" ? model.screen.id : undefined;
+	// A link waiting for the bank shows the file's shape where the file will be.
+	const waiting =
+		model.pendingLink !== undefined &&
+		(model.session.kind === "connecting" ||
+			(model.session.kind === "connected" && model.loading.kind === "loading"));
 	const saving = model.browser.saving;
 	const savingQuestion =
 		saving === undefined ? undefined : model.local.questions[saving.id];
@@ -205,7 +211,9 @@ export function App() {
 				{/* On narrow screens the tree and the open file are separate views. */}
 				<div
 					className="workspace"
-					data-open={open !== undefined || model.screen.kind === "foreign"}
+					data-open={
+						open !== undefined || model.screen.kind === "foreign" || waiting
+					}
 				>
 					<nav className="sidebar" aria-label="Question bank">
 						<BranchPanel model={model} />
@@ -226,10 +234,16 @@ export function App() {
 					<main className="content">
 						{model.screen.kind === "foreign" ? (
 							<ForeignView screen={model.screen} />
+						) : open === undefined && waiting && model.pendingLink ? (
+							<FileSkeleton
+								kind={kindAt(model.pendingLink.file ?? "")?.kind ?? "question"}
+								onBack={() => dispatch({ kind: "listOpened" })}
+							/>
 						) : open === undefined ? (
 							<div className="blank">
 								{model.pendingLink !== undefined &&
-								model.session.kind !== "connected" ? (
+								(model.session.kind === "anonymous" ||
+									model.session.kind === "failed") ? (
 									<Stack align="start" gap="condensed">
 										<p className="quiet">Sign in to open this link.</p>
 										<Button
@@ -246,9 +260,7 @@ export function App() {
 										{model.pendingLink !== undefined &&
 										model.loading.kind === "failed"
 											? "The bank did not load, so this link cannot open yet."
-											: model.pendingLink !== undefined
-												? "Opening the link once the bank has loaded…"
-												: "Pick a question or a shared element in the bank, or create a new one."}
+											: "Pick a question or a shared element in the bank, or create a new one."}
 									</p>
 								)}
 							</div>
@@ -495,7 +507,9 @@ const saving = (model: Model): boolean =>
 const busy = (model: Model): boolean =>
 	model.session.kind === "connecting" ||
 	(model.session.kind === "connected" &&
-		(model.loading.kind === "loading" || saving(model)));
+		(model.loading.kind === "loading" ||
+			saving(model) ||
+			(model.screen.kind === "foreign" && model.screen.file === undefined)));
 
 const capitalise = (s: string): string =>
 	s.charAt(0).toUpperCase() + s.slice(1);
