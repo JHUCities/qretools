@@ -223,7 +223,9 @@ emit a Universe item and resolve the link in role 2.
   That is the whole convention.
 - **Schema completion is composed, not bundled.** `codemirror-json-schema`'s
   `yamlSchema()` adds its own linter, which would double-report and call holes errors.
-  We use its `yamlCompletion`, `yamlSchemaHover` and `stateExtensions`, push our own
+  We use its `yamlCompletion` and `stateExtensions` (its `yamlSchemaHover` was dropped
+  2026-09-25: the cursor inspector shows a field's description, and the hover repeated
+  it beside the finding's own tooltip), push our own
   findings with `setDiagnostics` (holes map to CodeMirror's otherwise unused `hint`
   severity), and add `complete.ts` for the cases the package does not cover: a blank
   line, the first key under a parent, an empty enum value.

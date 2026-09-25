@@ -2,11 +2,12 @@
 import {
 	AlertIcon,
 	CheckCircleIcon,
+	ChevronRightIcon,
 	InfoIcon,
 	IssueDraftIcon,
 	XCircleIcon,
 } from "@primer/octicons-react";
-import { ActionList, Label } from "@primer/react";
+import { ActionList, Details, Label } from "@primer/react";
 import { Fragment, memo, type ReactNode, useId } from "react";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Status, Target } from "../../core/findings.js";
@@ -308,10 +309,18 @@ export const Ddi = memo(function Ddi({
 			</Label>
 		);
 	return (
-		<details className="pane">
-			<summary>
-				<h3>DDI-Lifecycle 4.0 {badge}</h3>
-			</summary>
+		// Primer's Details hides the browser's marker; the chevron stands in for it,
+		// on the heading's line.
+		<Details className="pane">
+			<Details.Summary>
+				<h3>
+					<span className="disclosure">
+						<ChevronRightIcon aria-hidden />
+						DDI-Lifecycle 4.0
+					</span>
+					{badge}
+				</h3>
+			</Details.Summary>
 			<div className="pane-body">
 				{problems.map((f, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: schema problems are positional and can repeat
@@ -321,7 +330,7 @@ export const Ddi = memo(function Ddi({
 				))}
 				<pre className="json">{JSON.stringify(document, null, 2)}</pre>
 			</div>
-		</details>
+		</Details>
 	);
 });
 

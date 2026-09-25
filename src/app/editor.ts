@@ -10,11 +10,11 @@ import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { Annotation, Compartment, EditorState, Prec } from "@codemirror/state";
-import { hoverTooltip, keymap } from "@codemirror/view";
+import { keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
-import { yamlCompletion, yamlSchemaHover } from "codemirror-json-schema/yaml";
+import { yamlCompletion } from "codemirror-json-schema/yaml";
 import type { Range } from "../core/findings.js";
 import { schemaCompletion } from "./complete.js";
 
@@ -58,7 +58,8 @@ export function createEditor(
 		// adds its own linter, which would double-report and call holes errors.
 		yamlLanguage.data.of({ autocomplete: yamlCompletion() }),
 		yamlLanguage.data.of({ autocomplete: schemaCompletion }),
-		hoverTooltip(yamlSchemaHover()),
+		// No schema hover: the cursor inspector shows a field's description, and a
+		// finding's tooltip shows the finding; a third tooltip repeated both.
 		stateExtensions(),
 		macCompletionKeys,
 		EditorView.lineWrapping,
@@ -194,6 +195,8 @@ const primerTheme = EditorView.theme({
 		border: "var(--borderWidth-thin) solid var(--borderColor-default)",
 		borderRadius: "var(--borderRadius-medium)",
 		boxShadow: "var(--shadow-floating-small)",
+		// A readable line length, never the editor's full width.
+		maxInlineSize: "60ch",
 	},
 	".cm-tooltip-autocomplete > ul > li[aria-selected]": {
 		color: "var(--fgColor-default)",
