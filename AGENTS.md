@@ -886,8 +886,8 @@ is the prior art to read first.
 **Saves always go to `qretools-<login>` (owner, 2026-09-25; a hyphen since the same day, see below).** The Bank panel's branch
 field is gone: the branch is not a choice, it follows from who is signed in; a branch
 stored by an older version is read and dropped. Development and headless checks use the
-checker's own branch, never `sandbox`. The token-paste fallback is off in
-`.env.development`; `pnpm dev:verify` (`vite --mode verify`, port 5299, `.env.verify`)
+checker's own branch, never `sandbox`. The token-paste fallback is off (absent from
+`.env`); `pnpm dev:verify` (`vite --mode verify`, port 5299, `.env.verify`)
 turns it on for scripted checks only. The branch and "Propose changes" now live
 at the top of the sidebar (see "The header follows github.com").
 
@@ -1021,10 +1021,23 @@ Primer's `Autocomplete` was built and rejected: its overlay comes only in fixed
 widths (never the field's), with a gutter on the "new" item. About a dozen topics
 need no filter; a native select's type-ahead is enough.
 
+**Deployed to GitHub Pages (owner, 2026-09-25).** `.github/workflows/pages.yml`, on
+every push to `main`: mise (Node and pnpm as `mise.toml` pins them), `pnpm check`, the
+Worker's checks, `pnpm build`, then GitHub's Pages actions. The base path is Pages'
+own (`configure-pages`' `base_path` as `BASE_PATH`; `vite.config.ts` reads it, "/"
+otherwise), so no repository name is in the code and a custom domain needs no change.
+One `.env` holds the sign-in configuration for every mode (nothing secret);
+`.env.verify` only adds the token-paste flag. Hash links need no 404 fallback. By hand:
+Pages source "GitHub Actions", the GitHub App's callback URL for the site, and
+`wrangler deploy` for the Worker (its allowlist gains `https://jhucities.github.io`).
+**Open for the owner:** `jhucities.github.io` is one origin shared by every JHUCities
+Pages site, and the sign-in token lives in that origin's storage; a custom domain
+would give the app an origin of its own.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
-so the minifier drops disabled code; on in development through `.env.development`, set
-per deployment otherwise. OpenFeature (the CNCF standard, web and React SDKs) was
+so the minifier drops disabled code; off unless a mode's env file turns one on
+(`.env.verify`). OpenFeature (the CNCF standard, web and React SDKs) was
 considered: it is the step up if runtime flags are ever needed (per user, without a
 rebuild), and `flags.ts` would become its provider without touching call sites.
 

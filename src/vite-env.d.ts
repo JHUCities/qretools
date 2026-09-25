@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-/** Build-time configuration: `.env.development` for development, the build environment otherwise. */
+/** Build-time configuration: `.env` for every mode, `.env.verify` adds the headless-check flags. */
 interface ImportMetaEnv {
 	/** "true" shows the token-paste fallback; off in production (AGENTS.md, feature flags). */
 	readonly VITE_FLAG_TOKEN_PASTE?: string;

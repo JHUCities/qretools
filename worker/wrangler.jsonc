@@ -10,6 +10,6 @@
 		// The GitHub App's client id (public): fill in after creating the App.
 		"CLIENT_ID": "Iv23liuH12sNU6DhRz15",
 		// Exact origins the app is served from, comma separated.
-		"ALLOWED_ORIGINS": "http://localhost:5199"
+		"ALLOWED_ORIGINS": "http://localhost:5199,https://jhucities.github.io"
 	}
 }

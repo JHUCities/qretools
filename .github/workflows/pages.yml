@@ -1,0 +1,44 @@
+# Checks, builds and deploys the app to GitHub Pages on every push to main. The site's
+# base path comes from Pages itself (a sub-path now, "/" under a custom domain later),
+# so no repository name is written into the code. The Worker is deployed by hand.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      # Node and pnpm as mise.toml pins them.
+      - uses: jdx/mise-action@v4
+      - id: pages
+        uses: actions/configure-pages@v6
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm --dir worker install --frozen-lockfile
+      - run: pnpm run check:worker
+      # The path Pages serves from: "/qretools/" on github.io, "/" under a custom domain.
+      - run: echo "base=[$BASE_PATH]" && pnpm run build
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v5
