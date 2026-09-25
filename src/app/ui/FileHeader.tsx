@@ -1,10 +1,5 @@
 /** The open file's header: identity, state, and the actions on it. */
-import {
-	ArrowLeftIcon,
-	DownloadIcon,
-	SyncIcon,
-	TrashIcon,
-} from "@primer/octicons-react";
+import { ArrowLeftIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label, PageHeader, Stack } from "@primer/react";
 import { useId } from "react";
 import type { Activity, Entry } from "../model.js";
@@ -14,9 +9,6 @@ export interface HeaderActions {
 	readonly save: () => void;
 	readonly reload: () => void;
 	readonly remove: () => void;
-	readonly downloadYaml: () => void;
-	/** Absent for a file that is not a question: only a question elaborates to DDI. */
-	readonly downloadDdi: (() => void) | undefined;
 	/** Absent for a file that cannot move: a draft, or a scheme file (named by its path). */
 	readonly move?: () => void;
 	/** Back to the bank: shown on narrow screens, where the tree and the file are separate views. */
@@ -109,22 +101,6 @@ export function FileHeader({
 					</PageHeader.TrailingVisual>
 				</PageHeader.TitleArea>
 				<PageHeader.Actions>
-					<Button
-						size="small"
-						leadingVisual={DownloadIcon}
-						onClick={on.downloadYaml}
-					>
-						YAML
-					</Button>
-					{on.downloadDdi !== undefined && (
-						<Button
-							size="small"
-							leadingVisual={DownloadIcon}
-							onClick={on.downloadDdi}
-						>
-							DDI
-						</Button>
-					)}
 					{on.move !== undefined && (
 						<Button
 							size="small"
@@ -184,7 +160,7 @@ export function FileHeader({
 				<Banner
 					variant="warning"
 					title="This file changed on GitHub since you started."
-					description="Download your version first if you want to keep it, then reload from GitHub."
+					description="Copy your version somewhere first if you want to keep it, then reload from GitHub."
 					primaryAction={reload}
 				/>
 			)}

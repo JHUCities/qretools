@@ -380,12 +380,6 @@ p.finding {
 .bank-status {
 	margin-top: var(--base-size-16);
 }
-.upload {
-	display: inline-flex;
-	gap: var(--base-size-6);
-	align-items: center;
-	font-size: var(--text-body-size-small);
-}
 .save-path {
 	margin: var(--base-size-12) 0 var(--base-size-4);
 }

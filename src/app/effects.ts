@@ -296,17 +296,6 @@ export function createEffects(deps: Deps): Effects {
 					);
 					return;
 				}
-				case "download": {
-					const url = URL.createObjectURL(
-						new Blob([cmd.text], { type: cmd.mime }),
-					);
-					const a = document.createElement("a");
-					a.href = url;
-					a.download = cmd.filename;
-					a.click();
-					setTimeout(() => URL.revokeObjectURL(url), 1000);
-					return;
-				}
 				case "forgetToken":
 					deps.credentialStore.clear();
 					credentials = null;

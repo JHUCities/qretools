@@ -157,18 +157,6 @@ describe("editing", () => {
 				"name: q\ntext:\nintent: i\nopen:\n".slice(cmd.range[0], cmd.range[1]),
 		).toBe("text:");
 	});
-
-	it("upload adds drafts with their text and returns to the list", () => {
-		const [m] = update(fresh(), {
-			kind: "filesUploaded",
-			files: [
-				{ name: "a.yaml", text: "name: a\n" },
-				{ name: "b.yaml", text: "name: b\n" },
-			],
-		});
-		expect(Object.keys(m.local.questions)).toHaveLength(2);
-		expect(m.screen.kind).toBe("blank");
-	});
 });
 
 describe("saving", () => {

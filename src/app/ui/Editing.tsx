@@ -84,10 +84,6 @@ function useActions(id: Id) {
 			save: () => dispatch({ kind: "saveRequested", id }),
 			reload: () => dispatch({ kind: "reloadRequested", id }),
 			remove: () => dispatch({ kind: "deleteRequested", id }),
-			downloadYaml: () =>
-				dispatch({ kind: "downloadRequested", id, format: "yaml" }),
-			downloadDdi: () =>
-				dispatch({ kind: "downloadRequested", id, format: "ddi" }),
 			close: () => dispatch({ kind: "listOpened" }),
 		},
 	};
@@ -238,7 +234,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				activity={activity[e.id]}
 				blocked={blocked}
 				stale={eStale}
-				on={{ ...on, downloadDdi: undefined }}
+				on={on}
 			/>
 			<div className="split">
 				<section className="left" aria-label={`${SINGULAR[e.kind]} source`}>

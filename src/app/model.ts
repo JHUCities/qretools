@@ -226,13 +226,6 @@ export type Msg =
 	| { readonly kind: "schemeNameChanged"; readonly name: string }
 	| { readonly kind: "schemeCreateConfirmed" }
 	| { readonly kind: "schemeCreateCancelled" }
-	| {
-			readonly kind: "filesUploaded";
-			readonly files: readonly {
-				readonly name: string;
-				readonly text: string;
-			}[];
-	  }
 	| { readonly kind: "deleteRequested"; readonly id: Id }
 	| { readonly kind: "deleteCancelled" }
 	| { readonly kind: "saveRequested"; readonly id: Id }
@@ -258,11 +251,6 @@ export type Msg =
 			readonly kind: "fileReloaded";
 			readonly id: Id;
 			readonly result: Result<File, Failure>;
-	  }
-	| {
-			readonly kind: "downloadRequested";
-			readonly id: Id;
-			readonly format: "yaml" | "ddi";
 	  }
 	| { readonly kind: "connectRequested"; readonly settings: BankSettings }
 	/** Sign in with GitHub: the settings are kept, then the page leaves for GitHub. */
@@ -296,12 +284,6 @@ export type Cmd =
 			readonly target: BranchTarget;
 			readonly changes: readonly Change[];
 			readonly message: string;
-	  }
-	| {
-			readonly kind: "download";
-			readonly filename: string;
-			readonly text: string;
-			readonly mime: string;
 	  }
 	| { readonly kind: "forgetToken" }
 	/** Leave for GitHub's sign-in page; the credentials come back to the effects, never here. */

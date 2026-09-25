@@ -6,7 +6,6 @@ import {
 	FOLDER_PATTERN,
 } from "../core/bank.js";
 import { compact } from "../core/compact.js";
-import { evaluate } from "../core/evaluate.js";
 import { locate } from "../core/findings.js";
 import { MISSING_NAME, schemePath } from "../core/schemes.js";
 import type { NamedScheme } from "../core/surface/env.js";
@@ -228,13 +227,6 @@ function step(model: Model, msg: Msg): Step {
 				},
 			);
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
-		}
-
-		case "filesUploaded": {
-			let next = model;
-			for (const f of msg.files)
-				[next] = add(next, { kind: "question", source: f.text });
-			return persist([next, []]);
 		}
 
 		case "deleteRequested": {
@@ -548,49 +540,6 @@ function step(model: Model, msg: Msg): Step {
 			]);
 		}
 
-		case "downloadRequested": {
-			const q = fileOf(model, msg.id);
-			if (!q) return [model, []];
-			if (q.kind !== "question")
-				return [
-					model,
-					msg.format === "yaml"
-						? [
-								{
-									kind: "download",
-									filename: `${q.name}.yaml`,
-									text: q.source,
-									mime: "application/yaml",
-								},
-							]
-						: [],
-				];
-			const ev = evaluate(
-				q.source,
-				model.agency,
-				envOf(model.local.schemes, model.remote.schemes),
-			);
-			const stem = ev.draft.name ?? `question-${msg.id}`;
-			return [
-				model,
-				[
-					msg.format === "yaml"
-						? {
-								kind: "download",
-								filename: `${stem}.yaml`,
-								text: q.source,
-								mime: "application/yaml",
-							}
-						: {
-								kind: "download",
-								filename: `${stem}.ddi.json`,
-								text: JSON.stringify(ev.ddi, null, 2),
-								mime: "application/json",
-							},
-				],
-			];
-		}
-
 		case "connectRequested":
 			return persist([
 				{
@@ -722,7 +671,7 @@ function write(
 				model,
 				id,
 				"This file changed on GitHub since you started.",
-				"Download your version first if you want to keep it, then reload from GitHub.",
+				"Copy your version somewhere first if you want to keep it, then reload from GitHub.",
 			),
 			[],
 		];
@@ -1072,7 +1021,7 @@ const current = (model: Model): Entry | undefined =>
  */
 export function writeBlocked(model: Model): string | undefined {
 	if (model.session.kind !== "connected") return "Connect to the bank to save";
-	if (!model.session.canWrite) return "Read access only: download instead";
+	if (!model.session.canWrite) return "Read access only";
 	if (model.loading.kind !== "loaded") return "Checking GitHub…";
 	// One commit at a time: two in flight naming the same file would make the second
 	// look stale for a save that worked. Commits to one branch are serial anyway.

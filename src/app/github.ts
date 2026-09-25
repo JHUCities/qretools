@@ -212,7 +212,7 @@ export const makeGitHubStore = (
 				failure: {
 					kind: "stale",
 					message: `Changed on GitHub since you started: ${stale.map((c) => `\`${c.path}\``).join(", ")}.`,
-					hint: "Download your version first if you want to keep it, then reload from GitHub.",
+					hint: "Copy your version somewhere first if you want to keep it, then reload from GitHub.",
 				},
 				seen: Object.fromEntries(paths.map((p) => [p, files[p] ?? null])),
 			});

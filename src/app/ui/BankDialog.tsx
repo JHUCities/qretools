@@ -3,7 +3,6 @@
  * is a development fallback behind a build-time flag. The form fields are transient
  * input until then; a pasted token goes to the effects, never into a message. Failures and the session are shown here from the Model.
  */
-import { UploadIcon } from "@primer/octicons-react";
 import {
 	Banner,
 	Button,
@@ -53,15 +52,6 @@ export function BankDialog({
 		dispatch({ kind: "connectRequested", settings: next() });
 	};
 	const config = signInSetUp;
-	const upload = async (files: FileList | null) => {
-		const read = await Promise.all(
-			[...(files ?? [])].map(async (f) => ({
-				name: f.name,
-				text: (await f.text()).replace(/\r\n?/g, "\n"),
-			})),
-		);
-		if (read.length > 0) dispatch({ kind: "filesUploaded", files: read });
-	};
 	return (
 		<Dialog
 			title="Bank"
@@ -181,15 +171,6 @@ export function BankDialog({
 						onDismiss={() => dispatch({ kind: "failureDismissed", index: i })}
 					/>
 				))}
-				<label className="upload">
-					<UploadIcon /> Upload YAML{" "}
-					<input
-						type="file"
-						accept=".yaml,.yml"
-						multiple
-						onChange={(e) => void upload(e.target.files)}
-					/>
-				</label>
 			</Stack>
 		</Dialog>
 	);
@@ -230,7 +211,7 @@ function SessionLine({
 					Connected as {session.login},{" "}
 					{session.canWrite
 						? "with write access."
-						: "read access only: you can browse, draft and download."}{" "}
+						: "read access only: you can browse and draft."}{" "}
 					<Button size="small" onClick={onDisconnect}>
 						Disconnect
 					</Button>

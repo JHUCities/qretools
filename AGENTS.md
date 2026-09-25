@@ -891,6 +891,14 @@ turns it on for scripted checks only. The top bar shows the branch as Primer's
 and "Propose changes" as a small `LinkButton` with the pull-request icon, the way
 github.com offers "Compare & pull request".
 
+**No download or upload (owner, 2026-09-25).** The YAML and DDI download buttons and
+"Upload YAML" are gone (Msgs `downloadRequested`, `filesUploaded`, Cmd `download`). Files
+enter and leave the bank through git, and the app does not duplicate that: a file is
+created in the app or on GitHub, and GitHub is where it is fetched. This retires the
+step 5 upload and download and step 9's planned "a DDI download says when it includes
+unsaved shared elements". A DDI export, if wanted, returns as a build product of the
+bank (for example in CI), not as a button.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; on in development through `.env.development`, set
