@@ -14,12 +14,15 @@ export function Browser({
 	filter,
 	open,
 	dispatch,
+	loading = false,
 }: {
 	folders: readonly Folder[];
 	sections: readonly SchemeSection[];
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
+	/** The bank is being read from GitHub: an empty tree means "not yet", not "none". */
+	loading?: boolean;
 }) {
 	return (
 		<div className="browser">
@@ -35,10 +38,12 @@ export function Browser({
 				}
 			/>
 			{folders.length === 0 ? (
-				<p className="quiet">
-					{filter === ""
-						? "No questions yet. Create one, or connect to the bank."
-						: "No questions match."}
+				<p className="quiet" aria-live="polite">
+					{loading
+						? "Loading the bank from GitHub…"
+						: filter === ""
+							? "No questions yet. Create one, or connect to the bank."
+							: "No questions match."}
 				</p>
 			) : (
 				<TreeView aria-label="Questions">

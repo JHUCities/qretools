@@ -154,6 +154,10 @@ export function App() {
 					<Browser
 						folders={folders}
 						sections={sections}
+						loading={
+							model.loading.kind === "loading" ||
+							model.session.kind === "connecting"
+						}
 						filter={model.browser.filter}
 						open={open}
 						dispatch={dispatch}
