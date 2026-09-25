@@ -1,7 +1,7 @@
 /**
- * Bank settings and connection. The form fields are transient input until
- * Connect; the token goes to the effects and the token store, never into a
- * message. Failures and the session are shown here from the Model.
+ * Bank settings and connection. "Sign in with GitHub" is the way in; pasting a token
+ * is a development fallback behind a build-time flag. The form fields are transient
+ * input until then; a pasted token goes to the effects, never into a message. Failures and the session are shown here from the Model.
  */
 import { UploadIcon } from "@primer/octicons-react";
 import {
@@ -13,6 +13,8 @@ import {
 	TextInput,
 } from "@primer/react";
 import { useState } from "react";
+import { signInConfig } from "../config.js";
+import { TOKEN_PASTE } from "../flags.js";
 import type { Bank, Dispatch, Session } from "../model.js";
 import type { BankSettings, Failure } from "../storage.js";
 import { useApp } from "./AppContext.js";
@@ -38,17 +40,25 @@ export function BankDialog({
 	const [token, setToken] = useState("");
 	const [remember, setRemember] = useState(settings.remember);
 	const close = () => dispatch({ kind: "settingsToggled", open: false });
+	// An empty branch means the author's own branch: it must stay empty, not fall back.
+	const next = (): BankSettings => ({
+		owner: owner.trim() || settings.owner,
+		repo: repo.trim() || settings.repo,
+		branch: branch.trim(),
+		remember,
+	});
+	const signIn = () => dispatch({ kind: "signInRequested", settings: next() });
 	const connect = () => {
-		const next: BankSettings = {
-			owner: owner.trim() || settings.owner,
-			repo: repo.trim() || settings.repo,
-			branch: branch.trim() || settings.branch,
-			remember,
-		};
-		if (token.trim() !== "") effects.setToken(token.trim(), remember);
+		if (TOKEN_PASTE && token.trim() !== "")
+			effects.setToken(token.trim(), remember);
 		setToken("");
-		dispatch({ kind: "connectRequested", settings: next });
+		dispatch({ kind: "connectRequested", settings: next() });
 	};
+	const config = signInConfig(
+		import.meta.env,
+		location.origin,
+		import.meta.env.BASE_URL,
+	);
 	const upload = async (files: FileList | null) => {
 		const read = await Promise.all(
 			[...(files ?? [])].map(async (f) => ({
@@ -64,7 +74,26 @@ export function BankDialog({
 			onClose={close}
 			footerButtons={[
 				{ buttonType: "default", content: "Close", onClick: close },
-				{ buttonType: "primary", content: "Connect", onClick: connect },
+				...(TOKEN_PASTE
+					? [
+							{
+								buttonType: config
+									? ("default" as const)
+									: ("primary" as const),
+								content: "Connect with token",
+								onClick: connect,
+							},
+						]
+					: []),
+				...(config
+					? [
+							{
+								buttonType: "primary" as const,
+								content: "Sign in with GitHub",
+								onClick: signIn,
+							},
+						]
+					: []),
 			]}
 		>
 			<div className="bank-form">
@@ -98,26 +127,33 @@ export function BankDialog({
 						empty for your own branch, created on your first save.
 					</FormControl.Caption>
 				</FormControl>
-				<FormControl>
-					<FormControl.Label>Token</FormControl.Label>
-					<TextInput
-						block
-						type="password"
-						autoComplete="off"
-						placeholder={
-							effects.hasToken()
-								? "(a token is on hand; paste to replace)"
-								: "fine-grained personal access token"
-						}
-						value={token}
-						onChange={(e) => setToken(e.target.value)}
-					/>
-					<FormControl.Caption>
-						Create a fine-grained token on GitHub limited to the bank repository
-						with Contents and Pull requests read and write. It stays in this
-						browser and is never sent anywhere but GitHub.
-					</FormControl.Caption>
-				</FormControl>
+				{config === undefined && (
+					<p className="fg-attention">
+						Sign-in with GitHub is not set up for this build.
+					</p>
+				)}
+				{TOKEN_PASTE && (
+					<FormControl>
+						<FormControl.Label>Token (development)</FormControl.Label>
+						<TextInput
+							block
+							type="password"
+							autoComplete="off"
+							placeholder={
+								effects.hasToken()
+									? "(signed in; paste to use a token instead)"
+									: "fine-grained personal access token"
+							}
+							value={token}
+							onChange={(e) => setToken(e.target.value)}
+						/>
+						<FormControl.Caption>
+							A fine-grained token limited to the bank repository, with Contents
+							read and write. For development and as a fallback; it stays in
+							this browser.
+						</FormControl.Caption>
+					</FormControl>
+				)}
 				<FormControl>
 					<Checkbox
 						checked={remember}

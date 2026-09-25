@@ -50,7 +50,9 @@ type Step = readonly [Model, readonly Cmd[]];
  * Back works); anything else (a draft gets its path, a file moves) replaces it.
  */
 export function update(model: Model, msg: Msg): Step {
-	const [next, cmds] = step(model, msg);
+	const lapsed = authFailure(msg);
+	const [next, cmds] =
+		lapsed === undefined ? step(model, msg) : sessionLapsed(model, lapsed);
 	const before = linkOf(model);
 	const after = linkOf(next);
 	if (after === undefined || after === before) return [next, cmds];
@@ -606,6 +608,18 @@ function step(model: Model, msg: Msg): Step {
 				],
 			]);
 
+		case "signInRequested":
+			return persist([
+				{
+					...model,
+					settings: msg.settings,
+					session: { kind: "connecting" },
+					failures: [],
+					browser: { ...model.browser, settingsOpen: false },
+				},
+				[{ kind: "signIn", remember: msg.settings.remember }],
+			]);
+
 		case "connected":
 			if (!msg.result.ok)
 				return [
@@ -790,6 +804,45 @@ function messageOf(model: Model, q: Entry): string {
 		q.base === undefined ? undefined : parseSurface(q.base.text, env).draft,
 		parseSurface(q.source, env).draft,
 	);
+}
+
+/**
+ * A reply saying the author is no longer signed in (the token was refused, or could
+ * not be renewed), whichever command it answers. Other failures are ordinary.
+ */
+function authFailure(msg: Msg): Failure | undefined {
+	const failure =
+		msg.kind === "connected" ||
+		msg.kind === "bankLoaded" ||
+		msg.kind === "fileReloaded" ||
+		msg.kind === "foreignLoaded"
+			? msg.result.ok
+				? undefined
+				: msg.result.error
+			: msg.kind === "committed"
+				? msg.result.ok
+					? undefined
+					: msg.result.error.failure
+				: undefined;
+	return failure?.kind === "auth" ? failure : undefined;
+}
+
+/**
+ * The sign-in has ended: one rule, whatever command noticed. The session says so and
+ * offers to sign in again, the stored credentials are forgotten (so a dead token is not
+ * retried on every load), and nothing waits on GitHub any more. Working copies stay.
+ */
+function sessionLapsed(model: Model, failure: Failure): Step {
+	return [
+		compact({
+			...model,
+			session: { kind: "failed", failure } as const,
+			loading: { kind: "bundled" } as const,
+			activity: {},
+			pendingLink: undefined,
+		}),
+		[{ kind: "forgetToken" }],
+	];
 }
 
 /** The topic folder of a question path: `questions/<folder>/<name>.yaml`. */

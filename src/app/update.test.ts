@@ -1242,3 +1242,50 @@ describe("links while connecting", () => {
 		});
 	});
 });
+
+describe("signing in", () => {
+	it("keeps the settings and leaves for GitHub", () => {
+		const settings = { ...DEFAULT_SETTINGS, remember: true };
+		const [m, cmds] = update(fresh(), { kind: "signInRequested", settings });
+		expect(m.session).toEqual({ kind: "connecting" });
+		expect(cmds.map((c) => c.kind)).toEqual(["signIn", "persist"]);
+		expect(cmds[0]).toEqual({ kind: "signIn", remember: true });
+	});
+
+	it("a sign-in that has ended ends the session, whatever reply says so, and forgets the credentials", () => {
+		const ended = {
+			kind: "auth" as const,
+			message: "Your GitHub sign-in has ended.",
+		};
+		const m = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q.yaml", "name: q\n"),
+		]);
+		const [afterLoad, c1] = update(m, {
+			kind: "bankLoaded",
+			result: { ok: false, error: ended },
+		});
+		expect(afterLoad.session).toEqual({ kind: "failed", failure: ended });
+		expect(c1).toContainEqual({ kind: "forgetToken" });
+		// Working copies stay.
+		expect(afterLoad.local).toBe(m.local);
+		const [afterSave] = update(m, {
+			kind: "committed",
+			changes: [
+				{ id: 1, path: "questions/q/q.yaml", expected: "s", text: "x" },
+			],
+			result: { ok: false, error: { failure: ended } },
+		});
+		expect(afterSave.session.kind).toBe("failed");
+		expect(afterSave.activity).toEqual({});
+	});
+
+	it("a network failure leaves the session as it is", () => {
+		const m = connected(fresh());
+		const [after, cmds] = update(m, {
+			kind: "bankLoaded",
+			result: { ok: false, error: { kind: "network", message: "offline" } },
+		});
+		expect(after.session).toBe(m.session);
+		expect(cmds).not.toContainEqual({ kind: "forgetToken" });
+	});
+});

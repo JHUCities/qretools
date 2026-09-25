@@ -6,13 +6,18 @@ import { BaseStyles } from "@primer/react";
 import { ThemeProvider } from "@primer/react/next";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import type { Result } from "../core/result.js";
+import { type Callback, callbackOf, PendingSchema } from "./auth.js";
+import { signInConfig } from "./config.js";
+import { PENDING_KEY } from "./effects.js";
 import { makeGitHubStore } from "./github.js";
 import {
-	browserTokenStore,
+	browserCredentialStore,
 	readPersisted,
 	STORAGE_KEY,
 	UNREADABLE_KEY,
 } from "./persist.js";
+import type { Failure } from "./storage.js";
 import { createApp } from "./store.js";
 import { App } from "./ui/App.js";
 import { AppContext } from "./ui/AppContext.js";
@@ -34,9 +39,25 @@ if (root) {
 			// nothing more to do
 		}
 	}
+	const config = signInConfig(
+		import.meta.env,
+		location.origin,
+		import.meta.env.BASE_URL,
+	);
+	const returned = config === undefined ? undefined : cameBackFromGitHub();
 	const app = createApp(
-		{ stored, hasToken: browserTokenStore.load() !== null },
-		{ makeStore: makeGitHubStore, tokenStore: browserTokenStore },
+		{
+			stored,
+			hasToken:
+				browserCredentialStore.load() !== null || returned !== undefined,
+		},
+		{
+			makeStore: makeGitHubStore,
+			credentialStore: browserCredentialStore,
+			...(config !== undefined && {
+				signIn: { config, ...(returned !== undefined && { returned }) },
+			}),
+		},
 	);
 	// Links live in the hash. The address is read when the event is handled, never
 	// taken from the event: a stale event after quick navigation must not pull back.
@@ -55,4 +76,37 @@ if (root) {
 			</AppContext.Provider>
 		</StrictMode>,
 	);
+}
+
+/**
+ * Back from GitHub's sign-in page (`?code&state`, or `?error&state`)? Check the state
+ * against the one this tab stored when it left (used once), then take the code out of
+ * the address with the one `history.replaceState` (a `location.replace` would reload),
+ * restoring the link that was open before the round trip.
+ */
+function cameBackFromGitHub(): Result<Callback, Failure> | undefined {
+	if (!/[?&](code|error)=/.test(location.search)) return undefined;
+	let raw: string | null = null;
+	try {
+		raw = sessionStorage.getItem(PENDING_KEY);
+		sessionStorage.removeItem(PENDING_KEY);
+	} catch {
+		// no storage: the state cannot be checked, so the sign-in is refused below
+	}
+	let pending: ReturnType<typeof PendingSchema.parse> | undefined;
+	try {
+		const parsed = PendingSchema.safeParse(
+			raw === null ? undefined : JSON.parse(raw),
+		);
+		if (parsed.success) pending = parsed.data;
+	} catch {
+		pending = undefined;
+	}
+	const returned = callbackOf(location.search, pending, Date.now());
+	history.replaceState(
+		null,
+		"",
+		`${location.pathname}${pending?.hash ?? location.hash}`,
+	);
+	return returned;
 }

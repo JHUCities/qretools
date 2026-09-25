@@ -15,15 +15,16 @@ import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 import { RequestError } from "@octokit/request-error";
 import { err, ok, type Result } from "../core/result.js";
-import type {
-	BranchTarget,
-	Change,
-	CommitFailure,
-	Committed,
-	Failure,
-	File,
-	Repo,
-	Store,
+import {
+	AuthError,
+	type BranchTarget,
+	type Change,
+	type CommitFailure,
+	type Committed,
+	type Failure,
+	type File,
+	type Repo,
+	type Store,
 } from "./storage.js";
 
 const GitHub = Octokit.plugin(retry, throttling);
@@ -37,12 +38,11 @@ const ONCE = { request: { retries: 0 } } as const;
  */
 export const makeGitHubStore = (
 	{ owner, repo }: Repo,
-	token: string,
+	token: () => Promise<string>,
 	fetch: typeof globalThis.fetch = globalThis.fetch,
 	pacing = true,
 ): Store => {
 	const octokit = new GitHub({
-		auth: token,
 		request: { fetch },
 		headers: { "X-GitHub-Api-Version": "2022-11-28" },
 		retry: { enabled: pacing },
@@ -52,6 +52,12 @@ export const makeGitHubStore = (
 			onRateLimit: (_after, _options, _octokit, count) => count < 1,
 			onSecondaryRateLimit: (_after, _options, _octokit, count) => count < 1,
 		},
+	});
+
+	// The token is asked for before every request, so a renewed one is used at once
+	// without rebuilding anything. If none can be had, the getter throws an AuthError.
+	octokit.hook.before("request", async (options) => {
+		options.headers.authorization = `token ${await token()}`;
 	});
 
 	/** Run a request; turn what Octokit throws into a Failure. */
@@ -494,6 +500,8 @@ function failureOf(e: unknown): Failure {
 		(error.response?.data as { message?: string } | undefined)?.message ??
 		error.message ??
 		String(e);
+	// The token getter's own answer: no token, or the sign-in has ended.
+	if (e instanceof AuthError) return e.failure;
 	// Anything but Octokit's own error is a bug here, not an outage: say so.
 	if (!(e instanceof RequestError))
 		return {

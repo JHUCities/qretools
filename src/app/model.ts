@@ -265,6 +265,8 @@ export type Msg =
 			readonly format: "yaml" | "ddi";
 	  }
 	| { readonly kind: "connectRequested"; readonly settings: BankSettings }
+	/** Sign in with GitHub: the settings are kept, then the page leaves for GitHub. */
+	| { readonly kind: "signInRequested"; readonly settings: BankSettings }
 	| {
 			readonly kind: "connected";
 			readonly result: Result<Who, Failure>;
@@ -302,6 +304,8 @@ export type Cmd =
 			readonly mime: string;
 	  }
 	| { readonly kind: "forgetToken" }
+	/** Leave for GitHub's sign-in page; the credentials come back to the effects, never here. */
+	| { readonly kind: "signIn"; readonly remember: boolean }
 	/** Put a link in the address bar: a new history entry, or in place. */
 	| { readonly kind: "setLink"; readonly hash: string; readonly push: boolean }
 	/** Read one file from another author's branch, for a link. */

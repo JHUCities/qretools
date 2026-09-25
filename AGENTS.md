@@ -863,7 +863,36 @@ is the prior art to read first.
 so the minifier drops disabled code; on in development through `.env.development`, set
 per deployment otherwise. OpenFeature (the CNCF standard, web and React SDKs) was
 considered: it is the step up if runtime flags are ever needed (per user, without a
-rebuild), and `flags.ts` would become its provider without touching call sites. Notes for step 5 from the step 4 review: identify questions by a
+rebuild), and `flags.ts` would become its provider without touching call sites.
+
+**Step 10 built (2026-09-25), not yet verified live (needs the App and a deployed
+Worker).** `worker/` (own package and lockfile; `pnpm check:worker`): `POST /exchange`
+and `POST /refresh`, exact origin allowlist (`ALLOWED_ORIGINS`), `CLIENT_ID` and the
+`CLIENT_SECRET` secret, only whitelisted fields returned, GitHub's 200-with-error mapped
+(our own misconfiguration hidden as 502), tested as a plain fetch handler. Sveltia's
+auth Worker drives the redirect and keeps state in a cookie; ours keeps the redirect in
+the browser with PKCE, so the Worker is stateless. App: `auth.ts` (pure: `authorizeUrl`,
+`callbackOf` checking state, single use and a ten-minute limit, `credentialsOf` with
+absolute lifetimes, `stale` five minutes early; the two Worker calls take `fetch`);
+`config.ts` (`VITE_GITHUB_CLIENT_ID`, `VITE_AUTH_URL`, `VITE_GITHUB_APP_SLUG`; absent
+means "not set up for this build"); `flags.ts` (`TOKEN_PASTE`; verified: the paste
+caption is absent from a production bundle). One new Msg (`signInRequested`) and Cmd
+(`signIn`); the rest reuses connect. `exec signIn` flushes persistence, makes state and
+verifier with `crypto`, keeps them in session storage, and leaves with
+`location.assign`. `main.tsx` handles the return before the app starts (state checked,
+used once, the code stripped with one `history.replaceState`, the open link restored)
+and hands the result to the effects, which redeem the code at once; the code never
+enters the Model or a Msg. Credentials (`{access, expiresAt?, refresh?,
+refreshExpiresAt?}`) live in the effects' closure and a `CredentialStore` (session
+storage, local only with "remember"; an old pasted token is read once). Octokit asks a
+token getter before every request (a `hook.before`; `@octokit/auth-oauth-user` was
+rejected: it needs the secret and would keep a second token state): renewal on demand
+five minutes before expiry, once for concurrent callers, under a Web Lock
+(`navigator.locks`) so tabs never spend the single-use refresh token twice. One rule in
+`update` (`sessionLapsed`): any reply failing with `auth` ends the session, forgets the
+credentials and clears a pending link; working copies stay. The Bank panel offers "Sign
+in with GitHub"; "Connect with token" only under the flag. Fixed on the way: clearing
+"Your branch" now means the author's own branch instead of keeping the old value. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeGitHubStore } from "./github.js";
-import type { BranchTarget } from "./storage.js";
+import { AuthError, type BranchTarget } from "./storage.js";
 
 type Seen = { url: string; method: string; body: Record<string, unknown> };
 type Canned = (req: Seen) => Response;
@@ -10,7 +10,7 @@ function store(respond: Canned) {
 	const seen: Seen[] = [];
 	const s = makeGitHubStore(
 		{ owner: "JHUCities", repo: "bas-question-bank" },
-		"tok",
+		async () => "tok",
 		(async (url: string, init: RequestInit = {}) => {
 			const req = {
 				url: String(url),
@@ -82,7 +82,7 @@ describe("GitHub adapter (Octokit)", () => {
 		expect(!auth.ok && auth.error.kind).toBe("auth");
 		const down = makeGitHubStore(
 			{ owner: "o", repo: "r" },
-			"tok",
+			async () => "tok",
 			(async () => {
 				throw new TypeError("offline");
 			}) as typeof fetch,
@@ -397,5 +397,49 @@ describe("GitHub adapter (Octokit)", () => {
 			target,
 		);
 		expect(!odd.ok && odd.error.kind).toBe("unreadable");
+	});
+
+	it("asks the getter before every request, and reports its refusal as itself", async () => {
+		let n = 0;
+		const headers: string[] = [];
+		const s = makeGitHubStore(
+			{ owner: "o", repo: "r" },
+			async () => `tok${++n}`,
+			(async (_url: string, init: RequestInit = {}) => {
+				headers.push(String(new Headers(init.headers).get("authorization")));
+				return new Response(
+					JSON.stringify({
+						data: {
+							viewer: { login: "i" },
+							repository: {
+								viewerPermission: "READ",
+								defaultBranchRef: { name: "main" },
+							},
+						},
+					}),
+					{ headers: { "content-type": "application/json" } },
+				);
+			}) as typeof fetch,
+			false,
+		);
+		await s.whoAmI();
+		await s.whoAmI();
+		expect(headers).toEqual(["token tok1", "token tok2"]);
+		const ended = makeGitHubStore(
+			{ owner: "o", repo: "r" },
+			async () => {
+				throw new AuthError({
+					kind: "auth",
+					message: "Your GitHub sign-in has ended.",
+				});
+			},
+			(async () => new Response("{}")) as typeof fetch,
+			false,
+		);
+		const r = await ended.whoAmI();
+		expect(!r.ok && r.error).toEqual({
+			kind: "auth",
+			message: "Your GitHub sign-in has ended.",
+		});
 	});
 });

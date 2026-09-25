@@ -5,8 +5,10 @@
  * never in this value.
  */
 import { z } from "zod";
+import { compact } from "../core/compact.js";
 import { err, ok, type Result } from "../core/result.js";
-import type { Failure, TokenStore } from "./storage.js";
+import type { Credentials } from "./auth.js";
+import type { CredentialStore, Failure } from "./storage.js";
 
 const OriginSchema = z.discriminatedUnion("kind", [
 	z.strictObject({ kind: z.literal("draft") }),
@@ -140,7 +142,6 @@ export type Persisted = z.infer<typeof PersistedSchema>;
 
 export const STORAGE_KEY = "qretools.v1";
 export const UNREADABLE_KEY = "qretools.v1.unreadable";
-const TOKEN_KEY = "qretools.token";
 
 export function readPersisted(
 	raw: string | null,
@@ -175,22 +176,56 @@ const safe = <T>(f: () => T, fallback: T): T => {
 	}
 };
 
+const AUTH_KEY = "qretools.auth";
+/** Before sign-in, a pasted token was kept as a bare string under this key; read once. */
+const OLD_TOKEN_KEY = "qretools.token";
+
+const CredentialsSchema = z.strictObject({
+	access: z.string(),
+	expiresAt: z.number().optional(),
+	refresh: z.string().optional(),
+	refreshExpiresAt: z.number().optional(),
+});
+
+function readCredentials(storage: Storage): Credentials | null {
+	const raw = storage.getItem(AUTH_KEY);
+	if (raw !== null) {
+		try {
+			const parsed = CredentialsSchema.safeParse(JSON.parse(raw));
+			if (parsed.success) return compact(parsed.data) as Credentials;
+		} catch {
+			// unreadable: treat as none
+		}
+		return null;
+	}
+	const old = storage.getItem(OLD_TOKEN_KEY);
+	return old === null ? null : { access: old };
+}
+
 /** Session storage by default: gone when the tab closes. Local storage only when asked to remember. */
-export const browserTokenStore: TokenStore = {
+export const browserCredentialStore: CredentialStore = {
 	load: () =>
-		safe(
-			() =>
-				sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY),
-			null,
-		),
-	save: (token, remember) =>
 		safe(() => {
-			(remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
-			(remember ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
+			const session = readCredentials(sessionStorage);
+			if (session !== null) return { credentials: session, remember: false };
+			const local = readCredentials(localStorage);
+			return local === null ? null : { credentials: local, remember: true };
+		}, null),
+	save: (credentials, remember) =>
+		safe(() => {
+			(remember ? localStorage : sessionStorage).setItem(
+				AUTH_KEY,
+				JSON.stringify(credentials),
+			);
+			for (const s of [sessionStorage, localStorage])
+				s.removeItem(OLD_TOKEN_KEY);
+			(remember ? sessionStorage : localStorage).removeItem(AUTH_KEY);
 		}, undefined),
 	clear: () =>
 		safe(() => {
-			sessionStorage.removeItem(TOKEN_KEY);
-			localStorage.removeItem(TOKEN_KEY);
+			for (const s of [sessionStorage, localStorage]) {
+				s.removeItem(AUTH_KEY);
+				s.removeItem(OLD_TOKEN_KEY);
+			}
 		}, undefined),
 };

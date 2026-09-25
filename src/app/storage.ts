@@ -6,6 +6,7 @@
  * A Failure is a shell value: HTTP and networks are not the core's vocabulary.
  */
 import type { Result } from "../core/result.js";
+import type { Credentials } from "./auth.js";
 
 export interface File {
 	readonly path: string;
@@ -127,11 +128,30 @@ export interface CommitFailure {
 	>;
 }
 
-export type MakeStore = (repo: Repo, token: string) => Store;
+/** A store over one repository; `token` is asked for before every request, so it may renew. */
+export type MakeStore = (repo: Repo, token: () => Promise<string>) => Store;
 
-/** Where the token lives: never in the Model. */
-export interface TokenStore {
-	load(): string | null;
-	save(token: string, remember: boolean): void;
+/**
+ * Where the credentials live: never in the Model. Session storage by default, local
+ * storage only when the author asked to be remembered.
+ */
+export interface CredentialStore {
+	load(): {
+		readonly credentials: Credentials;
+		readonly remember: boolean;
+	} | null;
+	save(credentials: Credentials, remember: boolean): void;
 	clear(): void;
+}
+
+/**
+ * The token getter could not produce a token (none, or the sign-in has ended). Thrown
+ * inside Octokit's request hook, where only a throw can stop a request; the adapter
+ * turns it back into its Failure.
+ */
+export class AuthError extends Error {
+	constructor(readonly failure: Failure) {
+		super(failure.message);
+		this.name = "AuthError";
+	}
 }

@@ -1,7 +1,7 @@
 /**
- * Where commands run, and the only place the shell keeps hidden state: the token,
- * the store built from it, the compiled DDI validator, the persist debouncer, and
- * a handle to the editor. `exec` is the interpreter for `Cmd`; every result goes
+ * Where commands run, and the only place the shell keeps hidden state: the GitHub
+ * credentials (and their renewal), the store, the compiled DDI validator, the persist
+ * debouncer, and a handle to the editor. `exec` is the interpreter for `Cmd`; every result goes
  * back through `dispatch` as a message. Two things live here and not in `update`,
  * by design: the token (it must never enter Model or Msg) and the editor handle
  * (a DOM object).
@@ -11,23 +11,59 @@ import type { DdiDocument } from "../core/ddi/document.js";
 import type { Validator } from "../core/ddi/validate.js";
 import { makeValidator } from "../core/ddi/validate.js";
 import type { Finding } from "../core/findings.js";
-import { err, type Result } from "../core/result.js";
+import { err, ok, type Result } from "../core/result.js";
+import {
+	authorizeUrl,
+	base64url,
+	type Callback,
+	type Credentials,
+	exchange,
+	type PendingSignIn,
+	refresh,
+	stale,
+} from "./auth.js";
+import type { SignInConfig } from "./config.js";
 import type { Editor } from "./editor.js";
 import type { Cmd, Dispatch } from "./model.js";
 import { STORAGE_KEY } from "./persist.js";
-import type {
-	Failure,
-	File,
-	MakeStore,
-	Repo,
-	Store,
-	TokenStore,
+import {
+	AuthError,
+	type CredentialStore,
+	type Failure,
+	type File,
+	type MakeStore,
+	type Repo,
+	type Store,
 } from "./storage.js";
 
 export interface Deps {
 	readonly makeStore: MakeStore;
-	readonly tokenStore: TokenStore;
+	readonly credentialStore: CredentialStore;
+	/** Sign-in with GitHub, when this build is configured for it. */
+	readonly signIn?: {
+		readonly config: SignInConfig;
+		/** The author just came back from GitHub: the code to redeem, or why not. */
+		readonly returned?: Result<Callback, Failure>;
+	};
+	readonly now?: () => number;
+	readonly fetch?: typeof fetch;
+	/**
+	 * Run `f` holding a lock shared by this origin's tabs: GitHub's refresh tokens are
+	 * single use, so two tabs renewing at once would sign one of them out. Native:
+	 * `navigator.locks`.
+	 */
+	readonly lock?: <T>(name: string, f: () => Promise<T>) => Promise<T>;
+	/** Leave for GitHub's sign-in page: `location.assign`. */
+	readonly navigate?: (url: string) => void;
 }
+
+/** Where a sign-in in progress is kept across the round trip to GitHub. */
+export const PENDING_KEY = "qretools.signin";
+
+const nativeLock = <T>(name: string, f: () => Promise<T>): Promise<T> =>
+	typeof navigator !== "undefined" && navigator.locks
+		? navigator.locks.request(name, f)
+		: f();
 
 export interface Effects {
 	exec(cmd: Cmd, dispatch: Dispatch): void;
@@ -38,28 +74,129 @@ export interface Effects {
 	validate(ddi: DdiDocument): readonly Finding[] | undefined;
 }
 
-/** A command that needs the bank when no token is on hand: reported, never swallowed. */
-const NO_TOKEN = {
+/** A command that needs the bank when no one is signed in: reported, never swallowed. */
+const NO_TOKEN: Failure = {
 	kind: "auth",
-	message: "No token. Paste a fine-grained personal access token and connect.",
-} as const;
+	message: "Not signed in.",
+	hint: "Sign in with GitHub from the Bank panel.",
+};
+
+const ENDED: Failure = {
+	kind: "auth",
+	message: "Your GitHub sign-in has ended.",
+	hint: "Sign in again from the Bank panel.",
+};
+
+/**
+ * Leave for GitHub with a fresh state and PKCE verifier, kept in session storage for
+ * the way back. Randomness is here, in the shell: `update` never touches it.
+ */
+async function startSignIn(
+	config: SignInConfig,
+	remember: boolean,
+	navigate: (url: string) => void = (url) => location.assign(url),
+): Promise<void> {
+	const random = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
+	const state = random();
+	const verifier = random();
+	const digest = await crypto.subtle.digest(
+		"SHA-256",
+		new TextEncoder().encode(verifier),
+	);
+	const challenge = base64url(new Uint8Array(digest));
+	const pendingSignIn: PendingSignIn = {
+		state,
+		verifier,
+		remember,
+		hash: location.hash,
+		at: Date.now(),
+	};
+	sessionStorage.setItem(PENDING_KEY, JSON.stringify(pendingSignIn));
+	navigate(authorizeUrl(config, { state, challenge }));
+}
 
 export function createEffects(deps: Deps): Effects {
+	const now = deps.now ?? Date.now;
+	const fetcher =
+		deps.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
+	const lock = deps.lock ?? nativeLock;
 	let validator: Validator | undefined;
-	let token: string | null = deps.tokenStore.load();
+	const loaded = deps.credentialStore.load();
+	let credentials = loaded?.credentials ?? null;
+	let remember = loaded?.remember ?? false;
+	/** A redemption or renewal in flight; every request waits for it. */
+	let pending: Promise<Result<Credentials, Failure>> | undefined;
 	let store: Store | undefined;
 	let repoInUse: string | undefined;
-	let tokenInUse: string | null = null;
 	let editor: Editor | undefined;
 	const persist = debouncedPersist();
 
+	const keep = (c: Credentials, r: boolean) => {
+		credentials = c;
+		remember = r;
+		deps.credentialStore.save(c, r);
+	};
+
+	/** Settle a redemption or renewal: keep what it gave, and let the next one start. */
+	const settle = (
+		work: Promise<Result<Credentials, Failure>>,
+	): Promise<Result<Credentials, Failure>> => {
+		pending = work.then((r) => {
+			if (r.ok) keep(r.value, remember);
+			return r;
+		});
+		const settled = pending;
+		settled.finally(() => {
+			if (pending === settled) pending = undefined;
+		});
+		return settled;
+	};
+
+	// Back from GitHub: redeem the code at once; the first request waits for it.
+	const returned = deps.signIn?.returned;
+	if (returned !== undefined && deps.signIn !== undefined) {
+		const config = deps.signIn.config;
+		if (returned.ok) {
+			remember = returned.value.remember;
+			settle(exchange(config, returned.value, now, fetcher));
+		} else pending = Promise.resolve(returned);
+	}
+
+	/**
+	 * The token for the next request, renewed when within minutes of expiry, once for all
+	 * callers and all tabs. Throws an AuthError when there is none, or it cannot be renewed.
+	 */
+	const token = async (): Promise<string> => {
+		if (pending !== undefined) {
+			const r = await pending;
+			if (!r.ok) throw new AuthError(r.error);
+		}
+		const c = credentials;
+		if (c === null) throw new AuthError(NO_TOKEN);
+		if (!stale(c, now())) return c.access;
+		const config = deps.signIn?.config;
+		if (config === undefined || c.refresh === undefined)
+			throw new AuthError(ENDED);
+		if (c.refreshExpiresAt !== undefined && c.refreshExpiresAt < now())
+			throw new AuthError(ENDED);
+		const renewed = await settle(
+			lock("qretools.auth", async () => {
+				// Another tab may have renewed while this one waited for the lock.
+				const theirs = deps.credentialStore.load()?.credentials;
+				if (theirs && !stale(theirs, now())) return ok(theirs);
+				return refresh(config, c.refresh ?? "", now, fetcher);
+			}),
+		);
+		if (!renewed.ok) throw new AuthError(renewed.error);
+		return renewed.value.access;
+	};
+
 	const storeFor = (repo: Repo): Store | undefined => {
-		if (token === null) return undefined;
+		if (credentials === null && pending === undefined) return undefined;
 		const key = `${repo.owner}/${repo.repo}`;
-		if (!store || token !== tokenInUse || key !== repoInUse) {
+		if (!store || key !== repoInUse) {
 			store = deps.makeStore(repo, token);
 			repoInUse = key;
-			tokenInUse = token;
 		}
 		return store;
 	};
@@ -68,11 +205,8 @@ export function createEffects(deps: Deps): Effects {
 		registerEditor: (e) => {
 			editor = e;
 		},
-		setToken: (t, remember) => {
-			token = t;
-			deps.tokenStore.save(t, remember);
-		},
-		hasToken: () => token !== null,
+		setToken: (t, r) => keep({ access: t }, r),
+		hasToken: () => credentials !== null || pending !== undefined,
 		validate: (ddi) => validator?.(ddi),
 
 		exec(cmd, dispatch) {
@@ -163,10 +297,35 @@ export function createEffects(deps: Deps): Effects {
 					return;
 				}
 				case "forgetToken":
-					deps.tokenStore.clear();
-					token = null;
+					deps.credentialStore.clear();
+					credentials = null;
+					pending = undefined;
 					store = undefined;
 					return;
+				case "signIn": {
+					const config = deps.signIn?.config;
+					if (config === undefined)
+						return dispatch({
+							kind: "connected",
+							result: err({
+								kind: "auth",
+								message: "Sign-in is not set up for this build.",
+							}),
+						});
+					// Leaving the page: write what should survive first.
+					persist.flush();
+					void startSignIn(config, cmd.remember, deps.navigate).catch(
+						(e: unknown) =>
+							dispatch({
+								kind: "connected",
+								result: err({
+									kind: "auth",
+									message: `Sign-in could not start: ${e instanceof Error ? e.message : String(e)}`,
+								}),
+							}),
+					);
+					return;
+				}
 				case "setLink":
 					// The browser keeps the history: setting the hash adds an entry, replace()
 					// does not. Writing the address it already shows would add a duplicate.
@@ -199,8 +358,8 @@ export function createEffects(deps: Deps): Effects {
 	};
 }
 
-/** Persist at most every 300 ms, and flush when the page is hidden. */
-function debouncedPersist(): (json: string) => void {
+/** Persist at most every 300 ms, and flush when the page is hidden, or on demand. */
+function debouncedPersist(): ((json: string) => void) & { flush(): void } {
 	let pending: string | undefined;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const flush = () => {
@@ -213,9 +372,10 @@ function debouncedPersist(): (json: string) => void {
 		pending = undefined;
 	};
 	if (typeof window !== "undefined") window.addEventListener("pagehide", flush);
-	return (json) => {
+	const write = (json: string) => {
 		pending = json;
 		if (timer !== undefined) clearTimeout(timer);
 		timer = setTimeout(flush, 300);
 	};
+	return Object.assign(write, { flush });
 }
