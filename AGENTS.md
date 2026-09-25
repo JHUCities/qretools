@@ -64,6 +64,15 @@ Concretely:
 
 When a shortcut would make the code harder to reason about, take the longer path.
 
+**Use the platform's native features, always (owner, 2026-09-25).** Before building or
+adding a library for something in the browser, use what the browser already does:
+navigation and history (`location.hash`, `hashchange`), links (`<a href>`), buttons,
+form controls and dialogs (through Primer, which renders native elements). No router,
+no hand-managed history, no custom widget where a native element serves. Native is
+also the accessible default; where a native feature is not accessible (drag and drop:
+mouse only), leave it out rather than build around it, as long as an accessible path
+exists.
+
 ## Three roles, one in scope
 
 1. **Question-maker** (in scope now): drafts survey questions and their documentation.
