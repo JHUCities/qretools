@@ -1129,6 +1129,15 @@ describe("links", () => {
 		expect(same.screen).toEqual({ kind: "editing", id: 1 });
 	});
 
+	it("signed out, a link to another repository waits: the sign-in form offers it", () => {
+		const [m] = update(fresh(), {
+			kind: "hashChanged",
+			hash: formatLink({ repo: "other/bank", branch: "main" }),
+		});
+		expect(m.failures).toEqual([]);
+		expect(m.pendingLink).toMatchObject({ repo: "other/bank" });
+	});
+
 	it("a link to another repository is refused, saying which", () => {
 		const [m] = update(loadedBank(), {
 			kind: "hashChanged",

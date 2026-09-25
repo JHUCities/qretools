@@ -937,8 +937,19 @@ hidden for the seconds of the load). An open file stays: viewing never waits. A 
 load failed, and hiding the author's work then would cost more than it helps.
 
 **No editor without a bank (owner, 2026-09-25).** The flow starts from a repository,
-so signed out (anonymous or failed) the app is a sign-in page (Primer `Blankslate`,
-the failure if any, "Sign in" opening the Bank dialog), with no tree, editor or "New".
+so signed out (anonymous or failed) the app is a sign-in page, with no tree, editor or
+"New". **Revised the same day:** the page is the form, as github.com's own sign-in: one
+narrow column, a "Repository" field written `owner/name` (GitHub's form; a pasted URL
+works; `parseRepo` in storage.ts, once, on submit; default `JHUCities/bas-question-bank`
+from `DEFAULT_SETTINGS`, visibly a default), "Remember on this device", a full-width
+"Sign in with GitHub"; the development token field under the flag. The Bank dialog and
+"Change bank…" are gone: kept work is not scoped to its bank yet (FEATURES.md), so
+switching banks is signing out and in. A failed connection still holding a GitHub
+sign-in offers "Sign out of GitHub". GitHub's "Could not resolve to a Repository" reads
+"GitHub has no repository x that you can open". Until a bank is open, a link to another
+bank is not an error: it waits and the form offers its repository. While connecting,
+the page is empty under the header's status: neither the form nor the workspace's shape
+is known to be right (a stored sign-in to a failing bank flashed the workspace).
 This reverses the local-only store of step 5 and "a user who has not connected keeps
 local drafts". Signed out, the app holds only the author's own work (`signedOut` in
 model.ts): drafts and unsaved edits, kept for the next sign-in and hidden until then;

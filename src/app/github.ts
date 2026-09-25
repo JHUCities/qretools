@@ -88,7 +88,10 @@ export const makeGitHubStore = (
 			if (e instanceof Error && e.name === "GraphqlResponseError") {
 				const partial = e as Error & {
 					data?: T;
-					errors?: readonly { path?: readonly (string | number)[] }[];
+					errors?: readonly {
+						type?: string;
+						path?: readonly (string | number)[];
+					}[];
 				};
 				const onlyTolerated =
 					tolerated !== undefined &&
@@ -96,6 +99,21 @@ export const makeGitHubStore = (
 						(x) => x.path?.[0] === "repository" && x.path?.[1] === tolerated,
 					);
 				if (onlyTolerated && partial.data) return ok({ data: partial.data });
+				// GitHub answers "Could not resolve to a Repository" both for a name that
+				// does not exist and for one this sign-in cannot see: say it plainly.
+				if (
+					(partial.errors ?? []).some(
+						(x) =>
+							x.type === "NOT_FOUND" &&
+							x.path?.[0] === "repository" &&
+							x.path.length === 1,
+					)
+				)
+					return err({
+						kind: "unreadable",
+						message: `GitHub has no repository ${owner}/${repo} that you can open.`,
+						hint: "Check the name, and that the qretools app is installed on it.",
+					});
 				return err({ kind: "unreadable", message: e.message });
 			}
 			return err(failureOf(e));

@@ -168,12 +168,6 @@ function step(model: Model, msg: Msg): Step {
 			return [{ ...model, browser: { ...model.browser, expanded } }, []];
 		}
 
-		case "settingsToggled":
-			return [
-				{ ...model, browser: { ...model.browser, settingsOpen: msg.open } },
-				[],
-			];
-
 		case "questionCreated": {
 			const [next, id] = add(model, { kind: "question", source: msg.text });
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
@@ -558,7 +552,6 @@ function step(model: Model, msg: Msg): Step {
 					settings: msg.settings,
 					session: { kind: "connecting" },
 					failures: [],
-					browser: { ...model.browser, settingsOpen: false },
 				},
 				[
 					{
@@ -575,7 +568,6 @@ function step(model: Model, msg: Msg): Step {
 					settings: msg.settings,
 					session: { kind: "connecting" },
 					failures: [],
-					browser: { ...model.browser, settingsOpen: false },
 				},
 				[{ kind: "signIn", remember: msg.settings.remember }],
 			]);
@@ -925,15 +917,20 @@ const claimant = (model: Model, path: Path): Entry | undefined =>
  */
 function openLink(model: Model, link: Link): Step {
 	const repo = `${model.settings.owner}/${model.settings.repo}`;
-	if (link.repo !== repo)
+	if (link.repo !== repo) {
+		// Until a bank is open, a link to another bank is where to sign in: the form
+		// offers its repository, and the link opens once that bank has loaded.
+		if (model.session.kind !== "connected")
+			return [{ ...model, pendingLink: link }, []];
 		return [
 			refused(
 				model,
-				`This link is to ${link.repo}; the Bank panel is set to ${repo}.`,
-				"Change the repository in the Bank panel to open it.",
+				`This link is to ${link.repo}; you are signed in to ${repo}.`,
+				`Sign out, then sign in to ${link.repo} to open it.`,
 			),
 			[],
 		];
+	}
 	const loaded = model.loading.kind === "loaded";
 	const session =
 		model.session.kind === "connected" ? model.session : undefined;

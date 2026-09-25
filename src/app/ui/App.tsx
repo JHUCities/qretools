@@ -4,14 +4,12 @@ import {
 	GitPullRequestIcon,
 	LinkExternalIcon,
 	PlusIcon,
-	RepoIcon,
 	SignOutIcon,
 } from "@primer/octicons-react";
 import {
 	ActionList,
 	ActionMenu,
 	Avatar,
-	Banner,
 	Button,
 	ConfirmationDialog,
 	IconButton,
@@ -20,7 +18,7 @@ import {
 	Stack,
 	VisuallyHidden,
 } from "@primer/react";
-import { AriaStatus, Blankslate } from "@primer/react/experimental";
+import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
@@ -42,7 +40,6 @@ import {
 	sessionStatus,
 } from "../update.js";
 import { SESSION_STATUS, useApp, useEnv, useModel } from "./AppContext.js";
-import { BankDialog } from "./BankDialog.js";
 import { BankFilter, Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { ExternalLink } from "./ExternalLink.js";
@@ -50,6 +47,7 @@ import { FileSkeleton } from "./FileSkeleton.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
+import { SignIn } from "./SignIn.js";
 
 export function App() {
 	const { dispatch, evaluations } = useApp();
@@ -230,8 +228,12 @@ export function App() {
 					<Account model={model} />
 				</Stack>
 				{/* On narrow screens the tree and the open file are separate views. */}
-				{!signedIn ? (
-					<SignInPage model={model} />
+				{model.session.kind === "connecting" ? (
+					// Whether there will be a bank is not known yet: neither the sign-in
+					// form nor the workspace's shape; the top bar says what is happening.
+					<main className="content" aria-busy="true" />
+				) : !signedIn ? (
+					<SignIn model={model} />
 				) : (
 					<div
 						className="workspace"
@@ -282,15 +284,6 @@ export function App() {
 					</div>
 				)}
 			</div>
-			{model.browser.settingsOpen && (
-				<BankDialog
-					settings={model.settings}
-					session={model.session}
-					bank={model.loading}
-					failures={model.failures}
-					dispatch={dispatch}
-				/>
-			)}
 			{moving && movingQuestion?.base && (
 				<MoveDialog
 					from={movingQuestion.base.path}
@@ -360,50 +353,6 @@ export function App() {
 	);
 }
 
-/**
- * Signed out: the way in, and why. The bank is where the questions live, so there is
- * nothing to edit without one; the author's own unsaved work waits for the sign-in.
- */
-function SignInPage({ model }: { model: Model }) {
-	const { dispatch } = useApp();
-	const problems = [
-		...(model.session.kind === "failed" ? [model.session.failure] : []),
-		...model.failures,
-	];
-	return (
-		<main className="signin">
-			<Stack gap="normal" className="stack-width">
-				{problems.map((f, i) => (
-					<Banner
-						// biome-ignore lint/suspicious/noArrayIndexKey: the same failure may appear twice
-						key={i}
-						variant="critical"
-						title={f.message}
-						description={f.hint}
-					/>
-				))}
-				<Blankslate spacious>
-					<Blankslate.Visual>
-						<RepoIcon size="medium" />
-					</Blankslate.Visual>
-					<Blankslate.Heading as="h2">
-						Sign in to your question bank
-					</Blankslate.Heading>
-					<Blankslate.Description>
-						qretools edits the survey questions kept in a GitHub repository.
-						Sign in with GitHub to open yours.
-					</Blankslate.Description>
-					<Blankslate.PrimaryAction
-						onClick={() => dispatch({ kind: "settingsToggled", open: true })}
-					>
-						Sign in
-					</Blankslate.PrimaryAction>
-				</Blankslate>
-			</Stack>
-		</main>
-	);
-}
-
 const repoUrl = (model: Model): string =>
 	`https://github.com/${model.settings.owner}/${model.settings.repo}`;
 
@@ -466,7 +415,6 @@ function Context({ model }: { model: Model }) {
 function Account({ model }: { model: Model }) {
 	const { dispatch } = useApp();
 	const { session, loading } = model;
-	const settings = () => dispatch({ kind: "settingsToggled", open: true });
 	// Signed out, the page itself is the way in; while connecting, nothing yet.
 	if (session.kind !== "connected") return null;
 	return (
@@ -502,12 +450,6 @@ function Account({ model }: { model: Model }) {
 								</ActionList.TrailingVisual>
 							</ActionList.LinkItem>
 						)}
-						<ActionList.Item onSelect={settings}>
-							<ActionList.LeadingVisual>
-								<RepoIcon />
-							</ActionList.LeadingVisual>
-							Change bank…
-						</ActionList.Item>
 					</ActionList.Group>
 					<ActionList.Divider />
 					<ActionList.Item onSelect={() => dispatch({ kind: "disconnected" })}>

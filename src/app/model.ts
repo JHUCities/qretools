@@ -119,8 +119,6 @@ export interface Browser {
 	/** Folders the user opened. A folder holding the open question, or any folder while filtering, is open regardless. */
 	readonly expanded: readonly string[];
 	readonly confirmDelete?: Id;
-	/** The bank settings dialog. */
-	readonly settingsOpen: boolean;
 	/** The save dialog for a draft: which question, and the topic folder being chosen. */
 	readonly saving?: { readonly id: Id; readonly folder: string };
 	/** The move dialog for a bank question: which one, and the topic folder being chosen. */
@@ -215,7 +213,6 @@ export type Msg =
 			readonly text: string;
 	  }
 	| { readonly kind: "folderToggled"; readonly folder: string }
-	| { readonly kind: "settingsToggled"; readonly open: boolean }
 	| { readonly kind: "questionCreated"; readonly text: string }
 	/** New scheme file: `missing` is created at once (it has one name); the others ask for a name. */
 	| {
@@ -392,7 +389,7 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		activity: {},
 		nextId: stored?.nextId ?? 1,
 		screen: { kind: "blank" },
-		browser: { filter: "", expanded: [], settingsOpen: false },
+		browser: { filter: "", expanded: [] },
 		session: flags.hasToken ? { kind: "connecting" } : { kind: "anonymous" },
 		settings,
 		loading: { kind: "bundled" },
@@ -455,7 +452,6 @@ export function signedOut(model: Model): Model {
 		browser: {
 			filter: model.browser.filter,
 			expanded: model.browser.expanded,
-			settingsOpen: model.browser.settingsOpen,
 		},
 	});
 }

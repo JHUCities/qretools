@@ -5,7 +5,7 @@
  *
  * A Failure is a shell value: HTTP and networks are not the core's vocabulary.
  */
-import type { Result } from "../core/result.js";
+import { err, ok, type Result } from "../core/result.js";
 import type { Credentials } from "./auth.js";
 
 export interface File {
@@ -35,6 +35,36 @@ export interface BankSettings {
 	readonly repo: string;
 	/** Keep the token on this device (localStorage) rather than for this tab (sessionStorage). */
 	readonly remember: boolean;
+}
+
+/**
+ * A repository as GitHub writes it everywhere, `owner/name`, or pasted as its URL.
+ * Parsed once, at the sign-in form; the Model never holds the text. GitHub's rules:
+ * an owner is letters, digits and hyphens (up to 39); a name letters, digits, `.`,
+ * `_` and `-` (up to 100), never `.` or `..`.
+ */
+export function parseRepo(
+	text: string,
+): Result<{ readonly owner: string; readonly repo: string }, string> {
+	const bare = text
+		.trim()
+		.replace(/^https?:\/\/github\.com\//, "")
+		.replace(/\.git$/, "")
+		.replace(/\/$/, "");
+	const [owner, repo, ...rest] = bare.split("/");
+	if (
+		owner === undefined ||
+		repo === undefined ||
+		rest.length > 0 ||
+		!/^[A-Za-z0-9-]{1,39}$/.test(owner) ||
+		!/^[A-Za-z0-9._-]{1,100}$/.test(repo) ||
+		repo === "." ||
+		repo === ".."
+	)
+		return err(
+			"Write the repository as owner/name, for example JHUCities/bas-question-bank.",
+		);
+	return ok({ owner, repo });
 }
 
 /** A repository on the forge. */

@@ -199,14 +199,26 @@ body {
 	margin: 0;
 	padding-left: var(--base-size-20);
 }
-/* Signed out: the way in, in a readable measure. */
+/* Signed out: one narrow column, as github.com's sign-in page. */
 .signin {
 	overflow: auto;
 	padding: var(--base-size-40) var(--base-size-16);
 }
-.signin > .stack-width {
-	max-inline-size: 40rem;
+.signin-column {
+	max-inline-size: var(--overlay-width-small);
 	margin-inline: auto;
+}
+.signin-heading {
+	margin: 0;
+	text-align: center;
+	font-size: var(--text-title-size-medium);
+	font-weight: var(--base-text-weight-normal);
+}
+.signin-box {
+	padding: var(--base-size-16);
+	background: var(--bgColor-muted);
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-medium);
 }
 .blank {
 	grid-row: 1 / -1;
@@ -480,14 +492,6 @@ p.finding {
 	overflow-wrap: anywhere;
 }
 
-/* The Bank dialog. */
-.bank-form {
-	display: grid;
-	gap: var(--base-size-12);
-}
-.bank-status {
-	margin-top: var(--base-size-16);
-}
 .save-path {
 	margin: var(--base-size-12) 0 var(--base-size-4);
 }
