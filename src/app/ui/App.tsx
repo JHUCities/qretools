@@ -11,11 +11,11 @@ import {
 	ActionList,
 	ActionMenu,
 	Avatar,
-	Banner,
 	BranchName,
 	Button,
 	ConfirmationDialog,
-	LinkButton,
+	IconButton,
+	Link,
 	Spinner,
 	Stack,
 	VisuallyHidden,
@@ -341,9 +341,11 @@ function Context({ model }: { model: Model }) {
 	return (
 		<span className="context">
 			<span className="quiet owner">{model.settings.owner} / </span>
-			<ExternalLink href={repoUrl(model)}>
+			{/* No external-link icon here, as in github.com's header; still said to screen readers. */}
+			<Link href={repoUrl(model)} target="_blank" rel="noreferrer">
 				<strong>{model.settings.repo}</strong>
-			</ExternalLink>
+				<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+			</Link>
 		</span>
 	);
 }
@@ -442,33 +444,30 @@ function BranchPanel({ model }: { model: Model }) {
 						<GitBranchIcon size={12} aria-hidden /> {ownBranch(session.login)}
 					</BranchName>
 				)}
+				{/*
+				 * Something to propose: the pull-request icon with a dot, as VS Code badges
+				 * pending changes; the tooltip (Primer's, from `description`) says what the
+				 * dot means and what the link does. Absent when there is nothing.
+				 */}
+				{loading.proposable && (
+					<IconButton
+						as="a"
+						href={compare}
+						target="_blank"
+						rel="noreferrer"
+						icon={GitPullRequestIcon}
+						variant="invisible"
+						aria-label="Propose changes (opens in a new tab)"
+						description="Your saved work is not in the bank yet. Open pull request."
+						notificationIndicator="icon"
+					/>
+				)}
 				{loading.behindBy > 0 && (
 					<ExternalLink href={compare} muted>
 						{loading.behindBy} behind {session.defaultBranch}
 					</ExternalLink>
 				)}
 			</Stack>
-			{/* GitHub's "had recent pushes · Compare & pull request", shown only when it applies. */}
-			{loading.proposable && (
-				<Banner
-					variant="info"
-					layout="compact"
-					title="Your branch has changes to propose."
-					primaryAction={
-						<LinkButton
-							size="small"
-							href={compare}
-							target="_blank"
-							rel="noreferrer"
-							leadingVisual={GitPullRequestIcon}
-							trailingVisual={LinkExternalIcon}
-						>
-							Propose changes
-							<VisuallyHidden> on GitHub (opens in a new tab)</VisuallyHidden>
-						</LinkButton>
-					}
-				/>
-			)}
 		</Stack>
 	);
 }

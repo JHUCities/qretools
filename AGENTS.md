@@ -917,8 +917,15 @@ and the account: the Primer `Avatar` (GraphQL `viewer.avatarUrl`) opening a menu
 "Signed in as", "Your branch on GitHub", "Change bank…" and "Sign out"; "Sign in" before
 connecting, nothing while connecting. The Bank button is gone; its dialog is titled
 "Sign in" or "Change bank". The sidebar opens with the branch (`BranchName`, "N behind
-main") and, only when the branch has something to propose, a compact info `Banner`
-with "Propose changes", GitHub's "Compare & pull request". A bank that fails to load is
+main") and, only when the branch has something to propose, a pull-request `IconButton`
+link with Primer's notification dot (VS Code's badge for pending changes), named
+"Propose changes (opens in a new tab)" (the name is not shown, since `description` is
+the tooltip), its tooltip "Your saved work is not in the bank yet. Open pull request."; it opens GitHub's compare page, which is the pull request form. It
+replaced a compact `Banner` the owner found too large. Accepted loss: on touch screens
+there is no hover, so the icon and dot carry the meaning alone. Medium size, because the
+dot is positioned for it (at small it covers the icon). The repository link in the
+header has no external-link icon (it sat below the baseline); the new tab is still
+said to screen readers. A bank that fails to load is
 a state (`loading: failed{failure}`), said in the status with "Try again"
 (`bankReloadRequested`: reloads as the same session, never reconnects); before, it read
 "Loading the bank from GitHub…" forever. The Session no longer stores the branch: it is
