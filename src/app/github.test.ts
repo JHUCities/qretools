@@ -37,7 +37,7 @@ const json = (
 const target: BranchTarget = {
 	owner: "JHUCities",
 	repo: "bas-question-bank",
-	branch: "qretools/iain",
+	branch: "qretools-iain",
 	defaultBranch: "main",
 };
 
@@ -182,7 +182,7 @@ describe("GitHub adapter (Octokit)", () => {
 			message: "Update q",
 		});
 		const patch = seen.find((q) => q.method === "PATCH");
-		expect(patch?.url).toMatch(/git\/refs\/heads\/qretools\/iain$/);
+		expect(patch?.url).toMatch(/git\/refs\/heads\/qretools-iain$/);
 		expect(patch?.body).toMatchObject({ sha: "commit2", force: false });
 	});
 
@@ -214,7 +214,7 @@ describe("GitHub adapter (Octokit)", () => {
 			(q) => q.url.endsWith("/git/refs") && q.method === "POST",
 		);
 		expect(made?.body).toEqual({
-			ref: "refs/heads/qretools/iain",
+			ref: "refs/heads/qretools-iain",
 			sha: "main-head",
 		});
 	});
@@ -274,7 +274,7 @@ describe("GitHub adapter (Octokit)", () => {
 		...extra,
 	});
 	const repository = (mine: boolean) => ({
-		mine: mine ? { name: "qretools/iain" } : null,
+		mine: mine ? { name: "qretools-iain" } : null,
 		bankRef: { compare: mine ? { aheadBy: 2, behindBy: 1 } : null },
 		questions: {
 			entries: [
@@ -340,7 +340,7 @@ describe("GitHub adapter (Octokit)", () => {
 	it("before the first save, loads the bank instead, keeping the data GitHub sends with its errors", async () => {
 		const { s, seen } = store(({ body }) => {
 			const variables = body.variables as Record<string, string>;
-			return variables.ref === "refs/heads/qretools/iain"
+			return variables.ref === "refs/heads/qretools-iain"
 				? json({
 						data: { repository: repository(false) },
 						errors: [
@@ -388,7 +388,7 @@ describe("GitHub adapter (Octokit)", () => {
 		const variables = seen[0]?.body.variables as
 			| Record<string, string>
 			| undefined;
-		expect(variables?.at).toBe("qretools/iain:questions/a/a.yaml");
+		expect(variables?.at).toBe("qretools-iain:questions/a/a.yaml");
 	});
 
 	it("a secondary rate limit is a rate limit, and a bug is not an outage", async () => {

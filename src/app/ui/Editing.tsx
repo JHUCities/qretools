@@ -27,7 +27,7 @@ import {
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf } from "../sync.js";
 import { SCHEME_SINGULAR } from "../tree.js";
-import { hrefOf, writeBlocked } from "../update.js";
+import { branchOwner, hrefOf, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
@@ -437,10 +437,10 @@ function Inspector({
 }
 
 /** Whose version a branch holds, as a person would say it. */
-const whose = (branch: string): string =>
-	branch.startsWith("qretools/")
-		? `${branch.slice("qretools/".length)}'s version`
-		: `the ${branch} version`;
+const whose = (branch: string): string => {
+	const owner = branchOwner(branch);
+	return owner !== undefined ? `${owner}'s version` : `the ${branch} version`;
+};
 
 /**
  * Another author's version of a file, from a link: read only (owner, 2026-09-25).

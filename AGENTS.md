@@ -883,7 +883,7 @@ paste stays as a fallback behind a feature flag, off in production. Tailscale wa
 considered and rejected (it would need an always-on machine); Sveltia CMS's auth Worker
 is the prior art to read first.
 
-**Saves always go to `qretools/<login>` (owner, 2026-09-25).** The Bank panel's branch
+**Saves always go to `qretools-<login>` (owner, 2026-09-25; a hyphen since the same day, see below).** The Bank panel's branch
 field is gone: the branch is not a choice, it follows from who is signed in; a branch
 stored by an older version is read and dropped. Development and headless checks use the
 checker's own branch, never `sandbox`. The token-paste fallback is off in
@@ -906,7 +906,7 @@ and a file's inactive Move, Delete and Save point there with `aria-describedby`.
 header's description appears only for "Saving also saves …". Nothing to save needs no
 explanation. One label: `draft` (never saved), `unsaved` (edited), none when saved and
 unchanged; "in bank" was wrong once saves went to the author's branch. The
-default-branch check in `writeBlocked` is gone: the branch is always `qretools/<login>`.
+default-branch check in `writeBlocked` is gone: the branch is always the author's own.
 
 **The sidebar's band lines up with the file header (owner, 2026-09-25).** `.workspace`
 has two rows, a band and the rest (`auto minmax(0, 1fr)`); the sidebar and the content
@@ -958,7 +958,7 @@ and the account: the Primer `Avatar` (GraphQL `viewer.avatarUrl`) opening a menu
 "Signed in as", "Your branch on GitHub", "Change bank…" and "Sign out"; "Sign in" before
 connecting, nothing while connecting. The Bank button is gone; its dialog is titled
 "Sign in" or "Change bank". The branch follows the repository in the header,
-`owner / repo / ⑂ qretools/<login>` (owner, 2026-09-25: it is never a choice, so it is
+`owner / repo / ⑂ qretools-<login>` (owner, 2026-09-25: it is never a choice, so it is
 context, as in VS Code's status bar or GitHub Desktop's "Current branch", not a tree
 picker as on github.com, where choosing a branch changes the tree): `BranchName`, a link
 once the branch exists, known from the login the moment the session connects (no
@@ -978,9 +978,22 @@ a state (`loading: failed{failure}`), said in the status with "Try again"
 (`bankReloadRequested`: reloads as the same session, never reconnects); before, it read
 "Loading the bank from GitHub…" forever. The Session no longer stores the branch: it is
 `ownBranch(login)`, derived wherever it is needed, so save-is-not-publish is structural;
-the tests assert every commit targets `qretools/<login>`. Before-pass review (2026-09-25) supplied
+the tests assert every commit targets `qretools-<login>`. Before-pass review (2026-09-25) supplied
 the failed-load state, the invariant test and the anchor choice (Primer `Button`, not a
 native one).
+
+**The author's branch is `qretools-<login>`, and the header's path is one line (owner,
+2026-09-25).** A hyphen, not a slash: the branch reads as one segment of `owner / repo
+/ branch`, and git could not hold a `qretools` ref beside `qretools/…` ones. Logins are
+letters, digits and single hyphens, so everything after the prefix is the login;
+`ownBranch` and its inverse `branchOwner` (used by "whose version") are the one place
+the prefix is written. Upgrade: rename an old `qretools/<login>` branch on GitHub
+(which retargets its pull request); until then, and for old links naming it, it opens
+as someone else's read-only branch. No fallback code. The header's `owner / repo /
+⑂ branch` is one inline element of plain text (the branch a muted link once it exists,
+with an inline octicon), so it shares one baseline and truncates as one; Primer's
+`BranchName` chip is gone from it (a boxed token has no text baseline and never lined
+up). "N behind main" and the pull-request icon follow as centred items.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)

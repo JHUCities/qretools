@@ -100,46 +100,41 @@ body {
 	min-width: 0;
 }
 /*
- * The brand row gives way in order: the repository first, then the branch (to an
- * ellipsis, its full name in a tooltip); the name, "behind" and the pull-request
- * icon never shrink.
+ * The brand row: the name, the path, "behind" and the pull-request icon never shrink
+ * except the path, which truncates from the end (the branch first, then the
+ * repository; the branch's full name is its tooltip).
  */
 /* Primer's Stack renders its children as direct DOM children, which these rely on. */
 .topbar .brand > * {
 	flex-shrink: 0;
 }
-/* Text shares a baseline; a chip and an icon button have none of their own. */
-.topbar .brand > .branch-name,
-.topbar .brand > .propose {
-	align-self: center;
-}
-.topbar .brand > .context,
-.topbar .brand > .branch-name {
+.topbar .brand > .path {
 	flex-shrink: 1;
 	min-width: 0;
 }
-.topbar .brand > .branch-name {
-	max-width: 16rem;
+.topbar .path > h1 {
+	flex-shrink: 0;
 }
-.topbar .branch-text {
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.topbar .brand > .context {
+.topbar .path > .context {
+	flex-shrink: 1;
 	font-size: var(--text-body-size-medium);
 	min-width: 0;
-	overflow: hidden;
+	/* Clipped for the ellipsis, with room for the links' focus rings. */
+	overflow: clip;
+	overflow-clip-margin: var(--base-size-4);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .topbar .status {
 	min-width: 0;
 }
+/* An octicon in running text sits on the text, as Primer sets them inline. */
+.inline-icon {
+	vertical-align: text-bottom;
+}
 @media (--viewportRange-narrow) {
 	.topbar .owner,
-	.topbar .branch-part,
+	.topbar .branch-path,
 	.topbar .behind {
 		display: none;
 	}

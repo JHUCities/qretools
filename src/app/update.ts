@@ -1088,7 +1088,18 @@ export function sessionStatus(model: Model): string | undefined {
 }
 
 /** The author's own branch: each author works apart and proposes with a pull request. */
-export const ownBranch = (login: string): string => `qretools/${login}`;
+const BRANCH_PREFIX = "qretools-";
+export const ownBranch = (login: string): string => `${BRANCH_PREFIX}${login}`;
+/**
+ * Whose own branch this is, or undefined for any other branch. A hyphen, not a slash:
+ * the branch reads as one segment of the header's `owner / repo / branch`, and git
+ * could not hold a `qretools` ref beside `qretools/…` ones. Logins are letters,
+ * digits and single hyphens, so everything after the prefix is the login.
+ */
+export const branchOwner = (branch: string): string | undefined =>
+	branch.startsWith(BRANCH_PREFIX) && branch.length > BRANCH_PREFIX.length
+		? branch.slice(BRANCH_PREFIX.length)
+		: undefined;
 
 type Connected = Extract<Model["session"], { kind: "connected" }>;
 

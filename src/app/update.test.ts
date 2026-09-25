@@ -22,8 +22,10 @@ import {
 import type { File } from "./storage.js";
 import { remoteBlob, syncOf } from "./sync.js";
 import {
+	branchOwner,
 	movedPath,
 	moveProblem,
+	ownBranch,
 	schemeNameProblem,
 	sessionStatus,
 	update,
@@ -207,7 +209,7 @@ describe("saving", () => {
 				kind: "commit",
 				target: {
 					...{ owner: "JHUCities", repo: "bas-question-bank" },
-					branch: "qretools/iain",
+					branch: "qretools-iain",
 					defaultBranch: "main",
 				},
 				changes: [
@@ -752,7 +754,7 @@ describe("writing waits for this session's load", () => {
 });
 
 describe("the author's own branch", () => {
-	it("saves always go to qretools/<login>, resolved on connecting, and the bank loads from it", () => {
+	it("saves always go to qretools-<login>, resolved on connecting, and the bank loads from it", () => {
 		const [m, cmds] = update(
 			{ ...fresh(), session: { kind: "connecting" } },
 			{
@@ -773,7 +775,7 @@ describe("the author's own branch", () => {
 			target: {
 				owner: "JHUCities",
 				repo: "bas-question-bank",
-				branch: "qretools/iain",
+				branch: "qretools-iain",
 				defaultBranch: "main",
 			},
 		});
@@ -824,7 +826,7 @@ describe("the author's own branch", () => {
 			kind: "reloadRequested",
 			id: 1,
 		});
-		expect(after[0]).toMatchObject({ target: { branch: "qretools/iain" } });
+		expect(after[0]).toMatchObject({ target: { branch: "qretools-iain" } });
 	});
 });
 
@@ -1019,7 +1021,7 @@ describe("change sets", () => {
 });
 
 describe("links", () => {
-	const hashFor = (file?: string, branch = "qretools/iain") =>
+	const hashFor = (file?: string, branch = "qretools-iain") =>
 		formatLink({
 			repo: "JHUCities/bas-question-bank",
 			branch,
@@ -1082,11 +1084,11 @@ describe("links", () => {
 	it("another author's version is read only; one matching your base opens your copy", () => {
 		const [m, cmds] = update(loadedBank(), {
 			kind: "hashChanged",
-			hash: hashFor("questions/q/q.yaml", "qretools/alice"),
+			hash: hashFor("questions/q/q.yaml", "qretools-alice"),
 		});
 		expect(m.screen).toEqual({
 			kind: "foreign",
-			branch: "qretools/alice",
+			branch: "qretools-alice",
 			path: "questions/q/q.yaml",
 		});
 		expect(cmds[0]).toMatchObject({
@@ -1095,7 +1097,7 @@ describe("links", () => {
 		});
 		const [theirs] = update(m, {
 			kind: "foreignLoaded",
-			branch: "qretools/alice",
+			branch: "qretools-alice",
 			path: "questions/q/q.yaml",
 			result: ok({
 				file: {
@@ -1116,7 +1118,7 @@ describe("links", () => {
 		});
 		const [same] = update(m, {
 			kind: "foreignLoaded",
-			branch: "qretools/alice",
+			branch: "qretools-alice",
 			path: "questions/q/q.yaml",
 			result: ok({
 				file: { path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
@@ -1159,7 +1161,7 @@ describe("moving a question", () => {
 			target: {
 				owner: "JHUCities",
 				repo: "bas-question-bank",
-				branch: "qretools/iain",
+				branch: "qretools-iain",
 				defaultBranch: "main",
 			},
 			changes: [
@@ -1242,7 +1244,7 @@ describe("moving a question", () => {
 describe("links while connecting", () => {
 	const link = formatLink({
 		repo: "JHUCities/bas-question-bank",
-		branch: "qretools/alice",
+		branch: "qretools-alice",
 		file: "questions/q/q.yaml",
 	});
 
@@ -1282,14 +1284,14 @@ describe("links while connecting", () => {
 		};
 		const [waiting] = update(m, { kind: "hashChanged", hash: link });
 		expect(waiting.screen.kind).toBe("blank");
-		expect(waiting.pendingLink).toMatchObject({ branch: "qretools/alice" });
+		expect(waiting.pendingLink).toMatchObject({ branch: "qretools-alice" });
 		// Going back to the bank stops waiting: the link must not pull the author away later.
 		expect(
 			update(waiting, { kind: "listOpened" })[0].pendingLink,
 		).toBeUndefined();
 		const own = formatLink({
 			repo: "JHUCities/bas-question-bank",
-			branch: "qretools/iain",
+			branch: "qretools-iain",
 			file: "questions/q/q.yaml",
 		});
 		expect(update(m, { kind: "hashChanged", hash: own })[0].screen).toEqual({
@@ -1373,7 +1375,7 @@ describe("signing in", () => {
 				target: {
 					owner: "JHUCities",
 					repo: "bas-question-bank",
-					branch: "qretools/iain",
+					branch: "qretools-iain",
 					defaultBranch: "main",
 				},
 			},
@@ -1404,15 +1406,15 @@ describe("the top bar's status", () => {
 		expect(
 			sessionStatus({
 				...base,
-				screen: { kind: "foreign", branch: "qretools/alice", path: "q.yaml" },
+				screen: { kind: "foreign", branch: "qretools-alice", path: "q.yaml" },
 			}),
-		).toBe("Loading q.yaml from qretools/alice…");
+		).toBe("Loading q.yaml from qretools-alice…");
 		expect(
 			sessionStatus({
 				...connected(fresh(), false),
-				screen: { kind: "foreign", branch: "qretools/alice", path: "q.yaml" },
+				screen: { kind: "foreign", branch: "qretools-alice", path: "q.yaml" },
 			}),
-		).toBe("Loading q.yaml from qretools/alice…");
+		).toBe("Loading q.yaml from qretools-alice…");
 	});
 });
 
@@ -1431,5 +1433,16 @@ describe("a refused return from GitHub", () => {
 		expect(m.session).toEqual({ kind: "connecting" });
 		expect(cmds.map((c) => c.kind)).toContain("connect");
 		expect(cmds.map((c) => c.kind)).not.toContain("forgetToken");
+	});
+});
+
+describe("the author's own branch", () => {
+	it("is named from the login, and read back from the name", () => {
+		expect(branchOwner(ownBranch("iain"))).toBe("iain");
+		expect(branchOwner("qretools-a-b")).toBe("a-b");
+		expect(branchOwner("qretools-")).toBeUndefined();
+		expect(branchOwner("main")).toBeUndefined();
+		// The old slashed name is someone else's branch now.
+		expect(branchOwner("qretools/iain")).toBeUndefined();
 	});
 });
