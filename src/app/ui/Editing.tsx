@@ -25,6 +25,7 @@ import {
 	type SchemeEntry,
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf } from "../sync.js";
+import { SCHEME_SINGULAR } from "../tree.js";
 import { hrefOf, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
@@ -196,12 +197,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	);
 }
 
-const SINGULAR: Readonly<Record<SchemeEntry["kind"], string>> = {
-	scale: "scale",
-	universe: "universe",
-	instruction: "instruction",
-	missing: "missing values",
-};
+const SINGULAR = SCHEME_SINGULAR;
 
 function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const { evaluations } = useApp();

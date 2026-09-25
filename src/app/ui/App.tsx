@@ -12,7 +12,12 @@ import { SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves } from "../sync.js";
-import { bankFolders, SCHEME_LABELS, schemeSections, treeOf } from "../tree.js";
+import {
+	bankFolders,
+	SCHEME_SINGULAR,
+	schemeSections,
+	treeOf,
+} from "../tree.js";
 import { movedPath, moveProblem, schemeNameProblem } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
@@ -134,9 +139,7 @@ export function App() {
 											dispatch({ kind: "schemeCreateOpened", scheme: k })
 										}
 									>
-										{k === "missing"
-											? "Missing values"
-											: SCHEME_LABELS[k].replace(/s$/, "")}
+										{capitalise(SCHEME_SINGULAR[k])}
 									</ActionList.Item>
 								))}
 							</ActionList>
@@ -298,3 +301,6 @@ function sessionLine(model: Model): string {
 				: `${session.login} · ${settings.owner}/${settings.repo} · ${session.branch}${session.canWrite ? "" : " (read only)"}`;
 	}
 }
+
+const capitalise = (s: string): string =>
+	s.charAt(0).toUpperCase() + s.slice(1);

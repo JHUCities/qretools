@@ -294,11 +294,12 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   - Findings as a Primer `ActionList` (severity octicons as leading visuals, the hint
     as description) instead of the bespoke list; keep holes visibly dashed.
   - `Stack` for the remaining hand-written flex rows (top bar, tree marks, Bank status).
-  - Tree details: `CounterLabel` counts, `TreeView.TrailingVisual label` for the marks
-    and status icon (screen-reader text), `Spinner` for the busy mark, skeleton nodes
-    (`SubTree state="loading"`) while the bank loads, `Blankslate` for empty states.
+  - ~~Tree details~~ done: `CounterLabel` counts, trailing-visual labels heard as one
+    phrase ("draft, has holes"), `Spinner` for busy, `SkeletonText` while loading,
+    `Blankslate` when empty.
   - Narrow screens as separate views (tree, or the open file) rather than stacked.
   - The codebook's "Universe:"/"Source:" lines as a `<dl>`; the respondent preview's
     radio group name from `useId()`.
-  - One tree with two top-level groups instead of two TreeViews; one table of singular
-    scheme labels (App and Editing each have their own).
+  - ~~One table of singular scheme labels~~ done (`SCHEME_SINGULAR`). Two TreeViews
+    stay, each named by its visible heading: TreeView has no group headings, and Tab
+    between two trees, arrows within, is the pattern Primer's guidelines describe.

@@ -120,6 +120,14 @@ export interface SchemeSection {
 	readonly expanded: boolean;
 }
 
+/** One table for how each kind of shared element is named, singular and plural. */
+export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
+	scale: "scale",
+	universe: "universe",
+	instruction: "instruction",
+	missing: "missing values",
+};
+
 export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 	scale: "Scales",
 	universe: "Universes",
