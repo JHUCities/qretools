@@ -90,7 +90,10 @@ editing view had filled it with `height: calc(100vh - 64px)`, a guessed header h
 so the page scrolled past a fixed-height region and looked clipped. Primer's docs say a
 height-constrained area must be constrained by its parent; the shell is that parent.
 The sidebar uses PageLayout's `medium` pane widths (256px, 296px from 1012px) and stacks
-below Primer's medium breakpoint (768px). Lost: Primer's resizable pane.
+below Primer's medium breakpoint (768px). Lost: Primer's resizable pane. On narrow screens (Primer's
+`--viewportRange-narrow`) the tree and the open file are separate views
+(`.workspace[data-open]`), the file's PageHeader context area offering "Back to the
+bank", as Primer's layout guidance advises for a pane full of links.
 
 ## Three roles, one in scope
 

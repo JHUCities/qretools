@@ -1,5 +1,10 @@
 /** The open file's header: identity, state, and the actions on it. */
-import { DownloadIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
+import {
+	ArrowLeftIcon,
+	DownloadIcon,
+	SyncIcon,
+	TrashIcon,
+} from "@primer/octicons-react";
 import { Banner, Button, Label, PageHeader, Stack } from "@primer/react";
 import { useId } from "react";
 import type { Activity, Entry } from "../model.js";
@@ -14,6 +19,8 @@ export interface HeaderActions {
 	readonly downloadDdi: (() => void) | undefined;
 	/** Absent for a file that cannot move: a draft, or a scheme file (named by its path). */
 	readonly move?: () => void;
+	/** Back to the bank: shown on narrow screens, where the tree and the file are separate views. */
+	readonly close?: () => void;
 }
 
 export function FileHeader({
@@ -72,6 +79,19 @@ export function FileHeader({
 	return (
 		<div className="qhead">
 			<PageHeader>
+				{on.close !== undefined && (
+					// PageHeader shows its context area on narrow screens only.
+					<PageHeader.ContextArea>
+						<Button
+							variant="invisible"
+							size="small"
+							leadingVisual={ArrowLeftIcon}
+							onClick={on.close}
+						>
+							Back to the bank
+						</Button>
+					</PageHeader.ContextArea>
+				)}
 				<PageHeader.TitleArea variant="subtitle">
 					<PageHeader.Title as="h2">
 						{kind !== undefined && <span className="quiet">{kind} </span>}

@@ -3,6 +3,7 @@
  * everything derived from it beside it. Bank-level findings (a variable defined
  * twice) come from the index and are shown on the file like any other finding.
  */
+import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
 import { memo, type ReactNode, useMemo } from "react";
@@ -87,6 +88,7 @@ function useActions(id: Id) {
 				dispatch({ kind: "downloadRequested", id, format: "yaml" }),
 			downloadDdi: () =>
 				dispatch({ kind: "downloadRequested", id, format: "ddi" }),
+			close: () => dispatch({ kind: "listOpened" }),
 		},
 	};
 }
@@ -491,6 +493,16 @@ export function ForeignView({
 		<div className="editing">
 			<div className="qhead">
 				<PageHeader>
+					<PageHeader.ContextArea>
+						<Button
+							variant="invisible"
+							size="small"
+							leadingVisual={ArrowLeftIcon}
+							onClick={() => dispatch({ kind: "listOpened" })}
+						>
+							Back to the bank
+						</Button>
+					</PageHeader.ContextArea>
 					<PageHeader.TitleArea variant="subtitle">
 						<PageHeader.Title as="h2">
 							<span className="quiet">{whose(screen.branch)} of </span>

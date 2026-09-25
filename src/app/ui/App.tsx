@@ -162,7 +162,11 @@ export function App() {
 						Bank
 					</Button>
 				</Stack>
-				<div className="workspace">
+				{/* On narrow screens the tree and the open file are separate views. */}
+				<div
+					className="workspace"
+					data-open={open !== undefined || model.screen.kind === "foreign"}
+				>
 					<nav className="sidebar" aria-label="Question bank">
 						<Browser
 							folders={folders}

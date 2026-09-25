@@ -286,20 +286,13 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   nothing and says "not on that branch". A fallback could open the local question with
   the same filename in another folder, when there is exactly one. Cheap; not built.
 
-- **Front-end audit, what remains (2026-09-25).** Done: the app shell, dark mode and the
-  editor's name, PageHeader with inactive buttons and loading, links that navigate,
-  native dialog forms with Primer validation, the CSS on Primer's tokens with scoped
-  selectors, a keyboard-scrollable previews region, the session line as a live status.
-  Remaining, in rough order:
-  - Findings as a Primer `ActionList` (severity octicons as leading visuals, the hint
-    as description) instead of the bespoke list; keep holes visibly dashed.
-  - `Stack` for the remaining hand-written flex rows (top bar, tree marks, Bank status).
-  - ~~Tree details~~ done: `CounterLabel` counts, trailing-visual labels heard as one
-    phrase ("draft, has holes"), `Spinner` for busy, `SkeletonText` while loading,
-    `Blankslate` when empty.
-  - Narrow screens as separate views (tree, or the open file) rather than stacked.
-  - The codebook's "Universe:"/"Source:" lines as a `<dl>`; the respondent preview's
-    radio group name from `useId()`.
-  - ~~One table of singular scheme labels~~ done (`SCHEME_SINGULAR`). Two TreeViews
-    stay, each named by its visible heading: TreeView has no group headings, and Tab
-    between two trees, arrows within, is the pattern Primer's guidelines describe.
+- **Front-end audit (2026-09-25): done.** Every item from the audit is built: the app
+  shell; dark mode on Primer's root theme and CodeMirror tokens; the editor's name;
+  PageHeader with inactive, explained buttons and loading states; links that navigate
+  and link buttons that act; native dialog forms with Primer validation; CSS on Primer's
+  tokens with scoped selectors; a keyboard-scrollable previews region; the session line
+  as a live status; findings as an ActionList; Stack for flex rows; tree counters,
+  spoken marks, spinner, skeleton and blankslate; the codebook's particulars as a
+  `<dl>`; per-preview radio groups; one table of scheme names; narrow screens as
+  separate views. Two TreeViews stay, each named by its heading (TreeView has no group
+  headings).
