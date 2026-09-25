@@ -119,7 +119,7 @@ describe("scheme references in the previews", () => {
 		});
 		const cb = codebookView(d, env);
 		expect(cb.universe).toEqual({ text: "Renters only", ref: "renters" });
-		expect(cb.missing).toBe("Missing: -8 (Item non-response)");
+		expect(cb.missing).toBe("-8 (Item non-response)");
 		const prose = parseSurface(
 			"name: q\ntext: Q?\nintent: i\nuniverse: Everyone here\nopen:\n",
 			EMPTY_ENV,

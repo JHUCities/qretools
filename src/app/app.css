@@ -290,9 +290,18 @@ button.hole {
 	font-style: normal;
 }
 .cb-meta {
-	margin: var(--base-size-2) 0;
+	margin: var(--base-size-8) 0 0;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: var(--base-size-2) var(--base-size-8);
 	color: var(--fgColor-muted);
 	font-size: var(--text-body-size-small);
+}
+.cb-meta dt {
+	font-weight: var(--base-text-weight-semibold);
+}
+.cb-meta dd {
+	margin: 0;
 }
 
 /* Findings: severity is data, carried by the label and the edge, never by colour alone. */

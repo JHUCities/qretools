@@ -63,7 +63,7 @@ export interface CodebookView {
 	readonly values:
 		| { readonly kind: "lines"; readonly lines: readonly string[] }
 		| Hole;
-	/** The bank's missing-value line, as the codebook prints it, when the bank declares any. */
+	/** The bank's missing-value codes, as the codebook prints them, when the bank declares any. */
 	readonly missing?: string;
 	readonly universe?: Resolved;
 	readonly source?: string;
@@ -133,7 +133,7 @@ export function codebookView(draft: Draft, env: Env): CodebookView {
 		missing:
 			env.missing.length === 0
 				? undefined
-				: `Missing: ${env.missing.map((c) => `${c.code} (${c.label})`).join(", ")}`,
+				: env.missing.map((c) => `${c.code} (${c.label})`).join(", "),
 		universe: resolved(draft.universe),
 		source: draft.source,
 		notes: notes(draft),

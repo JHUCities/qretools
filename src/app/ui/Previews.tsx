@@ -7,7 +7,7 @@ import {
 	XCircleIcon,
 } from "@primer/octicons-react";
 import { ActionList, Label } from "@primer/react";
-import { memo, type ReactNode } from "react";
+import { Fragment, memo, type ReactNode, useId } from "react";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Status, Target } from "../../core/findings.js";
 import type {
@@ -128,19 +128,20 @@ function RespondentInput({
 	input: Input;
 	onTarget?: OnTarget;
 }) {
+	const group = useId();
 	switch (input.kind) {
 		case "hole":
 			return <HoleButton hole={input} onTarget={onTarget} />;
 		case "choice":
-			// Inputs sit inside their labels, and the group name is constant: author-spelled
-			// codes make poor ids, and `name` may still be a hole.
+			// Inputs sit inside their labels; the group's name is this preview's own
+			// (author-spelled codes make poor ids, and `name` may still be a hole).
 			return (
 				<div className="options">
 					{input.options.map((o) => (
 						<label key={o.code}>
 							<input
 								type={input.select === "one" ? "radio" : "checkbox"}
-								name="response"
+								name={group}
 								value={o.code}
 							/>{" "}
 							{o.label}
@@ -195,25 +196,35 @@ export function Codebook({
 					))}
 				</ul>
 			)}
-			{view.universe !== undefined && (
-				<p className="cb-meta">
-					<b>Universe: </b>
-					<ResolvedText value={view.universe} />
-				</p>
-			)}
-			{view.missing !== undefined && <p className="cb-meta">{view.missing}</p>}
-			{view.source !== undefined && (
-				<p className="cb-meta">
-					<b>Source: </b>
-					{view.source}
-				</p>
-			)}
-			{view.notes.map((n) => (
-				<p className="cb-meta" key={n}>
-					<b>Note: </b>
-					{n}
-				</p>
-			))}
+			{/* The entry's particulars, as the BAS codebook lists them: terms and their values. */}
+			<dl className="cb-meta">
+				{view.universe !== undefined && (
+					<>
+						<dt>Universe</dt>
+						<dd>
+							<ResolvedText value={view.universe} />
+						</dd>
+					</>
+				)}
+				{view.missing !== undefined && (
+					<>
+						<dt>Missing</dt>
+						<dd>{view.missing}</dd>
+					</>
+				)}
+				{view.source !== undefined && (
+					<>
+						<dt>Source</dt>
+						<dd>{view.source}</dd>
+					</>
+				)}
+				{view.notes.map((n) => (
+					<Fragment key={n}>
+						<dt>Note</dt>
+						<dd>{n}</dd>
+					</Fragment>
+				))}
+			</dl>
 		</div>
 	);
 }
