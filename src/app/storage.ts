@@ -55,6 +55,8 @@ export interface BranchTarget extends Repo {
 
 export interface Who {
 	readonly login: string;
+	/** The account's picture, as GitHub serves it. */
+	readonly avatarUrl: string;
 	readonly canWrite: boolean;
 	readonly defaultBranch: string;
 }

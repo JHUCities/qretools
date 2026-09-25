@@ -1,14 +1,17 @@
 /** The page: a split layout with the bank tree in the pane and the open file in the content. */
 import {
-	GearIcon,
 	GitBranchIcon,
 	GitPullRequestIcon,
 	LinkExternalIcon,
 	PlusIcon,
+	RepoIcon,
+	SignOutIcon,
 } from "@primer/octicons-react";
 import {
 	ActionList,
 	ActionMenu,
+	Avatar,
+	Banner,
 	BranchName,
 	Button,
 	ConfirmationDialog,
@@ -29,7 +32,13 @@ import {
 	schemeSections,
 	treeOf,
 } from "../tree.js";
-import { movedPath, moveProblem, schemeNameProblem } from "../update.js";
+import {
+	movedPath,
+	moveProblem,
+	ownBranch,
+	schemeNameProblem,
+	sessionStatus,
+} from "../update.js";
 import { SESSION_STATUS, useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
@@ -117,21 +126,40 @@ export function App() {
 					paddingBlock="condensed"
 					paddingInline="normal"
 				>
-					<h1>qretools</h1>
-					<span className="quiet">question bank</span>
+					{/* Name and context share a baseline; the row centres the rest. */}
+					<Stack
+						direction="horizontal"
+						align="baseline"
+						gap="condensed"
+						className="brand"
+					>
+						<h1>qretools</h1>
+						<Context model={model} />
+					</Stack>
 					{/*
-					 * A live region: connecting, loading, saving and signing out are
-					 * announced. It is also why a file's write buttons are inactive
-					 * (they point here), since those reasons are the session's, not the file's.
+					 * A live region, always mounted so that what it says is announced: what
+					 * the session is doing, or why nothing can be written. A file's inactive
+					 * write buttons point here, since those reasons are the session's.
 					 */}
-					<Stack direction="horizontal" align="center" gap="condensed">
+					<Stack
+						direction="horizontal"
+						align="center"
+						gap="condensed"
+						className="status"
+					>
 						{busy(model) && <Spinner size="small" srText={null} />}
 						<AriaStatus as="span" id={SESSION_STATUS} className="quiet session">
-							{sessionLine(model)}
+							{sessionStatus(model) ?? ""}
 						</AriaStatus>
+						{model.loading.kind === "failed" && (
+							<Button
+								size="small"
+								onClick={() => dispatch({ kind: "bankReloadRequested" })}
+							>
+								Try again
+							</Button>
+						)}
 					</Stack>
-					<BranchLinks model={model} />
-					<Stack.Item grow />
 					<ActionMenu>
 						<ActionMenu.Anchor>
 							<Button leadingVisual={PlusIcon}>New</Button>
@@ -172,12 +200,7 @@ export function App() {
 							</ActionList>
 						</ActionMenu.Overlay>
 					</ActionMenu>
-					<Button
-						leadingVisual={GearIcon}
-						onClick={() => dispatch({ kind: "settingsToggled", open: true })}
-					>
-						Bank
-					</Button>
+					<Account model={model} />
 				</Stack>
 				{/* On narrow screens the tree and the open file are separate views. */}
 				<div
@@ -185,6 +208,7 @@ export function App() {
 					data-open={open !== undefined || model.screen.kind === "foreign"}
 				>
 					<nav className="sidebar" aria-label="Question bank">
+						<BranchPanel model={model} />
 						<Browser
 							folders={folders}
 							sections={sections}
@@ -202,14 +226,29 @@ export function App() {
 							<ForeignView screen={model.screen} />
 						) : open === undefined ? (
 							<div className="blank">
-								<p className="quiet">
-									{model.pendingLink !== undefined &&
-									model.session.kind !== "connected"
-										? "Connect to the bank (Bank, above) to open this link."
-										: model.pendingLink !== undefined
-											? "Opening the link once the bank has loaded…"
-											: "Pick a question or a shared element in the bank, or create a new one."}
-								</p>
+								{model.pendingLink !== undefined &&
+								model.session.kind !== "connected" ? (
+									<Stack align="start" gap="condensed">
+										<p className="quiet">Sign in to open this link.</p>
+										<Button
+											variant="primary"
+											onClick={() =>
+												dispatch({ kind: "settingsToggled", open: true })
+											}
+										>
+											Sign in
+										</Button>
+									</Stack>
+								) : (
+									<p className="quiet">
+										{model.pendingLink !== undefined &&
+										model.loading.kind === "failed"
+											? "The bank did not load, so this link cannot open yet."
+											: model.pendingLink !== undefined
+												? "Opening the link once the bank has loaded…"
+												: "Pick a question or a shared element in the bank, or create a new one."}
+									</p>
+								)}
 							</div>
 						) : (
 							<Editing id={open} index={index} />
@@ -290,50 +329,145 @@ export function App() {
 	);
 }
 
+const repoUrl = (model: Model): string =>
+	`https://github.com/${model.settings.owner}/${model.settings.repo}`;
+
 /**
- * What the author's branch holds that the bank does not, as links to GitHub, which
- * does the rest: the pull request, review, updating the branch, merging. The app
- * states facts and links; it never recreates GitHub's interface.
+ * Where the author is, as github.com's header says it: `owner / repo`, the repository
+ * a link to GitHub. On narrow screens only the repository name.
  */
-function BranchLinks({ model }: { model: Model }) {
-	const { session, loading, settings } = model;
-	if (session.kind !== "connected" || loading.kind !== "loaded") return null;
-	const repo = `https://github.com/${settings.owner}/${settings.repo}`;
-	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(session.branch)}?expand=1`;
+function Context({ model }: { model: Model }) {
+	if (model.session.kind !== "connected") return null;
 	return (
-		<Stack direction="horizontal" align="center" gap="condensed" wrap="wrap">
-			{/* Before the first save the branch does not exist yet: named, not linked. */}
-			{loading.from === "branch" ? (
-				<BranchName
-					href={`${repo}/tree/${encodeURI(session.branch)}`}
-					target="_blank"
-					rel="noreferrer"
+		<span className="context">
+			<span className="quiet owner">{model.settings.owner} / </span>
+			<ExternalLink href={repoUrl(model)}>
+				<strong>{model.settings.repo}</strong>
+			</ExternalLink>
+		</span>
+	);
+}
+
+/**
+ * The account, as github.com shows it: the avatar opens a menu with who is signed in,
+ * the bank, and signing out. Before sign-in, a button; while connecting, nothing, so
+ * the startup connection does not flicker a "Sign in".
+ */
+function Account({ model }: { model: Model }) {
+	const { dispatch } = useApp();
+	const { session, loading } = model;
+	const settings = () => dispatch({ kind: "settingsToggled", open: true });
+	if (session.kind === "connecting") return null;
+	if (session.kind !== "connected")
+		return <Button onClick={settings}>Sign in</Button>;
+	return (
+		<ActionMenu>
+			<ActionMenu.Anchor>
+				<Button
+					variant="invisible"
+					className="account"
+					aria-label={`Account: ${session.login}`}
 				>
-					<GitBranchIcon size={12} aria-hidden /> {session.branch}
-					<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-				</BranchName>
-			) : (
-				<BranchName as="span">
-					<GitBranchIcon size={12} aria-hidden /> {session.branch}
-				</BranchName>
-			)}
-			{loading.behindBy > 0 && (
-				<ExternalLink href={compare} muted>
-					{loading.behindBy} behind {session.defaultBranch}
-				</ExternalLink>
-			)}
+					<Avatar src={session.avatarUrl} size={32} alt="" />
+				</Button>
+			</ActionMenu.Anchor>
+			<ActionMenu.Overlay align="end">
+				<ActionList>
+					<ActionList.Group>
+						<ActionList.GroupHeading>
+							Signed in as {session.login}
+						</ActionList.GroupHeading>
+						{loading.kind === "loaded" && loading.from === "branch" && (
+							<ActionList.LinkItem
+								href={`${repoUrl(model)}/tree/${encodeURI(ownBranch(session.login))}`}
+								target="_blank"
+								rel="noreferrer"
+							>
+								<ActionList.LeadingVisual>
+									<GitBranchIcon />
+								</ActionList.LeadingVisual>
+								Your branch on GitHub
+								<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+								<ActionList.TrailingVisual>
+									<LinkExternalIcon />
+								</ActionList.TrailingVisual>
+							</ActionList.LinkItem>
+						)}
+						<ActionList.Item onSelect={settings}>
+							<ActionList.LeadingVisual>
+								<RepoIcon />
+							</ActionList.LeadingVisual>
+							Change bank…
+						</ActionList.Item>
+					</ActionList.Group>
+					<ActionList.Divider />
+					<ActionList.Item onSelect={() => dispatch({ kind: "disconnected" })}>
+						<ActionList.LeadingVisual>
+							<SignOutIcon />
+						</ActionList.LeadingVisual>
+						Sign out
+					</ActionList.Item>
+				</ActionList>
+			</ActionMenu.Overlay>
+		</ActionMenu>
+	);
+}
+
+/**
+ * The author's branch at the top of the tree, where github.com keeps its branch
+ * picker, and what it holds that the bank does not, as links to GitHub, which does
+ * the rest: the pull request, review, updating the branch, merging. The app states
+ * facts and links; it never recreates GitHub's interface.
+ */
+function BranchPanel({ model }: { model: Model }) {
+	const { session, loading } = model;
+	if (session.kind !== "connected" || loading.kind !== "loaded") return null;
+	const repo = repoUrl(model);
+	const compare = `${repo}/compare/${session.defaultBranch}...${encodeURI(ownBranch(session.login))}?expand=1`;
+	return (
+		<Stack gap="condensed" className="branch">
+			<Stack direction="horizontal" align="center" gap="condensed" wrap="wrap">
+				{/* Before the first save the branch does not exist yet: named, not linked. */}
+				{loading.from === "branch" ? (
+					<BranchName
+						href={`${repo}/tree/${encodeURI(ownBranch(session.login))}`}
+						target="_blank"
+						rel="noreferrer"
+					>
+						<GitBranchIcon size={12} aria-hidden /> {ownBranch(session.login)}
+						<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+					</BranchName>
+				) : (
+					<BranchName as="span">
+						<GitBranchIcon size={12} aria-hidden /> {ownBranch(session.login)}
+					</BranchName>
+				)}
+				{loading.behindBy > 0 && (
+					<ExternalLink href={compare} muted>
+						{loading.behindBy} behind {session.defaultBranch}
+					</ExternalLink>
+				)}
+			</Stack>
+			{/* GitHub's "had recent pushes · Compare & pull request", shown only when it applies. */}
 			{loading.proposable && (
-				<LinkButton
-					size="small"
-					href={compare}
-					target="_blank"
-					rel="noreferrer"
-					leadingVisual={GitPullRequestIcon}
-					trailingVisual={LinkExternalIcon}
-				>
-					Propose changes
-					<VisuallyHidden> on GitHub (opens in a new tab)</VisuallyHidden>
-				</LinkButton>
+				<Banner
+					variant="info"
+					layout="compact"
+					title="Your branch has changes to propose."
+					primaryAction={
+						<LinkButton
+							size="small"
+							href={compare}
+							target="_blank"
+							rel="noreferrer"
+							leadingVisual={GitPullRequestIcon}
+							trailingVisual={LinkExternalIcon}
+						>
+							Propose changes
+							<VisuallyHidden> on GitHub (opens in a new tab)</VisuallyHidden>
+						</LinkButton>
+					}
+				/>
 			)}
 		</Stack>
 	);
@@ -348,25 +482,6 @@ const busy = (model: Model): boolean =>
 	model.session.kind === "connecting" ||
 	(model.session.kind === "connected" &&
 		(model.loading.kind === "loading" || saving(model)));
-
-/**
- * Who is connected to which bank, or what the connection is doing: said, and
- * announced. Every reason `writeBlocked` gives is visible here.
- */
-function sessionLine(model: Model): string {
-	const { session, settings, loading } = model;
-	switch (session.kind) {
-		case "anonymous":
-			return "Not connected: drafts stay in this browser";
-		case "connecting":
-			return "Connecting to GitHub…";
-		case "failed":
-			return session.failure.message;
-		case "connected":
-			if (loading.kind !== "loaded") return "Loading the bank from GitHub…";
-			return `${session.login} · ${settings.owner}/${settings.repo}${session.canWrite ? (saving(model) ? " · saving…" : "") : " (read only)"}`;
-	}
-}
 
 const capitalise = (s: string): string =>
 	s.charAt(0).toUpperCase() + s.slice(1);

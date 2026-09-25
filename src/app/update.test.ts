@@ -24,6 +24,7 @@ import {
 	movedPath,
 	moveProblem,
 	schemeNameProblem,
+	sessionStatus,
 	update,
 	writeBlocked,
 } from "./update.js";
@@ -49,8 +50,8 @@ const connected = (model: Model, canWrite = true): Model => ({
 	session: {
 		kind: "connected",
 		login: "iain",
+		avatarUrl: "https://a/iain",
 		canWrite,
-		branch: "qretools/iain",
 		defaultBranch: "main",
 	},
 	loading: LOADED,
@@ -379,7 +380,12 @@ describe("connecting", () => {
 		});
 		const [m2, c2] = update(m1, {
 			kind: "connected",
-			result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
+			result: ok({
+				login: "iain",
+				avatarUrl: "https://a/iain",
+				canWrite: true,
+				defaultBranch: "main",
+			}),
 		});
 		expect(m2.loading.kind).toBe("loading");
 		expect(c2[0]?.kind).toBe("loadBank");
@@ -632,7 +638,7 @@ describe("writing waits for this session's load", () => {
 				),
 			],
 		);
-		expect(writeBlocked(m)).toMatch(/Checking GitHub/);
+		expect(writeBlocked(m)).toMatch(/Loading the bank/);
 		expect(update(m, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
 		expect(
 			run(
@@ -684,10 +690,14 @@ describe("the author's own branch", () => {
 	it("saves always go to qretools/<login>, resolved on connecting, and the bank loads from it", () => {
 		const [m, cmds] = update(fresh(), {
 			kind: "connected",
-			result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
+			result: ok({
+				login: "iain",
+				avatarUrl: "https://a/iain",
+				canWrite: true,
+				defaultBranch: "main",
+			}),
 		});
 		expect(m.session).toMatchObject({
-			branch: "qretools/iain",
 			defaultBranch: "main",
 		});
 		expect(cmds[0]).toEqual({
@@ -1173,7 +1183,12 @@ describe("links while connecting", () => {
 		expect(waiting.pendingLink).toBeDefined();
 		const [connectedM, c1] = update(waiting, {
 			kind: "connected",
-			result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
+			result: ok({
+				login: "iain",
+				avatarUrl: "https://a/iain",
+				canWrite: true,
+				defaultBranch: "main",
+			}),
 		});
 		expect(c1.some((c) => c.kind === "setLink")).toBe(false);
 		const [, c2] = update(connectedM, {
@@ -1256,6 +1271,68 @@ describe("signing in", () => {
 		});
 		expect(after.session).toBe(m.session);
 		expect(cmds).not.toContainEqual({ kind: "forgetToken" });
+	});
+
+	it("a bank that did not load says so, and nothing can be written", () => {
+		const offline = { kind: "network" as const, message: "offline" };
+		const [after] = update(connected(fresh()), {
+			kind: "bankLoaded",
+			result: { ok: false, error: offline },
+		});
+		expect(after.loading).toEqual({ kind: "failed", failure: offline });
+		expect(writeBlocked(after)).toBeDefined();
+		expect(sessionStatus(after)).toMatch(/did not load: offline/);
+	});
+
+	it("trying again reloads the bank as the same session, without reconnecting", () => {
+		const m = {
+			...connected(fresh()),
+			loading: {
+				kind: "failed" as const,
+				failure: { kind: "network" as const, message: "offline" },
+			},
+		};
+		const [after, cmds] = update(m, { kind: "bankReloadRequested" });
+		expect(after.session).toBe(m.session);
+		expect(after.loading).toEqual({ kind: "loading" });
+		expect(cmds).toEqual([
+			{
+				kind: "loadBank",
+				target: {
+					owner: "JHUCities",
+					repo: "bas-question-bank",
+					branch: "qretools/iain",
+					defaultBranch: "main",
+				},
+			},
+		]);
+	});
+});
+
+describe("the top bar's status", () => {
+	it("gives a reason whenever writing is blocked, and is empty in the steady state", () => {
+		const base = connected(fresh());
+		const models: Model[] = [
+			fresh(),
+			{ ...fresh(), session: { kind: "connecting" } },
+			{
+				...fresh(),
+				session: { kind: "failed", failure: { kind: "auth", message: "x" } },
+			},
+			{ ...base, loading: { kind: "loading" } },
+			{ ...base, loading: { kind: "bundled" } },
+			{
+				...base,
+				loading: { kind: "failed", failure: { kind: "network", message: "x" } },
+			},
+			connected(fresh(), false),
+			{ ...base, activity: { 1: { kind: "saving" } } },
+			base,
+		];
+		for (const m of models)
+			if (writeBlocked(m) !== undefined) expect(sessionStatus(m)).toBeDefined();
+		expect(writeBlocked(base)).toBeUndefined();
+		expect(sessionStatus(base)).toBeUndefined();
 	});
 });
 

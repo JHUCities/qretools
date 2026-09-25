@@ -68,6 +68,47 @@ body {
 	margin: 0;
 	font-size: var(--text-title-size-small);
 }
+/*
+ * The context takes the row's spare room and truncates before anything wraps; the
+ * status follows it. On narrow screens only the repository names the context, as on
+ * github.com, and a status with something to say takes a row of its own.
+ */
+/* A zero basis: a wrapping row breaks at natural widths, so the brand never asks for any. */
+.topbar .brand {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.topbar h1 {
+	flex-shrink: 0;
+}
+.topbar .context {
+	font-size: var(--text-body-size-medium);
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.topbar .status {
+	min-width: 0;
+}
+@media (--viewportRange-narrow) {
+	.topbar .owner {
+		display: none;
+	}
+	.topbar .status:not(:has(.session:empty)) {
+		order: 1;
+		flex-basis: 100%;
+	}
+}
+/* The branch heads the tree, where github.com keeps its branch picker. */
+.branch {
+	margin-bottom: var(--base-size-12);
+}
+/* The avatar is the button: its hover and focus take the avatar's round shape. */
+.topbar .account {
+	padding: 0;
+	border-radius: var(--borderRadius-full);
+}
 .topbar .session {
 	font-size: var(--text-body-size-small);
 	overflow-wrap: anywhere;

@@ -46,7 +46,7 @@ describe("GitHub adapter (Octokit)", () => {
 		const { s, seen } = store(() =>
 			json({
 				data: {
-					viewer: { login: "iain" },
+					viewer: { login: "iain", avatarUrl: "https://a/iain" },
 					repository: {
 						viewerPermission: "READ",
 						defaultBranchRef: { name: "main" },
@@ -56,13 +56,18 @@ describe("GitHub adapter (Octokit)", () => {
 		);
 		expect(await s.whoAmI()).toEqual({
 			ok: true,
-			value: { login: "iain", canWrite: false, defaultBranch: "main" },
+			value: {
+				login: "iain",
+				avatarUrl: "https://a/iain",
+				canWrite: false,
+				defaultBranch: "main",
+			},
 		});
 		expect(seen).toHaveLength(1);
 		const { s: writer } = store(() =>
 			json({
 				data: {
-					viewer: { login: "iain" },
+					viewer: { login: "iain", avatarUrl: "https://a/iain" },
 					repository: {
 						viewerPermission: "WRITE",
 						defaultBranchRef: { name: "trunk" },
@@ -410,7 +415,7 @@ describe("GitHub adapter (Octokit)", () => {
 				return new Response(
 					JSON.stringify({
 						data: {
-							viewer: { login: "i" },
+							viewer: { login: "i", avatarUrl: "https://a/i" },
 							repository: {
 								viewerPermission: "READ",
 								defaultBranchRef: { name: "main" },

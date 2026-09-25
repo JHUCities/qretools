@@ -135,9 +135,8 @@ export type Session =
 	| {
 			readonly kind: "connected";
 			readonly login: string;
+			readonly avatarUrl: string;
 			readonly canWrite: boolean;
-			/** Where saves go, resolved: the settings' branch, or `qretools/<login>`. */
-			readonly branch: string;
 			/** The bank: the repository's default branch, which only pull requests change. */
 			readonly defaultBranch: string;
 	  }
@@ -146,6 +145,8 @@ export type Session =
 export type Bank =
 	| { readonly kind: "bundled" }
 	| { readonly kind: "loading" }
+	/** Connected, but the bank did not load: said in the top bar, with a retry. */
+	| { readonly kind: "failed"; readonly failure: Failure }
 	| {
 			readonly kind: "loaded";
 			/** Whether the author's branch exists yet, or the bank was read instead. */
@@ -263,6 +264,8 @@ export type Msg =
 			readonly kind: "bankLoaded";
 			readonly result: Result<Loaded, Failure>;
 	  }
+	/** Read the bank again, as the same session: a retry after a failed load. */
+	| { readonly kind: "bankReloadRequested" }
 	| { readonly kind: "disconnected" }
 	| { readonly kind: "failureDismissed"; readonly index: number };
 

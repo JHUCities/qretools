@@ -366,6 +366,7 @@ export const makeGitHubStore = (
 				});
 			return ok({
 				login: data.viewer.login,
+				avatarUrl: data.viewer.avatarUrl,
 				canWrite: ["WRITE", "MAINTAIN", "ADMIN"].includes(
 					data.repository?.viewerPermission ?? "",
 				),
@@ -561,7 +562,7 @@ interface Entry {
 type Tree = { readonly entries?: readonly Entry[] } | null;
 
 interface WhoData {
-	readonly viewer: { readonly login: string };
+	readonly viewer: { readonly login: string; readonly avatarUrl: string };
 	readonly repository: {
 		readonly viewerPermission: string | null;
 		readonly defaultBranchRef: { readonly name: string } | null;
@@ -586,7 +587,7 @@ interface BankData {
 }
 
 const WHO_QUERY = `query Who($owner: String!, $repo: String!) {
-  viewer { login }
+  viewer { login avatarUrl(size: 64) }
   repository(owner: $owner, name: $repo) { viewerPermission defaultBranchRef { name } }
 }`;
 

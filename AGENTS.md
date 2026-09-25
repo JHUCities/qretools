@@ -888,10 +888,8 @@ field is gone: the branch is not a choice, it follows from who is signed in; a b
 stored by an older version is read and dropped. Development and headless checks use the
 checker's own branch, never `sandbox`. The token-paste fallback is off in
 `.env.development`; `pnpm dev:verify` (`vite --mode verify`, port 5299, `.env.verify`)
-turns it on for scripted checks only. The top bar shows the branch as Primer's
-`BranchName` (linking to it on GitHub once it exists), "N behind main" as a muted link,
-and "Propose changes" as a small `LinkButton` with the pull-request icon, the way
-github.com offers "Compare & pull request".
+turns it on for scripted checks only. The branch and "Propose changes" now live
+at the top of the sidebar (see "The header follows github.com").
 
 **No download or upload (owner, 2026-09-25).** The YAML and DDI download buttons and
 "Upload YAML" are gone (Msgs `downloadRequested`, `filesUploaded`, Cmd `download`). Files
@@ -909,6 +907,25 @@ header's description appears only for "Saving also saves …". Nothing to save n
 explanation. One label: `draft` (never saved), `unsaved` (edited), none when saved and
 unchanged; "in bank" was wrong once saves went to the author's branch. The
 default-branch check in `writeBlocked` is gone: the branch is always `qretools/<login>`.
+
+**The header follows github.com (owner, 2026-09-25).** Left: `qretools`, then
+`owner / repo` (the repository a link to GitHub; the owner hidden on narrow screens; the
+context truncates rather than wrap the row). Then the status live region
+(`sessionStatus`, pure, beside `writeBlocked`, tested so that a blocked write always has
+a reason there; empty in the steady state, always mounted so it announces). Right: "New"
+and the account: the Primer `Avatar` (GraphQL `viewer.avatarUrl`) opening a menu with
+"Signed in as", "Your branch on GitHub", "Change bank…" and "Sign out"; "Sign in" before
+connecting, nothing while connecting. The Bank button is gone; its dialog is titled
+"Sign in" or "Change bank". The sidebar opens with the branch (`BranchName`, "N behind
+main") and, only when the branch has something to propose, a compact info `Banner`
+with "Propose changes", GitHub's "Compare & pull request". A bank that fails to load is
+a state (`loading: failed{failure}`), said in the status with "Try again"
+(`bankReloadRequested`: reloads as the same session, never reconnects); before, it read
+"Loading the bank from GitHub…" forever. The Session no longer stores the branch: it is
+`ownBranch(login)`, derived wherever it is needed, so save-is-not-publish is structural;
+the tests assert every commit targets `qretools/<login>`. Before-pass review (2026-09-25) supplied
+the failed-load state, the invariant test and the anchor choice (Primer `Button`, not a
+native one).
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
@@ -942,8 +959,9 @@ rejected: it needs the secret and would keep a second token state): renewal on d
 five minutes before expiry, once for concurrent callers, under a Web Lock
 (`navigator.locks`) so tabs never spend the single-use refresh token twice. One rule in
 `update` (`sessionLapsed`): any reply failing with `auth` ends the session, forgets the
-credentials and clears a pending link; working copies stay. The Bank panel offers "Sign
-in with GitHub"; "Connect with token" only under the flag. Fixed on the way: clearing
+credentials and clears a pending link; working copies stay. The Bank dialog (now "Sign in"
+or "Change bank", from the account menu) offers "Sign in with GitHub"; "Connect with
+token" only under the flag. Fixed on the way: clearing
 "Your branch" now means the author's own branch instead of keeping the old value. After-pass: Back through GitHub's redirect replays a
 callback after a successful sign-in (same state, record already used), so **a refused
 callback is only a message** (`Flags.signInFailure`, listed in `failures`): it never

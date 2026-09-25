@@ -54,7 +54,7 @@ export function BankDialog({
 	const config = signInSetUp;
 	return (
 		<Dialog
-			title="Bank"
+			title={session.kind === "connected" ? "Change bank" : "Sign in"}
 			onClose={close}
 			footerButtons={[
 				{ buttonType: "default", content: "Close", onClick: close },
@@ -155,6 +155,14 @@ export function BankDialog({
 					onDisconnect={() => dispatch({ kind: "disconnected" })}
 				/>
 				{bank.kind === "loading" && <p>Loading the bank…</p>}
+				{bank.kind === "failed" && (
+					<Banner
+						flush
+						variant="critical"
+						title="The bank did not load."
+						description={bank.failure.message}
+					/>
+				)}
 				{bank.kind === "loaded" && (
 					<p>
 						Bank loaded. Shared scales, universes, instructions and missing
@@ -213,7 +221,7 @@ function SessionLine({
 						? "with write access."
 						: "read access only: you can browse and draft."}{" "}
 					<Button size="small" onClick={onDisconnect}>
-						Disconnect
+						Sign out
 					</Button>
 				</p>
 			);

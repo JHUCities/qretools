@@ -100,10 +100,10 @@ export function FileHeader({
 					{on.move !== undefined && (
 						<Button
 							size="small"
-							inactive={q.base === undefined || !canWrite}
-							aria-disabled={q.base === undefined || !canWrite || undefined}
+							inactive={!canWrite}
+							aria-disabled={!canWrite || undefined}
 							aria-describedby={why}
-							onClick={when(q.base !== undefined && canWrite, on.move)}
+							onClick={when(canWrite, on.move)}
 						>
 							Move…
 						</Button>

@@ -576,15 +576,13 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				];
 			{
-				const { login, canWrite, defaultBranch } = msg.result.value;
+				const { login, avatarUrl, canWrite, defaultBranch } = msg.result.value;
 				const session = {
 					kind: "connected" as const,
 					login,
+					avatarUrl,
 					canWrite,
 					defaultBranch,
-					// Saves always go to the author's own branch; the bank changes only
-					// through a pull request (AGENTS.md, save is not publish).
-					branch: ownBranch(login),
 				};
 				return [
 					{ ...model, session, loading: { kind: "loading" } },
@@ -597,8 +595,7 @@ function step(model: Model, msg: Msg): Step {
 				return [
 					compact({
 						...model,
-						loading: { kind: "bundled" } as const,
-						failures: [...model.failures, msg.result.error],
+						loading: { kind: "failed", failure: msg.result.error } as const,
 						pendingLink: undefined,
 					}),
 					[],
@@ -625,6 +622,13 @@ function step(model: Model, msg: Msg): Step {
 					: openLink(loaded, model.pendingLink);
 			return persist([opened, cmds]);
 		}
+
+		case "bankReloadRequested":
+			if (model.session.kind !== "connected") return [model, []];
+			return [
+				{ ...model, loading: { kind: "loading" } },
+				[{ kind: "loadBank", target: targetOf(model.settings, model.session) }],
+			];
 
 		case "disconnected":
 			return [
@@ -840,7 +844,7 @@ export function linkOf(model: Model): string | undefined {
 	const own =
 		model.loading.kind === "loaded" && model.loading.from === "default"
 			? model.session.defaultBranch
-			: model.session.branch;
+			: ownBranch(model.session.login);
 	const { screen } = model;
 	if (screen.kind === "foreign")
 		return formatLink({ repo, branch: screen.branch, file: screen.path });
@@ -869,7 +873,7 @@ export function hrefOf(model: Model, f: Entry): string | undefined {
 		branch:
 			model.loading.from === "default"
 				? model.session.defaultBranch
-				: model.session.branch,
+				: ownBranch(model.session.login),
 		file: f.base.path,
 	});
 }
@@ -910,7 +914,7 @@ function openLink(model: Model, link: Link): Step {
 		model.session.kind === "connected" ? model.session : undefined;
 	const ownBranches = session
 		? [
-				session.branch,
+				ownBranch(session.login),
 				...(loaded &&
 				model.loading.kind === "loaded" &&
 				model.loading.from === "default"
@@ -922,10 +926,7 @@ function openLink(model: Model, link: Link): Step {
 	// Your own copy answers a link to your own branch at once, even before the load;
 	// any other branch (the default one included) waits, since whose version it is
 	// cannot be known until their blob is.
-	if (
-		own !== undefined &&
-		(ownBranches.includes(link.branch) || session?.branch === link.branch)
-	)
+	if (own !== undefined && ownBranches.includes(link.branch))
 		return [
 			compact({
 				...model,
@@ -1022,7 +1023,8 @@ const current = (model: Model): Entry | undefined =>
 export function writeBlocked(model: Model): string | undefined {
 	if (model.session.kind !== "connected") return "Connect to the bank to save";
 	if (!model.session.canWrite) return "Read access only";
-	if (model.loading.kind !== "loaded") return "Checking GitHub…";
+	if (model.loading.kind === "failed") return "The bank did not load";
+	if (model.loading.kind !== "loaded") return "Loading the bank…";
 	// One commit at a time: two in flight naming the same file would make the second
 	// look stale for a save that worked. Commits to one branch are serial anyway.
 	if (
@@ -1032,6 +1034,28 @@ export function writeBlocked(model: Model): string | undefined {
 	)
 		return "Saving…";
 	return undefined;
+}
+
+/**
+ * The top bar's status: what the session is doing, or why nothing can be written.
+ * Empty in the steady state (connected, loaded, writable, idle), since the account
+ * and the repository already say who and where. A file's inactive write buttons point
+ * at it, so whenever `writeBlocked` gives a reason, this says one (tested).
+ */
+export function sessionStatus(model: Model): string | undefined {
+	const { session, loading } = model;
+	switch (session.kind) {
+		case "anonymous":
+			return "Not connected: drafts stay in this browser";
+		case "connecting":
+			return "Connecting to GitHub…";
+		case "failed":
+			return session.failure.message;
+		case "connected":
+			return loading.kind === "failed"
+				? `The bank did not load: ${loading.failure.message}`
+				: writeBlocked(model);
+	}
 }
 
 /** The author's own branch: each author works apart and proposes with a pull request. */
@@ -1045,7 +1069,7 @@ const targetOf = (
 ): BranchTarget => ({
 	owner: settings.owner,
 	repo: settings.repo,
-	branch: session.branch,
+	branch: ownBranch(session.login),
 	defaultBranch: session.defaultBranch,
 });
 
