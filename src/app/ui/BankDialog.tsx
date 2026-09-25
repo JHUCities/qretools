@@ -183,6 +183,7 @@ export function BankDialog({
 				)}
 				{failures.map((f, i) => (
 					<Banner
+						flush
 						key={`${f.kind}:${f.message}`}
 						variant="critical"
 						title={f.message}
@@ -223,6 +224,7 @@ function SessionLine({
 		case "failed":
 			return (
 				<Banner
+					flush
 					variant="critical"
 					title={session.failure.message}
 					description={
