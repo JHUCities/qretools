@@ -122,6 +122,19 @@ export function BankDialog({
 						empty for your own branch, created on your first save.
 					</FormControl.Caption>
 				</FormControl>
+				{config?.appSlug !== undefined && (
+					<p className="quiet">
+						Signing in works for repositories where the{" "}
+						<a
+							href={`https://github.com/apps/${config.appSlug}/installations/new`}
+							target="_blank"
+							rel="noreferrer"
+						>
+							{config.appSlug} app is installed
+						</a>{" "}
+						and you have access.
+					</p>
+				)}
 				{config === undefined && (
 					<p className="fg-attention">
 						Sign-in with GitHub is not set up for this build.
