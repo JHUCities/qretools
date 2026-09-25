@@ -849,7 +849,8 @@ saved version (`base.text`) at the new path, and a delete of the old path with n
 (`Change.id` is optional: a delete without one removes the path on GitHub only, never a
 working file). Like `git mv`, unsaved edits stay unsaved and the filename never
 changes. After the commit the base and GitHub's copy move; the link is replaced in
-place. Drag and drop was evaluated and not built (mouse only; see FEATURES.md).
+place. Drag and drop was evaluated and not built: mouse only, and the explicit move is
+simpler (owner, 2026-09-25).
 
 **Links after-pass (2026-09-25).** The address bar is never overwritten while a link is
 being opened: `linkOf` is the pending link while there is one, and undefined until this

@@ -1,4 +1,5 @@
-/* Layout and the previews; colours, spacing and type come from Primer's tokens. */
+/* Layout and the previews; colours, spacing, type and breakpoints come from Primer's tokens. */
+@import "@primer/primitives/dist/css/functional/size/viewport.css";
 body {
 	margin: 0;
 	background: var(--bgColor-default);
@@ -16,16 +17,20 @@ body {
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr);
 }
-/* The sidebar takes Primer PageLayout's `medium` pane widths at Primer's breakpoints. */
+/*
+ * The sidebar's width: one named design decision, taken from Primer PageLayout's
+ * `medium` pane (256px, wider on wide screens). PageLayout keeps its pane widths
+ * internal rather than publishing them as tokens, so they are named here, once.
+ */
 .workspace {
-	--sidebar-width: 256px;
+	--sidebar-width: 16rem;
 	display: grid;
 	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 	min-height: 0;
 }
-@media (min-width: 1012px) {
+@media (--viewportRange-wide) {
 	.workspace {
-		--sidebar-width: 296px;
+		--sidebar-width: 18.5rem;
 	}
 }
 .sidebar {
@@ -40,8 +45,8 @@ body {
 	display: flex;
 	flex-direction: column;
 }
-/* Narrow screens stack, as Primer's layout does below its medium breakpoint. */
-@media (max-width: calc(768px - 0.02px)) {
+/* Narrow screens stack, as Primer's layout does in its narrow viewport range. */
+@media (--viewportRange-narrow) {
 	.workspace {
 		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: auto minmax(0, 1fr);
