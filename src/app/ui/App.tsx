@@ -17,6 +17,7 @@ import { useApp, useEnv, useModel } from "./AppContext.js";
 import { BankDialog } from "./BankDialog.js";
 import { Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
+import { ExternalLink } from "./ExternalLink.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
@@ -267,24 +268,14 @@ function BranchLinks({ model }: { model: Model }) {
 	return (
 		<>
 			{loading.proposable && (
-				<a
-					className="topbar-link"
-					href={compare}
-					target="_blank"
-					rel="noreferrer"
-				>
+				<ExternalLink href={compare}>
 					Propose your changes on GitHub
-				</a>
+				</ExternalLink>
 			)}
 			{loading.behindBy > 0 && (
-				<a
-					className="topbar-link quiet"
-					href={compare}
-					target="_blank"
-					rel="noreferrer"
-				>
+				<ExternalLink href={compare} muted>
 					{loading.behindBy} behind {session.defaultBranch}: update on GitHub
-				</a>
+				</ExternalLink>
 			)}
 		</>
 	);

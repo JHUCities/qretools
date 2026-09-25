@@ -19,7 +19,8 @@ import type {
 } from "../../core/render.js";
 import type { DdiSchema } from "../model.js";
 
-type OnTarget = (target: Target) => void;
+/** Where a click on a hole or finding goes; absent in a read-only view, where nothing is clickable. */
+type OnTarget = ((target: Target) => void) | undefined;
 
 /** Messages mark field names with backticks (a core/shell convention); show those as code. */
 export function inlineCode(text: string): ReactNode[] {
@@ -31,12 +32,14 @@ export function inlineCode(text: string): ReactNode[] {
 	return out;
 }
 
+/** A hole in a preview: a button to its place in the source, or plain text where there is no source to go to. */
 function HoleButton({ hole, onTarget }: { hole: Hole; onTarget: OnTarget }) {
+	if (onTarget === undefined)
+		return <span className="hole">{hole.prompt}</span>;
 	return (
 		<button
 			type="button"
 			className="hole"
-			title="Go to this place in the source"
 			onClick={() => onTarget({ path: hole.path, severity: "hole" })}
 		>
 			{hole.prompt}
@@ -94,7 +97,7 @@ export function Respondent({
 	onTarget,
 }: {
 	view: RespondentView;
-	onTarget: OnTarget;
+	onTarget?: OnTarget;
 }) {
 	return (
 		<fieldset className="respondent">
@@ -114,7 +117,7 @@ function RespondentInput({
 	onTarget,
 }: {
 	input: Input;
-	onTarget: OnTarget;
+	onTarget?: OnTarget;
 }) {
 	switch (input.kind) {
 		case "hole":
@@ -163,7 +166,7 @@ export function Codebook({
 	onTarget,
 }: {
 	view: CodebookView;
-	onTarget: OnTarget;
+	onTarget?: OnTarget;
 }) {
 	return (
 		<div className="codebook">
@@ -211,7 +214,7 @@ export function Findings({
 	onTarget,
 }: {
 	findings: readonly Finding[];
-	onTarget: OnTarget;
+	onTarget?: OnTarget;
 }) {
 	if (findings.length === 0)
 		return <p className="quiet">Nothing to fill in, fix, or reconsider.</p>;
@@ -220,15 +223,19 @@ export function Findings({
 			{findings.map((f, i) => (
 				// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
 				<li key={i}>
-					<button
-						type="button"
-						className={`finding ${f.severity}`}
-						onClick={() => onTarget(f)}
-					>
-						<span className="sev">{f.severity}</span>
-						<span className="msg">{inlineCode(f.message)}</span>
-						{f.hint !== undefined && <span className="hint">{f.hint}</span>}
-					</button>
+					{onTarget === undefined ? (
+						<div className={`finding ${f.severity}`}>
+							<FindingBody f={f} />
+						</div>
+					) : (
+						<button
+							type="button"
+							className={`finding ${f.severity}`}
+							onClick={() => onTarget(f)}
+						>
+							<FindingBody f={f} />
+						</button>
+					)}
 				</li>
 			))}
 		</ul>
@@ -281,6 +288,16 @@ function ResolvedText({ value }: { value: Resolved }) {
 		<>
 			{value.text}
 			{value.ref !== undefined && <span className="ref">{value.ref}</span>}
+		</>
+	);
+}
+
+function FindingBody({ f }: { f: Finding }) {
+	return (
+		<>
+			<span className="sev">{f.severity}</span>
+			<span className="msg">{inlineCode(f.message)}</span>
+			{f.hint !== undefined && <span className="hint">{f.hint}</span>}
 		</>
 	);
 }

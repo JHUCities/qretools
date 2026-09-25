@@ -3,8 +3,8 @@
  * everything derived from it beside it. Bank-level findings (a variable defined
  * twice) come from the index and are shown on the file like any other finding.
  */
-import { Button, Label, PageHeader } from "@primer/react";
-import { memo, useMemo } from "react";
+import { Button, Label, Link, PageHeader } from "@primer/react";
+import { memo, type ReactNode, useMemo } from "react";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
 import { inspect } from "../../core/inspect.js";
@@ -24,7 +24,7 @@ import {
 	type SchemeEntry,
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf } from "../sync.js";
-import { writeBlocked } from "../update.js";
+import { hrefOf, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
@@ -317,13 +317,12 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 												: evaluations.get(q, agency, env).draft.name;
 										return (
 											<li key={id}>
-												<button
-													type="button"
-													className="linklike"
-													onClick={() => dispatch({ kind: "fileOpened", id })}
+												<FileLink
+													id={id}
+													onOpen={() => dispatch({ kind: "fileOpened", id })}
 												>
 													{name ?? `(no name) ${id}`}
-												</button>
+												</FileLink>
 											</li>
 										);
 									})}
@@ -388,21 +387,19 @@ function Inspector({
 							: `“${m.value.text}”`}
 						, used by {users} question{users === 1 ? "" : "s"}.{" "}
 						{file && (
-							<button
-								type="button"
-								className="linklike"
-								onClick={() => dispatch({ kind: "fileOpened", id: file.id })}
+							<FileLink
+								id={file.id}
+								onOpen={() => dispatch({ kind: "fileOpened", id: file.id })}
 							>
-								Open it
-							</button>
+								Open {m.name}
+							</FileLink>
 						)}
 					</p>
 				) : (
 					// The hole below says the name is unknown; this offers the fix.
 					<p>
-						<button
-							type="button"
-							className="linklike"
+						<Button
+							variant="link"
 							onClick={() =>
 								dispatch({
 									kind: "schemeCreateOpened",
@@ -412,7 +409,7 @@ function Inspector({
 							}
 						>
 							New {m.scheme} <code>{m.name}</code>
-						</button>
+						</Button>
 					</p>
 				))}
 			{at.names !== undefined && m === undefined && (
@@ -537,7 +534,7 @@ export function ForeignView({
 								Findings <StatusBadge status={status(findings)} />
 							</h3>
 							<div className="pane-body">
-								<Findings findings={findings} onTarget={() => {}} />
+								<Findings findings={findings} />
 							</div>
 						</article>
 						{ev && (
@@ -545,13 +542,13 @@ export function ForeignView({
 								<article className="pane">
 									<h3>As the respondent sees it</h3>
 									<div className="pane-body">
-										<Respondent view={ev.respondent} onTarget={() => {}} />
+										<Respondent view={ev.respondent} />
 									</div>
 								</article>
 								<article className="pane">
 									<h3>Codebook entry</h3>
 									<div className="pane-body">
-										<Codebook view={ev.codebook} onTarget={() => {}} />
+										<Codebook view={ev.codebook} />
 									</div>
 								</article>
 							</>
@@ -560,5 +557,32 @@ export function ForeignView({
 				</div>
 			)}
 		</div>
+	);
+}
+
+/**
+ * Opening a file is navigation, so it is a link (`<a href="#…">`, which the browser's
+ * hashchange opens, and which can open in a new tab). A draft has no address on GitHub
+ * yet, so it opens with a button instead.
+ */
+function FileLink({
+	id,
+	onOpen,
+	children,
+}: {
+	id: Id;
+	onOpen: () => void;
+	children: ReactNode;
+}) {
+	const href = useModel((m) => {
+		const f = fileOf(m, id);
+		return f === undefined ? undefined : hrefOf(m, f);
+	});
+	return href !== undefined ? (
+		<Link href={href}>{children}</Link>
+	) : (
+		<Button variant="link" onClick={onOpen}>
+			{children}
+		</Button>
 	);
 }

@@ -100,7 +100,7 @@ describe("Browser", () => {
 		});
 	});
 
-	it("shows shared elements by kind; an empty kind offers to create one", () => {
+	it("shows shared elements by kind, with how many questions use each", () => {
 		const dispatch = vi.fn();
 		render(
 			<Browser
@@ -142,12 +142,5 @@ describe("Browser", () => {
 			screen.getAllByRole("treeitem", { name: /agree4/ })[0] as HTMLElement,
 		);
 		expect(dispatch).toHaveBeenCalledWith({ kind: "fileOpened", id: 7 });
-		fireEvent.click(
-			screen.getAllByRole("treeitem", { name: /None yet/ })[0] as HTMLElement,
-		);
-		expect(dispatch).toHaveBeenCalledWith({
-			kind: "schemeCreateOpened",
-			scheme: "universe",
-		});
 	});
 });

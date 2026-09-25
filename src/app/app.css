@@ -94,10 +94,6 @@ body {
 	flex-direction: column;
 	gap: 8px;
 }
-.topbar-link {
-	font-size: 13px;
-	white-space: nowrap;
-}
 .inspector {
 	border-top: 1px solid var(--borderColor-default);
 	padding: 8px 12px;
@@ -128,17 +124,6 @@ body {
 .used-by {
 	margin: 0;
 	padding-left: 18px;
-}
-.linklike {
-	padding: 0;
-	border: 0;
-	background: none;
-	color: var(--fgColor-accent);
-	font: inherit;
-	cursor: pointer;
-}
-.linklike:hover {
-	text-decoration: underline;
 }
 .leaf-marks {
 	display: inline-flex;

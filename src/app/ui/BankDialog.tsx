@@ -17,6 +17,7 @@ import { TOKEN_PASTE } from "../flags.js";
 import type { Bank, Dispatch, Session } from "../model.js";
 import type { BankSettings, Failure } from "../storage.js";
 import { useApp } from "./AppContext.js";
+import { ExternalLink } from "./ExternalLink.js";
 import { inlineCode } from "./Previews.js";
 
 export function BankDialog({
@@ -125,13 +126,11 @@ export function BankDialog({
 				{config?.appSlug !== undefined && (
 					<p className="quiet">
 						Signing in works for repositories where the{" "}
-						<a
+						<ExternalLink
 							href={`https://github.com/apps/${config.appSlug}/installations/new`}
-							target="_blank"
-							rel="noreferrer"
 						>
 							{config.appSlug} app is installed
-						</a>{" "}
+						</ExternalLink>{" "}
 						and you have access.
 					</p>
 				)}

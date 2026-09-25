@@ -165,30 +165,20 @@ function SectionItem({
 				<span className="quiet">{section.leaves.length}</span>
 			</TreeView.TrailingVisual>
 			<TreeView.SubTree>
-				{section.leaves.length === 0 ? (
+				{/* A tree node navigates; creating is the New menu's, never a node's. */}
+				{section.leaves.map((leaf) => (
 					<TreeView.Item
-						id={`${section.key}:new`}
-						onSelect={() =>
-							dispatch({ kind: "schemeCreateOpened", scheme: section.kind })
-						}
+						key={leaf.id}
+						id={`s:${leaf.id}`}
+						current={leaf.id === open}
+						onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
 					>
-						<span className="quiet">None yet. New…</span>
+						{leaf.name}
+						<TreeView.TrailingVisual>
+							<Marks leaf={leaf} />
+						</TreeView.TrailingVisual>
 					</TreeView.Item>
-				) : (
-					section.leaves.map((leaf) => (
-						<TreeView.Item
-							key={leaf.id}
-							id={`s:${leaf.id}`}
-							current={leaf.id === open}
-							onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
-						>
-							{leaf.name}
-							<TreeView.TrailingVisual>
-								<Marks leaf={leaf} />
-							</TreeView.TrailingVisual>
-						</TreeView.Item>
-					))
-				)}
+				))}
 			</TreeView.SubTree>
 		</TreeView.Item>
 	);

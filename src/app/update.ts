@@ -901,6 +901,28 @@ export function linkOf(model: Model): string | undefined {
 	);
 }
 
+/**
+ * A link to a working file, for an `<a href>`: undefined while nothing names the branch
+ * (not connected, not loaded) or for a draft, which is not on GitHub. The same rule as
+ * `linkOf`: the branch the file was read from.
+ */
+export function hrefOf(model: Model, f: Entry): string | undefined {
+	if (
+		model.session.kind !== "connected" ||
+		model.loading.kind !== "loaded" ||
+		f.base === undefined
+	)
+		return undefined;
+	return formatLink({
+		repo: `${model.settings.owner}/${model.settings.repo}`,
+		branch:
+			model.loading.from === "default"
+				? model.session.defaultBranch
+				: model.session.branch,
+		file: f.base.path,
+	});
+}
+
 /** Whether a different file is open: a navigation, which the browser should record. */
 const openChanged = (a: Model, b: Model): boolean =>
 	a.screen.kind !== b.screen.kind ||
