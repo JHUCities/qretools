@@ -327,6 +327,13 @@ emit a Universe item and resolve the link in role 2.
 
 ## Lookahead (not to build yet; role 1 must not preclude it)
 
+- **"Asked" is derived from surveys, never stored on a question (owner, 2026-09-25).**
+  The BAS team speaks of candidate questions "promoted" to the bank when a survey uses
+  them, after non-linear negotiation. There is one bank of questions, all available to
+  any survey; a fielded survey is the record of what was asked, so "has this been asked,
+  where" is a query over surveys, and promotion is inclusion in a fielded survey. The
+  migrated `legacy.surveys_used` is that record in v1 form. No candidate tier, folder or
+  status field.
 - **Surveys are a real DSL, not YAML.** Prior art: the Language Workbench Challenge's
   QL. A Lezer grammar (incremental, error-tolerant) gives holes; types come from the
   question bank (code list → enum, select many → set, number → numeric); live
