@@ -3,9 +3,10 @@ import {
 	AlertIcon,
 	CheckCircleIcon,
 	InfoIcon,
-	IssueOpenedIcon,
+	IssueDraftIcon,
+	XCircleIcon,
 } from "@primer/octicons-react";
-import { Label } from "@primer/react";
+import { ActionList, Label } from "@primer/react";
 import { memo, type ReactNode } from "react";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Status, Target } from "../../core/findings.js";
@@ -96,7 +97,7 @@ export function StatusIcon({ status }: { status: Status }) {
 	return status.errors > 0 ? (
 		<AlertIcon size={14} className="fg-danger" aria-label="errors" />
 	) : (
-		<IssueOpenedIcon size={14} className="fg-attention" aria-label="holes" />
+		<IssueDraftIcon size={14} className="fg-attention" aria-label="holes" />
 	);
 }
 
@@ -217,6 +218,19 @@ export function Codebook({
 	);
 }
 
+/** Each severity's icon and colour: a hole is a dashed circle, an invitation, never red. */
+const SEVERITY = {
+	hole: { Icon: IssueDraftIcon, className: "fg-attention" },
+	error: { Icon: XCircleIcon, className: "fg-danger" },
+	warning: { Icon: AlertIcon, className: "fg-attention" },
+	info: { Icon: InfoIcon, className: "fg-accent" },
+} as const;
+
+/**
+ * The findings: in an editable view, Primer's ActionList, each item taking the author
+ * to its place in the source; severity is an icon with its name, never colour alone.
+ * In a read-only view, a plain list: nothing there is an action.
+ */
 export function Findings({
 	findings,
 	onTarget,
@@ -226,28 +240,37 @@ export function Findings({
 }) {
 	if (findings.length === 0)
 		return <p className="quiet">Nothing to fill in, fix, or reconsider.</p>;
+	if (onTarget === undefined)
+		return (
+			<ul className="findings">
+				{findings.map((f, i) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
+					<li key={i} className="finding" data-severity={f.severity}>
+						<FindingBody f={f} />
+					</li>
+				))}
+			</ul>
+		);
 	return (
-		<ul className="findings">
-			{findings.map((f, i) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
-				<li key={i}>
-					{onTarget === undefined ? (
-						<div className="finding" data-severity={f.severity}>
-							<FindingBody f={f} />
-						</div>
-					) : (
-						<button
-							type="button"
-							className="finding"
-							data-severity={f.severity}
-							onClick={() => onTarget(f)}
-						>
-							<FindingBody f={f} />
-						</button>
-					)}
-				</li>
-			))}
-		</ul>
+		<ActionList aria-label="Findings" variant="full">
+			{findings.map((f, i) => {
+				const { Icon, className } = SEVERITY[f.severity];
+				return (
+					// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
+					<ActionList.Item key={i} onSelect={() => onTarget(f)}>
+						<ActionList.LeadingVisual>
+							<Icon className={className} aria-label={f.severity} />
+						</ActionList.LeadingVisual>
+						{inlineCode(f.message)}
+						{f.hint !== undefined && (
+							<ActionList.Description variant="block">
+								{f.hint}
+							</ActionList.Description>
+						)}
+					</ActionList.Item>
+				);
+			})}
+		</ActionList>
 	);
 }
 

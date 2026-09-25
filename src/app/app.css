@@ -338,12 +338,6 @@ button.hole {
 	margin: 0;
 	font: inherit;
 }
-button.finding {
-	cursor: pointer;
-}
-button.finding:hover {
-	background: var(--bgColor-muted);
-}
 .finding .sev {
 	min-width: 4em;
 	color: var(--edge);
