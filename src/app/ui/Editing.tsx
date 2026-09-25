@@ -163,6 +163,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						text={q.source}
 						diagnostics={diagnostics}
 						schema={evaluations.schema(env)}
+						label={`Question ${ev.draft.name ?? "(no name yet)"}: source (YAML)`}
 					/>
 					<Inspector q={q} ev={ev} index={index} />
 				</section>
@@ -251,6 +252,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 								? SCHEME_SCHEMAS.text
 								: SCHEME_SCHEMAS.labels
 						}
+						label={`${SINGULAR[e.kind]} ${e.name}: source (YAML)`}
 					/>
 				</section>
 				<section className="right">
@@ -520,6 +522,7 @@ export function ForeignView({
 										: SCHEME_SCHEMAS.labels
 							}
 							readOnly
+							label={`${whose(screen.branch)} of ${screen.path} (YAML, read only)`}
 						/>
 					</section>
 					<section className="right">

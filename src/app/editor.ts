@@ -7,9 +7,11 @@
  */
 import { startCompletion } from "@codemirror/autocomplete";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { Annotation, Compartment, EditorState, Prec } from "@codemirror/state";
 import { hoverTooltip, keymap } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion, yamlSchemaHover } from "codemirror-json-schema/yaml";
@@ -27,6 +29,8 @@ export interface EditorInputs {
 	readonly schema: object;
 	/** Another author's version, from a link: shown, never edited. */
 	readonly readOnly?: boolean;
+	/** The editor's accessible name, e.g. "Question source (YAML)". */
+	readonly label?: string;
 }
 
 export interface Editor {
@@ -45,6 +49,8 @@ export function createEditor(
 	let current: number | undefined;
 	let locked = false;
 	const readOnly = new Compartment();
+	const label = new Compartment();
+	let named = "Source";
 	const extensions = [
 		basicSetup,
 		yaml(),
@@ -56,7 +62,10 @@ export function createEditor(
 		stateExtensions(),
 		macCompletionKeys,
 		EditorView.lineWrapping,
-		holeTheme,
+		primerTheme,
+		primerHighlight,
+		// The accessible name of the text area, which changes with the file open.
+		label.of(EditorView.contentAttributes.of({ "aria-label": "Source" })),
 		readOnly.of(EditorState.readOnly.of(false)),
 		// `docChanged` is essential: setDiagnostics also triggers this listener.
 		EditorView.updateListener.of((u) => {
@@ -70,14 +79,30 @@ export function createEditor(
 	];
 	const view = new EditorView({ parent, extensions });
 	return {
-		sync({ id, text, diagnostics, schema: next, readOnly: lock = false }) {
+		sync({
+			id,
+			text,
+			diagnostics,
+			schema: next,
+			readOnly: lock = false,
+			label: name = "Source (YAML)",
+		}) {
 			if (id !== current) {
 				// A fresh state: new document, empty undo history, and the schema state
 				// starts over, so it must be pushed again below. So does read-only.
 				current = id;
 				schema = undefined;
 				locked = false;
+				named = "Source";
 				view.setState(EditorState.create({ doc: text, extensions }));
+			}
+			if (name !== named) {
+				named = name;
+				view.dispatch({
+					effects: label.reconfigure(
+						EditorView.contentAttributes.of({ "aria-label": name }),
+					),
+				});
 			}
 			if (lock !== locked) {
 				locked = lock;
@@ -126,15 +151,91 @@ const macCompletionKeys = Prec.highest(
 	]),
 );
 
-/** Holes are invitations, not mistakes: dashed and tinted, never red. */
-const holeTheme = EditorView.theme({
+/**
+ * The editor in Primer's own terms: every colour is one of Primer's `--codeMirror-*`
+ * (or overlay and border) tokens, which are CSS variables, so one theme serves light
+ * and dark alike. Holes are invitations, not mistakes: dashed and tinted, never red.
+ */
+const primerTheme = EditorView.theme({
+	"&": {
+		height: "100%",
+		color: "var(--codeMirror-fgColor)",
+		backgroundColor: "var(--codeMirror-bgColor)",
+		fontSize: "var(--text-codeBlock-size)",
+	},
+	".cm-scroller": {
+		fontFamily: "var(--fontStack-monospace)",
+		lineHeight: "var(--text-codeBlock-lineHeight)",
+	},
+	".cm-content": { caretColor: "var(--codeMirror-cursor-fgColor)" },
+	".cm-cursor, .cm-dropCursor": {
+		borderLeftColor: "var(--codeMirror-cursor-fgColor)",
+	},
+	"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+		{ backgroundColor: "var(--codeMirror-selection-bgColor)" },
+	".cm-activeLine": { backgroundColor: "var(--codeMirror-activeline-bgColor)" },
+	".cm-gutters": {
+		color: "var(--codeMirror-lineNumber-fgColor)",
+		backgroundColor: "var(--codeMirror-gutters-bgColor)",
+		borderRight: "var(--borderWidth-thin) solid var(--borderColor-default)",
+	},
+	".cm-activeLineGutter": {
+		color: "var(--codeMirror-gutterMarker-fgColor-default)",
+		backgroundColor: "var(--codeMirror-activeline-bgColor)",
+	},
+	".cm-matchingBracket, &.cm-focused .cm-matchingBracket": {
+		color: "var(--codeMirror-matchingBracket-fgColor)",
+		backgroundColor: "transparent",
+		outline: "var(--borderWidth-thin) solid var(--borderColor-default)",
+	},
+	".cm-tooltip": {
+		color: "var(--fgColor-default)",
+		backgroundColor: "var(--overlay-bgColor)",
+		border: "var(--borderWidth-thin) solid var(--borderColor-default)",
+		borderRadius: "var(--borderRadius-medium)",
+		boxShadow: "var(--shadow-floating-small)",
+	},
+	".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+		color: "var(--fgColor-default)",
+		backgroundColor: "var(--bgColor-accent-muted)",
+	},
+	".cm-panels": {
+		color: "var(--fgColor-default)",
+		backgroundColor: "var(--bgColor-muted)",
+	},
 	".cm-lintRange-hint": {
 		backgroundImage: "none",
 		backgroundColor: "var(--bgColor-attention-muted)",
-		borderBottom: "2px dashed var(--fgColor-attention)",
+		borderBottom: "var(--borderWidth-thick) dashed var(--fgColor-attention)",
 	},
 	".cm-lintPoint-hint:after": { borderBottomColor: "var(--fgColor-attention)" },
 	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },
-	"&": { height: "100%", fontSize: "14px" },
-	".cm-scroller": { fontFamily: "var(--fontStack-monospace)" },
 });
+
+/** Syntax colours from Primer's `--codeMirror-syntax-*` tokens (YAML needs few). */
+const primerHighlight = syntaxHighlighting(
+	HighlightStyle.define([
+		{ tag: tags.comment, color: "var(--codeMirror-syntax-fgColor-comment)" },
+		{
+			tag: [tags.propertyName, tags.definition(tags.propertyName)],
+			color: "var(--codeMirror-syntax-fgColor-entity)",
+		},
+		{
+			tag: [tags.string, tags.special(tags.string), tags.content],
+			color: "var(--codeMirror-syntax-fgColor-string)",
+		},
+		{
+			tag: [tags.number, tags.bool, tags.null, tags.atom],
+			color: "var(--codeMirror-syntax-fgColor-constant)",
+		},
+		{
+			tag: [tags.keyword, tags.typeName, tags.labelName],
+			color: "var(--codeMirror-syntax-fgColor-keyword)",
+		},
+		{
+			tag: [tags.punctuation, tags.separator, tags.meta],
+			color: "var(--codeMirror-syntax-fgColor-support)",
+		},
+		{ tag: tags.invalid, color: "var(--fgColor-danger)" },
+	]),
+);

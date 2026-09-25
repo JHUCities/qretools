@@ -188,9 +188,6 @@ body {
 	min-width: 0;
 	min-height: 0;
 }
-.editor .cm-editor {
-	height: 100%;
-}
 .right {
 	min-height: 0;
 	overflow: auto;
