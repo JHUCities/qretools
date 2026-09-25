@@ -389,6 +389,55 @@ export const makeGitHubStore = (
 				: bank;
 		},
 
+		async readWithSchemes(target, path) {
+			const ref = target.branch;
+			const r = await graphql<{
+				repository: {
+					file: { oid: string; text: string | null } | null;
+					scales?: Tree;
+					universes?: Tree;
+					instructions?: Tree;
+					missing?: Entry["object"] | null;
+				} | null;
+			}>(FOREIGN_QUERY, {
+				owner,
+				repo,
+				at: `${ref}:${path}`,
+				scales: `${ref}:scales`,
+				universes: `${ref}:universes`,
+				instructions: `${ref}:instructions`,
+				missing: `${ref}:missing.yaml`,
+			});
+			if (!r.ok) return r;
+			const data = r.value.data?.repository;
+			const file = data?.file;
+			if (!data || typeof file?.text !== "string")
+				return err({
+					kind: "http",
+					status: 404,
+					message: `\`${path}\` is not on ${ref}.`,
+				});
+			const flat = (folder: string, tree: Tree | undefined) =>
+				(tree?.entries ?? []).flatMap((e) =>
+					blobFile(`${folder}/${e.name}`, e),
+				);
+			return ok({
+				file: { path, sha: file.oid, text: file.text },
+				schemes: [
+					...flat("scales", data.scales),
+					...flat("universes", data.universes),
+					...flat("instructions", data.instructions),
+					...(data.missing
+						? blobFile("missing.yaml", {
+								name: "missing.yaml",
+								type: "blob",
+								object: data.missing,
+							})
+						: []),
+				],
+			});
+		},
+
 		async read(target, path) {
 			const r = await graphql<{
 				repository: {
@@ -540,6 +589,15 @@ const WHO_QUERY = `query Who($owner: String!, $repo: String!) {
  */
 const FLAT =
 	"... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } }";
+const FOREIGN_QUERY = `query Foreign($owner: String!, $repo: String!, $at: String!, $scales: String!, $universes: String!, $instructions: String!, $missing: String!) {
+  repository(owner: $owner, name: $repo) {
+    file: object(expression: $at) { ... on Blob { oid text } }
+    scales: object(expression: $scales) { ${FLAT} }
+    universes: object(expression: $universes) { ${FLAT} }
+    instructions: object(expression: $instructions) { ${FLAT} }
+    missing: object(expression: $missing) { ... on Blob { oid text isBinary isTruncated } }
+  }
+}`;
 const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, $scales: String!, $universes: String!, $instructions: String!, $missing: String!) {
   repository(owner: $owner, name: $repo) {
     mine: ref(qualifiedName: $ref) { name }

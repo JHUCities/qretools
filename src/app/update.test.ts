@@ -1051,20 +1051,30 @@ describe("links", () => {
 			branch: "qretools/alice",
 			path: "questions/q/q.yaml",
 			result: ok({
-				path: "questions/q/q.yaml",
-				sha: "other",
-				text: "name: q\nnote: hers\n",
+				file: {
+					path: "questions/q/q.yaml",
+					sha: "other",
+					text: "name: q\nnote: hers\n",
+				},
+				schemes: [
+					{ path: "scales/yn.yaml", sha: "t", text: "labels:\n  1: Theirs\n" },
+				],
 			}),
 		});
 		expect(theirs.screen).toMatchObject({
 			kind: "foreign",
 			file: { sha: "other" },
+			// Their question reads against their branch's shared files.
+			schemes: { "scales/yn.yaml": { sha: "t" } },
 		});
 		const [same] = update(m, {
 			kind: "foreignLoaded",
 			branch: "qretools/alice",
 			path: "questions/q/q.yaml",
-			result: ok({ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" }),
+			result: ok({
+				file: { path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
+				schemes: [],
+			}),
 		});
 		expect(same.screen).toEqual({ kind: "editing", id: 1 });
 	});
@@ -1179,5 +1189,56 @@ describe("moving a question", () => {
 		expect(movedPath("questions/svy/dem_latx.yaml", "dem")).toBe(
 			"questions/dem/dem_latx.yaml",
 		);
+	});
+});
+
+describe("links while connecting", () => {
+	const link = formatLink({
+		repo: "JHUCities/bas-question-bank",
+		branch: "qretools/alice",
+		file: "questions/q/q.yaml",
+	});
+
+	it("a link being opened keeps the address until it resolves, through connecting and loading", () => {
+		const [waiting] = update(fresh(), { kind: "hashChanged", hash: link });
+		expect(waiting.pendingLink).toBeDefined();
+		const [connectedM, c1] = update(waiting, {
+			kind: "connected",
+			result: ok({ login: "iain", canWrite: true, defaultBranch: "main" }),
+		});
+		expect(c1.some((c) => c.kind === "setLink")).toBe(false);
+		const [, c2] = update(connectedM, {
+			kind: "bankLoaded",
+			result: loadOf([
+				{ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
+			]),
+		});
+		// Alice's branch: opened read only, the address still names her branch.
+		const setLink = c2.find((c) => c.kind === "setLink");
+		expect(
+			setLink === undefined ||
+				(setLink.kind === "setLink" && setLink.hash === link),
+		).toBe(true);
+	});
+
+	it("before the load, a link to another branch waits instead of opening your copy", () => {
+		const m = {
+			...withBank(connected(fresh()), [
+				bankQuestion(1, "questions/q/q.yaml", "name: q\n"),
+			]),
+			loading: { kind: "loading" as const },
+		};
+		const [waiting] = update(m, { kind: "hashChanged", hash: link });
+		expect(waiting.screen.kind).toBe("blank");
+		expect(waiting.pendingLink).toMatchObject({ branch: "qretools/alice" });
+		const own = formatLink({
+			repo: "JHUCities/bas-question-bank",
+			branch: "qretools/iain",
+			file: "questions/q/q.yaml",
+		});
+		expect(update(m, { kind: "hashChanged", hash: own })[0].screen).toEqual({
+			kind: "editing",
+			id: 1,
+		});
 	});
 });

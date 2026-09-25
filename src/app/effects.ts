@@ -179,7 +179,9 @@ export function createEffects(deps: Deps): Effects {
 					return;
 				case "readAt": {
 					const s = storeFor(cmd.target);
-					const reply = (result: Result<File, Failure>) =>
+					const reply = (
+						result: Result<{ file: File; schemes: readonly File[] }, Failure>,
+					) =>
 						dispatch({
 							kind: "foreignLoaded",
 							branch: cmd.target.branch,
@@ -187,7 +189,7 @@ export function createEffects(deps: Deps): Effects {
 							result,
 						});
 					if (!s) return reply(err(NO_TOKEN));
-					s.read(cmd.target, cmd.path).then(reply);
+					s.readWithSchemes(cmd.target, cmd.path).then(reply);
 					return;
 				}
 				default:

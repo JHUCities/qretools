@@ -830,7 +830,17 @@ saved version (`base.text`) at the new path, and a delete of the old path with n
 (`Change.id` is optional: a delete without one removes the path on GitHub only, never a
 working file). Like `git mv`, unsaved edits stay unsaved and the filename never
 changes. After the commit the base and GitHub's copy move; the link is replaced in
-place. Drag and drop was evaluated and not built (mouse only; see FEATURES.md). Notes for step 5 from the step 4 review: identify questions by a
+place. Drag and drop was evaluated and not built (mouse only; see FEATURES.md).
+
+**Links after-pass (2026-09-25).** The address bar is never overwritten while a link is
+being opened: `linkOf` is the pending link while there is one, and undefined until this
+session's load (whether the author's own branch exists is not known before it). Before
+the load only a link to the viewer's own branch opens their copy; any other branch,
+the default one included, waits, since whose version it is needs their blob. Another
+author's question reads against their branch's scheme files, fetched with the file in
+one request (`readWithSchemes`) and turned into an environment by `envOfRemote`: the
+viewer's unsaved edits never leak into someone else's read-only view. This is the first
+use of a remote environment. Notes for step 5 from the step 4 review: identify questions by a
 numeric `Id` with `nextId` in the Model (never by `name`, which may be a hole or a
 duplicate); `screen: list | editing{id}`; `init(flags)` with stored data parsed by a Zod
 schema, anything unparseable becoming a finding; `update` emits a `persist` Cmd and

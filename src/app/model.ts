@@ -10,7 +10,7 @@
 import { compact } from "../core/compact.js";
 import type { Finding, Range, Target } from "../core/findings.js";
 import type { Result } from "../core/result.js";
-import { type SchemeKind, schemeEnv } from "../core/schemes.js";
+import { kindAt, type SchemeKind, schemeEnv } from "../core/schemes.js";
 import type { Env, NamedScheme } from "../core/surface/env.js";
 import { parseScale, type Scales } from "../core/surface/scales.js";
 import choiceTemplate from "../templates/choice.yaml?raw";
@@ -109,6 +109,8 @@ export type Screen =
 			readonly branch: string;
 			readonly path: Path;
 			readonly file?: File;
+			/** That branch's scheme files: their question reads against these, never the viewer's. */
+			readonly schemes?: Remote["schemes"];
 	  };
 
 /** The bank browser beside the open question. Effective expansion is derived in tree.ts. */
@@ -199,7 +201,10 @@ export type Msg =
 			readonly kind: "foreignLoaded";
 			readonly branch: string;
 			readonly path: Path;
-			readonly result: Result<File, Failure>;
+			readonly result: Result<
+				{ readonly file: File; readonly schemes: readonly File[] },
+				Failure
+			>;
 	  }
 	| { readonly kind: "ddiSchemaLoaded"; readonly result: DdiSchema }
 	| { readonly kind: "listOpened" }
@@ -459,6 +464,18 @@ export function envOf(
 	return Object.keys(remoteSchemes).length === 0
 		? { ...env, scales: { ...EXAMPLE_SCALES, ...env.scales } }
 		: env;
+}
+
+/** The environment of a branch as GitHub has it: for reading another author's version. */
+export function envOfRemote(schemes: Remote["schemes"]): Env {
+	return schemeEnv(
+		Object.entries(schemes).flatMap(([path, blob]) => {
+			const at = kindAt(path);
+			return at === undefined || at.kind === "question"
+				? []
+				: [{ kind: at.kind, name: at.name, text: blob.text }];
+		}),
+	);
 }
 
 export const toPersisted = (model: Model): Persisted => ({

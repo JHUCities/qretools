@@ -79,6 +79,14 @@ export interface Store {
 	loadBank(target: BranchTarget): Promise<Result<Loaded, Failure>>;
 	read(target: BranchTarget, path: string): Promise<Result<File, Failure>>;
 	/**
+	 * Another author's file with the scheme files of their branch, in one request, so
+	 * their question reads as it does for them, never against the viewer's own edits.
+	 */
+	readWithSchemes(
+		target: BranchTarget,
+		path: string,
+	): Promise<Result<{ file: File; schemes: readonly File[] }, Failure>>;
+	/**
 	 * One commit of a change set on the target branch, creating the branch from the
 	 * default branch first if it does not exist. Every change states the blob sha it
 	 * expects at its path (null: nothing there); if any differs at the branch head,

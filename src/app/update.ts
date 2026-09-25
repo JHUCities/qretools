@@ -117,12 +117,18 @@ function step(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
-			const file = msg.result.value;
+			const { file } = msg.result.value;
 			// Their version is exactly the one you started from: open your own copy.
 			const own = claimant(model, file.path);
 			if (own?.base?.sha === file.sha)
 				return [{ ...model, screen: { kind: "editing", id: own.id } }, []];
-			return [{ ...model, screen: { ...screen, file } }, []];
+			const schemes = Object.fromEntries(
+				msg.result.value.schemes.map((f) => [
+					f.path,
+					{ sha: f.sha, text: f.text },
+				]),
+			);
+			return [{ ...model, screen: { ...screen, file, schemes } }, []];
 		}
 
 		case "ddiSchemaLoaded":
@@ -819,7 +825,13 @@ export function moveProblem(
  * names the default branch, which others can open.
  */
 export function linkOf(model: Model): string | undefined {
-	if (model.session.kind !== "connected") return undefined;
+	// A link being opened keeps its place in the address bar until it resolves, so a
+	// link that fails is still there to copy or report.
+	if (model.pendingLink !== undefined) return formatLink(model.pendingLink);
+	// Before the load, whether the author's own branch exists is unknown: leave the
+	// address alone rather than name a branch dishonestly.
+	if (model.session.kind !== "connected" || model.loading.kind !== "loaded")
+		return undefined;
 	const repo = `${model.settings.owner}/${model.settings.repo}`;
 	const own =
 		model.loading.kind === "loaded" && model.loading.from === "default"
@@ -881,8 +893,13 @@ function openLink(model: Model, link: Link): Step {
 			]
 		: [];
 	const own = link.file === undefined ? undefined : claimant(model, link.file);
-	// Your own copy answers any link to your branch, and, before the load, any link at all.
-	if (own !== undefined && (!loaded || ownBranches.includes(link.branch)))
+	// Your own copy answers a link to your own branch at once, even before the load;
+	// any other branch (the default one included) waits, since whose version it is
+	// cannot be known until their blob is.
+	if (
+		own !== undefined &&
+		(ownBranches.includes(link.branch) || session?.branch === link.branch)
+	)
 		return [
 			compact({
 				...model,

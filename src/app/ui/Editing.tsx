@@ -16,6 +16,7 @@ import {
 import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
 import {
+	envOfRemote,
 	fileOf,
 	type Id,
 	type Model,
@@ -447,7 +448,11 @@ export function ForeignView({
 	screen: Extract<Model["screen"], { kind: "foreign" }>;
 }) {
 	const { dispatch, evaluations } = useApp();
-	const env = useEnv();
+	// Their question reads against their branch's shared files, never your own edits.
+	const env = useMemo(
+		() => envOfRemote(screen.schemes ?? {}),
+		[screen.schemes],
+	);
 	const agency = useModel((m) => m.agency);
 	const own = useModel((m) =>
 		[
