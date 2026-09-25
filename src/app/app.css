@@ -204,6 +204,15 @@ body {
 	margin: 0;
 	padding-left: var(--base-size-20);
 }
+/* Signed out: the way in, in a readable measure. */
+.signin {
+	overflow: auto;
+	padding: var(--base-size-40) var(--base-size-16);
+}
+.signin > .stack-width {
+	max-inline-size: 40rem;
+	margin-inline: auto;
+}
 .blank {
 	grid-row: 1 / -1;
 	padding: var(--base-size-40);

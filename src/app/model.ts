@@ -383,13 +383,12 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 				),
 			}
 		: { questions: {}, schemes: {} };
-	const remote = remoteOfBases(local);
 	const settings = stored?.settings ?? DEFAULT_SETTINGS;
 	const repo = { owner: settings.owner, repo: settings.repo };
-	const model: Model = {
+	const opened: Model = {
 		local,
 		// The last GitHub state this browser knew is exactly what its bases record.
-		remote,
+		remote: remoteOfBases(local),
 		activity: {},
 		nextId: stored?.nextId ?? 1,
 		screen: { kind: "blank" },
@@ -404,13 +403,61 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		agency: AGENCY,
 		ddiSchema: { kind: "loading" },
 	};
+	// Without a sign-in, nothing of the bank stays: only the author's own work.
+	const model = flags.hasToken ? opened : signedOut(opened);
 	return [
 		model,
 		[
 			{ kind: "loadDdiSchema" },
-			...(flags.hasToken ? [{ kind: "connect", repo } as const] : []),
+			...(flags.hasToken
+				? [{ kind: "connect", repo } as const]
+				: model.local !== opened.local
+					? [{ kind: "persist", data: toPersisted(model) } as const]
+					: []),
 		],
 	];
+}
+
+/** A file that is the author's own work: never saved, or changed since. */
+const ownWork = (f: Entry): boolean =>
+	f.base === undefined || f.source !== f.base.text;
+
+/**
+ * Signed out, the app holds only the author's own work: drafts and unsaved edits,
+ * kept for the next sign-in and hidden until then. Clean copies of the bank's files
+ * are forgotten (the bank may be private; signing in reloads them), and so is
+ * everything that could point at one. The session is the caller's to set.
+ */
+export function signedOut(model: Model): Model {
+	const keep = <F extends Entry>(files: Readonly<Record<Id, F>>) =>
+		Object.values(files).every(ownWork)
+			? files
+			: Object.fromEntries(
+					Object.values(files)
+						.filter(ownWork)
+						.map((f) => [f.id, f]),
+				);
+	const questions = keep(model.local.questions);
+	const schemes = keep(model.local.schemes);
+	const local =
+		questions === model.local.questions && schemes === model.local.schemes
+			? model.local
+			: { questions, schemes };
+	return compact({
+		...model,
+		local,
+		remote: remoteOfBases(local),
+		activity: {},
+		loading: { kind: "bundled" } as const,
+		screen: { kind: "blank" } as const,
+		cursor: undefined,
+		pendingLink: undefined,
+		browser: {
+			filter: model.browser.filter,
+			expanded: model.browser.expanded,
+			settingsOpen: model.browser.settingsOpen,
+		},
+	});
 }
 
 export function remoteOfBases(local: Local): Remote {

@@ -11,6 +11,7 @@ import {
 	ActionList,
 	ActionMenu,
 	Avatar,
+	Banner,
 	BranchName,
 	Button,
 	ConfirmationDialog,
@@ -20,7 +21,7 @@ import {
 	Stack,
 	VisuallyHidden,
 } from "@primer/react";
-import { AriaStatus } from "@primer/react/experimental";
+import { AriaStatus, Blankslate } from "@primer/react/experimental";
 import { useMemo } from "react";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
@@ -54,6 +55,9 @@ export function App() {
 	const model = useModel((m) => m);
 	const env = useEnv();
 	const { local, browser, screen, activity } = model;
+	// There is no editor without a bank: signed out is a sign-in page.
+	const signedIn =
+		model.session.kind === "connecting" || model.session.kind === "connected";
 	// The tree is drawn from these slices only, so a caret move does not redraw it.
 	const treeInput = useMemo(
 		() => ({ local, browser, screen, activity }),
@@ -167,109 +171,101 @@ export function App() {
 							</Button>
 						)}
 					</Stack>
-					<ActionMenu>
-						<ActionMenu.Anchor>
-							<Button leadingVisual={PlusIcon}>New</Button>
-						</ActionMenu.Anchor>
-						<ActionMenu.Overlay>
-							<ActionList>
-								<ActionList.Item
-									onSelect={() =>
-										dispatch({ kind: "questionCreated", text: "" })
-									}
-								>
-									Blank question
-								</ActionList.Item>
-								<ActionList.Divider />
-								<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
-								{TEMPLATES.map((t) => (
+					{signedIn && (
+						<ActionMenu>
+							<ActionMenu.Anchor>
+								<Button leadingVisual={PlusIcon}>New</Button>
+							</ActionMenu.Anchor>
+							<ActionMenu.Overlay>
+								<ActionList>
 									<ActionList.Item
-										key={t.label}
 										onSelect={() =>
-											dispatch({ kind: "questionCreated", text: t.text })
+											dispatch({ kind: "questionCreated", text: "" })
 										}
 									>
-										{t.label}
+										Blank question
 									</ActionList.Item>
-								))}
-								<ActionList.Divider />
-								<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
-								{SCHEME_KINDS.map((k) => (
-									<ActionList.Item
-										key={k}
-										onSelect={() =>
-											dispatch({ kind: "schemeCreateOpened", scheme: k })
-										}
-									>
-										{capitalise(SCHEME_SINGULAR[k])}
-									</ActionList.Item>
-								))}
-							</ActionList>
-						</ActionMenu.Overlay>
-					</ActionMenu>
+									<ActionList.Divider />
+									<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
+									{TEMPLATES.map((t) => (
+										<ActionList.Item
+											key={t.label}
+											onSelect={() =>
+												dispatch({ kind: "questionCreated", text: t.text })
+											}
+										>
+											{t.label}
+										</ActionList.Item>
+									))}
+									<ActionList.Divider />
+									<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
+									{SCHEME_KINDS.map((k) => (
+										<ActionList.Item
+											key={k}
+											onSelect={() =>
+												dispatch({ kind: "schemeCreateOpened", scheme: k })
+											}
+										>
+											{capitalise(SCHEME_SINGULAR[k])}
+										</ActionList.Item>
+									))}
+								</ActionList>
+							</ActionMenu.Overlay>
+						</ActionMenu>
+					)}
 					<Account model={model} />
 				</Stack>
 				{/* On narrow screens the tree and the open file are separate views. */}
-				<div
-					className="workspace"
-					data-open={
-						open !== undefined || model.screen.kind === "foreign" || waiting
-					}
-				>
-					<nav className="sidebar" aria-label="Question bank">
-						<BankFilter filter={model.browser.filter} dispatch={dispatch} />
-						<div className="trees">
-							<Browser
-								folders={folders}
-								sections={sections}
-								loading={
-									model.loading.kind === "loading" ||
-									model.session.kind === "connecting"
-								}
-								filter={model.browser.filter}
-								open={open}
-								dispatch={dispatch}
-							/>
-						</div>
-					</nav>
-					<main className="content">
-						{model.screen.kind === "foreign" ? (
-							<ForeignView screen={model.screen} />
-						) : open === undefined && waiting && model.pendingLink ? (
-							<FileSkeleton
-								kind={kindAt(model.pendingLink.file ?? "")?.kind ?? "question"}
-								onBack={() => dispatch({ kind: "listOpened" })}
-							/>
-						) : open === undefined ? (
-							<div className="blank">
-								{model.pendingLink !== undefined &&
-								(model.session.kind === "anonymous" ||
-									model.session.kind === "failed") ? (
-									<Stack align="start" gap="condensed">
-										<p className="quiet">Sign in to open this link.</p>
-										<Button
-											variant="primary"
-											onClick={() =>
-												dispatch({ kind: "settingsToggled", open: true })
-											}
-										>
-											Sign in
-										</Button>
-									</Stack>
-								) : (
+				{!signedIn ? (
+					<SignInPage model={model} />
+				) : (
+					<div
+						className="workspace"
+						data-open={
+							open !== undefined || model.screen.kind === "foreign" || waiting
+						}
+					>
+						<nav className="sidebar" aria-label="Question bank">
+							<BankFilter filter={model.browser.filter} dispatch={dispatch} />
+							<div className="trees">
+								<Browser
+									folders={folders}
+									sections={sections}
+									loading={
+										model.loading.kind === "loading" ||
+										model.session.kind === "connecting"
+									}
+									filter={model.browser.filter}
+									open={open}
+									dispatch={dispatch}
+								/>
+							</div>
+						</nav>
+						<main className="content">
+							{model.screen.kind === "foreign" ? (
+								<ForeignView screen={model.screen} />
+							) : open === undefined && waiting && model.pendingLink ? (
+								<FileSkeleton
+									kind={
+										kindAt(model.pendingLink.file ?? "")?.kind ?? "question"
+									}
+									onBack={() => dispatch({ kind: "listOpened" })}
+								/>
+							) : open === undefined ? (
+								<div className="blank">
 									<p className="quiet">
 										{model.pendingLink !== undefined &&
 										model.loading.kind === "failed"
 											? "The bank did not load, so this link cannot open yet."
 											: "Pick a question or a shared element in the bank, or create a new one."}
 									</p>
-								)}
-							</div>
-						) : (
-							<Editing id={open} index={index} />
-						)}
-					</main>
-				</div>
+								</div>
+							) : (
+								<Editing id={open} index={index} />
+							)}
+						</main>
+					</div>
+				)}
 			</div>
 			{model.browser.settingsOpen && (
 				<BankDialog
@@ -344,6 +340,50 @@ export function App() {
 	);
 }
 
+/**
+ * Signed out: the way in, and why. The bank is where the questions live, so there is
+ * nothing to edit without one; the author's own unsaved work waits for the sign-in.
+ */
+function SignInPage({ model }: { model: Model }) {
+	const { dispatch } = useApp();
+	const problems = [
+		...(model.session.kind === "failed" ? [model.session.failure] : []),
+		...model.failures,
+	];
+	return (
+		<main className="signin">
+			<Stack gap="normal" className="stack-width">
+				{problems.map((f, i) => (
+					<Banner
+						// biome-ignore lint/suspicious/noArrayIndexKey: the same failure may appear twice
+						key={i}
+						variant="critical"
+						title={f.message}
+						description={f.hint}
+					/>
+				))}
+				<Blankslate spacious>
+					<Blankslate.Visual>
+						<RepoIcon size="medium" />
+					</Blankslate.Visual>
+					<Blankslate.Heading as="h2">
+						Sign in to your question bank
+					</Blankslate.Heading>
+					<Blankslate.Description>
+						qretools edits the survey questions kept in a GitHub repository.
+						Sign in with GitHub to open yours.
+					</Blankslate.Description>
+					<Blankslate.PrimaryAction
+						onClick={() => dispatch({ kind: "settingsToggled", open: true })}
+					>
+						Sign in
+					</Blankslate.PrimaryAction>
+				</Blankslate>
+			</Stack>
+		</main>
+	);
+}
+
 const repoUrl = (model: Model): string =>
 	`https://github.com/${model.settings.owner}/${model.settings.repo}`;
 
@@ -369,16 +409,14 @@ function Context({ model }: { model: Model }) {
 
 /**
  * The account, as github.com shows it: the avatar opens a menu with who is signed in,
- * the bank, and signing out. Before sign-in, a button; while connecting, nothing, so
- * the startup connection does not flicker a "Sign in".
+ * the bank, and signing out.
  */
 function Account({ model }: { model: Model }) {
 	const { dispatch } = useApp();
 	const { session, loading } = model;
 	const settings = () => dispatch({ kind: "settingsToggled", open: true });
-	if (session.kind === "connecting") return null;
-	if (session.kind !== "connected")
-		return <Button onClick={settings}>Sign in</Button>;
+	// Signed out, the page itself is the way in; while connecting, nothing yet.
+	if (session.kind !== "connected") return null;
 	return (
 		<ActionMenu>
 			<ActionMenu.Anchor>

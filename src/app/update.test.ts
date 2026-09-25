@@ -17,6 +17,7 @@ import {
 	type Question,
 	remoteOfBases,
 	type SchemeEntry,
+	toPersisted,
 } from "./model.js";
 import type { File } from "./storage.js";
 import { remoteBlob, syncOf } from "./sync.js";
@@ -428,7 +429,7 @@ describe("connecting", () => {
 	});
 
 	it("reads questions against the working scheme files, so an edit shows at once", () => {
-		const [m] = update(fresh(), {
+		const [m] = update(connected(fresh()), {
 			kind: "bankLoaded",
 			result: loadOf([
 				{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
@@ -449,7 +450,71 @@ describe("connecting", () => {
 	it("disconnecting forgets the token", () => {
 		const [m, cmds] = update(connected(fresh()), { kind: "disconnected" });
 		expect(m.session).toEqual({ kind: "anonymous" });
-		expect(cmds).toEqual([{ kind: "forgetToken" }]);
+		expect(cmds).toContainEqual({ kind: "forgetToken" });
+	});
+
+	it("signed out, only the author's own work stays: drafts and unsaved edits", () => {
+		const m = {
+			...withBank(connected(fresh()), [
+				bankQuestion(1, "questions/q/clean.yaml", "name: clean\n"),
+				bankQuestion(
+					2,
+					"questions/q/edited.yaml",
+					"name: edited\n",
+					"name: e2\n",
+				),
+			]),
+			nextId: 3,
+			screen: { kind: "editing" as const, id: 1 },
+			cursor: { id: 1, offset: 3 },
+		};
+		const [draft] = update(m, { kind: "questionCreated", text: "name: d\n" });
+		const [out, cmds] = update(draft, { kind: "disconnected" });
+		expect(Object.keys(out.local.questions).sort()).toEqual(["2", "3"]);
+		// GitHub's copy is what the kept bases record; nothing points at a dropped file.
+		expect(Object.keys(out.remote.questions)).toEqual([
+			"questions/q/edited.yaml",
+		]);
+		expect(out.screen).toEqual({ kind: "blank" });
+		expect(out.cursor).toBeUndefined();
+		expect(cmds.some((c) => c.kind === "persist")).toBe(true);
+	});
+
+	it("a reply from GitHub after signing out is ignored", () => {
+		const [out] = update(connected(fresh()), { kind: "disconnected" });
+		const [after, cmds] = update(out, {
+			kind: "bankLoaded",
+			result: loadOf([
+				{ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
+			]),
+		});
+		expect(after).toBe(out);
+		expect(cmds).toEqual([]);
+		expect(
+			update(out, {
+				kind: "connected",
+				result: ok({
+					login: "iain",
+					avatarUrl: "https://a/iain",
+					canWrite: true,
+					defaultBranch: "main",
+				}),
+			})[0],
+		).toBe(out);
+	});
+
+	it("starting without a sign-in forgets the bank's clean copies too", () => {
+		const stored = toPersisted(
+			withBank(fresh(), [
+				bankQuestion(1, "questions/q/clean.yaml", "name: clean\n"),
+				bankQuestion(2, "questions/q/edited.yaml", "name: edited\n", "x\n"),
+			]),
+		);
+		const [m, cmds] = init({ stored: ok(stored), hasToken: false });
+		expect(Object.keys(m.local.questions)).toEqual(["2"]);
+		expect(cmds.some((c) => c.kind === "persist")).toBe(true);
+		const [kept] = init({ stored: ok(stored), hasToken: true });
+		expect(Object.keys(kept.local.questions)).toHaveLength(2);
 	});
 
 	it("messages and the model are plain data", () => {
@@ -577,7 +642,7 @@ describe("scheme files", () => {
 });
 
 describe("the environment's identity", () => {
-	const loaded = update(fresh(), {
+	const loaded = update(connected(fresh()), {
 		kind: "bankLoaded",
 		result: loadOf([
 			{ path: "questions/a/a.yaml", sha: "q", text: "name: a\n" },
@@ -688,15 +753,18 @@ describe("writing waits for this session's load", () => {
 
 describe("the author's own branch", () => {
 	it("saves always go to qretools/<login>, resolved on connecting, and the bank loads from it", () => {
-		const [m, cmds] = update(fresh(), {
-			kind: "connected",
-			result: ok({
-				login: "iain",
-				avatarUrl: "https://a/iain",
-				canWrite: true,
-				defaultBranch: "main",
-			}),
-		});
+		const [m, cmds] = update(
+			{ ...fresh(), session: { kind: "connecting" } },
+			{
+				kind: "connected",
+				result: ok({
+					login: "iain",
+					avatarUrl: "https://a/iain",
+					canWrite: true,
+					defaultBranch: "main",
+				}),
+			},
+		);
 		expect(m.session).toMatchObject({
 			defaultBranch: "main",
 		});
@@ -1254,8 +1322,8 @@ describe("signing in", () => {
 		});
 		expect(afterLoad.session).toEqual({ kind: "failed", failure: ended });
 		expect(c1).toContainEqual({ kind: "forgetToken" });
-		// Working copies stay.
-		expect(afterLoad.local).toBe(m.local);
+		// Only the author's own work stays (this bank question is unchanged).
+		expect(afterLoad.local.questions).toEqual({});
 		const [afterSave] = update(m, {
 			kind: "committed",
 			changes: [
@@ -1317,12 +1385,7 @@ describe("the top bar's status", () => {
 	it("gives a reason whenever writing is blocked, and is empty in the steady state", () => {
 		const base = connected(fresh());
 		const models: Model[] = [
-			fresh(),
 			{ ...fresh(), session: { kind: "connecting" } },
-			{
-				...fresh(),
-				session: { kind: "failed", failure: { kind: "auth", message: "x" } },
-			},
 			{ ...base, loading: { kind: "loading" } },
 			{ ...base, loading: { kind: "bundled" } },
 			{

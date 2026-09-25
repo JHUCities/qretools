@@ -931,6 +931,24 @@ is gone. Going back to the bank stops waiting for a link (`listOpened` clears
 `pendingLink`). No flash delay: `SkeletonText` has no `delay`. Open for the owner: the
 Bank dialog's own "Loading the bank…" line.
 
+**No editor without a bank (owner, 2026-09-25).** The flow starts from a repository,
+so signed out (anonymous or failed) the app is a sign-in page (Primer `Blankslate`,
+the failure if any, "Sign in" opening the Bank dialog), with no tree, editor or "New".
+This reverses the local-only store of step 5 and "a user who has not connected keeps
+local drafts". Signed out, the app holds only the author's own work (`signedOut` in
+model.ts): drafts and unsaved edits, kept for the next sign-in and hidden until then;
+clean copies of the bank's files are forgotten, since the bank may be private, on
+sign-out, on an ended sign-in, and at startup without a token (the case a closed tab
+leaves behind; the before-pass review found it). `remote` becomes what the kept bases
+record; everything that could point at a dropped file is reset. The same holds when
+connecting fails for any reason. After-pass: a GitHub reply already in flight at
+sign-out (`bankLoaded`, `committed`, `fileReloaded`, `foreignLoaded`) is ignored while
+signed out, and `connected` is accepted only while connecting (`stale` in update.ts);
+otherwise it would bring the bank back. Accepted: an old session's reply arriving
+after a quick sign-out and sign-in lands in the new one; the next load corrects it. The status says
+nothing signed out. The example scales now show only during a load. Not yet: kept
+work is not scoped to its bank (FEATURES.md).
+
 **The header follows github.com (owner, 2026-09-25).** Left: `qretools`, then
 `owner / repo` (the repository a link to GitHub; the owner hidden on narrow screens; the
 context truncates rather than wrap the row). Then the status live region

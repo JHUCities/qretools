@@ -296,3 +296,18 @@ Places where the code still assumes BAS or JHU, found 2026-09-24:
   `<dl>`; per-preview radio groups; one table of scheme names; narrow screens as
   separate views. Two TreeViews stay, each named by its heading (TreeView has no group
   headings).
+
+- **Scope kept work to its bank and login.** Signed out, drafts and unsaved edits are
+  kept for the next sign-in, but not tagged with the repository or login they came
+  from: signing in to another bank shows them there, where a save would file them.
+  Tag stored working copies with owner/repo/login and show only matching ones (never
+  delete the others: a draft you cannot save is a draft you lose).
+
+- **TODO: a starter bank repository, with setup instructions.** The Bank dialog used to
+  explain the own branch and the app installation in prose (removed 2026-09-25: it
+  was clutter). Replace it with a template repository a team creates its bank from,
+  already configured: the folder layout (`questions/`, `scales/`, `universes/`,
+  `instructions/`, `missing.yaml`, `scales/yesno01.yaml`), a ruleset protecting `main`
+  (pull request required, no force-push or deletion), "Automatically delete head
+  branches" on, and the qretools GitHub App installed, plus a short README of those
+  steps. The dialog then links to it once.

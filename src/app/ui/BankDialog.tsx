@@ -17,7 +17,6 @@ import { TOKEN_PASTE } from "../flags.js";
 import type { Bank, Dispatch, Session } from "../model.js";
 import type { BankSettings, Failure } from "../storage.js";
 import { useApp } from "./AppContext.js";
-import { ExternalLink } from "./ExternalLink.js";
 import { inlineCode } from "./Previews.js";
 
 export function BankDialog({
@@ -97,23 +96,6 @@ export function BankDialog({
 						onChange={(e) => setRepo(e.target.value)}
 					/>
 				</FormControl>
-				<p className="quiet">
-					Saves go to your own branch, <code className="code">qretools/</code>{" "}
-					followed by your GitHub login, never to the bank itself: the bank
-					changes when you propose your changes and the pull request is merged
-					on GitHub.
-				</p>
-				{config?.appSlug !== undefined && (
-					<p className="quiet">
-						Signing in works for repositories where the{" "}
-						<ExternalLink
-							href={`https://github.com/apps/${config.appSlug}/installations/new`}
-						>
-							{config.appSlug} app is installed
-						</ExternalLink>{" "}
-						and you have access.
-					</p>
-				)}
 				{config === undefined && (
 					<p className="fg-attention">
 						Sign-in with GitHub is not set up for this build.
@@ -193,11 +175,7 @@ function SessionLine({
 }) {
 	switch (session.kind) {
 		case "anonymous":
-			return (
-				<p className="quiet">
-					Not connected. Working with local drafts and the bundled scales.
-				</p>
-			);
+			return null;
 		case "connecting":
 			return <p>Connecting…</p>;
 		case "failed":

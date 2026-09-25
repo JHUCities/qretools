@@ -28,6 +28,7 @@ import {
 	type Remote,
 	SCHEME_TEMPLATES,
 	type SchemeEntry,
+	signedOut,
 	toPersisted,
 } from "./model.js";
 import type { BranchTarget, Change, Failure } from "./storage.js";
@@ -49,6 +50,7 @@ type Step = readonly [Model, readonly Cmd[]];
  * Back works); anything else (a draft gets its path, a file moves) replaces it.
  */
 export function update(model: Model, msg: Msg): Step {
+	if (stale(model, msg)) return [model, []];
 	const lapsed = authFailure(msg);
 	const [next, cmds] =
 		lapsed === undefined ? step(model, msg) : sessionLapsed(model, lapsed);
@@ -579,11 +581,15 @@ function step(model: Model, msg: Msg): Step {
 			]);
 
 		case "connected":
+			// Signed out, whatever the reason: only the author's own work stays.
 			if (!msg.result.ok)
-				return [
-					{ ...model, session: { kind: "failed", failure: msg.result.error } },
+				return persist([
+					{
+						...signedOut(model),
+						session: { kind: "failed", failure: msg.result.error },
+					},
 					[],
-				];
+				]);
 			{
 				const { login, avatarUrl, canWrite, defaultBranch } = msg.result.value;
 				const session = {
@@ -640,15 +646,10 @@ function step(model: Model, msg: Msg): Step {
 			];
 
 		case "disconnected":
-			return [
-				compact({
-					...model,
-					session: { kind: "anonymous" } as const,
-					loading: { kind: "bundled" } as const,
-					pendingLink: undefined,
-				}),
+			return persist([
+				{ ...signedOut(model), session: { kind: "anonymous" } },
 				[{ kind: "forgetToken" }],
-			];
+			]);
 
 		case "failureDismissed":
 			return [
@@ -797,16 +798,31 @@ function authFailure(msg: Msg): Failure | undefined {
  * retried on every load), and nothing waits on GitHub any more. Working copies stay.
  */
 function sessionLapsed(model: Model, failure: Failure): Step {
-	return [
-		compact({
-			...model,
-			session: { kind: "failed", failure } as const,
-			loading: { kind: "bundled" } as const,
-			activity: {},
-			pendingLink: undefined,
-		}),
+	return persist([
+		{ ...signedOut(model), session: { kind: "failed", failure } },
 		[{ kind: "forgetToken" }],
-	];
+	]);
+}
+
+/**
+ * A reply from GitHub that no longer has a session to land in: sent before a sign-out,
+ * it would bring the bank's files back into a signed-out browser. And a connection
+ * answers only while one is being made.
+ */
+function stale(model: Model, msg: Msg): boolean {
+	const out =
+		model.session.kind === "anonymous" || model.session.kind === "failed";
+	switch (msg.kind) {
+		case "bankLoaded":
+		case "committed":
+		case "fileReloaded":
+		case "foreignLoaded":
+			return out;
+		case "connected":
+			return model.session.kind !== "connecting";
+		default:
+			return false;
+	}
 }
 
 /** The topic folder of a question path: `questions/<folder>/<name>.yaml`. */
@@ -1049,17 +1065,18 @@ export function writeBlocked(model: Model): string | undefined {
  * The top bar's status: what the session is doing, or why nothing can be written.
  * Empty in the steady state (connected, loaded, writable, idle), since the account
  * and the repository already say who and where. A file's inactive write buttons point
- * at it, so whenever `writeBlocked` gives a reason, this says one (tested).
+ * at it, so whenever `writeBlocked` gives a reason while signed in, this says one
+ * (tested); signed out there are no files and no buttons.
  */
 export function sessionStatus(model: Model): string | undefined {
 	const { session, loading } = model;
 	switch (session.kind) {
+		// Signed out there is no editor: the sign-in page says what to do, and why.
 		case "anonymous":
-			return "Not connected: drafts stay in this browser";
+		case "failed":
+			return undefined;
 		case "connecting":
 			return "Connecting to GitHub…";
-		case "failed":
-			return session.failure.message;
 		case "connected":
 			return loading.kind === "failed"
 				? `The bank did not load: ${loading.failure.message}`
