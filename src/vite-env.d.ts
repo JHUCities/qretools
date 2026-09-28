@@ -10,6 +10,8 @@ interface ImportMetaEnv {
 	readonly VITE_AUTH_URL?: string;
 	/** The GitHub App's slug, for the "install the App" link. */
 	readonly VITE_GITHUB_APP_SLUG?: string;
+	/** The template a new bank starts from, as owner/name (the sign-in page links it). */
+	readonly VITE_BANK_TEMPLATE?: string;
 }
 
 interface ImportMeta {

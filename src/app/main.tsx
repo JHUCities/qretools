@@ -8,7 +8,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Result } from "../core/result.js";
 import { type Callback, callbackOf, PendingSchema } from "./auth.js";
-import { signInConfig } from "./config.js";
+import { bankTemplate, signInConfig } from "./config.js";
 import { PENDING_KEY } from "./effects.js";
 import { makeGitHubStore } from "./github.js";
 import {
@@ -39,6 +39,7 @@ if (root) {
 			// nothing more to do
 		}
 	}
+	const template = bankTemplate(import.meta.env);
 	const config = signInConfig(
 		import.meta.env,
 		location.origin,
@@ -74,6 +75,7 @@ if (root) {
 				signIn: { config, ...(returned !== undefined && { returned }) },
 			}),
 		},
+		template === undefined ? {} : { template },
 	);
 	// Links live in the hash. The address is read when the event is handled, never
 	// taken from the event: a stale event after quick navigation must not pull back.

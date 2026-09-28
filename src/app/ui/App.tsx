@@ -23,6 +23,7 @@ import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
+import { installUrl } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves, isUnsaved } from "../sync.js";
 import {
@@ -189,7 +190,7 @@ export function App() {
 							signInConfig?.appSlug !== undefined && (
 								<LinkButton
 									size="small"
-									href={`https://github.com/apps/${signInConfig.appSlug}/installations/new`}
+									href={installUrl(signInConfig.appSlug)}
 									target="_blank"
 									rel="noreferrer"
 									trailingVisual={LinkExternalIcon}
