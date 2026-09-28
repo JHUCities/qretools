@@ -85,22 +85,29 @@ export function callbackOf(
 	const code = params.get("code");
 	const error = params.get("error");
 	if (code === null && error === null) return undefined;
-	const refused = (message: string, hint?: string): Result<Callback, Failure> =>
-		err(
-			hint === undefined
-				? { kind: "auth", message }
-				: { kind: "auth", message, hint },
-		);
+	const refused = (
+		message: string,
+		hint?: string,
+		detail?: string,
+	): Result<Callback, Failure> =>
+		err({
+			kind: "auth",
+			message,
+			...(hint !== undefined && { hint }),
+			...(detail !== undefined && { detail }),
+		});
 	if (pending === undefined || params.get("state") !== pending.state)
 		return refused(
-			"This sign-in did not start here, or has already been used.",
+			"This sign-in didn't start here, or has already been used.",
 			"Sign in again.",
 		);
 	if (error !== null)
 		return refused(
 			error === "access_denied"
-				? "Sign-in was cancelled on GitHub."
-				: `GitHub did not sign you in: ${error}.`,
+				? "Sign-in was canceled on GitHub."
+				: "GitHub didn't sign you in.",
+			undefined,
+			error === "access_denied" ? undefined : error,
 		);
 	if (now - pending.at > CODE_LIFETIME)
 		return refused("The sign-in took too long.", "Sign in again.");
@@ -161,7 +168,9 @@ async function redeem(
 	} catch (e) {
 		return err({
 			kind: "network",
-			message: `Could not reach the sign-in service: ${e instanceof Error ? e.message : String(e)}`,
+			message: "Couldn't reach the sign-in service.",
+			hint: "Check that you're online, then try again.",
+			detail: e instanceof Error ? e.message : String(e),
 		});
 	}
 	let json: unknown;
@@ -186,7 +195,7 @@ async function redeem(
 					status: response.status,
 					message:
 						code === "misconfigured"
-							? "The sign-in service is not set up correctly."
+							? "The sign-in service isn't set up correctly."
 							: `The sign-in service answered ${response.status}.`,
 				});
 	}
@@ -194,7 +203,7 @@ async function redeem(
 	return credentials === undefined
 		? err({
 				kind: "unreadable",
-				message: "The sign-in service's answer was not understood.",
+				message: "The sign-in service's answer wasn't understood.",
 			})
 		: ok(credentials);
 }

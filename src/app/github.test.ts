@@ -206,7 +206,7 @@ describe("GitHub adapter (Octokit)", () => {
 			).s.whoAmI();
 		const own = await empty("ADMIN");
 		expect(own).toMatchObject({ ok: false, error: { kind: "empty" } });
-		expect(!own.ok && own.error.message).toMatch(/has no commits yet/);
+		expect(!own.ok && own.error.message).toMatch(/is empty on GitHub/);
 		expect(!own.ok && own.error.hint).toMatch(/Add a first file/);
 		const other = await empty("READ");
 		expect(!other.ok && other.error.hint).toMatch(

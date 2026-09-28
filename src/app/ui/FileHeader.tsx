@@ -7,7 +7,7 @@ import { plainText } from "../../core/codeSpans.js";
 import { UNNAMED } from "../../core/copy.js";
 import type { Activity, Entry } from "../model.js";
 import { SESSION_STATUS } from "./AppContext.js";
-import { inlineCode } from "./Previews.js";
+import { failureDescription } from "./Previews.js";
 
 export interface HeaderActions {
 	readonly save: () => void;
@@ -149,11 +149,7 @@ export function FileHeader({
 				<Banner
 					variant="critical"
 					title={plainText(activity.failure.message)}
-					description={
-						activity.failure.hint === undefined
-							? undefined
-							: inlineCode(activity.failure.hint)
-					}
+					description={failureDescription(activity.failure)}
 					primaryAction={stale ? reload : undefined}
 				/>
 			)}

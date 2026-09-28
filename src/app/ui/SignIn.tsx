@@ -28,7 +28,7 @@ import { TOKEN_PASTE } from "../flags.js";
 import { type Local, type Model, parseWorkKey } from "../model.js";
 import { parseRepo } from "../storage.js";
 import { useApp } from "./AppContext.js";
-import { inlineCode } from "./Previews.js";
+import { failureDescription } from "./Previews.js";
 
 export function SignIn({ model }: { model: Model }) {
 	const { dispatch, effects, signIn: config, template } = useApp();
@@ -83,11 +83,7 @@ export function SignIn({ model }: { model: Model }) {
 					<Banner
 						variant="critical"
 						title={plainText(session.failure.message)}
-						description={
-							session.failure.hint === undefined
-								? undefined
-								: inlineCode(session.failure.hint)
-						}
+						description={failureDescription(session.failure)}
 						// An empty repository: GitHub's page for it offers the first file.
 						primaryAction={
 							session.failure.kind === "empty" ? (
@@ -110,7 +106,7 @@ export function SignIn({ model }: { model: Model }) {
 						key={i}
 						variant="critical"
 						title={plainText(f.message)}
-						description={f.hint === undefined ? undefined : inlineCode(f.hint)}
+						description={failureDescription(f)}
 						onDismiss={() => dispatch({ kind: "failureDismissed", index: i })}
 					/>
 				))}

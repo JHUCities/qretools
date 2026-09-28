@@ -31,6 +31,8 @@ export interface Failure {
 		| "refused";
 	readonly message: string;
 	readonly hint?: string;
+	/** GitHub's or a library's own words, kept under the plain message. */
+	readonly detail?: string;
 	readonly status?: number;
 }
 

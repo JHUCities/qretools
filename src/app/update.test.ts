@@ -1376,7 +1376,7 @@ describe("signing in", () => {
 		});
 		expect(after.loading).toEqual({ kind: "failed", failure: offline });
 		expect(writeBlocked(after)).toBeDefined();
-		expect(sessionStatus(after)).toMatch(/did not load: offline/);
+		expect(sessionStatus(after)).toMatch(/didn't load: offline/);
 	});
 
 	it("trying again reloads the bank as the same session, without reconnecting", () => {
@@ -1485,7 +1485,7 @@ describe("a refused return from GitHub", () => {
 	it("is only a message: an existing sign-in is kept and connects as usual", () => {
 		const refused = {
 			kind: "auth" as const,
-			message: "This sign-in did not start here, or has already been used.",
+			message: "This sign-in didn't start here, or has already been used.",
 		};
 		const [m, cmds] = init({
 			stored: ok(undefined),
