@@ -4,6 +4,7 @@
  * "(unfiled)", last (named ones first). A folder is open when the user opened
  * it, when it holds the open question, or whenever a filter is active.
  */
+import { SCHEME_LABELS } from "../core/copy.js";
 import type { Evaluation } from "../core/evaluate.js";
 import { type Status, status } from "../core/findings.js";
 import {
@@ -119,21 +120,6 @@ export interface SchemeSection {
 	readonly leaves: readonly SchemeLeaf[];
 	readonly expanded: boolean;
 }
-
-/** One table for how each kind of shared element is named, singular and plural. */
-export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
-	scale: "scale",
-	universe: "universe",
-	instruction: "instruction",
-	missing: "missing values",
-};
-
-export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
-	scale: "Scales",
-	universe: "Universes",
-	instruction: "Instructions",
-	missing: "Missing values",
-};
 
 /**
  * One section per kind of shared element, always shown (even empty) so the kinds are

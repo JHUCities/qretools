@@ -214,6 +214,11 @@ const primerTheme = EditorView.theme({
 	".cm-lintPoint-hint:after": { borderBottomColor: "var(--fgColor-attention)" },
 	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },
 	".cm-finding-hint": { color: "var(--fgColor-muted)" },
+	".cm-finding-detail": {
+		color: "var(--fgColor-muted)",
+		fontFamily: "var(--fontStack-monospace)",
+		fontSize: "var(--text-caption-size)",
+	},
 });
 
 /** Syntax colours from Primer's `--codeMirror-syntax-*` tokens (YAML needs few). */

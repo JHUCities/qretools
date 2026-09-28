@@ -1,12 +1,13 @@
 /**
  * Shared response scales: a scale used by many questions exists once, and a
- * question names it (`responses: agree4`). Scales are a bank-level value the
+ * question names it (`responses: satisfied5`). Scales are a bank-level value the
  * shell loads and the core is given; one file per scale, body `labels: {code: label}`.
  */
 import { isMap, parseDocument } from "yaml";
 import type { Finding } from "../findings.js";
 import { readCodeMap } from "./codes.js";
 import type { Code } from "./draft.js";
+import { yamlErrors } from "./read.js";
 
 export interface Scale {
 	readonly codes: readonly Code[];
@@ -21,12 +22,7 @@ export interface ParsedScale {
 
 export function parseScale(text: string): ParsedScale {
 	const doc = parseDocument(text, { prettyErrors: false });
-	const syntax: Finding[] = doc.errors.map((e) => ({
-		code: "yaml-syntax",
-		severity: "error",
-		path: "",
-		message: e.message,
-	}));
+	const syntax: Finding[] = yamlErrors(doc.errors, text.length);
 	const node = isMap(doc.contents)
 		? doc.contents.get("labels", true)
 		: undefined;

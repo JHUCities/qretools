@@ -6,7 +6,7 @@
 import { isMap, parseDocument } from "yaml";
 import type { Finding } from "../findings.js";
 import type { Code } from "./draft.js";
-import { error, hole, isPlainObject } from "./read.js";
+import { error, hole, isPlainObject, yamlError, yamlErrors } from "./read.js";
 import type { Scale } from "./scales.js";
 
 export type Scheme<T> = Readonly<Record<string, T>>;
@@ -52,9 +52,7 @@ export interface ParsedTextEntry {
 /** A universe or instruction file: one `text:` line. */
 export function parseTextEntry(source: string): ParsedTextEntry {
 	const doc = parseDocument(source, { prettyErrors: false });
-	const syntax: Finding[] = doc.errors.map((e) =>
-		error("yaml-syntax", "", e.message),
-	);
+	const syntax: Finding[] = yamlErrors(doc.errors, source.length);
 	let js: unknown;
 	try {
 		js = doc.toJS() ?? {};
@@ -62,7 +60,7 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 		return {
 			findings: [
 				...syntax,
-				error("yaml-syntax", "", e instanceof Error ? e.message : String(e)),
+				yamlError(e instanceof Error ? e.message : String(e)),
 			],
 		};
 	}
@@ -71,7 +69,7 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 		return {
 			findings: [
 				...syntax,
-				error("not-a-map", "", "This file is a `text:` line."),
+				error("not-a-map", "", "This is one `text:` line."),
 			],
 		};
 	const unknown = Object.keys(js)
@@ -87,11 +85,7 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 	const text = js.text;
 	if (text === undefined)
 		return {
-			findings: [
-				...syntax,
-				...unknown,
-				hole("text", "This file needs a `text:` line."),
-			],
+			findings: [...syntax, ...unknown, hole("text", "Add a `text:` line.")],
 		};
 	if (text === null || (typeof text === "string" && text.trim() === ""))
 		return {

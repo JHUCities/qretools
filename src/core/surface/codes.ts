@@ -13,6 +13,7 @@ import {
 	fail,
 	hole,
 	isPlainObject,
+	issueSentence,
 	ok,
 	opened,
 	type Read,
@@ -85,16 +86,30 @@ export function readCodeMap(
 			const result = OptionSchema.safeParse(rest);
 			if (!result.success) {
 				for (const issue of result.error.issues) {
-					const sub =
-						issue.code === "unrecognized_keys"
-							? issue.keys.join(", ")
-							: issue.path.map(String).join(".");
+					if (issue.code === "unrecognized_keys") {
+						for (const k of issue.keys)
+							findings.push(
+								error(
+									"unknown-key",
+									`${at}.${k}`,
+									`Option \`${code}\`: \`${k}\` is not an option field.`,
+									"An option has `label`, `title`, `variable` and `note`.",
+								),
+							);
+						continue;
+					}
+					const sub = issue.path.map(String).join(".");
+					const said = issueSentence(sub || "label", issue);
 					findings.push(
-						error(
-							"wrong-type",
-							sub ? `${at}.${sub}` : at,
-							`Option \`${code}\`: ${issue.message}`,
-						),
+						compact({
+							...error(
+								"wrong-type",
+								sub ? `${at}.${sub}` : at,
+								`Option \`${code}\`: ${said.message}`,
+								said.hint,
+							),
+							detail: said.detail,
+						}),
 					);
 				}
 				findings.push(...holes);

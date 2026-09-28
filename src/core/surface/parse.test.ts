@@ -204,4 +204,18 @@ describe("parseSurface", () => {
 			expect(() => parseSurface(s, EMPTY_ENV)).not.toThrow();
 		}
 	});
+
+	it("says library errors in plain words and keeps the library's as detail", () => {
+		const { findings } = parseSurface(
+			"name: q1\ntext: Q?\nintent: i\nnumber:\n  min: low\n  decimals: -1\ntags: [\n",
+			EMPTY_ENV,
+		);
+		const syntax = findings.find((f) => f.code === "yaml-syntax");
+		expect(syntax?.message).toBe("This line can't be read as YAML.");
+		expect(syntax?.detail).toBeTruthy();
+		const min = findings.find((f) => f.path === "number.min");
+		expect(min?.message).toBe("`min` must be a number.");
+		const decimals = findings.find((f) => f.path === "number.decimals");
+		expect(decimals?.message).toBe("`decimals` must be at least 0.");
+	});
 });

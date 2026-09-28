@@ -1,4 +1,5 @@
 /** The previews, drawn from the core's render models. They decide nothing. */
+
 import {
 	AlertIcon,
 	CheckCircleIcon,
@@ -10,6 +11,7 @@ import {
 import { ActionList, Details, Label } from "@primer/react";
 import { Fragment, memo, type ReactNode, useId } from "react";
 import { codeSpans } from "../../core/codeSpans.js";
+import { toFillIn } from "../../core/copy.js";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Status, Target } from "../../core/findings.js";
 import type {
@@ -72,7 +74,7 @@ export function StatusBadge({ status }: { status: Status }) {
 			return (
 				<Label variant={status.errors > 0 ? "danger" : "attention"}>
 					{[
-						status.holes > 0 && `${status.holes} to fill in`,
+						status.holes > 0 && toFillIn(status.holes),
 						status.errors > 0 && `${status.errors} to fix`,
 					]
 						.filter(Boolean)
@@ -270,9 +272,12 @@ export function Findings({
 							<Icon className={className} aria-label={f.severity} />
 						</ActionList.LeadingVisual>
 						{inlineCode(f.message)}
-						{f.hint !== undefined && (
+						{(f.hint !== undefined || f.detail !== undefined) && (
 							<ActionList.Description variant="block">
-								{inlineCode(f.hint)}
+								{f.hint !== undefined && inlineCode(f.hint)}
+								{f.detail !== undefined && (
+									<span className="detail">{f.detail}</span>
+								)}
 							</ActionList.Description>
 						)}
 					</ActionList.Item>
@@ -321,7 +326,10 @@ export const Ddi = memo(function Ddi({
 				{problems.map((f, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: schema problems are positional and can repeat
 					<p className="finding" data-severity="error" key={i}>
-						{inlineCode(f.message)}
+						<span>{inlineCode(f.message)}</span>
+						{f.detail !== undefined && (
+							<span className="hint detail">{f.detail}</span>
+						)}
 					</p>
 				))}
 				<pre className="json">{JSON.stringify(document, null, 2)}</pre>
@@ -347,6 +355,9 @@ function FindingBody({ f }: { f: Finding }) {
 			<span className="msg">{inlineCode(f.message)}</span>
 			{f.hint !== undefined && (
 				<span className="hint">{inlineCode(f.hint)}</span>
+			)}
+			{f.detail !== undefined && (
+				<span className="hint detail">{f.detail}</span>
 			)}
 		</>
 	);

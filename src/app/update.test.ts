@@ -567,7 +567,9 @@ describe("scheme files", () => {
 		});
 		expect(asked.browser.creating).toEqual({ kind: "scale", name: "" });
 		expect(schemeNameProblem(asked, "scale", "")).toMatch(/name/);
-		expect(schemeNameProblem(asked, "scale", "Agree 5")).toMatch(/lower case/);
+		expect(schemeNameProblem(asked, "scale", "Agree 5")).toMatch(
+			/Lowercase letters, digits and underscores/,
+		);
 		// Confirming an unusable name does nothing.
 		expect(update(asked, { kind: "schemeCreateConfirmed" })[0]).toBe(asked);
 		const [made] = run(
@@ -1225,7 +1227,9 @@ describe("moving a question", () => {
 		const m = edited();
 		const q = m.local.questions[1] as Question;
 		expect(moveProblem(m, q, "nhd")).toMatch(/already in that folder/);
-		expect(moveProblem(m, q, "Not A Folder")).toMatch(/folder is lower case/);
+		expect(moveProblem(m, q, "Not A Folder")).toMatch(
+			/Lowercase letters, digits, hyphens/,
+		);
 		const clash = withBank(m, [
 			bankQuestion(2, "questions/svy/nhd_sat.yaml", "name: x\n"),
 		]);

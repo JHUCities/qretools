@@ -7,12 +7,11 @@
  * the rest of the program reasons about.
  */
 import { z } from "zod";
+import { NAME_RULE_TEXT } from "../copy.js";
 import { EMPTY_ENV, type Env } from "./env.js";
 import type { Scale } from "./scales.js";
 
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
-const NAME_RULE =
-	"lowercase letters, digits and underscores, starting with a letter";
 
 export const NumberDomainSchema = z
 	.strictObject({
@@ -49,14 +48,14 @@ export const OptionSchema = z
 			.string()
 			.optional()
 			.describe(
-				"Select many only: codebook title of this option's own variable, e.g. Race selected -- White.",
+				"For select all that apply: the codebook title of this option's own variable, e.g. Services used -- Library.",
 			),
 		variable: z
 			.string()
-			.regex(NAME_PATTERN, NAME_RULE)
+			.regex(NAME_PATTERN, NAME_RULE_TEXT)
 			.optional()
 			.describe(
-				"Select many only: this option's variable name when it is not <name>_<code>.",
+				"For select all that apply: this option's variable name when it isn't <name>_<code>.",
 			),
 		note: z
 			.string()
@@ -69,14 +68,14 @@ export const QuestionSchema = z
 	.strictObject({
 		name: z
 			.string()
-			.regex(NAME_PATTERN, NAME_RULE)
+			.regex(NAME_PATTERN, NAME_RULE_TEXT)
 			.describe(
-				"Variable name used in the dataset and codebook. Lowercase, starts with a letter, e.g. nhd_sat.",
+				"Variable name used in the dataset and codebook. Lowercase, starts with a letter, e.g. service_satisfaction.",
 			),
 		title: z
 			.string()
 			.optional()
-			.describe("Short codebook title, e.g. Neighborhood satisfaction."),
+			.describe("Short codebook title, e.g. Overall satisfaction."),
 		text: z
 			.string()
 			.describe(
@@ -91,19 +90,19 @@ export const QuestionSchema = z
 			.string()
 			.optional()
 			.describe(
-				"The concept measured, e.g. neighborhood satisfaction. Becomes a DDI Concept.",
+				"The concept measured, e.g. satisfaction with services. Becomes a DDI Concept.",
 			),
 		universe: z
 			.string()
 			.optional()
 			.describe(
-				"Who answers this question, e.g. All respondents, or Renters only.",
+				"Who answers this question, e.g. All respondents, or Owners only.",
 			),
 		// Documentation and JSON Schema only: parse.ts reads responses from the YAML
 		// AST (author order, original code spelling), not through this record.
 		responses: z
 			.union([
-				z.string().describe("The name of a shared scale, e.g. agree4."),
+				z.string().describe("The name of a shared scale, e.g. satisfied5."),
 				z.record(z.string(), z.union([z.string(), OptionSchema])),
 			])
 			.optional()
@@ -132,13 +131,13 @@ export const QuestionSchema = z
 			.string()
 			.optional()
 			.describe(
-				"Where the question comes from, e.g. DCAS 2018 Q6, or Original.",
+				"Where the question comes from, e.g. Original, or a published survey question.",
 			),
 		note: z
 			.string()
 			.optional()
 			.describe(
-				"Documentation not shown to the respondent: fills, randomisation, history.",
+				"Documentation not shown to the respondent: fills, randomization, history.",
 			),
 		legacy: z
 			.record(z.string(), z.unknown())

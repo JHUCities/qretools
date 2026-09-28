@@ -46,6 +46,8 @@ export interface Finding {
 	readonly path: string;
 	readonly message: string;
 	readonly hint?: string;
+	/** A library's own words (the YAML parser's, the DDI schema's), kept under the plain message. */
+	readonly detail?: string;
 	/** Present when the finding has its own position (syntax errors); otherwise look up `path`. */
 	readonly range?: Range;
 }

@@ -49,5 +49,11 @@ function messageNode(f: Finding): Node {
 	const node = document.createElement("div");
 	node.append(line(f.message, "cm-finding-message"));
 	if (f.hint !== undefined) node.append(line(f.hint, "cm-finding-hint"));
+	if (f.detail !== undefined) {
+		const detail = document.createElement("div");
+		detail.className = "cm-finding-detail";
+		detail.textContent = f.detail;
+		node.append(detail);
+	}
 	return node;
 }

@@ -6,7 +6,9 @@
  * and never an empty space. A reference is shown resolved, with its name kept
  * so the shell can offer "go to definition".
  */
+
 import { compact } from "./compact.js";
+import { UNNAMED } from "./copy.js";
 import {
 	type Code,
 	type Domain,
@@ -158,7 +160,8 @@ function valueLines(
 			// codebook publishes it: the variable, then the option's title.
 			return domain.select === "many"
 				? domain.codes.map(
-						(c) => `${optionVariable(name, c) ?? "?"}: ${c.title ?? c.label}`,
+						(c) =>
+							`${optionVariable(name, c) ?? UNNAMED}: ${c.title ?? c.label}`,
 					)
 				: domain.codes.map((c) => `${c.code} = ${c.label}`);
 		case "number":

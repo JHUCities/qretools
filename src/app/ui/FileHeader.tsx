@@ -4,6 +4,7 @@ import { ArrowLeftIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label, PageHeader, Stack } from "@primer/react";
 import { useId } from "react";
 import { plainText } from "../../core/codeSpans.js";
+import { UNNAMED } from "../../core/copy.js";
 import type { Activity, Entry } from "../model.js";
 import { SESSION_STATUS } from "./AppContext.js";
 import { inlineCode } from "./Previews.js";
@@ -85,7 +86,7 @@ export function FileHeader({
 				<PageHeader.TitleArea variant="subtitle">
 					<PageHeader.Title as="h2">
 						{kind !== undefined && <span className="quiet">{kind} </span>}
-						{name ?? <span className="quiet">(no name yet)</span>}
+						{name ?? <span className="quiet">{UNNAMED}</span>}
 					</PageHeader.Title>
 					<PageHeader.TrailingVisual>
 						<Stack direction="horizontal" gap="condensed">

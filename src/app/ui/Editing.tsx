@@ -3,10 +3,12 @@
  * everything derived from it beside it. Bank-level findings (a variable defined
  * twice) come from the index and are shown on the file like any other finding.
  */
+
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
 import { memo, type ReactNode, useMemo } from "react";
+import { SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
 import { inspect } from "../../core/inspect.js";
@@ -26,7 +28,6 @@ import {
 	type SchemeEntry,
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf } from "../sync.js";
-import { SCHEME_SINGULAR } from "../tree.js";
 import { branchOwner, hrefOf, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
@@ -107,11 +108,11 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		// Another file's name, as a bank-level finding cites it.
 		const label = (id: Id): string => {
 			const other = questions[id];
-			if (!other) return "?";
+			if (!other) return UNNAMED;
 			return (
 				evaluations.get(other, agency, env).draft.name ??
 				other.base?.path ??
-				`draft ${id}`
+				UNNAMED
 			);
 		};
 		return [...ev.findings, ...bankFindings(q.id, ev.symbols, index, label)];
@@ -164,7 +165,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						text={q.source}
 						diagnostics={diagnostics}
 						schema={evaluations.schema(env)}
-						label={`Question ${ev.draft.name ?? "(no name yet)"}: source (YAML)`}
+						label={`Question ${ev.draft.name ?? UNNAMED}: source (YAML)`}
 					/>
 					<Inspector q={q} ev={ev} index={index} />
 				</section>
@@ -318,7 +319,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 													id={id}
 													onOpen={() => dispatch({ kind: "fileOpened", id })}
 												>
-													{name ?? `(no name) ${id}`}
+													{name ?? UNNAMED}
 												</FileLink>
 											</li>
 										);

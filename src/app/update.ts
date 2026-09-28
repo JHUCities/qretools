@@ -7,6 +7,7 @@ import {
 	saveableName,
 } from "../core/bank.js";
 import { compact } from "../core/compact.js";
+import { FOLDER_RULE_TEXT, NAME_RULE_TEXT, SCHEME_NAME } from "../core/copy.js";
 import { locate } from "../core/findings.js";
 import { MISSING_NAME, schemePath } from "../core/schemes.js";
 import type { NamedScheme } from "../core/surface/env.js";
@@ -852,8 +853,7 @@ export function moveProblem(
 	folder: string,
 ): string | undefined {
 	if (q.base === undefined) return "Only a question in the bank can move.";
-	if (!FOLDER_PATTERN.test(folder))
-		return "A folder is lower case letters, digits, `_` and `-`, starting with a letter.";
+	if (!FOLDER_PATTERN.test(folder)) return FOLDER_RULE_TEXT;
 	const to = movedPath(q.base.path, folder);
 	if (to === q.base.path) return "It is already in that folder.";
 	const sync = syncOf(q, remoteBlob(model.remote, q));
@@ -1036,12 +1036,11 @@ export function schemeNameProblem(
 	name: string,
 ): string | undefined {
 	if (name === "") return "Give it a name.";
-	if (!NAME_PATTERN.test(name))
-		return "A name is lower case letters, digits and `_`, starting with a letter.";
+	if (!NAME_PATTERN.test(name)) return NAME_RULE_TEXT;
 	return Object.values(model.local.schemes).some(
 		(e) => e.kind === kind && e.name === name,
 	)
-		? `A ${kind} named \`${name}\` already exists.`
+		? `A ${SCHEME_NAME[kind]} named \`${name}\` already exists.`
 		: undefined;
 }
 
