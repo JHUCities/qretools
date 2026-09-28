@@ -10,6 +10,7 @@ import {
 	ActionList,
 	ActionMenu,
 	Avatar,
+	Banner,
 	Button,
 	ConfirmationDialog,
 	IconButton,
@@ -21,6 +22,7 @@ import {
 } from "@primer/react";
 import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
+import { plainText } from "../../core/codeSpans.js";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
@@ -45,6 +47,7 @@ import { Editing, ForeignView } from "./Editing.js";
 import { ExternalLink } from "./ExternalLink.js";
 import { FileSkeleton } from "./FileSkeleton.js";
 import { MoveDialog } from "./MoveDialog.js";
+import { failureDescription } from "./Previews.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";
@@ -259,6 +262,26 @@ export function App() {
 						</ActionMenu>
 					)}
 					<Account model={model} />
+				</Stack>
+				{/*
+				 * What the app has to say once, while signed in (signed out, the sign-in page
+				 * says it). Always mounted, so the shell's rows stay in place; empty, it has
+				 * no height.
+				 */}
+				<Stack gap="condensed" className="notices">
+					{model.session.kind === "connected" &&
+						model.failures.map((f, i) => (
+							<Banner
+								// biome-ignore lint/suspicious/noArrayIndexKey: the same failure may appear twice
+								key={i}
+								variant="critical"
+								title={plainText(f.message)}
+								description={failureDescription(f)}
+								onDismiss={() =>
+									dispatch({ kind: "failureDismissed", index: i })
+								}
+							/>
+						))}
 				</Stack>
 				{/* On narrow screens the tree and the open file are separate views. */}
 				{model.session.kind === "connecting" ? (
