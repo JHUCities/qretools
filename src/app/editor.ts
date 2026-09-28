@@ -1,0 +1,244 @@
+/**
+ * The only file that touches CodeMirror. The editor is a stateful widget that
+ * owns the text while a keystroke is in flight; the Model owns it otherwise.
+ * `sync` is idempotent: it pushes the Model's text in only when it differs
+ * (loading an example), always pushes the current diagnostics, and pushes the
+ * JSON Schema when it is a new value (the bank's scales changed).
+ */
+import { startCompletion } from "@codemirror/autocomplete";
+import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
+import { Annotation, Compartment, EditorState, Prec } from "@codemirror/state";
+import { keymap } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
+import { basicSetup, EditorView } from "codemirror";
+import { stateExtensions, updateSchema } from "codemirror-json-schema";
+import { yamlCompletion } from "codemirror-json-schema/yaml";
+import type { Range } from "../core/findings.js";
+import { schemaCompletion } from "./complete.js";
+
+/** Marks a change we made ourselves, so it is not echoed back as an edit. */
+const external = Annotation.define<boolean>();
+
+export interface EditorInputs {
+	/** Which question is open. A change resets editor state, so undo history never leaks between questions. */
+	readonly id: number;
+	readonly text: string;
+	readonly diagnostics: readonly Diagnostic[];
+	readonly schema: object;
+	/** Another author's version, from a link: shown, never edited. */
+	readonly readOnly?: boolean;
+	/** The editor's accessible name, e.g. "Question source (YAML)". */
+	readonly label?: string;
+}
+
+export interface Editor {
+	sync(inputs: EditorInputs): void;
+	reveal(range: Range): void;
+	/** Tear the editor down; React mounts and unmounts the host, so this must exist. */
+	destroy(): void;
+}
+
+export function createEditor(
+	parent: HTMLElement,
+	onEdit: (text: string) => void,
+	onCursor: (offset: number) => void,
+): Editor {
+	let schema: object | undefined;
+	let current: number | undefined;
+	let locked = false;
+	const readOnly = new Compartment();
+	const label = new Compartment();
+	let named = "Source";
+	const extensions = [
+		basicSetup,
+		yaml(),
+		// We compose the schema features ourselves. The package's bundled extension
+		// adds its own linter, which would double-report and call holes errors.
+		yamlLanguage.data.of({ autocomplete: yamlCompletion() }),
+		yamlLanguage.data.of({ autocomplete: schemaCompletion }),
+		// No schema hover: the cursor inspector shows a field's description, and a
+		// finding's tooltip shows the finding; a third tooltip repeated both.
+		stateExtensions(),
+		macCompletionKeys,
+		EditorView.lineWrapping,
+		primerTheme,
+		primerHighlight,
+		// The accessible name of the text area, which changes with the file open.
+		label.of(EditorView.contentAttributes.of({ "aria-label": "Source" })),
+		readOnly.of(EditorState.readOnly.of(false)),
+		// `docChanged` is essential: setDiagnostics also triggers this listener.
+		EditorView.updateListener.of((u) => {
+			if (u.docChanged && !u.transactions.some((t) => t.annotation(external)))
+				onEdit(u.state.doc.toString());
+			// Only when the caret actually moved, so a message is never sent for nothing.
+			const head = u.state.selection.main.head;
+			if (u.selectionSet && head !== u.startState.selection.main.head)
+				onCursor(head);
+		}),
+	];
+	const view = new EditorView({ parent, extensions });
+	return {
+		sync({
+			id,
+			text,
+			diagnostics,
+			schema: next,
+			readOnly: lock = false,
+			label: name = "Source (YAML)",
+		}) {
+			if (id !== current) {
+				// A fresh state: new document, empty undo history, and the schema state
+				// starts over, so it must be pushed again below. So does read-only.
+				current = id;
+				schema = undefined;
+				locked = false;
+				named = "Source";
+				view.setState(EditorState.create({ doc: text, extensions }));
+			}
+			if (name !== named) {
+				named = name;
+				view.dispatch({
+					effects: label.reconfigure(
+						EditorView.contentAttributes.of({ "aria-label": name }),
+					),
+				});
+			}
+			if (lock !== locked) {
+				locked = lock;
+				view.dispatch({
+					effects: readOnly.reconfigure(EditorState.readOnly.of(lock)),
+				});
+			}
+			if (next !== schema) {
+				schema = next;
+				updateSchema(view, next as never);
+			}
+			if (text !== view.state.doc.toString()) {
+				view.dispatch({
+					changes: { from: 0, to: view.state.doc.length, insert: text },
+					annotations: external.of(true),
+				});
+			}
+			view.dispatch(setDiagnostics(view.state, [...diagnostics]));
+		},
+		reveal([from, to]) {
+			// Never throw from a click: clamp to the document as it is now.
+			const end = view.state.doc.length;
+			const anchor = Math.min(Math.max(0, from), end);
+			const head = Math.min(Math.max(anchor, to), end);
+			view.dispatch({ selection: { anchor, head }, scrollIntoView: true });
+			view.focus();
+		},
+		destroy() {
+			view.destroy();
+		},
+	};
+}
+
+/**
+ * Opening completion on a Mac. Ctrl-Space is often taken by macOS for switching
+ * input sources, and CodeMirror's own `Alt-i` cannot fire where Option-I is a dead
+ * key (US layout: the circumflex). We do not force Option-I to work, because that
+ * would stop authors typing accented text such as "rôle" in a question. Instead
+ * we bind what VS Code binds on a Mac: Cmd-I and Option-Esc. Cmd-I replaces
+ * CodeMirror's default "select parent syntax", which a question editor can spare.
+ */
+const macCompletionKeys = Prec.highest(
+	keymap.of([
+		{ mac: "Cmd-i", run: startCompletion },
+		{ mac: "Alt-Escape", run: startCompletion },
+	]),
+);
+
+/**
+ * The editor in Primer's own terms: every colour is one of Primer's `--codeMirror-*`
+ * (or overlay and border) tokens, which are CSS variables, so one theme serves light
+ * and dark alike. Holes are invitations, not mistakes: dashed and tinted, never red.
+ */
+const primerTheme = EditorView.theme({
+	"&": {
+		height: "100%",
+		color: "var(--codeMirror-fgColor)",
+		backgroundColor: "var(--codeMirror-bgColor)",
+		fontSize: "var(--text-codeBlock-size)",
+	},
+	".cm-scroller": {
+		fontFamily: "var(--fontStack-monospace)",
+		lineHeight: "var(--text-codeBlock-lineHeight)",
+	},
+	".cm-content": { caretColor: "var(--codeMirror-cursor-fgColor)" },
+	".cm-cursor, .cm-dropCursor": {
+		borderLeftColor: "var(--codeMirror-cursor-fgColor)",
+	},
+	"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+		{ backgroundColor: "var(--codeMirror-selection-bgColor)" },
+	".cm-activeLine": { backgroundColor: "var(--codeMirror-activeline-bgColor)" },
+	".cm-gutters": {
+		color: "var(--codeMirror-lineNumber-fgColor)",
+		backgroundColor: "var(--codeMirror-gutters-bgColor)",
+		borderRight: "var(--borderWidth-thin) solid var(--borderColor-default)",
+	},
+	".cm-activeLineGutter": {
+		color: "var(--codeMirror-gutterMarker-fgColor-default)",
+		backgroundColor: "var(--codeMirror-activeline-bgColor)",
+	},
+	".cm-matchingBracket, &.cm-focused .cm-matchingBracket": {
+		color: "var(--codeMirror-matchingBracket-fgColor)",
+		backgroundColor: "transparent",
+		outline: "var(--borderWidth-thin) solid var(--borderColor-default)",
+	},
+	".cm-tooltip": {
+		color: "var(--fgColor-default)",
+		backgroundColor: "var(--overlay-bgColor)",
+		border: "var(--borderWidth-thin) solid var(--borderColor-default)",
+		borderRadius: "var(--borderRadius-medium)",
+		boxShadow: "var(--shadow-floating-small)",
+		// A readable line length, never the editor's full width.
+		maxInlineSize: "60ch",
+	},
+	".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+		color: "var(--fgColor-default)",
+		backgroundColor: "var(--bgColor-accent-muted)",
+	},
+	".cm-panels": {
+		color: "var(--fgColor-default)",
+		backgroundColor: "var(--bgColor-muted)",
+	},
+	".cm-lintRange-hint": {
+		backgroundImage: "none",
+		backgroundColor: "var(--bgColor-attention-muted)",
+		borderBottom: "var(--borderWidth-thick) dashed var(--fgColor-attention)",
+	},
+	".cm-lintPoint-hint:after": { borderBottomColor: "var(--fgColor-attention)" },
+	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },
+});
+
+/** Syntax colours from Primer's `--codeMirror-syntax-*` tokens (YAML needs few). */
+const primerHighlight = syntaxHighlighting(
+	HighlightStyle.define([
+		{ tag: tags.comment, color: "var(--codeMirror-syntax-fgColor-comment)" },
+		{
+			tag: [tags.propertyName, tags.definition(tags.propertyName)],
+			color: "var(--codeMirror-syntax-fgColor-entity)",
+		},
+		{
+			tag: [tags.string, tags.special(tags.string), tags.content],
+			color: "var(--codeMirror-syntax-fgColor-string)",
+		},
+		{
+			tag: [tags.number, tags.bool, tags.null, tags.atom],
+			color: "var(--codeMirror-syntax-fgColor-constant)",
+		},
+		{
+			tag: [tags.keyword, tags.typeName, tags.labelName],
+			color: "var(--codeMirror-syntax-fgColor-keyword)",
+		},
+		{
+			tag: [tags.punctuation, tags.separator, tags.meta],
+			color: "var(--codeMirror-syntax-fgColor-support)",
+		},
+		{ tag: tags.invalid, color: "var(--fgColor-danger)" },
+	]),
+);

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+worker/.wrangler/
+worker/.dev.vars
+
+# Project notes kept locally, not in the repository.
+AGENTS.md
+FEATURES.md

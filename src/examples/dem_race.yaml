@@ -1,0 +1,18 @@
+name: dem_race
+title: Race
+text: What is your race? Indicate one or more races that you consider yourself to be.
+intent: Prevalence of racial identification, allowing more than one; used to construct the race-ethnicity variables
+concept: racial identification
+universe: All respondents
+instruction: Select all that apply
+select: many
+responses:
+  wh: { label: White, title: Race selected -- White }
+  bl: { label: Black or African American, title: Race selected -- Black }
+  am: { label: American Indian or Alaska Native, title: Race selected -- American Indian or Alaska Native }
+  as: { label: "Asian, Asian-American, Native Hawaiian, or other Pacific Islander", title: Race selected -- Asian or Pacific Islander }
+  ot: { label: Some other race, title: Race selected -- Other }
+note: The order of options was fixed. A free-text "please specify" for other race is a separate variable.
+legacy:
+  surveys_used: [bas-2023, bas-2024, bas-2025]
+  vargroup: dem

@@ -1,0 +1,13 @@
+name:
+title:
+text:
+intent:
+instruction: Select all that apply
+select: many
+responses:
+  opt1:
+    label:
+    title:
+  opt2:
+    label:
+    title:

@@ -1,0 +1,10 @@
+name: nhd_nyrs
+text: How many years have you lived in your current neighborhood?
+intent: Prevalence of neighborhood tenure; covariate for attachment and stability hypotheses
+concept: neighborhood tenure
+universe: All respondents
+number:
+  min: 0
+  max: 100
+  unit: years
+source: Original

@@ -1,0 +1,497 @@
+/* Layout and the previews; colours, spacing, type and breakpoints come from Primer's tokens. */
+@import "@primer/primitives/dist/css/functional/size/viewport.css";
+body {
+	margin: 0;
+	background: var(--bgColor-default);
+	color: var(--fgColor-default);
+}
+
+/*
+ * The app shell (see App.tsx): the dynamic viewport height (dvh follows mobile
+ * browsers' collapsing address bar, which 100vh does not), a header row sized by its
+ * content, and a workspace that takes the rest. `minmax(0, 1fr)` lets the workspace
+ * shrink below its content, so its children scroll instead of the window.
+ */
+.shell {
+	height: 100dvh;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+}
+/*
+ * The sidebar's width: one named design decision, taken from Primer PageLayout's
+ * `medium` pane (256px, wider on wide screens). PageLayout keeps its pane widths
+ * internal rather than publishing them as tokens, so they are named here, once.
+ */
+.workspace {
+	--sidebar-width: 16rem;
+	display: grid;
+	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+	/*
+	 * A band, then the rest. The sidebar and the content each take both rows as a
+	 * subgrid: the branch and the open file's header share the band, so their rules
+	 * line up whatever either holds; only the second row scrolls.
+	 */
+	grid-template-rows: auto minmax(0, 1fr);
+	min-height: 0;
+}
+@media (--viewportRange-wide) {
+	.workspace {
+		--sidebar-width: 18.5rem;
+	}
+}
+.sidebar,
+.content {
+	grid-row: 1 / -1;
+	display: grid;
+	grid-template-rows: subgrid;
+	/* Their own column, never sized by content that cannot wrap (the header's buttons). */
+	grid-template-columns: minmax(0, 1fr);
+	min-width: 0;
+	min-height: 0;
+}
+.sidebar {
+	border-right: var(--borderWidth-thin) solid var(--borderColor-default);
+}
+/* Every item is placed, so nothing moves up a row when no file header is there. */
+.band,
+.qhead {
+	grid-row: 1;
+}
+.trees,
+.split {
+	grid-row: 2;
+	min-height: 0;
+}
+.trees {
+	overflow: auto;
+	padding: var(--base-size-16);
+}
+/*
+ * Narrow screens: the tree and the open file are separate views, as Primer's layout
+ * guidance advises for a pane full of links; the file's header offers the way back.
+ */
+@media (--viewportRange-narrow) {
+	.workspace {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.sidebar {
+		border-right: none;
+	}
+	.workspace[data-open="true"] .sidebar,
+	.workspace[data-open="false"] .content {
+		display: none;
+	}
+}
+.topbar {
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+}
+.topbar h1 {
+	margin: 0;
+	font-size: var(--text-title-size-small);
+}
+/*
+ * The context takes the row's spare room and truncates before anything wraps; the
+ * status follows it. On narrow screens only the repository names the context, as on
+ * github.com, and a status with something to say takes a row of its own.
+ */
+/* A zero basis: a wrapping row breaks at natural widths, so the brand never asks for any. */
+.topbar .brand {
+	flex: 1 1 0;
+	min-width: 0;
+}
+/*
+ * The brand row: the name, the path, "behind" and the pull-request icon never shrink
+ * except the path, which truncates from the end (the branch first, then the
+ * repository; the branch's full name is its tooltip).
+ */
+/* Primer's Stack renders its children as direct DOM children, which these rely on. */
+.topbar .brand > * {
+	flex-shrink: 0;
+}
+.topbar .brand > .path {
+	flex-shrink: 1;
+	min-width: 0;
+}
+.topbar .path > h1 {
+	flex-shrink: 0;
+}
+.topbar .path > .context {
+	flex-shrink: 1;
+	font-size: var(--text-body-size-medium);
+	min-width: 0;
+	/* Clipped for the ellipsis, with room for the links' focus rings. */
+	overflow: clip;
+	overflow-clip-margin: var(--base-size-4);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.topbar .status {
+	min-width: 0;
+}
+/* An octicon in running text sits on the text, as Primer sets them inline. */
+.inline-icon {
+	vertical-align: text-bottom;
+}
+@media (--viewportRange-narrow) {
+	.topbar .owner,
+	.topbar .branch-path,
+	.topbar .behind {
+		display: none;
+	}
+	.topbar .status:not(:has(.session:empty)) {
+		order: 1;
+		flex-basis: 100%;
+	}
+}
+/* The sidebar's band: the filter, level with the open file's header and its rule. */
+.band {
+	padding: var(--base-size-8) var(--base-size-16);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+}
+/* The avatar is the button: its hover and focus take the avatar's round shape. */
+.topbar .account {
+	padding: 0;
+	border-radius: var(--borderRadius-full);
+}
+.topbar .session {
+	font-size: var(--text-body-size-small);
+	overflow-wrap: anywhere;
+}
+
+/* Colour utilities: Primer's functional tokens, one set. */
+.quiet {
+	color: var(--fgColor-muted);
+}
+.fg-success {
+	color: var(--fgColor-success);
+}
+.fg-accent {
+	color: var(--fgColor-accent);
+}
+.fg-attention {
+	color: var(--fgColor-attention);
+}
+.fg-danger {
+	color: var(--fgColor-danger);
+}
+
+/* Inline code of our own; scoped by class so Primer's components keep theirs. */
+.code {
+	font-family: var(--fontStack-monospace);
+	font-size: var(--text-codeInline-size);
+	background: var(--bgColor-muted);
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-small);
+	padding: 0 var(--base-size-4);
+}
+
+/* The bank tree. */
+.browser-heading {
+	margin: var(--base-size-8) 0 0;
+	font-size: var(--text-body-size-small);
+	font-weight: var(--base-text-weight-semibold);
+	color: var(--fgColor-muted);
+}
+.used-by {
+	margin: 0;
+	padding-left: var(--base-size-20);
+}
+/* Signed out: one narrow column, as github.com's sign-in page. */
+.signin {
+	overflow: auto;
+	padding: var(--base-size-40) var(--base-size-16);
+}
+.signin-column {
+	max-inline-size: var(--overlay-width-small);
+	margin-inline: auto;
+}
+.signin-heading {
+	margin: 0;
+	text-align: center;
+	font-size: var(--text-title-size-medium);
+	font-weight: var(--base-text-weight-normal);
+}
+.signin-box {
+	padding: var(--base-size-16);
+	background: var(--bgColor-muted);
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-medium);
+}
+.blank {
+	grid-row: 1 / -1;
+	padding: var(--base-size-40);
+}
+/* A title's place: a flex item has no width of its own, so it is given a name's width. */
+.skeleton-title {
+	display: block;
+	inline-size: 12rem;
+}
+/* The editor's place while a file loads: code-like lines, with the editor's inset. */
+.skeleton-code {
+	padding: var(--base-size-16);
+	gap: var(--base-size-8);
+}
+
+/* The open file: header, then source beside previews. */
+.qhead {
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	padding: var(--base-size-8) var(--base-size-16);
+	display: flex;
+	flex-direction: column;
+	gap: var(--base-size-8);
+}
+.split {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+/* Narrow: the source above its previews, each scrolling on its own. */
+@media (--viewportRange-narrow) {
+	.split {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+	}
+	.left {
+		border-right: none;
+		border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	}
+}
+.left {
+	min-height: 0;
+	border-right: var(--borderWidth-thin) solid var(--borderColor-default);
+	display: flex;
+	flex-direction: column;
+}
+.editor {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+}
+/* The previews: the one scroll region beside the editor's own. */
+.right {
+	min-height: 0;
+	overflow: auto;
+	padding: var(--base-size-16) var(--base-size-16) var(--base-size-40);
+	display: flex;
+	flex-direction: column;
+	gap: var(--base-size-16);
+}
+.inspector {
+	border-top: var(--borderWidth-thin) solid var(--borderColor-default);
+	padding: var(--base-size-8) var(--base-size-12);
+	font-size: var(--text-body-size-small);
+	background: var(--bgColor-muted);
+}
+.inspector p {
+	margin: var(--base-size-2) 0;
+}
+
+/* Preview panels. */
+.pane {
+	background: var(--bgColor-default);
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-medium);
+}
+.pane h3 {
+	margin: 0;
+	padding: var(--base-size-8) var(--base-size-12);
+	font-size: var(--text-body-size-medium);
+	font-weight: var(--base-text-weight-semibold);
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	display: flex;
+	gap: var(--base-size-8);
+	align-items: center;
+	justify-content: space-between;
+}
+.pane-body {
+	padding: var(--base-size-12);
+}
+details.pane > summary {
+	cursor: pointer;
+}
+.disclosure {
+	display: inline-flex;
+	gap: var(--base-size-4);
+	align-items: center;
+}
+details.pane[open] > summary .disclosure > svg {
+	transform: rotate(90deg);
+}
+details.pane:not([open]) > summary h3 {
+	border-bottom: 0;
+}
+
+/* A hole in a preview: dashed and tinted, an invitation, never an error. */
+.hole {
+	display: inline-block;
+	text-align: left;
+	border: var(--borderWidth-thick) dashed var(--fgColor-attention);
+	background: var(--bgColor-attention-muted);
+	color: var(--fgColor-default);
+	border-radius: var(--borderRadius-medium);
+	padding: var(--base-size-4) var(--base-size-8);
+	font: inherit;
+	font-size: var(--text-body-size-small);
+	max-width: 100%;
+}
+button.hole {
+	cursor: pointer;
+}
+
+/* As the respondent sees it: native form controls, as a respondent would get them. */
+.respondent {
+	border: 0;
+	margin: 0;
+	padding: 0;
+}
+.respondent legend {
+	font-size: var(--text-title-size-small);
+	font-weight: var(--base-text-weight-semibold);
+	padding: 0;
+	margin-bottom: var(--base-size-6);
+}
+.instruction {
+	margin: 0 0 var(--base-size-8);
+	color: var(--fgColor-muted);
+	font-style: italic;
+}
+.options {
+	display: flex;
+	flex-direction: column;
+	gap: var(--base-size-4);
+}
+.respondent .number input {
+	width: 8em;
+	font: inherit;
+	padding: var(--base-size-4) var(--base-size-6);
+}
+.respondent textarea {
+	width: 100%;
+	font: inherit;
+	padding: var(--base-size-6);
+}
+
+/* The codebook entry, in the BAS codebook's own style (its uppercase titles included). */
+.codebook {
+	font-size: var(--text-body-size-medium);
+}
+.cb-title {
+	margin: 0 0 var(--base-size-4);
+	font-weight: var(--base-text-weight-semibold);
+	text-transform: uppercase;
+}
+.cb-var {
+	font-weight: var(--base-text-weight-normal);
+	color: var(--fgColor-muted);
+	font-family: var(--fontStack-monospace);
+	font-size: var(--text-codeBlock-size);
+	margin-left: var(--base-size-6);
+}
+.cb-title .cb-var,
+.cb-title .hole {
+	text-transform: none;
+}
+.cb-text {
+	margin: 0 0 var(--base-size-8);
+	font-style: italic;
+}
+.cb-values {
+	list-style: none;
+	margin: 0 0 var(--base-size-8);
+	padding: 0;
+	font-family: var(--fontStack-monospace);
+	font-size: var(--text-codeBlock-size);
+}
+.ref {
+	margin-left: var(--base-size-6);
+	padding: 0 var(--base-size-4);
+	border-radius: var(--borderRadius-small);
+	background: var(--bgColor-neutral-muted);
+	font-family: var(--fontStack-monospace);
+	font-size: var(--text-caption-size);
+	font-style: normal;
+}
+.cb-meta {
+	margin: var(--base-size-8) 0 0;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: var(--base-size-2) var(--base-size-8);
+	color: var(--fgColor-muted);
+	font-size: var(--text-body-size-small);
+}
+.cb-meta dt {
+	font-weight: var(--base-text-weight-semibold);
+}
+.cb-meta dd {
+	margin: 0;
+}
+
+/* Findings: severity is data, carried by the label and the edge, never by colour alone. */
+.findings {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--base-size-6);
+}
+.finding {
+	--edge: var(--borderColor-default);
+	width: 100%;
+	text-align: left;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	column-gap: var(--base-size-8);
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-left: var(--borderWidth-thicker) solid var(--edge);
+	border-radius: var(--borderRadius-medium);
+	background: var(--bgColor-default);
+	color: var(--fgColor-default);
+	padding: var(--base-size-6) var(--base-size-8);
+	margin: 0;
+	font: inherit;
+}
+.finding .sev {
+	min-width: 4em;
+	color: var(--edge);
+	font-size: var(--text-caption-size);
+	text-transform: uppercase;
+	padding-top: var(--base-size-2);
+}
+.finding .hint {
+	grid-column: 2;
+	color: var(--fgColor-muted);
+	font-size: var(--text-body-size-small);
+	white-space: pre-wrap;
+}
+.finding[data-severity="hole"] {
+	--edge: var(--fgColor-attention);
+	border-left-style: dashed;
+}
+.finding[data-severity="error"] {
+	--edge: var(--fgColor-danger);
+}
+.finding[data-severity="warning"] {
+	--edge: var(--fgColor-attention);
+}
+.finding[data-severity="info"] {
+	--edge: var(--fgColor-accent);
+}
+p.finding {
+	display: block;
+}
+/* The DDI JSON scrolls with the previews; no scroll region of its own. */
+.json {
+	margin: 0;
+	font-family: var(--fontStack-monospace);
+	font-size: var(--text-caption-size);
+	line-height: var(--text-codeBlock-lineHeight);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.save-path {
+	margin: var(--base-size-12) 0 var(--base-size-4);
+}
