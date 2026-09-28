@@ -78,7 +78,7 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 			error(
 				"unknown-key",
 				k,
-				`\`${k}\` is not a field here.`,
+				`\`${k}\` isn't a field here.`,
 				"The only field is `text`.",
 			),
 		);

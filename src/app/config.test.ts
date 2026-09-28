@@ -44,7 +44,7 @@ describe("sign-in configuration", () => {
 			redirectUri: "https://x.io/app/",
 		});
 		expect(installUrl("qretools")).toBe(
-			"https://github.com/apps/qretools/installations/new",
+			"https://github.com/apps/qretools/installations/select_target",
 		);
 	});
 });

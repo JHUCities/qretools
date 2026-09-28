@@ -60,7 +60,7 @@ export function bankLocation(
 			code: "wrong-type",
 			severity: "error",
 			path: "",
-			message: `\`${folder}\` is not a folder name.`,
+			message: `\`${folder}\` isn't a folder name.`,
 			hint: FOLDER_RULE_TEXT,
 		});
 	return ok({

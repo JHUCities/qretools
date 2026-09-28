@@ -340,26 +340,28 @@ export const makeGitHubStore = (
 			}),
 		);
 		if (!commit.ok) return err({ failure: commit.error });
-		const moved = await run(() =>
-			octokit.request("PATCH /repos/{owner}/{repo}/git/refs/{+ref}", {
+		try {
+			await octokit.request("PATCH /repos/{owner}/{repo}/git/refs/{+ref}", {
 				owner,
 				repo,
 				ref: `heads/${target.branch}`,
 				sha: commit.value.data.sha,
 				force: false,
 				...ONCE,
-			}),
-		);
-		// 422 "Update is not a fast forward" (someone pushed) or "Reference does not exist"
-		// (the branch was merged and deleted mid-save): read again and retry, which
-		// recreates the branch if need be. Any other 422 is reported as itself.
-		if (!moved.ok)
-			return moved.error.status === 422 &&
-				/fast forward|does not exist/i.test(
-					moved.error.detail ?? moved.error.message,
-				)
-				? "lost"
-				: err({ failure: moved.error });
+			});
+		} catch (e) {
+			// Decided from GitHub's own error, before it becomes display text: 422
+			// "Update is not a fast forward" (someone pushed) or "Reference does not
+			// exist" (the branch was merged and deleted mid-save) means read again and
+			// retry, which recreates the branch if need be. Any other 422 is itself.
+			if (
+				e instanceof RequestError &&
+				e.status === 422 &&
+				/fast forward|does not exist/i.test(e.message)
+			)
+				return "lost";
+			return err({ failure: failureOf(e) });
+		}
 		return ok({ shas });
 	}
 
@@ -519,7 +521,7 @@ export const makeGitHubStore = (
 				return err({
 					kind: "http",
 					status: 404,
-					message: `\`${path}\` is not on ${ref}.`,
+					message: `\`${path}\` isn't on ${ref}.`,
 				});
 			const flat = (folder: string, tree: Tree | undefined) =>
 				(tree?.entries ?? []).flatMap((e) =>
@@ -559,7 +561,7 @@ export const makeGitHubStore = (
 				? err({
 						kind: "http",
 						status: 404,
-						message: `\`${path}\` is not on ${target.branch}.`,
+						message: `\`${path}\` isn't on ${target.branch}.`,
 					})
 				: ok({ path, sha: file.oid, text: file.text });
 		},

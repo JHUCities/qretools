@@ -100,7 +100,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			error(
 				"unknown-key",
 				key,
-				`\`${key}\` is not a question field.`,
+				`\`${key}\` isn't a question field.`,
 				FIELDS_HINT,
 			),
 		);
@@ -423,7 +423,7 @@ function issueFindings(kind: "number" | "open", zodError: ZodError): Finding[] {
 				error(
 					"unknown-key",
 					`${kind}.${k}`,
-					`\`${k}\` is not a \`${kind}\` field.`,
+					`\`${k}\` isn't a \`${kind}\` field.`,
 					describe(kind),
 				),
 			);
