@@ -5,15 +5,16 @@
  */
 import { Dialog, FormControl, TextInput } from "@primer/react";
 import { useId } from "react";
+import { SCHEME_NAME } from "../../core/copy.js";
 import { schemePath } from "../../core/schemes.js";
 import type { NamedScheme } from "../../core/surface/env.js";
 import type { Dispatch } from "../model.js";
 import { inlineCode } from "./Previews.js";
 
 const EXAMPLES: Readonly<Record<NamedScheme, string>> = {
-	scale: "agree5",
-	universe: "renters",
-	instruction: "select_all",
+	scale: "satisfied5",
+	universe: "owners",
+	instruction: "select_one",
 };
 
 export function SchemeNameDialog({
@@ -33,7 +34,7 @@ export function SchemeNameDialog({
 	const shown = name === "" ? undefined : problem;
 	return (
 		<Dialog
-			title={`New ${kind}`}
+			title={`New ${SCHEME_NAME[kind]}`}
 			onClose={close}
 			footerButtons={[
 				{ buttonType: "default", content: "Cancel", onClick: close },
@@ -74,7 +75,7 @@ export function SchemeNameDialog({
 						</code>
 						{problem === undefined && (
 							<>
-								; it is saved as{" "}
+								; it's saved as{" "}
 								<code className="code">{schemePath(kind, name)}</code>
 							</>
 						)}

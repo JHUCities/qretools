@@ -8,7 +8,7 @@ import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
 import { memo, type ReactNode, useMemo } from "react";
-import { SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
+import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import { status, type Target } from "../../core/findings.js";
 import { inspect } from "../../core/inspect.js";
@@ -185,7 +185,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						</div>
 					</article>
 					<article className="pane">
-						<h3>Codebook entry</h3>
+						<h3>As the codebook lists it</h3>
 						<div className="pane-body">
 							<Codebook view={ev.codebook} onTarget={onTarget} />
 						</div>
@@ -295,14 +295,14 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						<div className="pane-body">
 							{users === undefined ? (
 								<p className="quiet">
-									Every variable in the bank references the missing-value list.
+									Every variable in the bank uses the missing values.
 								</p>
 							) : users.length === 0 ? (
 								<p className="quiet">No question names it.</p>
 							) : !inEffect ? (
 								<p className="fg-attention">
-									This file does not read yet, so each of these shows a hole
-									where it names <code className="code">{e.name}</code>.
+									This can't be read yet, so each of these shows a field to fill
+									in where it names <code className="code">{e.name}</code>.
 								</p>
 							) : null}
 							{users !== undefined && users.length > 0 && (
@@ -391,7 +391,8 @@ function Inspector({
 			{m !== undefined &&
 				(m.value !== undefined ? (
 					<p>
-						<code className="code">{m.name}</code> is the {m.scheme}{" "}
+						<code className="code">{m.name}</code> is the{" "}
+						{SCHEME_NAME[m.scheme]}{" "}
 						{"codes" in m.value
 							? m.value.codes.map((c) => `${c.code} ${c.label}`).join(" · ")
 							: `“${m.value.text}”`}
@@ -418,7 +419,7 @@ function Inspector({
 								})
 							}
 						>
-							New {m.scheme} <code className="code">{m.name}</code>
+							New {SCHEME_NAME[m.scheme]} <code className="code">{m.name}</code>
 						</Button>
 					</p>
 				))}
@@ -562,7 +563,7 @@ export function ForeignView({
 									</div>
 								</article>
 								<article className="pane">
-									<h3>Codebook entry</h3>
+									<h3>As the codebook lists it</h3>
 									<div className="pane-body">
 										<Codebook view={ev.codebook} />
 									</div>

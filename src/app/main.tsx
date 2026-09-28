@@ -58,7 +58,7 @@ if (root) {
 				: config === undefined
 					? {
 							kind: "auth" as const,
-							message: "Sign-in is not set up for this build.",
+							message: "Sign-in isn't set up for this build.",
 						}
 					: undefined;
 	const app = createApp(

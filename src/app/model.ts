@@ -354,7 +354,7 @@ export const TEMPLATES: ReadonlyArray<{
 	readonly text: string;
 }> = [
 	{ label: "Single choice", text: choiceTemplate },
-	{ label: "Shared scale", text: scaleTemplate },
+	{ label: "Using a shared scale", text: scaleTemplate },
 	{ label: "Number", text: numberTemplate },
 	{ label: "Select all that apply", text: selectManyTemplate },
 ];

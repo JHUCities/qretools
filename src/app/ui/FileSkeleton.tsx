@@ -13,7 +13,7 @@ import type { SchemeKind } from "../../core/schemes.js";
 /** The preview panes a file of each kind shows, by heading; Editing.tsx draws the same. */
 export function paneTitles(kind: "question" | SchemeKind): readonly string[] {
 	return kind === "question"
-		? ["Findings", "As the respondent sees it", "Codebook entry"]
+		? ["Findings", "As the respondent sees it", "As the codebook lists it"]
 		: ["Findings", SCHEME_SINGULAR[kind], "Used by"];
 }
 
