@@ -363,6 +363,9 @@ export function migrate(local: Storage, session: Storage): readonly Failure[] {
 	if (raw === null || session.getItem(WORK_KEY) !== null) return [];
 	const stored = readPersisted(raw);
 	const notices: Failure[] = [];
+	// A tab still on an older version may write the old key again after a first
+	// migration: retire it beside, never over, what was retired before.
+	const retired = freeKey(local, RETIRED_KEY);
 	if (!stored.ok) notices.push(stored.error);
 	else if (stored.value !== undefined) {
 		const { work, settings, setAside } = fromLegacy(stored.value);
@@ -371,10 +374,10 @@ export function migrate(local: Storage, session: Storage): readonly Failure[] {
 		if (setAside)
 			notices.push({
 				kind: "unreadable",
-				message: `Unsaved work for other banks from an older version was set aside in this browser's storage (${RETIRED_KEY}).`,
+				message: `Unsaved work for other banks from an older version was set aside in this browser's storage (${retired}).`,
 			});
 	}
-	local.setItem(RETIRED_KEY, raw);
+	local.setItem(retired, raw);
 	local.removeItem(LEGACY_KEY);
 	return notices;
 }
@@ -480,3 +483,10 @@ export const browserCredentialStore: CredentialStore = {
 			}
 		}, undefined),
 };
+
+/** `base`, or `base.2`, `base.3`… : the first key not already holding something. */
+function freeKey(storage: Storage, base: string): string {
+	if (storage.getItem(base) === null) return base;
+	for (let n = 2; ; n++)
+		if (storage.getItem(`${base}.${n}`) === null) return `${base}.${n}`;
+}

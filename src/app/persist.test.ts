@@ -289,6 +289,15 @@ describe("migrating an older version's work", () => {
 		expect(second.getItem(WORK_KEY)).toBeNull();
 	});
 
+	it("never retires over an earlier retired value (a tab on the old version wrote again)", () => {
+		const local = new MemoryStorage();
+		local.setItem(RETIRED_KEY, "earlier");
+		local.setItem(LEGACY_KEY, JSON.stringify(v4));
+		migrate(local, new MemoryStorage());
+		expect(local.getItem(RETIRED_KEY)).toBe("earlier");
+		expect(local.getItem(`${RETIRED_KEY}.2`)).toBe(JSON.stringify(v4));
+	});
+
 	it("says once that work kept for other banks was set aside", () => {
 		const local = new MemoryStorage();
 		local.setItem(
