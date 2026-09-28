@@ -20,9 +20,20 @@ export interface App {
 	readonly evaluations: Evaluations;
 	/** Sign-in with GitHub for this build, if configured: read once, at startup. */
 	readonly signIn?: SignInConfig;
+	/** "Use this template" for a new bank, if configured. */
+	readonly template?: string;
 }
 
-export function createApp(flags: Flags, deps: Deps): App {
+/** What the view needs beyond the effects' dependencies: read once, at startup. */
+export interface ViewConfig {
+	readonly template?: string;
+}
+
+export function createApp(
+	flags: Flags,
+	deps: Deps,
+	view: ViewConfig = {},
+): App {
 	const effects = createEffects(deps);
 	const [model, first] = init(flags);
 	const store = createStore<{ model: Model }>()(
@@ -40,5 +51,6 @@ export function createApp(flags: Flags, deps: Deps): App {
 		effects,
 		evaluations: createEvaluations(),
 		...(deps.signIn !== undefined && { signIn: deps.signIn.config }),
+		...(view.template !== undefined && { template: view.template }),
 	};
 }

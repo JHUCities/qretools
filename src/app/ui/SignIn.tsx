@@ -14,12 +14,14 @@ import {
 	Button,
 	Checkbox,
 	FormControl,
+	Link,
 	LinkButton,
 	Stack,
 	TextInput,
 	VisuallyHidden,
 } from "@primer/react";
 import { useId, useRef, useState } from "react";
+import { installUrl } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import { type Local, type Model, parseWorkKey } from "../model.js";
 import { parseRepo } from "../storage.js";
@@ -27,7 +29,7 @@ import { useApp } from "./AppContext.js";
 import { inlineCode } from "./Previews.js";
 
 export function SignIn({ model }: { model: Model }) {
-	const { dispatch, effects, signIn: config } = useApp();
+	const { dispatch, effects, signIn: config, template } = useApp();
 	const { settings, session } = model;
 	const [text, setText] = useState(
 		model.pendingLink?.repo ?? `${settings.owner}/${settings.repo}`,
@@ -200,6 +202,30 @@ export function SignIn({ model }: { model: Model }) {
 						)}
 					</Stack>
 				</form>
+				{/* As github.com offers "New to GitHub?" under its form. */}
+				{template !== undefined && (
+					<p className="quiet signin-kept">
+						New bank?{" "}
+						<Link href={template} target="_blank" rel="noreferrer">
+							Start one from the template
+							<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+						</Link>
+						{config?.appSlug !== undefined && (
+							<>
+								, then{" "}
+								<Link
+									href={installUrl(config.appSlug)}
+									target="_blank"
+									rel="noreferrer"
+								>
+									install the app on it
+									<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+								</Link>
+							</>
+						)}
+						.
+					</p>
+				)}
 				{held.length > 0 && (
 					<p className="quiet signin-kept">
 						Unsaved work in this browser, kept for its bank:{" "}
