@@ -7,7 +7,7 @@ import { toDiagnostics } from "./diagnostics.js";
 import { createEvaluations } from "./evaluations.js";
 import { formatLink } from "./link.js";
 import {
-	adoptWork,
+	allFiles,
 	DEFAULT_SETTINGS,
 	envOf,
 	fileOf,
@@ -18,7 +18,8 @@ import {
 	type Question,
 	remoteOfBases,
 	type SchemeEntry,
-	toPersisted,
+	toWork,
+	warnOnLeave,
 } from "./model.js";
 import type { File } from "./storage.js";
 import { remoteBlob, syncOf } from "./sync.js";
@@ -30,11 +31,12 @@ import {
 	ownBranch,
 	schemeNameProblem,
 	sessionStatus,
+	signOutPlan,
 	update,
 	writeBlocked,
 } from "./update.js";
 
-const fresh = (): Model => init({ stored: ok(undefined), hasToken: false })[0];
+const fresh = (): Model => init({ work: ok(undefined), hasToken: false })[0];
 const run = (model: Model, ...msgs: Msg[]) =>
 	msgs.reduce<ReturnType<typeof update>>(
 		([m], msg) => update(m, msg),
@@ -93,7 +95,7 @@ const withBank = (model: Model, questions: readonly Question[]): Model => {
 
 describe("init", () => {
 	it("starts with an empty list on first run, and asks for the DDI schema", () => {
-		const [model, cmds] = init({ stored: ok(undefined), hasToken: false });
+		const [model, cmds] = init({ work: ok(undefined), hasToken: false });
 		expect(Object.keys(model.local.questions)).toHaveLength(0);
 		expect(model.screen).toEqual({ kind: "blank" });
 		expect(cmds).toEqual([{ kind: "loadDdiSchema" }]);
@@ -101,8 +103,8 @@ describe("init", () => {
 
 	it("restores saved work, and starts connecting when a token is on hand", () => {
 		const stored = {
-			version: 4 as const,
-			kept: {},
+			version: 5 as const,
+			repo: "JHUCities/bas-question-bank",
 			nextId: 9,
 			questions: [
 				{
@@ -113,9 +115,8 @@ describe("init", () => {
 				},
 			],
 			schemes: [],
-			settings: DEFAULT_SETTINGS,
 		};
-		const [model, cmds] = init({ stored: ok(stored), hasToken: true });
+		const [model, cmds] = init({ work: ok(stored), hasToken: true });
 		expect(model.local.questions[3]?.base).toEqual(stored.questions[0]?.base);
 		// GitHub as this browser last knew it is what the bases record.
 		expect(model.remote.questions["questions/q/q.yaml"]?.sha).toBe("abc");
@@ -129,7 +130,7 @@ describe("init", () => {
 
 	it("keeps an unreadable store as a failure, not a crash", () => {
 		const [model] = init({
-			stored: { ok: false, error: { kind: "unreadable", message: "bad" } },
+			work: { ok: false, error: { kind: "unreadable", message: "bad" } },
 			hasToken: false,
 		});
 		expect(model.failures).toEqual([{ kind: "unreadable", message: "bad" }]);
@@ -385,7 +386,7 @@ describe("connecting", () => {
 			settings: DEFAULT_SETTINGS,
 		});
 		expect(m1.session.kind).toBe("connecting");
-		expect(c1[0]).toEqual({
+		expect(c1.find((c) => c.kind === "connect")).toEqual({
 			kind: "connect",
 			repo: { owner: "JHUCities", repo: "bas-question-bank" },
 		});
@@ -514,16 +515,16 @@ describe("connecting", () => {
 	});
 
 	it("starting without a sign-in forgets the bank's clean copies too", () => {
-		const stored = toPersisted(
+		const stored = toWork(
 			withBank(fresh(), [
 				bankQuestion(1, "questions/q/clean.yaml", "name: clean\n"),
 				bankQuestion(2, "questions/q/edited.yaml", "name: edited\n", "x\n"),
 			]),
 		);
-		const [m, cmds] = init({ stored: ok(stored), hasToken: false });
+		const [m, cmds] = init({ work: ok(stored), hasToken: false });
 		expect(Object.keys(m.local.questions)).toEqual(["2"]);
 		expect(cmds.some((c) => c.kind === "persist")).toBe(true);
-		const [kept] = init({ stored: ok(stored), hasToken: true });
+		const [kept] = init({ work: ok(stored), hasToken: true });
 		expect(Object.keys(kept.local.questions)).toHaveLength(2);
 	});
 
@@ -1326,9 +1327,14 @@ describe("signing in", () => {
 	it("keeps the settings and leaves for GitHub", () => {
 		const settings = { ...DEFAULT_SETTINGS, remember: true };
 		const [m, cmds] = update(fresh(), { kind: "signInRequested", settings });
-		expect(m.session).toEqual({ kind: "connecting" });
-		expect(cmds.map((c) => c.kind)).toEqual(["signIn", "persist"]);
-		expect(cmds[0]).toEqual({ kind: "signIn", remember: true });
+		expect(m.session).toEqual({ kind: "connecting", toGitHub: true });
+		expect(cmds.map((c) => c.kind)).toEqual([
+			"saveSettings",
+			"signIn",
+			"persist",
+		]);
+		expect(cmds[0]).toEqual({ kind: "saveSettings", settings });
+		expect(cmds[1]).toEqual({ kind: "signIn", remember: true });
 	});
 
 	it("a sign-in that has ended ends the session, whatever reply says so, and forgets the credentials", () => {
@@ -1488,7 +1494,7 @@ describe("a refused return from GitHub", () => {
 			message: "This sign-in didn't start here, or has already been used.",
 		};
 		const [m, cmds] = init({
-			stored: ok(undefined),
+			work: ok(undefined),
 			hasToken: true,
 			signInFailure: refused,
 		});
@@ -1510,7 +1516,7 @@ describe("the author's own branch", () => {
 	});
 });
 
-describe("work belongs to one bank and one person", () => {
+describe("work belongs to this tab", () => {
 	const who = (login: string) => ({
 		kind: "connected" as const,
 		result: ok({
@@ -1520,73 +1526,230 @@ describe("work belongs to one bank and one person", () => {
 			defaultBranch: "main",
 		}),
 	});
-	const connecting = (m: Model, owner: string, repo: string): Model => ({
-		...m,
-		session: { kind: "connecting" },
-		settings: { ...m.settings, owner, repo },
-	});
 	const withDraft = (m: Model): Model =>
 		update(m, { kind: "questionCreated", text: "name: mine\n" })[0];
 
-	it("signing in to another bank sets this one's work aside, and returning brings it back", () => {
-		const [inA] = update(connecting(fresh(), "a", "bank"), who("iain"));
-		const aWork = withDraft(inA);
-		const [out] = update(aWork, { kind: "disconnected" });
-		const [inB, cmds] = update(connecting(out, "b", "bank"), who("iain"));
-		expect(inB.local.questions).toEqual({});
-		expect(inB.kept["a/bank@iain"]?.questions).toBe(out.local.questions);
-		expect(cmds.some((c) => c.kind === "persist")).toBe(true);
-		const [outB] = update(inB, { kind: "disconnected" });
-		const [backInA] = update(connecting(outB, "a", "bank"), who("iain"));
-		expect(backInA.local.questions).toBe(out.local.questions);
-		expect(backInA.kept).toEqual({});
-	});
-
-	it("another person in the same bank starts empty; the first person's work stays kept", () => {
-		const [inA] = update(connecting(fresh(), "a", "bank"), who("iain"));
-		const [out] = update(withDraft(inA), { kind: "disconnected" });
-		const [ann] = update(connecting(out, "a", "bank"), who("ann"));
-		expect(ann.local.questions).toEqual({});
-		expect(Object.keys(ann.kept)).toEqual(["a/bank@iain"]);
-	});
-
-	it("work kept before logins were recorded is the next person's to connect to its bank", () => {
-		const legacy = { ...withDraft(fresh()), workOf: { repo: "a/bank" } };
-		const same = adoptWork(legacy, "a/bank", "iain");
-		expect(same.local).toBe(legacy.local);
-		expect(same.workOf).toEqual({ repo: "a/bank", login: "iain" });
-		// Elsewhere first: it is set aside under its bank, then found there.
-		const away = adoptWork(legacy, "b/bank", "iain");
-		expect(away.local.questions).toEqual({});
-		const back = adoptWork(
-			{ ...away, workOf: { repo: "b/bank", login: "iain" } },
-			"a/bank",
-			"iain",
-		);
-		expect(back.local).toBe(legacy.local);
-	});
-
-	it("a bank or login typed with other capitals is the same bank and person", () => {
-		const legacy = {
-			...update(fresh(), { kind: "questionCreated", text: "name: q\n" })[0],
-			workOf: { repo: "JHUCities/Bank", login: "Iain" },
+	it("starts in its own work's bank, and records who signed in with it", () => {
+		const work = {
+			version: 5 as const,
+			repo: "a/bank",
+			login: "iain",
+			nextId: 1,
+			questions: [],
+			schemes: [],
 		};
-		expect(adoptWork(legacy, "jhucities/bank", "iain").local).toBe(
-			legacy.local,
-		);
+		const [m] = init({
+			work: ok(work),
+			settings: { owner: "x", repo: "y", remember: true },
+			hasToken: false,
+		});
+		expect(m.settings).toEqual({ owner: "a", repo: "bank", remember: true });
+		expect(m.author).toBe("iain");
+		expect(toWork(m)).toEqual(work);
 	});
 
-	it("signing out and a failed connection leave kept work alone", () => {
-		const kept = { "x/y@ann": { questions: {}, schemes: {} } };
-		const m = { ...connected(fresh()), kept };
-		expect(update(m, { kind: "disconnected" })[0].kept).toBe(kept);
-		const [failed] = update(
-			{ ...m, session: { kind: "connecting" } },
-			{
-				kind: "connected",
-				result: { ok: false, error: { kind: "network", message: "x" } },
-			},
+	it("someone else signing in sets the work aside, said once, never dropped", () => {
+		const mine = {
+			...withDraft({ ...fresh(), session: { kind: "connecting" } }),
+			author: "iain",
+		};
+		const [ann, cmds] = update(mine, who("Ann"));
+		expect(ann.local.questions).toEqual({});
+		expect(ann.author).toBe("Ann");
+		expect(ann.failures.at(-1)?.message).toBe(
+			"Unsaved work in this tab belonged to iain and was set aside.",
 		);
-		expect(failed.kept).toBe(kept);
+		expect(cmds).toContainEqual({ kind: "setAside", work: toWork(mine) });
+		// The same person, in other capitals, keeps it.
+		const [same, sameCmds] = update(mine, who("IAIN"));
+		expect(same.local).toBe(mine.local);
+		expect(sameCmds.some((c) => c.kind === "setAside")).toBe(false);
+	});
+
+	it("signing in to another bank sets this tab's work aside; the same bank keeps it", () => {
+		const mine = withDraft(fresh());
+		const other = { owner: "b", repo: "bank", remember: false };
+		const [away, cmds] = update(mine, {
+			kind: "signInRequested",
+			settings: other,
+		});
+		expect(away.local.questions).toEqual({});
+		expect(away.settings).toEqual(other);
+		expect(cmds).toContainEqual({ kind: "setAside", work: toWork(mine) });
+		const [here, hereCmds] = update(mine, {
+			kind: "signInRequested",
+			settings: { ...mine.settings, remember: true },
+		});
+		expect(here.local).toBe(mine.local);
+		expect(hereCmds.some((c) => c.kind === "setAside")).toBe(false);
+	});
+});
+
+describe("leaving the page", () => {
+	it("warns only while there is unsaved work, and not on the way to GitHub's sign-in", () => {
+		const clean = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q.yaml", "name: q\n"),
+		]);
+		expect(warnOnLeave(clean)).toBe(false);
+		const edited = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q.yaml", "name: q\n", "name: q2\n"),
+		]);
+		expect(warnOnLeave(edited)).toBe(true);
+		const draft = update(fresh(), { kind: "questionCreated", text: "" })[0];
+		expect(warnOnLeave(draft)).toBe(true);
+		const [leaving] = update(draft, {
+			kind: "signInRequested",
+			settings: draft.settings,
+		});
+		expect(warnOnLeave(leaving)).toBe(false);
+		// Signing in at startup (a token on hand) is not leaving.
+		expect(warnOnLeave({ ...draft, session: { kind: "connecting" } })).toBe(
+			true,
+		);
+	});
+});
+
+describe("signing out", () => {
+	/** Connected and loaded: a clean question, an edited one, a question draft, a scale draft. */
+	const holding = (): Model => {
+		const m = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/clean.yaml", "name: clean\n"),
+			bankQuestion(
+				2,
+				"questions/q/edited.yaml",
+				"name: edited\n",
+				"name: e2\n",
+			),
+		]);
+		return {
+			...m,
+			local: {
+				questions: {
+					...m.local.questions,
+					3: { kind: "question", id: 3, source: "name: draft\n" },
+				},
+				schemes: {
+					4: { kind: "scale", name: "yn", id: 4, source: "labels:\n  1: Y\n" },
+				},
+			},
+			nextId: 5,
+		};
+	};
+
+	it("with no unsaved work is exactly signing out", () => {
+		const clean = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q.yaml", "name: q\n"),
+		]);
+		expect(update(clean, { kind: "signOutRequested" })).toEqual(
+			update(clean, { kind: "disconnected" }),
+		);
+		const [out] = update(clean, { kind: "signOutRequested" });
+		expect(out.session).toEqual({ kind: "anonymous" });
+	});
+
+	it("with unsaved work asks first, and Cancel stays signed in", () => {
+		const m = holding();
+		const [asking, cmds] = update(m, { kind: "signOutRequested" });
+		expect(asking.browser.signingOut).toEqual({ phase: "asking" });
+		expect(asking.session.kind).toBe("connected");
+		expect(cmds).toEqual([]);
+		const [back] = update(asking, { kind: "signOutCancelled" });
+		expect(back.browser.signingOut).toBeUndefined();
+		expect(back.session.kind).toBe("connected");
+	});
+
+	it("plans the save: edited files and new shared files; question drafts are discarded", () => {
+		const plan = signOutPlan(holding());
+		expect(plan.save.map((f) => f.id)).toEqual([2, 4]);
+		expect(plan.discard.map((f) => f.id)).toEqual([3]);
+		expect(plan.blocked).toEqual([]);
+	});
+
+	it("Discard signs out with nothing left in this tab", () => {
+		const [asking] = update(holding(), { kind: "signOutRequested" });
+		const [out, cmds] = update(asking, { kind: "signOutDiscardConfirmed" });
+		expect(out.session).toEqual({ kind: "anonymous" });
+		expect(allFiles(out.local)).toEqual([]);
+		expect(out.browser.signingOut).toBeUndefined();
+		expect(cmds).toContainEqual({ kind: "forgetToken" });
+		expect(cmds).toContainEqual({ kind: "persist", work: toWork(out) });
+	});
+
+	it("Save commits every saveable file at once, then signs out", () => {
+		const [asking] = update(holding(), { kind: "signOutRequested" });
+		const [saving, cmds] = update(asking, { kind: "signOutSaveConfirmed" });
+		expect(saving.browser.signingOut).toEqual({ phase: "saving" });
+		const commit = cmds.find((c) => c.kind === "commit");
+		if (commit?.kind !== "commit") throw new Error("expected a commit");
+		expect(commit.target.branch).toBe(ownBranch("iain"));
+		expect(commit.changes).toEqual([
+			{
+				id: 2,
+				path: "questions/q/edited.yaml",
+				expected: "s",
+				text: "name: e2\n",
+			},
+			{
+				id: 4,
+				path: "scales/yn.yaml",
+				expected: null,
+				text: "labels:\n  1: Y\n",
+			},
+		]);
+		// Cancel does nothing while the save is on its way.
+		expect(update(saving, { kind: "signOutCancelled" })[0]).toBe(saving);
+		const [out, after] = update(saving, {
+			kind: "committed",
+			changes: commit.changes,
+			result: ok({
+				shas: { "questions/q/edited.yaml": "n", "scales/yn.yaml": "y" },
+			}),
+		});
+		expect(out.session).toEqual({ kind: "anonymous" });
+		expect(allFiles(out.local)).toEqual([]);
+		expect(after).toContainEqual({ kind: "forgetToken" });
+	});
+
+	it("a refused save stays signed in, the dialog says why, and the files show what GitHub has", () => {
+		const [asking] = update(holding(), { kind: "signOutRequested" });
+		const [saving, cmds] = update(asking, { kind: "signOutSaveConfirmed" });
+		const commit = cmds.find((c) => c.kind === "commit");
+		if (commit?.kind !== "commit") throw new Error("expected a commit");
+		const failure = { kind: "stale" as const, message: "Changed on GitHub." };
+		const [m] = update(saving, {
+			kind: "committed",
+			changes: commit.changes,
+			result: {
+				ok: false,
+				error: {
+					failure,
+					seen: {
+						"questions/q/edited.yaml": { sha: "theirs", text: "name: t\n" },
+						"scales/yn.yaml": null,
+					},
+				},
+			},
+		});
+		expect(m.session.kind).toBe("connected");
+		expect(m.browser.signingOut).toEqual({ phase: "asking", failure });
+		// The dialog reports, never a file.
+		expect(m.activity).toEqual({});
+		// The edited question is in conflict now: it blocks the next try until reloaded.
+		expect(signOutPlan(m).blocked.map((f) => f.id)).toEqual([2]);
+		const [still] = update(m, { kind: "signOutSaveConfirmed" });
+		expect(still).toBe(m);
+	});
+
+	it("can't save while the bank is loading, but can still discard", () => {
+		const [asking] = update(
+			{ ...holding(), loading: { kind: "loading" } },
+			{ kind: "signOutRequested" },
+		);
+		const [same, cmds] = update(asking, { kind: "signOutSaveConfirmed" });
+		expect(same).toBe(asking);
+		expect(cmds).toEqual([]);
+		expect(
+			update(asking, { kind: "signOutDiscardConfirmed" })[0].session.kind,
+		).toBe("anonymous");
 	});
 });

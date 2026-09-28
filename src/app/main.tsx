@@ -6,17 +6,13 @@ import { BaseStyles } from "@primer/react";
 import { ThemeProvider } from "@primer/react/next";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import type { Result } from "../core/result.js";
+import { ok, type Result } from "../core/result.js";
 import { type Callback, callbackOf, PendingSchema } from "./auth.js";
 import { bankTemplate, signInConfig } from "./config.js";
 import { PENDING_KEY } from "./effects.js";
 import { makeGitHubStore } from "./github.js";
-import {
-	browserCredentialStore,
-	readPersisted,
-	STORAGE_KEY,
-	UNREADABLE_KEY,
-} from "./persist.js";
+import { warnOnLeave } from "./model.js";
+import { browserCredentialStore, readStartup } from "./persist.js";
 import type { Failure } from "./storage.js";
 import { createApp } from "./store.js";
 import { App } from "./ui/App.js";
@@ -24,20 +20,14 @@ import { AppContext } from "./ui/AppContext.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 if (root) {
-	let raw: string | null = null;
+	let started: ReturnType<typeof readStartup> = {
+		work: ok(undefined),
+		notices: [],
+	};
 	try {
-		raw = localStorage.getItem(STORAGE_KEY);
+		started = readStartup(localStorage, sessionStorage);
 	} catch {
-		// no storage: start fresh
-	}
-	const stored = readPersisted(raw);
-	if (!stored.ok && raw !== null) {
-		// Keep what could not be read, so the first save does not destroy it.
-		try {
-			localStorage.setItem(UNREADABLE_KEY, raw);
-		} catch {
-			// nothing more to do
-		}
+		// No storage (a private window, blocked site data): start fresh.
 	}
 	const template = bankTemplate(import.meta.env);
 	const config = signInConfig(
@@ -63,7 +53,9 @@ if (root) {
 					: undefined;
 	const app = createApp(
 		{
-			stored,
+			work: started.work,
+			...(started.settings !== undefined && { settings: started.settings }),
+			notices: started.notices,
 			hasToken:
 				browserCredentialStore.load() !== null || returned !== undefined,
 			...(refused !== undefined && { signInFailure: refused }),
@@ -83,6 +75,13 @@ if (root) {
 		app.dispatch({ kind: "hashChanged", hash: location.hash });
 	window.addEventListener("hashchange", followLink);
 	followLink();
+	// Unsaved work lives only in this tab: closing it, or going elsewhere, asks first.
+	// The Model is read when the event fires; the rule is `warnOnLeave`'s.
+	window.addEventListener("beforeunload", (event) => {
+		if (!warnOnLeave(app.store.getState().model)) return;
+		event.preventDefault();
+		event.returnValue = "";
+	});
 	createRoot(root).render(
 		<StrictMode>
 			<AppContext.Provider value={app}>

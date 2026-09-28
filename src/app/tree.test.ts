@@ -28,7 +28,7 @@ const draft = (id: number, source: string): Question => ({
 	kind: "question",
 	source,
 });
-const base = init({ stored: ok(undefined), hasToken: false })[0];
+const base = init({ work: ok(undefined), hasToken: false })[0];
 const model: Model = {
 	...base,
 	local: {

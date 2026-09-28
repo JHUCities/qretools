@@ -1,7 +1,7 @@
 /**
  * Signed out, the app is this page: which bank, and "Sign in with GitHub", in one
  * narrow column as github.com's own sign-in page is. There is nothing to edit without
- * a bank; the author's own unsaved work waits for the sign-in.
+ * a bank; the author's own unsaved work in this tab waits for the sign-in.
  *
  * A native form: Enter signs in. The repository is written as GitHub writes it,
  * `owner/name`, and parsed once on submit (`parseRepo`); a link to another bank offers
@@ -25,7 +25,7 @@ import { useId, useRef, useState } from "react";
 import { plainText } from "../../core/codeSpans.js";
 import { installUrl } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
-import { type Local, type Model, parseWorkKey } from "../model.js";
+import { hasOwnWork, type Model } from "../model.js";
 import { parseRepo } from "../storage.js";
 import { useApp } from "./AppContext.js";
 import { failureDescription } from "./Previews.js";
@@ -60,19 +60,13 @@ export function SignIn({ model }: { model: Model }) {
 		setToken("");
 		dispatch({ kind: "connectRequested", settings: next });
 	};
-	// Unsaved work this browser keeps, by bank and person: it comes back when that
-	// person signs in to that bank, and never appears in another.
-	const count = (l: Local) =>
-		Object.keys(l.questions).length + Object.keys(l.schemes).length;
-	const held = [
-		...(model.workOf !== undefined && count(model.local) > 0
-			? [{ ...model.workOf, l: model.local }]
-			: []),
-		...Object.entries(model.kept).map(([key, l]) => ({
-			...parseWorkKey(key),
-			l,
-		})),
-	].filter((w) => count(w.l) > 0);
+	// This tab's unsaved work belongs to its bank: signing in to another sets it aside.
+	const current = `${settings.owner}/${settings.repo}`;
+	const elsewhere =
+		hasOwnWork(model) &&
+		parsed.ok &&
+		`${parsed.value.owner}/${parsed.value.repo}`.toLowerCase() !==
+			current.toLowerCase();
 	return (
 		<main className="signin" aria-labelledby={headingId}>
 			<Stack gap="normal" className="signin-column">
@@ -202,7 +196,7 @@ export function SignIn({ model }: { model: Model }) {
 				</form>
 				{/* As github.com offers "New to GitHub?" under its form. */}
 				{template !== undefined && (
-					<p className="quiet signin-kept">
+					<p className="quiet signin-note">
 						New bank?{" "}
 						<Link href={template} target="_blank" rel="noreferrer">
 							Start one from the template
@@ -224,16 +218,10 @@ export function SignIn({ model }: { model: Model }) {
 						.
 					</p>
 				)}
-				{held.length > 0 && (
-					<p className="quiet signin-kept">
-						Unsaved work in this browser, kept for its bank:{" "}
-						{held
-							.map(
-								(w) =>
-									`${w.repo}${w.login === undefined ? "" : ` (${w.login})`}: ${workCount(w.l)}`,
-							)
-							.join("; ")}
-						.
+				{elsewhere && (
+					<p className="quiet signin-note">
+						Your unsaved work in this tab is for {current}. Signing in to
+						another bank sets it aside.
 					</p>
 				)}
 				{/* A failed sign-in still holds the GitHub sign-in: a way to let it go. */}
@@ -248,18 +236,4 @@ export function SignIn({ model }: { model: Model }) {
 			</Stack>
 		</main>
 	);
-}
-
-/** Kept work, counted in the glossary's words: "2 questions and 1 shared item". */
-function workCount(l: Local): string {
-	const plural = (n: number, noun: string) =>
-		`${n} ${noun}${n === 1 ? "" : "s"}`;
-	const q = Object.keys(l.questions).length;
-	const s = Object.keys(l.schemes).length;
-	return [
-		q > 0 ? plural(q, "question") : undefined,
-		s > 0 ? plural(s, "shared item") : undefined,
-	]
-		.filter((x) => x !== undefined)
-		.join(" and ");
 }

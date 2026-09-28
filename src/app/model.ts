@@ -18,7 +18,7 @@ import numberTemplate from "../templates/number.yaml?raw";
 import scaleTemplate from "../templates/scale.yaml?raw";
 import selectManyTemplate from "../templates/select-many.yaml?raw";
 import type { Link } from "./link.js";
-import type { Persisted } from "./persist.js";
+import { startingSettings, type Work } from "./persist.js";
 import type {
 	Access,
 	BankSettings,
@@ -89,34 +89,13 @@ export interface Local {
 	readonly schemes: Readonly<Record<Id, SchemeEntry>>;
 }
 
-export interface WorkOf {
-	readonly repo: string;
-	readonly login?: string;
-}
-
-/**
- * The key kept work is filed under: a bank and a person (empty before the login was
- * recorded). GitHub's names ignore case, so the key does too. Neither a repository
- * nor a login can contain `@`.
- */
-export const workKey = ({ repo, login }: WorkOf): string =>
-	`${repo}@${login ?? ""}`.toLowerCase();
-
-/** `workKey`'s inverse, for showing whose kept work is whose. */
-export const parseWorkKey = (key: string): WorkOf => {
-	const at = key.lastIndexOf("@");
-	const login = key.slice(at + 1);
-	return { repo: key.slice(0, at), ...(login !== "" && { login }) };
-};
-
 const sameName = (a: string, b: string): boolean =>
 	a.toLowerCase() === b.toLowerCase();
 
-const hasFiles = (local: Local): boolean =>
-	Object.keys(local.questions).length + Object.keys(local.schemes).length > 0;
+export const EMPTY_LOCAL: Local = { questions: {}, schemes: {} };
 
 /** Stored working copies, as read by the persisted schema (optional fields may be undefined). */
-const localOf = (stored: Pick<Persisted, "questions" | "schemes">): Local => ({
+const localOf = (stored: Pick<Work, "questions" | "schemes">): Local => ({
 	questions: Object.fromEntries(
 		stored.questions.map((q) => [q.id, compact(q) as Question]),
 	),
@@ -162,11 +141,20 @@ export interface Browser {
 	readonly moving?: { readonly id: Id; readonly folder: string };
 	/** The name dialog for a new scale, universe or instruction: a scheme file is named before it exists. */
 	readonly creating?: { readonly kind: NamedScheme; readonly name: string };
+	/**
+	 * Signing out with unsaved work: asking what to do with it, or saving it first. A
+	 * failed save comes back here, never on a file.
+	 */
+	readonly signingOut?: {
+		readonly phase: "asking" | "saving";
+		readonly failure?: Failure;
+	};
 }
 
 export type Session =
 	| { readonly kind: "anonymous" }
-	| { readonly kind: "connecting" }
+	/** `toGitHub`: the page is leaving for GitHub's sign-in page, which is not losing work. */
+	| { readonly kind: "connecting"; readonly toGitHub?: true }
 	| {
 			readonly kind: "connected";
 			readonly login: string;
@@ -215,12 +203,10 @@ export interface Model {
 	/** A link that needs the bank (or another branch) before it can open. Never persisted. */
 	readonly pendingLink?: Link;
 	/**
-	 * Whose work `local` is: a bank (`owner/repo`) and, once someone has connected, the
-	 * login. Absent before anything was ever connected.
+	 * Whose work `local` is: the login that last signed in with it in this tab. Its bank
+	 * is `settings`'. Absent before anyone has.
 	 */
-	readonly workOf?: WorkOf;
-	/** Other banks' and people's kept work, by `workKey`; never holds `workOf`'s own. */
-	readonly kept: Readonly<Record<string, Local>>;
+	readonly author?: string;
 	/** Per file; content never carries it, so marking a scale "saving" leaves the environment alone. */
 	readonly activity: Readonly<Record<Id, Activity>>;
 	readonly nextId: Id;
@@ -307,13 +293,24 @@ export type Msg =
 	  }
 	/** Read the bank again, as the same session: a retry after a failed load. */
 	| { readonly kind: "bankReloadRequested" }
+	/** Sign out now, keeping only the author's own work (a failed session's way out). */
 	| { readonly kind: "disconnected" }
+	/** "Sign out" from the account menu: asks first when there is unsaved work. */
+	| { readonly kind: "signOutRequested" }
+	| { readonly kind: "signOutSaveConfirmed" }
+	| { readonly kind: "signOutDiscardConfirmed" }
+	| { readonly kind: "signOutCancelled" }
 	| { readonly kind: "failureDismissed"; readonly index: number };
 
 export type Cmd =
 	| { readonly kind: "revealRange"; readonly range: Range }
 	| { readonly kind: "loadDdiSchema" }
-	| { readonly kind: "persist"; readonly data: Persisted }
+	/** This tab's work, kept for a reload of this tab only. */
+	| { readonly kind: "persist"; readonly work: Work }
+	/** The bank and "remember", a default for the next new tab. */
+	| { readonly kind: "saveSettings"; readonly settings: BankSettings }
+	/** Work leaving this tab (someone else's, or another bank's): kept in the browser, never dropped. */
+	| { readonly kind: "setAside"; readonly work: Work }
 	| { readonly kind: "connect"; readonly repo: Repo }
 	| { readonly kind: "loadBank"; readonly target: BranchTarget }
 	| {
@@ -395,8 +392,12 @@ const EXAMPLE_SCALES: Scales = Object.fromEntries(
 );
 
 export interface Flags {
-	/** What the browser had saved, already validated by the shell; a failure is shown, never fatal. */
-	readonly stored: Result<Persisted | undefined, Failure>;
+	/** This tab's work, already validated by the shell; a failure is shown, never fatal. */
+	readonly work: Result<Work | undefined, Failure>;
+	/** The stored default bank; the work's own bank wins over it. */
+	readonly settings?: BankSettings;
+	/** Said once at startup (what an upgrade could not bring along). */
+	readonly notices?: readonly Failure[];
 	/** Whether a token is on hand, so connecting can start at once. */
 	readonly hasToken: boolean;
 	/**
@@ -410,23 +411,16 @@ export interface Flags {
 export const EMPTY_REMOTE: Remote = { questions: {}, schemes: {} };
 
 export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
-	const stored = flags.stored.ok ? flags.stored.value : undefined;
+	const stored = flags.work.ok ? flags.work.value : undefined;
 	// First run: an empty list. A template is one click away; seeded example drafts
 	// would sit beside bank questions of the same name.
 	// Zod types an absent optional as possibly-undefined; `compact` makes it absent.
-	const local: Local = stored
-		? localOf(stored)
-		: { questions: {}, schemes: {} };
-	const settings = stored?.settings ?? DEFAULT_SETTINGS;
+	const local: Local = stored ? localOf(stored) : EMPTY_LOCAL;
+	const settings = startingSettings(flags.settings, stored, DEFAULT_SETTINGS);
 	const repo = { owner: settings.owner, repo: settings.repo };
 	const opened: Model = {
 		local,
-		...(stored?.workOf !== undefined && {
-			workOf: compact(stored.workOf) as WorkOf,
-		}),
-		kept: Object.fromEntries(
-			Object.entries(stored?.kept ?? {}).map(([k, v]) => [k, localOf(v)]),
-		),
+		...(stored?.login !== undefined && { author: stored.login }),
 		// The last GitHub state this browser knew is exactly what its bases record.
 		remote: remoteOfBases(local),
 		activity: {},
@@ -437,7 +431,8 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		settings,
 		loading: { kind: "bundled" },
 		failures: [
-			...(flags.stored.ok ? [] : [flags.stored.error]),
+			...(flags.work.ok ? [] : [flags.work.error]),
+			...(flags.notices ?? []),
 			...(flags.signInFailure === undefined ? [] : [flags.signInFailure]),
 		],
 		agency: AGENCY,
@@ -452,15 +447,27 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 			...(flags.hasToken
 				? [{ kind: "connect", repo } as const]
 				: model.local !== opened.local
-					? [{ kind: "persist", data: toPersisted(model) } as const]
+					? [{ kind: "persist", work: toWork(model) } as const]
 					: []),
 		],
 	];
 }
 
 /** A file that is the author's own work: never saved, or changed since. */
-const ownWork = (f: Entry): boolean =>
+export const ownWork = (f: Entry): boolean =>
 	f.base === undefined || f.source !== f.base.text;
+
+/** Whether this tab holds work that is nowhere else: closing it would lose it. */
+export const hasOwnWork = (model: Model): boolean =>
+	allFiles(model.local).some(ownWork);
+
+/**
+ * Whether leaving the page should ask first: there is unsaved work, which lives only in
+ * this tab, and the page is not simply going to GitHub's sign-in page and back.
+ */
+export const warnOnLeave = (model: Model): boolean =>
+	hasOwnWork(model) &&
+	!(model.session.kind === "connecting" && model.session.toGitHub === true);
 
 /**
  * Signed out, the app holds only the author's own work: drafts and unsaved edits,
@@ -560,52 +567,22 @@ export function envOfRemote(schemes: Remote["schemes"]): Env {
 	);
 }
 
-export const toPersisted = (model: Model): Persisted => ({
-	version: 4,
+export const toWork = (model: Model): Work => ({
+	version: 5,
+	repo: `${model.settings.owner}/${model.settings.repo}`,
+	...(model.author !== undefined && { login: model.author }),
 	nextId: model.nextId,
 	questions: Object.values(model.local.questions),
 	schemes: Object.values(model.local.schemes),
-	settings: model.settings,
-	...(model.workOf !== undefined && { workOf: model.workOf }),
-	kept: Object.fromEntries(
-		Object.entries(model.kept).map(([k, v]) => [
-			k,
-			{
-				questions: Object.values(v.questions),
-				schemes: Object.values(v.schemes),
-			},
-		]),
-	),
 });
 
-/**
- * Someone is now connected to a bank: `local` becomes their work in it. The work in
- * hand is set aside under its own bank and person, and theirs, if any was kept, comes
- * back. Work recorded before logins were (`workOf` without one) is taken to be the
- * next person's to connect to its bank. Runs before the bank loads, so `rebase` never
- * sees another bank's or person's files. Nothing kept is ever dropped.
- */
-export function adoptWork(model: Model, repo: string, login: string): Model {
-	const to: WorkOf = { repo, login };
-	const from = model.workOf;
-	// The same bank and person, or legacy work of this bank: it is theirs already.
-	if (
-		from === undefined ||
-		(sameName(from.repo, repo) && sameName(from.login ?? login, login))
-	)
-		return { ...model, workOf: to };
-	const stashed = hasFiles(model.local)
-		? { ...model.kept, [workKey(from)]: model.local }
-		: model.kept;
-	const legacy = workKey({ repo });
-	const key = stashed[workKey(to)] !== undefined ? workKey(to) : legacy;
-	const { [key]: theirs, ...rest } = stashed;
-	const local = theirs ?? { questions: {}, schemes: {} };
-	return {
-		...model,
-		workOf: to,
-		kept: theirs === undefined ? stashed : rest,
-		local,
-		remote: remoteOfBases(local),
-	};
-}
+/** Whether a login is someone other than the author of the work in hand. GitHub's names ignore case. */
+export const otherAuthor = (model: Model, login: string): boolean =>
+	model.author !== undefined && !sameName(model.author, login);
+
+/** Whether a bank is another than the one the work in hand belongs to. */
+export const otherBank = (model: Model, settings: BankSettings): boolean =>
+	!sameName(
+		`${model.settings.owner}/${model.settings.repo}`,
+		`${settings.owner}/${settings.repo}`,
+	);
