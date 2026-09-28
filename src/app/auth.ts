@@ -94,7 +94,7 @@ export function callbackOf(
 	if (pending === undefined || params.get("state") !== pending.state)
 		return refused(
 			"This sign-in did not start here, or has already been used.",
-			"Sign in again from the Bank panel.",
+			"Sign in again.",
 		);
 	if (error !== null)
 		return refused(
@@ -179,7 +179,7 @@ async function redeem(
 					kind: "auth",
 					status: response.status,
 					message: "Your GitHub sign-in has ended.",
-					hint: "Sign in again from the Bank panel.",
+					hint: "Sign in again.",
 				})
 			: err({
 					kind: "http",

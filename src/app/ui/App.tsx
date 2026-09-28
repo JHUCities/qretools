@@ -529,8 +529,8 @@ function Branch({ model }: { model: Model }) {
 					rel="noreferrer"
 					icon={GitPullRequestIcon}
 					variant="invisible"
-					aria-label="Propose changes (opens in a new tab)"
-					description="Your saved work is not in the bank yet. Open pull request."
+					aria-label="Open pull request (opens in a new tab)"
+					description="Your saved work isn't in the bank yet. Open a pull request to propose it."
 					notificationIndicator="icon"
 				/>
 			)}

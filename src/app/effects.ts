@@ -78,13 +78,13 @@ export interface Effects {
 const NO_TOKEN: Failure = {
 	kind: "auth",
 	message: "Not signed in.",
-	hint: "Sign in with GitHub from the Bank panel.",
+	hint: "Sign in with GitHub.",
 };
 
 const ENDED: Failure = {
 	kind: "auth",
 	message: "Your GitHub sign-in has ended.",
-	hint: "Sign in again from the Bank panel.",
+	hint: "Sign in again.",
 };
 
 /**

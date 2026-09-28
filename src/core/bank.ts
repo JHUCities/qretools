@@ -30,8 +30,7 @@ export function saveableName(draft: Draft): Result<string, Finding> {
 			code: "hole",
 			severity: "hole",
 			path: "name",
-			message:
-				"A question needs a valid `name` before it can be saved to the bank.",
+			message: "A question needs a valid `name` before it can be saved.",
 			hint: "Lowercase letters, digits and underscores, starting with a letter.",
 		});
 	return ok(name);

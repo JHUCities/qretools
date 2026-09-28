@@ -280,8 +280,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 							)}
 							{unsaved && (
 								<p className="quiet">
-									Questions here already use this version. The bank gets it when
-									you save.
+									Questions in this browser already use this version. The bank
+									gets it when you save to your branch and your pull request is
+									merged.
 								</p>
 							)}
 						</div>
