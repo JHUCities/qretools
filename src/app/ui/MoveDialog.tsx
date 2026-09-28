@@ -1,14 +1,14 @@
 /**
- * Moving a bank question to another topic folder: one commit, the saved version at the
+ * Moving a bank question to another folder: one commit, the saved version at the
  * new path and the old path gone, like `git mv`. Only the folder changes. Why a folder
  * cannot be used is `update`'s rule (`moveProblem`), shown as the author types, as
- * Primer's validation message on the field. A native form: Enter in the new topic's
+ * Primer's validation message on the field. A native form: Enter in the new folder's
  * name moves (a native select does not submit on Enter).
  */
 import { Dialog } from "@primer/react";
 import { useId } from "react";
 import type { Dispatch } from "../model.js";
-import { TopicField } from "./TopicField.js";
+import { FolderField } from "./FolderField.js";
 
 export function MoveDialog({
 	from,
@@ -20,7 +20,7 @@ export function MoveDialog({
 	dispatch,
 }: {
 	readonly from: string;
-	/** The topic it is in now, by `update`'s reading of the path. */
+	/** The folder it is in now, by `update`'s reading of the path. */
 	readonly current: string;
 	readonly to: string;
 	readonly folder: string;
@@ -32,7 +32,7 @@ export function MoveDialog({
 	const close = () => dispatch({ kind: "moveCancelled" });
 	return (
 		<Dialog
-			title="Move to another topic"
+			title="Move to another folder"
 			onClose={close}
 			footerButtons={[
 				{ buttonType: "default", content: "Cancel", onClick: close },
@@ -53,7 +53,7 @@ export function MoveDialog({
 					if (problem === undefined) dispatch({ kind: "moveConfirmed" });
 				}}
 			>
-				<TopicField
+				<FolderField
 					folder={folder}
 					folders={folders}
 					current={current}

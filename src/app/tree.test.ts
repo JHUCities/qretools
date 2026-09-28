@@ -51,14 +51,14 @@ const tree = (m: Model) =>
 	);
 
 describe("treeOf", () => {
-	it("files bank questions by their path, drafts by name prefix, unnamed drafts last", () => {
+	it("files bank questions by their path, and every draft, named or not, under unfiled", () => {
+		// `att_new` is a draft: its name's prefix says nothing about where it goes.
 		expect(
 			tree(model).map((f) => [f.name, f.leaves.map((l) => l.name)]),
 		).toEqual([
-			["att", ["att_new"]],
 			["nhd", ["nhd_sat"]],
 			["svy", ["dem_latx"]],
-			[UNFILED, [undefined]],
+			[UNFILED, ["att_new", undefined]],
 		]);
 	});
 
@@ -75,13 +75,12 @@ describe("treeOf", () => {
 		const t = tree({
 			...model,
 			screen: { kind: "editing", id: 2 },
-			browser: { ...model.browser, expanded: ["att"] },
+			browser: { ...model.browser, expanded: [UNFILED] },
 		});
 		expect(Object.fromEntries(t.map((f) => [f.name, f.expanded]))).toEqual({
-			att: true,
 			nhd: false,
 			svy: true,
-			[UNFILED]: false,
+			[UNFILED]: true,
 		});
 	});
 
@@ -107,7 +106,7 @@ describe("treeOf", () => {
 			draft: false,
 			status: { kind: "incomplete" },
 		});
-		expect(t.find((f) => f.name === "att")?.leaves[0]).toMatchObject({
+		expect(t.find((f) => f.name === UNFILED)?.leaves[0]).toMatchObject({
 			draft: true,
 		});
 	});

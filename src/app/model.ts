@@ -156,9 +156,9 @@ export interface Browser {
 	/** Folders the user opened. A folder holding the open question, or any folder while filtering, is open regardless. */
 	readonly expanded: readonly string[];
 	readonly confirmDelete?: Id;
-	/** The save dialog for a draft: which question, and the topic folder being chosen. */
+	/** The save dialog for a draft: which question, and the folder being chosen. */
 	readonly saving?: { readonly id: Id; readonly folder: string };
-	/** The move dialog for a bank question: which one, and the topic folder being chosen. */
+	/** The move dialog for a bank question: which one, and the folder being chosen. */
 	readonly moving?: { readonly id: Id; readonly folder: string };
 	/** The name dialog for a new scale, universe or instruction: a scheme file is named before it exists. */
 	readonly creating?: { readonly kind: NamedScheme; readonly name: string };

@@ -1,8 +1,8 @@
 /**
- * The topic folder a question goes in. Choosing and creating are separate: a native
- * select (Primer's `Select`) of the bank's topics, whose last option, "New topic…",
+ * The folder a question goes in. Choosing and creating are separate: a native
+ * select (Primer's `Select`) of the bank's folders, whose last option, "New folder…",
  * reveals a field for the new name. A new folder is rare and every author sees it,
- * so it is a deliberate second step, never a typo one arrow key from a real topic
+ * so it is a deliberate second step, never a typo one arrow key from a real folder
  * (a creatable combobox suits cheap things like labels, not structure).
  *
  * The value is the Model's (the dialog dispatches it); whether it can be used is
@@ -15,7 +15,7 @@ import { inlineCode } from "./Previews.js";
 
 const NEW = "\u0000new";
 
-export function TopicField({
+export function FolderField({
 	folder,
 	folders,
 	current,
@@ -25,7 +25,7 @@ export function TopicField({
 }: {
 	readonly folder: string;
 	readonly folders: readonly string[];
-	/** The topic it is in now (moving), shown but not choosable. */
+	/** The folder it is in now (moving), shown but not choosable. */
 	readonly current?: string;
 	/** Why this folder cannot be used, or undefined. */
 	readonly problem: string | undefined;
@@ -44,9 +44,9 @@ export function TopicField({
 	const message = (
 		<>
 			<FormControl.Caption>
-				{folders.length === 0 && "The bank has no topics yet. "}
+				{folders.length === 0 && "The bank has no folders yet. "}
 				{caption}
-				{isNew && " A new topic: this creates it."}
+				{isNew && " A new folder: this creates it."}
 			</FormControl.Caption>
 			{shown !== undefined && (
 				<FormControl.Validation variant="error">
@@ -57,10 +57,10 @@ export function TopicField({
 	);
 	return (
 		<Stack gap="normal">
-			{/* With no topics there is nothing to choose: only the name. */}
+			{/* With no folders there is nothing to choose: only the name. */}
 			{folders.length > 0 && (
 				<FormControl>
-					<FormControl.Label>Topic</FormControl.Label>
+					<FormControl.Label>Folder</FormControl.Label>
 					<Select
 						block
 						autoFocus={!creating}
@@ -73,7 +73,7 @@ export function TopicField({
 					>
 						{!creating && !folders.includes(folder) && (
 							<Select.Option value={folder} disabled>
-								Choose a topic
+								Choose a folder
 							</Select.Option>
 						)}
 						{folders.map((f) => (
@@ -81,14 +81,14 @@ export function TopicField({
 								{f === current ? `${f} (where it is now)` : f}
 							</Select.Option>
 						))}
-						<Select.Option value={NEW}>New topic…</Select.Option>
+						<Select.Option value={NEW}>New folder…</Select.Option>
 					</Select>
 					{!creating && message}
 				</FormControl>
 			)}
 			{creating && (
 				<FormControl>
-					<FormControl.Label>New topic name</FormControl.Label>
+					<FormControl.Label>New folder name</FormControl.Label>
 					<TextInput
 						block
 						autoFocus

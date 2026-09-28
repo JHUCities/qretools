@@ -1,20 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { bankLocation, describeChange, folderOf } from "./bank.js";
+import { bankLocation, describeChange, saveableName } from "./bank.js";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
 
 const draft = (text: string) => parseSurface(text, EMPTY_ENV).draft;
 
 describe("bank paths", () => {
-	it("files a new question by its name prefix", () => {
-		expect(folderOf("nhd_sat")).toBe("nhd");
-		expect(folderOf("q")).toBe("q");
-		expect(bankLocation(draft("name: nhd_sat\n"))).toEqual({
+	it("reads nothing about where a question goes from its name", () => {
+		// No bank's convention, such as a topic prefix: the folder is always chosen.
+		expect(saveableName(draft("name: nhd_sat\n"))).toEqual({
+			ok: true,
+			value: "nhd_sat",
+		});
+		expect(bankLocation(draft("name: nhd_sat\n"), "")).toMatchObject({
+			ok: false,
+			error: { message: "Choose a folder." },
+		});
+		expect(bankLocation(draft("name: nhd_sat\n"), "health")).toEqual({
 			ok: true,
 			value: {
-				folder: "nhd",
+				folder: "health",
 				name: "nhd_sat",
-				path: "questions/nhd/nhd_sat.yaml",
+				path: "questions/health/nhd_sat.yaml",
 			},
 		});
 	});
@@ -30,7 +37,7 @@ describe("bank paths", () => {
 	});
 
 	it("needs a valid name, and says so as a hole", () => {
-		const r = bankLocation(draft("text: Q?\n"));
+		const r = bankLocation(draft("text: Q?\n"), "health");
 		expect(r.ok).toBe(false);
 		expect(!r.ok && r.error.path).toBe("name");
 	});

@@ -1,11 +1,9 @@
 /**
  * The bank browser's tree, derived from the Model: pure and tested without React.
- * Bank files sit in the folder of their path (the bank has questions whose folder
- * is not their name prefix); named drafts in the folder their name implies;
- * unnamed drafts under "(unfiled)", last. A folder is open when the user opened
+ * Bank files sit in the folder of their path; drafts, which have no path yet, under
+ * "(unfiled)", last (named ones first). A folder is open when the user opened
  * it, when it holds the open question, or whenever a filter is active.
  */
-import { folderOf } from "../core/bank.js";
 import type { Evaluation } from "../core/evaluate.js";
 import { type Status, status } from "../core/findings.js";
 import {
@@ -43,15 +41,10 @@ export interface Folder {
 	readonly expanded: boolean;
 }
 
-export const folderOfQuestion = (
-	q: Question,
-	name: string | undefined,
-): string =>
-	q.base !== undefined
-		? (q.base.path.split("/")[1] ?? UNFILED)
-		: name === undefined
-			? UNFILED
-			: folderOf(name);
+export const folderOfQuestion = (q: Question): string =>
+	// A saved question is where its path puts it; a draft is nowhere yet, whatever
+	// its name (no convention of one bank, such as a topic prefix, is read into it).
+	q.base !== undefined ? (q.base.path.split("/")[1] ?? UNFILED) : UNFILED;
 
 export function treeOf(
 	model: TreeInput,
@@ -69,7 +62,7 @@ export function treeOf(
 			title: ev.draft.title ?? ev.draft.concept,
 			status: status(ev.findings),
 		};
-		const folder = folderOfQuestion(q, leaf.name);
+		const folder = folderOfQuestion(q);
 		if (q.id === open) holds.add(folder);
 		if (
 			filter !== "" &&
@@ -84,8 +77,15 @@ export function treeOf(
 		.sort(([a], [b]) => byName(a, b))
 		.map(([name, leaves]) => ({
 			name,
+			// Named first, by name; an unnamed draft last ("~" sorted first by locale).
 			leaves: [...leaves].sort((a, b) =>
-				(a.name ?? "~").localeCompare(b.name ?? "~"),
+				a.name === undefined
+					? b.name === undefined
+						? 0
+						: 1
+					: b.name === undefined
+						? -1
+						: a.name.localeCompare(b.name),
 			),
 			expanded:
 				filter !== "" ||
@@ -180,7 +180,7 @@ export function schemeSections(
 	});
 }
 
-/** The topic folders the bank has, for the save dialog. Drafts do not count: they are not filed yet. */
+/** The folders the bank has, for the save dialog. Drafts do not count: they are not filed yet. */
 export const bankFolders = (model: Model): readonly string[] =>
 	[
 		...new Set(

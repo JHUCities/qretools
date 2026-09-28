@@ -185,13 +185,14 @@ describe("saving", () => {
 		).toEqual([]);
 	});
 
-	it("asks where a new draft goes, with the folder its name implies, and writes nothing yet", () => {
+	it("asks where a new draft goes, with no folder guessed from its name, and writes nothing yet", () => {
 		const [m, cmds] = update(connected(draftModel()), {
 			kind: "saveRequested",
 			id: 1,
 		});
 		expect(cmds).toEqual([]);
-		expect(m.browser.saving).toEqual({ id: 1, folder: "nhd" });
+		// The draft is named nhd_new: no folder is read into the prefix.
+		expect(m.browser.saving).toEqual({ id: 1, folder: "" });
 		expect(m.activity[1]).toBeUndefined();
 	});
 
@@ -249,7 +250,11 @@ describe("saving", () => {
 				"s",
 			),
 		]);
-		const [asked] = update(m0, { kind: "saveRequested", id: 1 });
+		const [asked] = run(
+			m0,
+			{ kind: "saveRequested", id: 1 },
+			{ kind: "saveFolderChanged", folder: "nhd" },
+		);
 		const [m, cmds] = update(asked, { kind: "saveConfirmed" });
 		expect(cmds).toEqual([]);
 		expect(
@@ -1220,7 +1225,7 @@ describe("moving a question", () => {
 		const m = edited();
 		const q = m.local.questions[1] as Question;
 		expect(moveProblem(m, q, "nhd")).toMatch(/already in that folder/);
-		expect(moveProblem(m, q, "Not A Folder")).toMatch(/topic folder/);
+		expect(moveProblem(m, q, "Not A Folder")).toMatch(/folder is lower case/);
 		const clash = withBank(m, [
 			bankQuestion(2, "questions/svy/nhd_sat.yaml", "name: x\n"),
 		]);
