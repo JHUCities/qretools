@@ -7,6 +7,7 @@ import { toDiagnostics } from "./diagnostics.js";
 import { createEvaluations } from "./evaluations.js";
 import { formatLink } from "./link.js";
 import {
+	adoptWork,
 	DEFAULT_SETTINGS,
 	envOf,
 	fileOf,
@@ -100,7 +101,8 @@ describe("init", () => {
 
 	it("restores saved work, and starts connecting when a token is on hand", () => {
 		const stored = {
-			version: 3 as const,
+			version: 4 as const,
+			kept: {},
 			nextId: 9,
 			questions: [
 				{
@@ -1496,5 +1498,86 @@ describe("the author's own branch", () => {
 		expect(branchOwner("main")).toBeUndefined();
 		// The old slashed name is someone else's branch now.
 		expect(branchOwner("qretools/iain")).toBeUndefined();
+	});
+});
+
+describe("work belongs to one bank and one person", () => {
+	const who = (login: string) => ({
+		kind: "connected" as const,
+		result: ok({
+			login,
+			avatarUrl: `https://a/${login}`,
+			access: { kind: "write" as const },
+			defaultBranch: "main",
+		}),
+	});
+	const connecting = (m: Model, owner: string, repo: string): Model => ({
+		...m,
+		session: { kind: "connecting" },
+		settings: { ...m.settings, owner, repo },
+	});
+	const withDraft = (m: Model): Model =>
+		update(m, { kind: "questionCreated", text: "name: mine\n" })[0];
+
+	it("signing in to another bank sets this one's work aside, and returning brings it back", () => {
+		const [inA] = update(connecting(fresh(), "a", "bank"), who("iain"));
+		const aWork = withDraft(inA);
+		const [out] = update(aWork, { kind: "disconnected" });
+		const [inB, cmds] = update(connecting(out, "b", "bank"), who("iain"));
+		expect(inB.local.questions).toEqual({});
+		expect(inB.kept["a/bank@iain"]?.questions).toBe(out.local.questions);
+		expect(cmds.some((c) => c.kind === "persist")).toBe(true);
+		const [outB] = update(inB, { kind: "disconnected" });
+		const [backInA] = update(connecting(outB, "a", "bank"), who("iain"));
+		expect(backInA.local.questions).toBe(out.local.questions);
+		expect(backInA.kept).toEqual({});
+	});
+
+	it("another person in the same bank starts empty; the first person's work stays kept", () => {
+		const [inA] = update(connecting(fresh(), "a", "bank"), who("iain"));
+		const [out] = update(withDraft(inA), { kind: "disconnected" });
+		const [ann] = update(connecting(out, "a", "bank"), who("ann"));
+		expect(ann.local.questions).toEqual({});
+		expect(Object.keys(ann.kept)).toEqual(["a/bank@iain"]);
+	});
+
+	it("work kept before logins were recorded is the next person's to connect to its bank", () => {
+		const legacy = { ...withDraft(fresh()), workOf: { repo: "a/bank" } };
+		const same = adoptWork(legacy, "a/bank", "iain");
+		expect(same.local).toBe(legacy.local);
+		expect(same.workOf).toEqual({ repo: "a/bank", login: "iain" });
+		// Elsewhere first: it is set aside under its bank, then found there.
+		const away = adoptWork(legacy, "b/bank", "iain");
+		expect(away.local.questions).toEqual({});
+		const back = adoptWork(
+			{ ...away, workOf: { repo: "b/bank", login: "iain" } },
+			"a/bank",
+			"iain",
+		);
+		expect(back.local).toBe(legacy.local);
+	});
+
+	it("a bank or login typed with other capitals is the same bank and person", () => {
+		const legacy = {
+			...update(fresh(), { kind: "questionCreated", text: "name: q\n" })[0],
+			workOf: { repo: "JHUCities/Bank", login: "Iain" },
+		};
+		expect(adoptWork(legacy, "jhucities/bank", "iain").local).toBe(
+			legacy.local,
+		);
+	});
+
+	it("signing out and a failed connection leave kept work alone", () => {
+		const kept = { "x/y@ann": { questions: {}, schemes: {} } };
+		const m = { ...connected(fresh()), kept };
+		expect(update(m, { kind: "disconnected" })[0].kept).toBe(kept);
+		const [failed] = update(
+			{ ...m, session: { kind: "connecting" } },
+			{
+				kind: "connected",
+				result: { ok: false, error: { kind: "network", message: "x" } },
+			},
+		);
+		expect(failed.kept).toBe(kept);
 	});
 });

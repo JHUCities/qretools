@@ -8,18 +8,25 @@ describe("readPersisted", () => {
 	it("accepts nothing, a valid value, and reports the rest as failures", () => {
 		expect(readPersisted(null)).toEqual({ ok: true, value: undefined });
 		const good = {
-			version: 3,
+			version: 4,
 			nextId: 3,
 			questions: [{ kind: "question", id: 1, source: "name: q2\n", base }],
 			schemes: [{ kind: "scale", name: "yn", id: 2, source: "labels: {}\n" }],
 			settings,
+			workOf: { repo: "o/r", login: "iain" },
+			kept: {
+				"x/y@ann": {
+					questions: [{ kind: "question", id: 4, source: "name: a\n" }],
+					schemes: [],
+				},
+			},
 		};
 		expect(readPersisted(JSON.stringify(good))).toEqual({
 			ok: true,
 			value: good,
 		});
 		expect(readPersisted("{not json").ok).toBe(false);
-		const wrong = readPersisted(JSON.stringify({ ...good, version: 4 }));
+		const wrong = readPersisted(JSON.stringify({ ...good, version: 5 }));
 		expect(!wrong.ok && wrong.error.kind).toBe("unreadable");
 		// A scheme file without its name is not readable: the name is its identity.
 		const nameless = readPersisted(
@@ -29,6 +36,20 @@ describe("readPersisted", () => {
 			}),
 		);
 		expect(nameless.ok).toBe(false);
+	});
+
+	it("reads version 3: its one pool of work is its own bank's, by a person not recorded", () => {
+		const v3 = {
+			version: 3,
+			nextId: 3,
+			questions: [{ kind: "question", id: 1, source: "name: q2\n", base }],
+			schemes: [],
+			settings,
+		};
+		expect(readPersisted(JSON.stringify(v3))).toEqual({
+			ok: true,
+			value: { ...v3, version: 4, workOf: { repo: "o/r" }, kept: {} },
+		});
 	});
 
 	it("reads version 2: a bank origin becomes a base, a draft has none, files split by kind", () => {
@@ -60,11 +81,13 @@ describe("readPersisted", () => {
 		expect(readPersisted(JSON.stringify(v2))).toEqual({
 			ok: true,
 			value: {
-				version: 3,
+				version: 4,
 				nextId: 3,
 				questions: [{ id: 1, kind: "question", source: "name: q2\n", base }],
 				schemes: [{ id: 2, kind: "scale", name: "yn", source: "labels: {}\n" }],
 				settings,
+				workOf: { repo: "o/r" },
+				kept: {},
 			},
 		});
 	});
@@ -79,11 +102,13 @@ describe("readPersisted", () => {
 		expect(readPersisted(JSON.stringify(v1))).toEqual({
 			ok: true,
 			value: {
-				version: 3,
+				version: 4,
 				nextId: 2,
 				questions: [{ id: 1, kind: "question", source: "name: q\n" }],
 				schemes: [],
 				settings,
+				workOf: { repo: "o/r" },
+				kept: {},
 			},
 		});
 	});
@@ -98,7 +123,13 @@ describe("readPersisted", () => {
 		};
 		expect(readPersisted(JSON.stringify(stored))).toEqual({
 			ok: true,
-			value: { ...stored, settings },
+			value: {
+				...stored,
+				version: 4,
+				settings,
+				workOf: { repo: "o/r" },
+				kept: {},
+			},
 		});
 	});
 });

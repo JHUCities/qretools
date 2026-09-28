@@ -14,6 +14,7 @@ import { NAME_PATTERN } from "../core/surface/schema.js";
 import { formatLink, type Link, parseLink } from "./link.js";
 import {
 	type Activity,
+	adoptWork,
 	allFiles,
 	type Blob,
 	type Cmd,
@@ -608,10 +609,16 @@ function step(model: Model, msg: Msg): Step {
 					access,
 					defaultBranch,
 				};
-				return [
-					{ ...model, session, loading: { kind: "loading" } },
+				// This bank's and this person's work, never another's, before the load.
+				const adopted = adoptWork(
+					model,
+					`${model.settings.owner}/${model.settings.repo}`,
+					login,
+				);
+				return persist([
+					{ ...adopted, session, loading: { kind: "loading" } },
 					[{ kind: "loadBank", target: targetOf(model.settings, session) }],
-				];
+				]);
 			}
 
 		case "bankLoaded": {
@@ -934,7 +941,8 @@ const claimant = (model: Model, path: Path): Entry | undefined =>
  */
 function openLink(model: Model, link: Link): Step {
 	const repo = `${model.settings.owner}/${model.settings.repo}`;
-	if (link.repo !== repo) {
+	// GitHub's names ignore case.
+	if (link.repo.toLowerCase() !== repo.toLowerCase()) {
 		// Until a bank is open, a link to another bank is where to sign in: the form
 		// offers its repository, and the link opens once that bank has loaded.
 		if (model.session.kind !== "connected")

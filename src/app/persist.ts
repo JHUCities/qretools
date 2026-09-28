@@ -46,7 +46,7 @@ const SCHEME_KIND = z.enum(["scale", "universe", "instruction", "missing"]);
  * remote slice is not stored: on load it is rebuilt from the bases, which record
  * exactly the last GitHub state this browser knew.
  */
-export const PersistedSchema = z.strictObject({
+const V3Schema = z.strictObject({
 	version: z.literal(3),
 	nextId: z.int().positive(),
 	questions: z.array(
@@ -69,7 +69,56 @@ export const PersistedSchema = z.strictObject({
 	settings: SettingsSchema,
 });
 
-type V3 = z.infer<typeof PersistedSchema>;
+const QuestionSchema = z.strictObject({
+	kind: z.literal("question"),
+	id: z.int().positive(),
+	source: z.string(),
+	base: BaseSchema.optional(),
+});
+const SchemeSchema = z.strictObject({
+	kind: SCHEME_KIND,
+	name: z.string(),
+	id: z.int().positive(),
+	source: z.string(),
+	base: BaseSchema.optional(),
+});
+
+/**
+ * Version 4: working copies belong to one bank and one person. `workOf` says whose the
+ * current ones are (`owner/repo`, and the login once known); `kept` holds the others,
+ * by `owner/repo@login`, set aside when someone signs in to another bank or as
+ * someone else, and brought back when they return. Nothing in `kept` is ever dropped.
+ */
+export const PersistedSchema = z.strictObject({
+	version: z.literal(4),
+	nextId: z.int().positive(),
+	questions: z.array(QuestionSchema),
+	schemes: z.array(SchemeSchema),
+	settings: SettingsSchema,
+	workOf: z
+		.strictObject({ repo: z.string(), login: z.string().optional() })
+		.optional(),
+	kept: z.record(
+		z.string(),
+		z.strictObject({
+			questions: z.array(QuestionSchema),
+			schemes: z.array(SchemeSchema),
+		}),
+	),
+});
+
+/**
+ * Version 3's work was one pool, saved while connected to its settings' repository:
+ * it is that bank's, by a person not recorded (assumed to be whoever signs in there next).
+ */
+const v3ToV4 = (v3: z.infer<typeof V3Schema>): Persisted => ({
+	...v3,
+	version: 4,
+	workOf: { repo: `${v3.settings.owner}/${v3.settings.repo}` },
+	kept: {},
+});
+
+type V3 = z.infer<typeof V3Schema>;
 
 const baseOf = (origin: z.infer<typeof OriginSchema>) =>
 	origin.kind === "bank"
@@ -140,8 +189,9 @@ const v1ToV2 = ({
 /** Every version this code has written, each upgraded one step at a time to the current one. */
 const StoredSchema = z.union([
 	PersistedSchema,
-	V2Schema.transform(v2ToV3),
-	V1Schema.transform((v1) => v2ToV3(v1ToV2(v1))),
+	V3Schema.transform(v3ToV4),
+	V2Schema.transform((v2) => v3ToV4(v2ToV3(v2))),
+	V1Schema.transform((v1) => v3ToV4(v2ToV3(v1ToV2(v1)))),
 ]);
 
 export type Persisted = z.infer<typeof PersistedSchema>;
