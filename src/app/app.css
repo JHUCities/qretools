@@ -15,7 +15,12 @@ body {
 .shell {
 	height: 100dvh;
 	display: grid;
-	grid-template-rows: auto minmax(0, 1fr);
+	grid-template-rows: auto auto minmax(0, 1fr);
+}
+/* The notices' row: no height when there is nothing to say. */
+.notices:not(:empty) {
+	padding: var(--base-size-8) var(--base-size-16);
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
 }
 /*
  * The sidebar's width: one named design decision, taken from Primer PageLayout's
