@@ -20,6 +20,7 @@ import selectManyTemplate from "../templates/select-many.yaml?raw";
 import type { Link } from "./link.js";
 import type { Persisted } from "./persist.js";
 import type {
+	Access,
 	BankSettings,
 	BranchTarget,
 	Change,
@@ -134,7 +135,7 @@ export type Session =
 			readonly kind: "connected";
 			readonly login: string;
 			readonly avatarUrl: string;
-			readonly canWrite: boolean;
+			readonly access: Access;
 			/** The bank: the repository's default branch, which only pull requests change. */
 			readonly defaultBranch: string;
 	  }

@@ -204,9 +204,10 @@ export function createEffects(deps: Deps): Effects {
 
 	const storeFor = (repo: Repo): Store | undefined => {
 		if (credentials === null && pending === undefined) return undefined;
-		const key = `${repo.owner}/${repo.repo}`;
+		const appToken = credentials?.pasted !== true;
+		const key = `${repo.owner}/${repo.repo}:${appToken}`;
 		if (!store || key !== repoInUse) {
-			store = deps.makeStore(repo, token);
+			store = deps.makeStore(repo, token, { appToken });
 			repoInUse = key;
 		}
 		return store;
@@ -216,7 +217,7 @@ export function createEffects(deps: Deps): Effects {
 		registerEditor: (e) => {
 			editor = e;
 		},
-		setToken: (t, r) => keep({ access: t }, r),
+		setToken: (t, r) => keep({ access: t, pasted: true }, r),
 		hasToken: () => credentials !== null || pending !== undefined,
 		validate: (ddi) => validator?.(ddi),
 

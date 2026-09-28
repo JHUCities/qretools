@@ -191,6 +191,7 @@ const CredentialsSchema = z.strictObject({
 	expiresAt: z.number().optional(),
 	refresh: z.string().optional(),
 	refreshExpiresAt: z.number().optional(),
+	pasted: z.literal(true).optional(),
 });
 
 function readCredentials(storage: Storage): Credentials | null {
@@ -205,7 +206,7 @@ function readCredentials(storage: Storage): Credentials | null {
 		return null;
 	}
 	const old = storage.getItem(OLD_TOKEN_KEY);
-	return old === null ? null : { access: old };
+	return old === null ? null : { access: old, pasted: true };
 }
 
 /** Session storage by default: gone when the tab closes. Local storage only when asked to remember. */

@@ -453,6 +453,23 @@ function step(model: Model, msg: Msg): Step {
 			);
 			if (!msg.result.ok) {
 				const { failure, seen } = msg.result.error;
+				// GitHub's answer is the ground truth: the app cannot write here (never
+				// installed, uninstalled mid-session, or without Contents write).
+				if (
+					failure.kind === "notInstalled" &&
+					model.session.kind === "connected"
+				) {
+					const blocked: Model = {
+						...idle,
+						session: { ...model.session, access: { kind: "notInstalled" } },
+					};
+					return [
+						primary === undefined
+							? blocked
+							: withActivity(blocked, primary, failed(failure)),
+						[],
+					];
+				}
 				// Stale: take what GitHub has at each touched path, so the files show as
 				// changed on GitHub, with "Reload from GitHub" to take their version.
 				const absorbed =
@@ -583,12 +600,12 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				]);
 			{
-				const { login, avatarUrl, canWrite, defaultBranch } = msg.result.value;
+				const { login, avatarUrl, access, defaultBranch } = msg.result.value;
 				const session = {
 					kind: "connected" as const,
 					login,
 					avatarUrl,
-					canWrite,
+					access,
 					defaultBranch,
 				};
 				return [
@@ -1044,7 +1061,9 @@ const current = (model: Model): Entry | undefined =>
  */
 export function writeBlocked(model: Model): string | undefined {
 	if (model.session.kind !== "connected") return "Connect to the bank to save";
-	if (!model.session.canWrite) return "Read access only";
+	if (model.session.access.kind === "readOnly") return "Read access only";
+	if (model.session.access.kind === "notInstalled")
+		return "The app can't write to this repository, so nothing can be saved";
 	if (model.loading.kind === "failed") return "The bank did not load";
 	if (model.loading.kind !== "loaded") return "Loading the bank…";
 	// One commit at a time: two in flight naming the same file would make the second
