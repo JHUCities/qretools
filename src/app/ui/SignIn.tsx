@@ -8,6 +8,7 @@
  * its repository here. The text, the checkbox and a pasted development token are
  * transient input, so component state; the token goes to the effects, never a Msg.
  */
+
 import { LinkExternalIcon, MarkGithubIcon } from "@primer/octicons-react";
 import {
 	Banner,
@@ -21,6 +22,7 @@ import {
 	VisuallyHidden,
 } from "@primer/react";
 import { useId, useRef, useState } from "react";
+import { plainText } from "../../core/codeSpans.js";
 import { installUrl } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import { type Local, type Model, parseWorkKey } from "../model.js";
@@ -80,7 +82,7 @@ export function SignIn({ model }: { model: Model }) {
 				{session.kind === "failed" && (
 					<Banner
 						variant="critical"
-						title={session.failure.message}
+						title={plainText(session.failure.message)}
 						description={
 							session.failure.hint === undefined
 								? undefined
@@ -107,7 +109,7 @@ export function SignIn({ model }: { model: Model }) {
 						// biome-ignore lint/suspicious/noArrayIndexKey: the same failure may appear twice
 						key={i}
 						variant="critical"
-						title={f.message}
+						title={plainText(f.message)}
 						description={f.hint === undefined ? undefined : inlineCode(f.hint)}
 						onDismiss={() => dispatch({ kind: "failureDismissed", index: i })}
 					/>
