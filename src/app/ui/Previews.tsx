@@ -9,6 +9,7 @@ import {
 } from "@primer/octicons-react";
 import { ActionList, Details, Label } from "@primer/react";
 import { Fragment, memo, type ReactNode, useId } from "react";
+import { codeSpans } from "../../core/codeSpans.js";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Status, Target } from "../../core/findings.js";
 import type {
@@ -24,23 +25,18 @@ import type { DdiSchema } from "../model.js";
 /** Where a click on a hole or finding goes; absent in a read-only view, where nothing is clickable. */
 type OnTarget = ((target: Target) => void) | undefined;
 
-/** Messages mark field names with backticks (a core/shell convention); show those as code. */
-export function inlineCode(text: string): ReactNode[] {
-	const out: ReactNode[] = [];
-	text.split("`").forEach((part, i) => {
-		out.push(
-			i % 2 === 1 ? (
-				// biome-ignore lint/suspicious/noArrayIndexKey: the pieces of a split string have no identity but their position
-				<code key={i} className="code">
-					{part}
-				</code>
-			) : (
-				part
-			),
-		);
-	});
-	return out;
-}
+/** Messages mark field names with backticks (`codeSpans`); show those as code. */
+export const inlineCode = (text: string): ReactNode[] =>
+	codeSpans(text).map((s, i) =>
+		s.code ? (
+			// biome-ignore lint/suspicious/noArrayIndexKey: the pieces of a split string have no identity but their position
+			<code key={i} className="code">
+				{s.text}
+			</code>
+		) : (
+			s.text
+		),
+	);
 
 /** A hole in a preview: a button to its place in the source, or plain text where there is no source to go to. */
 function HoleButton({ hole, onTarget }: { hole: Hole; onTarget: OnTarget }) {
@@ -276,7 +272,7 @@ export function Findings({
 						{inlineCode(f.message)}
 						{f.hint !== undefined && (
 							<ActionList.Description variant="block">
-								{f.hint}
+								{inlineCode(f.hint)}
 							</ActionList.Description>
 						)}
 					</ActionList.Item>
@@ -349,7 +345,9 @@ function FindingBody({ f }: { f: Finding }) {
 		<>
 			<span className="sev">{f.severity}</span>
 			<span className="msg">{inlineCode(f.message)}</span>
-			{f.hint !== undefined && <span className="hint">{f.hint}</span>}
+			{f.hint !== undefined && (
+				<span className="hint">{inlineCode(f.hint)}</span>
+			)}
 		</>
 	);
 }

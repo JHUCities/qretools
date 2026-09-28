@@ -1,7 +1,9 @@
 /** The open file's header: identity, state, and the actions on it. */
+
 import { ArrowLeftIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
 import { Banner, Button, Label, PageHeader, Stack } from "@primer/react";
 import { useId } from "react";
+import { plainText } from "../../core/codeSpans.js";
 import type { Activity, Entry } from "../model.js";
 import { SESSION_STATUS } from "./AppContext.js";
 import { inlineCode } from "./Previews.js";
@@ -145,7 +147,7 @@ export function FileHeader({
 			{activity?.kind === "failed" && (
 				<Banner
 					variant="critical"
-					title={activity.failure.message}
+					title={plainText(activity.failure.message)}
 					description={
 						activity.failure.hint === undefined
 							? undefined
