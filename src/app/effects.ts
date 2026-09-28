@@ -128,7 +128,9 @@ export function createEffects(deps: Deps): Effects {
 		lock(name, f).catch((e: unknown) =>
 			err({
 				kind: "network",
-				message: `Could not renew the sign-in: ${e instanceof Error ? e.message : String(e)}`,
+				message: "Couldn't renew your sign-in.",
+				hint: "Try again.",
+				detail: e instanceof Error ? e.message : String(e),
 			}),
 		);
 	let validator: Validator | undefined;
@@ -247,7 +249,9 @@ export function createEffects(deps: Deps): Effects {
 										code: "ddi-invalid",
 										severity: "error",
 										path: "",
-										message: `The DDI schema could not be loaded: ${e instanceof Error ? e.message : String(e)}`,
+										message:
+											"The DDI schema couldn't be loaded, so the export can't be checked.",
+										detail: e instanceof Error ? e.message : String(e),
 									},
 								},
 							}),
@@ -310,7 +314,7 @@ export function createEffects(deps: Deps): Effects {
 							kind: "connected",
 							result: err({
 								kind: "auth",
-								message: "Sign-in is not set up for this build.",
+								message: "Sign-in isn't set up for this build.",
 							}),
 						});
 					// Leaving the page: write what should survive first.
@@ -321,7 +325,8 @@ export function createEffects(deps: Deps): Effects {
 								kind: "connected",
 								result: err({
 									kind: "auth",
-									message: `Sign-in could not start: ${e instanceof Error ? e.message : String(e)}`,
+									message: "Sign-in couldn't start.",
+									detail: e instanceof Error ? e.message : String(e),
 								}),
 							}),
 					);

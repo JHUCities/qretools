@@ -697,7 +697,7 @@ function write(
 			refuse(
 				model,
 				id,
-				"This file changed on GitHub since you started.",
+				"This changed on GitHub since you started.",
 				"Copy your version somewhere first if you want to keep it, then reload from GitHub.",
 			),
 			[],
@@ -855,10 +855,10 @@ export function moveProblem(
 	if (q.base === undefined) return "Only a question in the bank can move.";
 	if (!FOLDER_PATTERN.test(folder)) return FOLDER_RULE_TEXT;
 	const to = movedPath(q.base.path, folder);
-	if (to === q.base.path) return "It is already in that folder.";
+	if (to === q.base.path) return "It's already in that folder.";
 	const sync = syncOf(q, remoteBlob(model.remote, q));
 	if (sync === "conflict" || sync === "deletedOnGitHub")
-		return "This file changed on GitHub since you started; reload it first.";
+		return "This question changed on GitHub since you started; reload it first.";
 	if (taken(model, to, q.id)) return `\`${to}\` is already taken.`;
 	return undefined;
 }
@@ -1063,11 +1063,11 @@ const current = (model: Model): Entry | undefined =>
  * in conflict would look merely unsaved, so a save then would act on a wrong picture.
  */
 export function writeBlocked(model: Model): string | undefined {
-	if (model.session.kind !== "connected") return "Connect to the bank to save";
+	if (model.session.kind !== "connected") return "Sign in to save";
 	if (model.session.access.kind === "readOnly") return "Read access only";
 	if (model.session.access.kind === "notInstalled")
 		return "The app can't write to this repository, so nothing can be saved";
-	if (model.loading.kind === "failed") return "The bank did not load";
+	if (model.loading.kind === "failed") return "The bank didn't load";
 	if (model.loading.kind !== "loaded") return "Loading the bank…";
 	// One commit at a time: two in flight naming the same file would make the second
 	// look stale for a save that worked. Commits to one branch are serial anyway.
@@ -1103,10 +1103,10 @@ export function sessionStatus(model: Model): string | undefined {
 		case "failed":
 			return undefined;
 		case "connecting":
-			return "Connecting to GitHub…";
+			return "Signing in…";
 		case "connected":
 			return loading.kind === "failed"
-				? `The bank did not load: ${loading.failure.message}`
+				? `The bank didn't load: ${loading.failure.message.replace(/\.$/, "")}`
 				: // What is happening now comes before a standing reason (read only).
 					model.screen.kind === "foreign" && model.screen.file === undefined
 					? `Loading ${model.screen.path} from ${model.screen.branch}…`

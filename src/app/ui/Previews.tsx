@@ -40,6 +40,18 @@ export const inlineCode = (text: string): ReactNode[] =>
 		),
 	);
 
+/** A banner's description: the hint, then any library detail, quieter. */
+export const failureDescription = (f: {
+	readonly hint?: string;
+	readonly detail?: string;
+}): ReactNode =>
+	f.hint === undefined && f.detail === undefined ? undefined : (
+		<>
+			{f.hint !== undefined && inlineCode(f.hint)}
+			{f.detail !== undefined && <span className="detail">{f.detail}</span>}
+		</>
+	);
+
 /** A hole in a preview: a button to its place in the source, or plain text where there is no source to go to. */
 function HoleButton({ hole, onTarget }: { hole: Hole; onTarget: OnTarget }) {
 	if (onTarget === undefined)

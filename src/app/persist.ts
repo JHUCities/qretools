@@ -209,16 +209,19 @@ export function readPersisted(
 	} catch {
 		return err({
 			kind: "unreadable",
-			message: "The saved work in this browser is not readable JSON.",
-			hint: `It was kept under \`${UNREADABLE_KEY}\`.`,
+			message: "The work kept in this browser can't be read.",
+			detail: "Not valid JSON.",
+			hint: `It was set aside under \`${UNREADABLE_KEY}\`.`,
 		});
 	}
 	const parsed = StoredSchema.safeParse(json);
 	if (!parsed.success) {
 		return err({
 			kind: "unreadable",
-			message: `The saved work in this browser does not match what this version expects: ${parsed.error.issues[0]?.message ?? "invalid"}.`,
-			hint: `It was kept under \`${UNREADABLE_KEY}\`.`,
+			message:
+				"The work kept in this browser doesn't match what this version of the app expects.",
+			detail: parsed.error.issues[0]?.message ?? "invalid",
+			hint: `It was set aside under \`${UNREADABLE_KEY}\`.`,
 		});
 	}
 	return ok(parsed.data);

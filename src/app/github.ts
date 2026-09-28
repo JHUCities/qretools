@@ -115,7 +115,11 @@ export const makeGitHubStore = (
 						message: `GitHub has no repository ${owner}/${repo} that you can open.`,
 						hint: "Check the name, and that the qretools app is installed on it.",
 					});
-				return err({ kind: "unreadable", message: e.message });
+				return err({
+					kind: "unreadable",
+					message: "GitHub couldn't read the bank.",
+					detail: e.message,
+				});
 			}
 			return err(failureOf(e));
 		}
@@ -270,7 +274,7 @@ export const makeGitHubStore = (
 			return err({
 				failure: {
 					kind: "unreadable",
-					message: "The branch could not be created.",
+					message: "Your branch couldn't be created.",
 				},
 			});
 		const { oid, tree, files } = head.value;
@@ -351,7 +355,9 @@ export const makeGitHubStore = (
 		// recreates the branch if need be. Any other 422 is reported as itself.
 		if (!moved.ok)
 			return moved.error.status === 422 &&
-				/fast forward|does not exist/i.test(moved.error.message)
+				/fast forward|does not exist/i.test(
+					moved.error.detail ?? moved.error.message,
+				)
 				? "lost"
 				: err({ failure: moved.error });
 		return ok({ shas });
@@ -388,8 +394,9 @@ export const makeGitHubStore = (
 		if (!data)
 			return err({
 				kind: "unreadable",
-				message: r.value.error ?? "GitHub returned no repository data.",
-				hint: "Check the owner, repository and branch, and that the token can read it.",
+				message: "GitHub couldn't read the bank.",
+				hint: "Check the repository's name, and that you can open it on GitHub.",
+				...(r.value.error !== undefined && { detail: r.value.error }),
 			});
 		const questions = (data.questions?.entries ?? []).flatMap((folder) =>
 			(folder.object?.entries ?? []).flatMap((e) =>
@@ -438,7 +445,7 @@ export const makeGitHubStore = (
 			if (data?.repository?.isEmpty)
 				return err({
 					kind: "empty",
-					message: `${owner}/${repo} has no commits yet.`,
+					message: `${owner}/${repo} is empty on GitHub.`,
 					hint: writable
 						? "Add a first file on GitHub (a README will do), then sign in again."
 						: "Ask someone with write access to add a first file, then sign in again.",
@@ -447,10 +454,9 @@ export const makeGitHubStore = (
 			if (!data || branch === undefined)
 				return err({
 					kind: "unreadable",
-					message:
-						r.value.error ??
-						`GitHub has no repository ${owner}/${repo} for this token.`,
-					hint: "Check the owner and repository, and that the token can read it.",
+					message: `GitHub has no repository ${owner}/${repo} that you can open.`,
+					hint: "Check the repository's name, and that you can open it on GitHub.",
+					...(r.value.error !== undefined && { detail: r.value.error }),
 				});
 			if (!installed.ok) return installed;
 			return ok({
@@ -568,7 +574,7 @@ export const makeGitHubStore = (
 				: err({
 						failure: {
 							kind: "stale",
-							message: "The branch kept moving while saving.",
+							message: "Your branch kept changing while saving.",
 							hint: "Reload from GitHub, then save again.",
 						},
 					});
@@ -610,18 +616,24 @@ function failureOf(e: unknown): Failure {
 	if (!(e instanceof RequestError))
 		return {
 			kind: "unreadable",
-			message: `GitHub's reply was not understood: ${message}`,
+			message: "GitHub's reply wasn't understood.",
+			detail: message,
 		};
 	// Octokit reports a request that never got an answer as status 500 with no response.
 	if (error.response === undefined)
-		return { kind: "network", message: `Could not reach GitHub: ${message}` };
+		return {
+			kind: "network",
+			message: "Couldn't reach GitHub.",
+			hint: "Check that you're online, then try again.",
+			detail: message,
+		};
 	const status = e.status;
 	if (status === 401)
 		return {
 			kind: "auth",
 			status,
-			message: "GitHub did not accept the token.",
-			hint: "It may have expired, or lack access to this repository.",
+			message: "GitHub didn't accept your sign-in.",
+			hint: "It may have ended. Sign in again.",
 		};
 	const headers = error.response.headers ?? {};
 	// The primary limit says so in its headers; a secondary one sends retry-after.
@@ -638,7 +650,8 @@ function failureOf(e: unknown): Failure {
 		return {
 			kind: "rateLimited",
 			status,
-			message: `GitHub's rate limit is exhausted until ${when}.`,
+			message: `GitHub's rate limit is used up until ${when}.`,
+			hint: "Try again then.",
 		};
 	}
 	if (status === 404)
@@ -646,9 +659,14 @@ function failureOf(e: unknown): Failure {
 			kind: "http",
 			status,
 			message: "GitHub found nothing at that address.",
-			hint: "Check the owner, repository, branch and path, and that the token can see the repository.",
+			hint: "Check the repository, branch and path, and that you can open the repository on GitHub.",
 		};
-	return { kind: "http", status, message };
+	return {
+		kind: "http",
+		status,
+		message: `GitHub refused the request (${status}).`,
+		detail: message,
+	};
 }
 
 interface Entry {

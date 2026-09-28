@@ -57,16 +57,16 @@ describe("sign-in", () => {
 			const r = callbackOf(search, p, now);
 			return r !== undefined && !r.ok ? r.error.message : "accepted";
 		};
-		expect(refused("?code=c&state=other")).toMatch(/did not start here/);
+		expect(refused("?code=c&state=other")).toMatch(/didn.t start here/);
 		// No sign-in stored in this tab (another tab, or already used).
 		const none = callbackOf("?code=c&state=s1", undefined, 1_000_000);
 		expect(none !== undefined && !none.ok && none.error.message).toMatch(
-			/did not start here/,
+			/didn.t start here/,
 		);
 		expect(
 			refused("?code=c&state=s1", pending, 1_000_000 + 11 * 60_000),
 		).toMatch(/too long/);
-		expect(refused("?error=access_denied&state=s1")).toMatch(/cancelled/);
+		expect(refused("?error=access_denied&state=s1")).toMatch(/canceled/);
 	});
 
 	it("makes lifetimes absolute on arrival, and treats a token with no expiry as lasting", () => {
