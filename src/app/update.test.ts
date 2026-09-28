@@ -622,7 +622,7 @@ describe("scheme files", () => {
 		expect(cmds[0]).toMatchObject({
 			kind: "commit",
 			changes: [{ path: "universes/renters.yaml", expected: null }],
-			message: "Add universe renters",
+			message: "Add shared universe renters",
 		});
 		const saved: Model = {
 			...made,
@@ -648,7 +648,7 @@ describe("scheme files", () => {
 		expect(del[0]).toMatchObject({
 			kind: "commit",
 			changes: [{ path: "universes/renters.yaml", text: null }],
-			message: "Delete universe renters",
+			message: "Delete shared universe renters",
 		});
 	});
 });
@@ -908,7 +908,7 @@ describe("change sets", () => {
 			[10, "scales/yn.yaml", "s-yn"],
 		]);
 		expect(cmd?.kind === "commit" && cmd.message).toMatch(
-			/With:\n- Update scale yn/,
+			/With:\n- Update shared scale yn/,
 		);
 		expect(m.activity[10]).toEqual({ kind: "saving" });
 		// One commit at a time.
@@ -1192,7 +1192,7 @@ describe("moving a question", () => {
 				},
 				{ path: "questions/nhd/nhd_sat.yaml", expected: "s", text: null },
 			],
-			message: "Move nhd_sat to questions/svy",
+			message: "Move nhd_sat to svy",
 		});
 	});
 
