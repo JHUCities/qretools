@@ -214,7 +214,7 @@ body {
 	font-size: var(--text-title-size-medium);
 	font-weight: var(--base-text-weight-normal);
 }
-.signin-kept {
+.signin-note {
 	margin: 0;
 	text-align: center;
 	font-size: var(--text-body-size-small);

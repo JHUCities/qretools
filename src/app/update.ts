@@ -16,25 +16,30 @@ import { NAME_PATTERN } from "../core/surface/schema.js";
 import { formatLink, type Link, parseLink } from "./link.js";
 import {
 	type Activity,
-	adoptWork,
 	allFiles,
 	type Blob,
 	type Cmd,
+	EMPTY_LOCAL,
+	EMPTY_REMOTE,
 	type Entry,
 	envOf,
 	fileOf,
+	hasOwnWork,
 	type Id,
 	type Model,
 	type Msg,
+	otherAuthor,
+	otherBank,
+	ownWork,
 	type Path,
 	type Question,
 	type Remote,
 	SCHEME_TEMPLATES,
 	type SchemeEntry,
 	signedOut,
-	toPersisted,
+	toWork,
 } from "./model.js";
-import type { BranchTarget, Change, Failure } from "./storage.js";
+import type { BankSettings, BranchTarget, Change, Failure } from "./storage.js";
 import {
 	claimOf,
 	dependencies,
@@ -444,13 +449,25 @@ function step(model: Model, msg: Msg): Step {
 			const ids = msg.changes.flatMap((c) =>
 				c.id === undefined ? [] : [c.id],
 			);
-			const primary = ids[0];
+			// Saving before signing out: the dialog reports, never a file.
+			const leaving = model.browser.signingOut?.phase === "saving";
+			const primary = leaving ? undefined : ids[0];
 			const idle = ids.reduce<Model>(
 				(m, id) => withActivity(m, id, undefined),
 				model,
 			);
 			if (!msg.result.ok) {
 				const { failure, seen } = msg.result.error;
+				const reported = (m: Model): Model =>
+					leaving
+						? {
+								...m,
+								browser: {
+									...m.browser,
+									signingOut: { phase: "asking", failure },
+								},
+							}
+						: m;
 				// GitHub's answer is the ground truth: the app cannot write here (never
 				// installed, uninstalled mid-session, or without Contents write).
 				if (
@@ -463,7 +480,7 @@ function step(model: Model, msg: Msg): Step {
 					};
 					return [
 						primary === undefined
-							? blocked
+							? reported(blocked)
 							: withActivity(blocked, primary, failed(failure)),
 						[],
 					];
@@ -484,7 +501,7 @@ function step(model: Model, msg: Msg): Step {
 				);
 				const failedAt =
 					primary === undefined
-						? { ...absorbed, local, nextId }
+						? reported({ ...absorbed, local, nextId })
 						: withActivity(
 								{ ...absorbed, local, nextId },
 								primary,
@@ -512,7 +529,10 @@ function step(model: Model, msg: Msg): Step {
 					: m;
 				return withGitHub(based, c.path, blob);
 			}, idle);
-			return persist([committed(done), []]);
+			// Everything saveable is saved; drafts without a folder go, as the dialog said.
+			return leaving
+				? signOut({ ...committed(done), local: EMPTY_LOCAL })
+				: persist([committed(done), []]);
 		}
 
 		case "reloadRequested": {
@@ -560,32 +580,32 @@ function step(model: Model, msg: Msg): Step {
 			]);
 		}
 
-		case "connectRequested":
+		case "connectRequested": {
+			const [chosen, cmds] = withSettings(model, msg.settings);
 			return persist([
-				{
-					...model,
-					settings: msg.settings,
-					session: { kind: "connecting" },
-					failures: [],
-				},
+				{ ...chosen, session: { kind: "connecting" }, failures: [] },
 				[
+					...cmds,
 					{
 						kind: "connect",
 						repo: { owner: msg.settings.owner, repo: msg.settings.repo },
 					},
 				],
 			]);
+		}
 
-		case "signInRequested":
+		case "signInRequested": {
+			// Leaving for GitHub and coming back is not leaving the work: no warning.
+			const [chosen, cmds] = withSettings(model, msg.settings);
 			return persist([
 				{
-					...model,
-					settings: msg.settings,
-					session: { kind: "connecting" },
+					...chosen,
+					session: { kind: "connecting", toGitHub: true },
 					failures: [],
 				},
-				[{ kind: "signIn", remember: msg.settings.remember }],
+				[...cmds, { kind: "signIn", remember: msg.settings.remember }],
 			]);
+		}
 
 		case "connected":
 			// Signed out, whatever the reason: only the author's own work stays.
@@ -606,15 +626,25 @@ function step(model: Model, msg: Msg): Step {
 					access,
 					defaultBranch,
 				};
-				// This bank's and this person's work, never another's, before the load.
-				const adopted = adoptWork(
-					model,
-					`${model.settings.owner}/${model.settings.repo}`,
-					login,
-				);
+				// This person's work, never another's, before the load: someone else's
+				// unsaved work in this tab is set aside, never shown to them or dropped.
+				const [theirs, aside] = otherAuthor(model, login)
+					? setAside(
+							model,
+							`Unsaved work in this tab belonged to ${model.author} and was set aside.`,
+						)
+					: [model, []];
 				return persist([
-					{ ...adopted, session, loading: { kind: "loading" } },
-					[{ kind: "loadBank", target: targetOf(model.settings, session) }],
+					{
+						...theirs,
+						author: login,
+						session,
+						loading: { kind: "loading" },
+					},
+					[
+						...aside,
+						{ kind: "loadBank", target: targetOf(model.settings, session) },
+					],
 				]);
 			}
 
@@ -659,10 +689,50 @@ function step(model: Model, msg: Msg): Step {
 			];
 
 		case "disconnected":
-			return persist([
-				{ ...signedOut(model), session: { kind: "anonymous" } },
-				[{ kind: "forgetToken" }],
-			]);
+			return signOut(model);
+
+		case "signOutRequested":
+			// Nothing of the author's own would be left behind: sign out at once.
+			return hasOwnWork(model)
+				? [
+						{
+							...model,
+							browser: { ...model.browser, signingOut: { phase: "asking" } },
+						},
+						[],
+					]
+				: signOut(model);
+
+		case "signOutCancelled":
+			return model.browser.signingOut?.phase === "asking"
+				? [{ ...model, browser: withoutSigningOut(model.browser) }, []]
+				: [model, []];
+
+		case "signOutDiscardConfirmed":
+			return model.browser.signingOut?.phase === "asking"
+				? signOut({ ...model, local: EMPTY_LOCAL })
+				: [model, []];
+
+		case "signOutSaveConfirmed": {
+			const as = writable(model);
+			const plan = signOutPlan(model);
+			if (
+				model.browser.signingOut?.phase !== "asking" ||
+				as === undefined ||
+				plan.blocked.length > 0 ||
+				plan.save.length === 0
+			)
+				return [model, []];
+			return commitFiles(
+				{
+					...model,
+					browser: { ...model.browser, signingOut: { phase: "saving" } },
+				},
+				as,
+				claimedChanges(plan.save),
+				plan.save,
+			);
+		}
 
 		case "failureDismissed":
 			return [
@@ -723,27 +793,45 @@ function write(
 			[],
 		];
 	// The file being saved comes first: a refused commit reports on `changes[0]`.
-	const changes: Change[] = [
-		{ id, path, expected: q.base?.sha ?? null, text: q.source },
-		...deps.include.flatMap((e) => {
-			const at = claimOf(e);
-			return at === undefined
-				? []
-				: [
-						{
-							id: e.id,
-							path: at,
-							expected: e.base?.sha ?? null,
-							text: e.source,
-						},
-					];
-		}),
-	];
+	return commitFiles(
+		model,
+		as,
+		[changeOf(q, path), ...claimedChanges(deps.include)],
+		[q, ...deps.include],
+	);
+}
+
+/** Writing a working file at a path: expected to be at its base, or not there yet. */
+const changeOf = (f: Entry, path: Path): Change => ({
+	id: f.id,
+	path,
+	expected: f.base?.sha ?? null,
+	text: f.source,
+});
+
+/** Changes for files whose path is settled: saved ones and scheme files (kind and name give it). */
+const claimedChanges = (files: readonly Entry[]): Change[] =>
+	files.flatMap((f) => {
+		const at = claimOf(f);
+		return at === undefined ? [] : [changeOf(f, at)];
+	});
+
+/**
+ * One commit of a change set: each working file marked as saving, the message from
+ * the first file with the others listed.
+ */
+function commitFiles(
+	model: Model,
+	as: Connected,
+	changes: readonly Change[],
+	files: readonly Entry[],
+): Step {
 	const busy = changes.reduce<Model>(
 		(m, c) =>
 			c.id === undefined ? m : withActivity(m, c.id, { kind: "saving" }),
 		model,
 	);
+	const [first, ...others] = files;
 	return [
 		busy,
 		[
@@ -752,12 +840,91 @@ function write(
 				target: targetOf(model.settings, as),
 				changes,
 				message: describeChangeSet(
-					messageOf(model, q),
-					deps.include.map((e) => messageOf(model, e)),
+					first === undefined ? "" : messageOf(model, first),
+					others.map((e) => messageOf(model, e)),
 				),
 			},
 		],
 	];
+}
+
+/**
+ * What signing out does with the author's own work: saved questions and shared files
+ * with unsaved changes, and new shared files (their path follows from kind and name),
+ * are saved in one commit; question drafts can't be (their folder is a choice) and are
+ * discarded; anything GitHub also changed or deleted blocks the save until reloaded.
+ */
+export function signOutPlan(model: Model): {
+	readonly save: readonly Entry[];
+	readonly discard: readonly Question[];
+	readonly blocked: readonly Entry[];
+} {
+	const save: Entry[] = [];
+	const discard: Question[] = [];
+	const blocked: Entry[] = [];
+	for (const f of allFiles(model.local).filter(ownWork)) {
+		if (f.kind === "question" && f.base === undefined) {
+			discard.push(f);
+			continue;
+		}
+		const sync = syncOf(f, remoteBlob(model.remote, f));
+		if (sync === "conflict" || sync === "deletedOnGitHub") blocked.push(f);
+		else if (sync === "draft" || sync === "unsaved") save.push(f);
+	}
+	return { save, discard, blocked };
+}
+
+/** Signed out: only the author's own work stays, and the credentials are forgotten. */
+function signOut(model: Model): Step {
+	return persist([
+		{ ...signedOut(model), session: { kind: "anonymous" } },
+		[{ kind: "forgetToken" }],
+	]);
+}
+
+/**
+ * The work in hand leaves this tab: kept in the browser's storage and said once, never
+ * dropped. Clean copies of the bank's files are simply forgotten (a load brings them back).
+ */
+function setAside(model: Model, message: string): Step {
+	const cleared: Model = compact({
+		...model,
+		local: EMPTY_LOCAL,
+		remote: EMPTY_REMOTE,
+		activity: {},
+		screen: { kind: "blank" } as const,
+		cursor: undefined,
+		author: undefined,
+	});
+	if (!hasOwnWork(model)) return [cleared, []];
+	return [
+		{
+			...cleared,
+			failures: [
+				...model.failures,
+				{
+					kind: "refused",
+					message,
+					hint: "It's kept in this browser's storage (`qretools.work.aside`).",
+				},
+			],
+		},
+		[{ kind: "setAside", work: toWork(model) }],
+	];
+}
+
+/**
+ * Settings chosen on the sign-in page: kept as the default for new tabs. Work belongs
+ * to its bank, so choosing another sets this tab's work aside rather than carry it there.
+ */
+function withSettings(model: Model, settings: BankSettings): Step {
+	const [kept, cmds] = otherBank(model, settings)
+		? setAside(
+				model,
+				`Unsaved work in this tab for ${model.settings.owner}/${model.settings.repo} was set aside.`,
+			)
+		: [model, []];
+	return [{ ...kept, settings }, [...cmds, { kind: "saveSettings", settings }]];
 }
 
 /** The app declined before any request: say so on the file. */
@@ -1044,6 +1211,9 @@ export function schemeNameProblem(
 		: undefined;
 }
 
+const withoutSigningOut = (browser: Model["browser"]): Model["browser"] =>
+	compact({ ...browser, signingOut: undefined });
+
 const withoutSaving = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, saving: undefined });
 
@@ -1256,5 +1426,5 @@ function add(model: Model, file: NewFile): [Model, Id] {
 /** Every change to what should survive a reload ends with a persist command. */
 const persist = ([model, cmds]: Step): Step => [
 	model,
-	[...cmds, { kind: "persist", data: toPersisted(model) }],
+	[...cmds, { kind: "persist", work: toWork(model) }],
 ];

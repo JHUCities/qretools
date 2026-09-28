@@ -25,7 +25,12 @@ import {
 import type { SignInConfig } from "./config.js";
 import type { Editor } from "./editor.js";
 import type { Cmd, Dispatch } from "./model.js";
-import { STORAGE_KEY } from "./persist.js";
+import {
+	SETTINGS_KEY,
+	setAsideWork,
+	settingsValue,
+	WORK_KEY,
+} from "./persist.js";
 import {
 	AuthError,
 	type CredentialStore,
@@ -258,7 +263,21 @@ export function createEffects(deps: Deps): Effects {
 						);
 					return;
 				case "persist":
-					persist(JSON.stringify(cmd.data));
+					persist(JSON.stringify(cmd.work));
+					return;
+				case "saveSettings":
+					try {
+						localStorage.setItem(SETTINGS_KEY, settingsValue(cmd.settings));
+					} catch {
+						// Storage unavailable: a new tab starts from the default bank.
+					}
+					return;
+				case "setAside":
+					try {
+						setAsideWork(localStorage, cmd.work);
+					} catch {
+						// Storage unavailable (private window, quota): nothing more can be done.
+					}
 					return;
 				case "connect": {
 					const s = storeFor(cmd.repo);
@@ -364,14 +383,17 @@ export function createEffects(deps: Deps): Effects {
 	};
 }
 
-/** Persist at most every 300 ms, and flush when the page is hidden, or on demand. */
+/**
+ * Persist this tab's work at most every 300 ms, and flush when the page is hidden, or
+ * on demand. Session storage: the work outlives a reload, never the tab.
+ */
 function debouncedPersist(): ((json: string) => void) & { flush(): void } {
 	let pending: string | undefined;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const flush = () => {
 		if (pending === undefined) return;
 		try {
-			localStorage.setItem(STORAGE_KEY, pending);
+			sessionStorage.setItem(WORK_KEY, pending);
 		} catch {
 			// Storage unavailable (private window, quota): the Model is still correct; drafts are just not kept.
 		}
