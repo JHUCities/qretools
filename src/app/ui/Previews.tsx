@@ -108,7 +108,11 @@ export function StatusIcon({ status }: { status: Status }) {
 	return status.errors > 0 ? (
 		<AlertIcon size={14} className="fg-danger" aria-label="errors" />
 	) : (
-		<IssueDraftIcon size={14} className="fg-attention" aria-label="holes" />
+		<IssueDraftIcon
+			size={14}
+			className="fg-attention"
+			aria-label="to fill in"
+		/>
 	);
 }
 
@@ -248,6 +252,14 @@ const SEVERITY = {
 	info: { Icon: InfoIcon, className: "fg-accent" },
 } as const;
 
+/** A severity as the author reads it: "hole" is the tool's word, not theirs. */
+const SEVERITY_LABEL: Readonly<Record<Finding["severity"], string>> = {
+	hole: "to fill in",
+	error: "error",
+	warning: "warning",
+	info: "info",
+};
+
 /**
  * The findings: in an editable view, Primer's ActionList, each item taking the author
  * to its place in the source; severity is an icon with its name, never colour alone.
@@ -281,7 +293,10 @@ export function Findings({
 					// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
 					<ActionList.Item key={i} onSelect={() => onTarget(f)}>
 						<ActionList.LeadingVisual>
-							<Icon className={className} aria-label={f.severity} />
+							<Icon
+								className={className}
+								aria-label={SEVERITY_LABEL[f.severity]}
+							/>
 						</ActionList.LeadingVisual>
 						{inlineCode(f.message)}
 						{(f.hint !== undefined || f.detail !== undefined) && (
@@ -363,7 +378,7 @@ function ResolvedText({ value }: { value: Resolved }) {
 function FindingBody({ f }: { f: Finding }) {
 	return (
 		<>
-			<span className="sev">{f.severity}</span>
+			<span className="sev">{SEVERITY_LABEL[f.severity]}</span>
 			<span className="msg">{inlineCode(f.message)}</span>
 			{f.hint !== undefined && (
 				<span className="hint">{inlineCode(f.hint)}</span>

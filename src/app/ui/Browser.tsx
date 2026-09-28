@@ -21,7 +21,7 @@ import {
 	SkeletonText,
 } from "@primer/react/experimental";
 import { useId } from "react";
-import { UNNAMED } from "../../core/copy.js";
+import { SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import type { Status } from "../../core/findings.js";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
@@ -158,6 +158,14 @@ function FolderItem({
 	);
 }
 
+/** A section's count, heard: "3 scales"; the one missing-values list is there or not. */
+const sectionCount = (s: SchemeSection): string =>
+	s.kind === "missing"
+		? s.leaves.length === 0
+			? "none yet"
+			: "defined"
+		: countLabel(s.leaves.length, SCHEME_SINGULAR[s.kind]);
+
 function SectionItem({
 	section,
 	open,
@@ -180,9 +188,7 @@ function SectionItem({
 				<TreeView.DirectoryIcon />
 			</TreeView.LeadingVisual>
 			{section.label}
-			<TreeView.TrailingVisual
-				label={countLabel(section.leaves.length, "file")}
-			>
+			<TreeView.TrailingVisual label={sectionCount(section)}>
 				<CounterLabel>{section.leaves.length}</CounterLabel>
 			</TreeView.TrailingVisual>
 			<TreeView.SubTree>
@@ -212,7 +218,7 @@ const STATUS_TEXT = (s: Status): string =>
 			? "has advice"
 			: s.errors > 0
 				? "has errors"
-				: "has holes";
+				: "has fields to fill in";
 
 /** A file's state, heard as one phrase (the trailing visual's `label`, as Primer's guidelines ask). */
 function marksLabel(leaf: Leaf | SchemeLeaf): string {

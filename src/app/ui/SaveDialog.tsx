@@ -73,7 +73,7 @@ export function SaveDialog({
 			</form>
 			{also.length > 0 && (
 				<InlineMessage variant="unavailable">
-					Also saves, in the same commit: {also.join(", ")}.
+					Also saves {also.join(", ")}.
 				</InlineMessage>
 			)}
 		</Dialog>

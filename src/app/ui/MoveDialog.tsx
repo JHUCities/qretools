@@ -67,7 +67,7 @@ export function MoveDialog({
 									<code className="code">{to}</code>.{" "}
 								</>
 							)}
-							The saved version moves; unsaved edits stay unsaved.
+							The saved version moves; unsaved changes stay unsaved.
 						</>
 					}
 				/>

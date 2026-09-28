@@ -66,13 +66,13 @@ export function SignIn({ model }: { model: Model }) {
 		Object.keys(l.questions).length + Object.keys(l.schemes).length;
 	const held = [
 		...(model.workOf !== undefined && count(model.local) > 0
-			? [{ ...model.workOf, n: count(model.local) }]
+			? [{ ...model.workOf, l: model.local }]
 			: []),
 		...Object.entries(model.kept).map(([key, l]) => ({
 			...parseWorkKey(key),
-			n: count(l),
+			l,
 		})),
-	].filter((w) => w.n > 0);
+	].filter((w) => count(w.l) > 0);
 	return (
 		<main className="signin" aria-labelledby={headingId}>
 			<Stack gap="normal" className="signin-column">
@@ -153,7 +153,7 @@ export function SignIn({ model }: { model: Model }) {
 						</FormControl>
 						{config === undefined && (
 							<p className="fg-attention">
-								Sign-in with GitHub is not set up for this build.
+								Sign-in with GitHub isn't set up for this build.
 							</p>
 						)}
 						{config !== undefined && (
@@ -184,7 +184,7 @@ export function SignIn({ model }: { model: Model }) {
 								</FormControl.Caption>
 								{tokenTried && token.trim() === "" && (
 									<FormControl.Validation variant="error">
-										Paste a token to connect with it.
+										Paste a token to sign in with it.
 									</FormControl.Validation>
 								)}
 							</FormControl>
@@ -195,7 +195,7 @@ export function SignIn({ model }: { model: Model }) {
 								block
 								onClick={config === undefined ? undefined : withToken}
 							>
-								Connect with token
+								Sign in with token
 							</Button>
 						)}
 					</Stack>
@@ -230,13 +230,13 @@ export function SignIn({ model }: { model: Model }) {
 						{held
 							.map(
 								(w) =>
-									`${w.repo}${w.login === undefined ? "" : ` (${w.login})`}: ${w.n} file${w.n === 1 ? "" : "s"}`,
+									`${w.repo}${w.login === undefined ? "" : ` (${w.login})`}: ${workCount(w.l)}`,
 							)
 							.join("; ")}
 						.
 					</p>
 				)}
-				{/* A failed connection still holds the GitHub sign-in: a way to let it go. */}
+				{/* A failed sign-in still holds the GitHub sign-in: a way to let it go. */}
 				{session.kind === "failed" && effects.hasToken() && (
 					<Button
 						variant="invisible"
@@ -248,4 +248,18 @@ export function SignIn({ model }: { model: Model }) {
 			</Stack>
 		</main>
 	);
+}
+
+/** Kept work, counted in the glossary's words: "2 questions and 1 shared item". */
+function workCount(l: Local): string {
+	const plural = (n: number, noun: string) =>
+		`${n} ${noun}${n === 1 ? "" : "s"}`;
+	const q = Object.keys(l.questions).length;
+	const s = Object.keys(l.schemes).length;
+	return [
+		q > 0 ? plural(q, "question") : undefined,
+		s > 0 ? plural(s, "shared item") : undefined,
+	]
+		.filter((x) => x !== undefined)
+		.join(" and ");
 }

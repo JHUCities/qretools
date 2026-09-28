@@ -140,7 +140,7 @@ export function FileHeader({
 				{also.length > 0 && (
 					<PageHeader.Description>
 						<span id={statusId} className="quiet">
-							Saving also saves {also.join(", ")}.
+							Also saves {also.join(", ")}.
 						</span>
 					</PageHeader.Description>
 				)}
@@ -156,7 +156,7 @@ export function FileHeader({
 			{stale && activity?.kind !== "failed" && (
 				<Banner
 					variant="warning"
-					title="This file changed on GitHub since you started."
+					title="This changed on GitHub since you started."
 					description="Copy your version somewhere first if you want to keep it, then reload from GitHub."
 					primaryAction={reload}
 				/>

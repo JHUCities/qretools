@@ -207,7 +207,7 @@ export function App() {
 										})
 									}
 								>
-									Check again
+									Try again
 								</Button>
 							)}
 					</Stack>
@@ -301,8 +301,8 @@ export function App() {
 									<p className="quiet">
 										{model.pendingLink !== undefined &&
 										model.loading.kind === "failed"
-											? "The bank did not load, so this link cannot open yet."
-											: "Pick a question or a shared element in the bank, or create a new one."}
+											? "The bank didn't load, so this link can't open yet."
+											: "Pick a question or a shared scale, universe or instruction in the bank, or create a new one."}
 									</p>
 								</div>
 							) : (
@@ -368,13 +368,13 @@ export function App() {
 				>
 					{/* Where the deletion goes: the author's branch, never the bank directly. */}
 					{confirm.base === undefined
-						? `${confirmName ?? "This draft"} exists only in this browser and cannot be recovered.`
-						: `It is removed from your branch${model.session.kind === "connected" ? `, ${ownBranch(model.session.login)},` : ""} in a commit. The bank is unchanged until your pull request is merged.`}
+						? `${confirmName ?? "This draft"} exists only in this browser and can't be recovered.`
+						: `It's removed from your branch${model.session.kind === "connected" ? `, ${ownBranch(model.session.login)}` : ""}. The bank is unchanged until your pull request is merged.`}
 					{confirm.base !== undefined &&
 						isUnsaved(confirm) &&
 						" Your unsaved changes to it are discarded."}
 					{confirmUsers > 0 &&
-						` ${confirmUsers} question${confirmUsers === 1 ? " names" : "s name"} it; each will show a hole there until it is changed.`}
+						` ${confirmUsers} question${confirmUsers === 1 ? " names" : "s name"} it; each will show a field to fill in there until it's changed.`}
 				</ConfirmationDialog>
 			)}
 		</>
