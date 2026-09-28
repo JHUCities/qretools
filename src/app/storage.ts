@@ -23,6 +23,8 @@ export interface Failure {
 		| "stale"
 		| "rateLimited"
 		| "unreadable"
+		/** The repository exists but has no commits yet: nothing to branch from. */
+		| "empty"
 		/** The app declined before any request was made. */
 		| "refused";
 	readonly message: string;

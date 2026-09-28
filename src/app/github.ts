@@ -373,6 +373,19 @@ export const makeGitHubStore = (
 			const r = await graphql<WhoData>(WHO_QUERY, { owner, repo });
 			if (!r.ok) return r;
 			const data = r.value.data;
+			const writable = ["WRITE", "MAINTAIN", "ADMIN"].includes(
+				data?.repository?.viewerPermission ?? "",
+			);
+			// A new repository has no commits and so no default branch: say that, not
+			// that it does not exist. GitHub's own page for it offers the first file.
+			if (data?.repository?.isEmpty)
+				return err({
+					kind: "empty",
+					message: `${owner}/${repo} has no commits yet.`,
+					hint: writable
+						? "Add a first file on GitHub (a README will do), then sign in again."
+						: "Ask someone with write access to add a first file, then sign in again.",
+				});
 			const branch = data?.repository?.defaultBranchRef?.name;
 			if (!data || branch === undefined)
 				return err({
@@ -385,9 +398,7 @@ export const makeGitHubStore = (
 			return ok({
 				login: data.viewer.login,
 				avatarUrl: data.viewer.avatarUrl,
-				canWrite: ["WRITE", "MAINTAIN", "ADMIN"].includes(
-					data.repository?.viewerPermission ?? "",
-				),
+				canWrite: writable,
 				defaultBranch: branch,
 			});
 		},
@@ -583,6 +594,7 @@ interface WhoData {
 	readonly viewer: { readonly login: string; readonly avatarUrl: string };
 	readonly repository: {
 		readonly viewerPermission: string | null;
+		readonly isEmpty: boolean;
 		readonly defaultBranchRef: { readonly name: string } | null;
 	} | null;
 }
@@ -606,7 +618,7 @@ interface BankData {
 
 const WHO_QUERY = `query Who($owner: String!, $repo: String!) {
   viewer { login avatarUrl(size: 64) }
-  repository(owner: $owner, name: $repo) { viewerPermission defaultBranchRef { name } }
+  repository(owner: $owner, name: $repo) { viewerPermission isEmpty defaultBranchRef { name } }
 }`;
 
 /**
