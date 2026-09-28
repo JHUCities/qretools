@@ -42,7 +42,7 @@ export function SaveDialog({
 	const close = () => dispatch({ kind: "saveCancelled" });
 	return (
 		<Dialog
-			title="Save to the bank"
+			title="Save to your branch"
 			onClose={close}
 			footerButtons={[
 				{ buttonType: "default", content: "Cancel", onClick: close },
