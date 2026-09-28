@@ -4,6 +4,7 @@
  * named by its visible heading: Tab moves between them, arrows within, as Primer's
  * TreeView guidelines describe.
  */
+
 import { SearchIcon } from "@primer/octicons-react";
 import {
 	CounterLabel,
@@ -20,6 +21,7 @@ import {
 	SkeletonText,
 } from "@primer/react/experimental";
 import { useId } from "react";
+import { UNNAMED } from "../../core/copy.js";
 import type { Status } from "../../core/findings.js";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
@@ -145,7 +147,7 @@ function FolderItem({
 						current={leaf.id === open}
 						onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
 					>
-						{leaf.name ?? <span className="quiet">(no name)</span>}
+						{leaf.name ?? <span className="quiet">{UNNAMED}</span>}
 						<TreeView.TrailingVisual label={marksLabel(leaf)}>
 							<Marks leaf={leaf} />
 						</TreeView.TrailingVisual>

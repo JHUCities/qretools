@@ -471,6 +471,17 @@ button.hole {
 	font-size: var(--text-body-size-small);
 	white-space: pre-wrap;
 }
+/* A library's own words under the plain message: kept, quieter. */
+.detail {
+	display: block;
+	color: var(--fgColor-muted);
+	font-family: var(--fontStack-monospace);
+	font-size: var(--text-caption-size);
+	white-space: pre-wrap;
+}
+.finding .detail {
+	grid-column: 2;
+}
 .finding[data-severity="hole"] {
 	--edge: var(--fgColor-attention);
 	border-left-style: dashed;

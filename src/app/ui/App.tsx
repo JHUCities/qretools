@@ -21,17 +21,13 @@ import {
 } from "@primer/react";
 import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
+import { SCHEME_SINGULAR } from "../../core/copy.js";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
 import { installUrl } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves, isUnsaved } from "../sync.js";
-import {
-	bankFolders,
-	SCHEME_SINGULAR,
-	schemeSections,
-	treeOf,
-} from "../tree.js";
+import { bankFolders, schemeSections, treeOf } from "../tree.js";
 import {
 	bankLoading,
 	folderOfPath,

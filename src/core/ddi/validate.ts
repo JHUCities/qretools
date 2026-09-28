@@ -15,11 +15,13 @@ import type { DdiDocument } from "./document.js";
 
 export type Validator = (document: DdiDocument) => readonly Finding[];
 
-const invalid = (message: string): Finding => ({
+/** The schema validator's words are the detail; the message says what it means. */
+const invalid = (message: string, detail: string): Finding => ({
 	code: "ddi-invalid",
 	severity: "error",
 	path: "",
 	message,
+	detail,
 });
 
 export function makeValidator(schema: unknown): Result<Validator, Finding> {
@@ -38,13 +40,17 @@ export function makeValidator(schema: unknown): Result<Validator, Finding> {
 			check(document)
 				? []
 				: (check.errors ?? []).map((e) =>
-						invalid(`DDI ${e.instancePath || "/"}: ${e.message ?? "invalid"}`),
+						invalid(
+							`The DDI at \`${e.instancePath || "/"}\` doesn't match the official schema.`,
+							e.message ?? "invalid",
+						),
 					),
 		);
 	} catch (e) {
 		return err(
 			invalid(
-				`The DDI schema could not be compiled: ${e instanceof Error ? e.message : String(e)}`,
+				"The DDI schema couldn't be loaded, so the export can't be checked.",
+				e instanceof Error ? e.message : String(e),
 			),
 		);
 	}

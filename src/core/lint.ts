@@ -65,7 +65,7 @@ const tooFewResponses: Rule = ({ domain }) =>
 					"warning",
 					"responses",
 					domain.scale === undefined
-						? "A choice needs at least two labelled responses."
+						? "A choice needs at least two labeled responses."
 						: `Scale \`${domain.scale}\` has fewer than two responses.`,
 					"Options must together be exhaustive: every respondent should find one that fits.",
 				),
@@ -85,8 +85,8 @@ const noNoneOption: Rule = ({ domain }) =>
 					"no-none-option",
 					"warning",
 					"select",
-					"Select-all has no “None of these” option.",
-					"Without one, a respondent to whom nothing applies cannot be told apart from one who skipped the question.",
+					"This select all that apply question has no “None of these” option.",
+					"Without one, a respondent to whom nothing applies can't be told apart from one who skipped the question.",
 				),
 			]
 		: [];
@@ -170,7 +170,7 @@ const optionVariables: Rule = ({ name, domain }) => {
 					"warning",
 					`responses.${c.code}`,
 					`Options \`${first}\` and \`${c.code}\` both become the variable \`${variable}\`.`,
-					"Each select-many option is its own variable; give one of them a different `variable`.",
+					"In select all that apply, each option is its own variable; give one of them a different `variable`.",
 				),
 			);
 		if (
@@ -183,7 +183,7 @@ const optionVariables: Rule = ({ name, domain }) => {
 					"option-variable-prefix",
 					"info",
 					`responses.${c.code}`,
-					`Variable \`${c.variable}\` does not start with \`${name}\`.`,
+					`Variable \`${c.variable}\` doesn't start with \`${name}\`.`,
 					"A codebook groups an option's variable with its question by name prefix.",
 				),
 			);

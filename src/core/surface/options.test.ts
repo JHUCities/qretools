@@ -65,7 +65,7 @@ describe("select-many options", () => {
 		[
 			"an unknown option field is an error",
 			`${base}responses:\n  wh: { label: White, tittle: x }\n`,
-			["error:wrong-type@responses.wh.tittle"],
+			["error:unknown-key@responses.wh.tittle"],
 		],
 		[
 			"a bad variable name is an error",

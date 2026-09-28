@@ -3,6 +3,7 @@
  * is described. Pure; the shell only carries the results to GitHub.
  */
 
+import { FOLDER_RULE_TEXT, NAME_RULE_TEXT } from "./copy.js";
 import type { Finding } from "./findings.js";
 import { err, ok, type Result } from "./result.js";
 import type { SchemeKind } from "./schemes.js";
@@ -31,7 +32,7 @@ export function saveableName(draft: Draft): Result<string, Finding> {
 			severity: "hole",
 			path: "name",
 			message: "A question needs a valid `name` before it can be saved.",
-			hint: "Lowercase letters, digits and underscores, starting with a letter.",
+			hint: NAME_RULE_TEXT,
 		});
 	return ok(name);
 }
@@ -60,7 +61,7 @@ export function bankLocation(
 			severity: "error",
 			path: "",
 			message: `\`${folder}\` is not a folder name.`,
-			hint: "Lowercase letters, digits, hyphens and underscores, starting with a letter.",
+			hint: FOLDER_RULE_TEXT,
 		});
 	return ok({
 		folder,

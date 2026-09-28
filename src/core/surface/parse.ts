@@ -10,6 +10,7 @@
 import { type Document, isMap, isNode, isScalar, parseDocument } from "yaml";
 import type { ZodError } from "zod";
 import { compact } from "../compact.js";
+import { NAME_RULE_TEXT } from "../copy.js";
 import type { Finding, Range } from "../findings.js";
 import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
 import type { Domain, Draft, Named } from "./draft.js";
@@ -21,14 +22,18 @@ import {
 	type TextEntry,
 } from "./env.js";
 import {
+	clampRange,
 	EMPTY_HINT,
 	error,
 	fail,
 	hole,
 	isPlainObject,
+	issueSentence,
 	ok,
 	opened,
 	type Read,
+	yamlError,
+	yamlErrors,
 } from "./read.js";
 import type { Scales } from "./scales.js";
 import {
@@ -70,9 +75,7 @@ const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older form
 export function parseSurface(text: string, env: Env): Parsed {
 	const doc = parseDocument(text, { prettyErrors: false });
 	const ranges = indexRanges(doc, text.length);
-	const syntax = doc.errors.map((e) =>
-		syntaxFinding(e.message, e.pos, text.length),
-	);
+	const syntax = yamlErrors(doc.errors, text.length);
 
 	const js = toJs(doc);
 	if (!isPlainObject(js.value)) {
@@ -165,9 +168,7 @@ function toJs(doc: Document): Read<unknown> {
 	} catch (e) {
 		return {
 			value: {},
-			findings: [
-				error("yaml-syntax", "", e instanceof Error ? e.message : String(e)),
-			],
+			findings: [yamlError(e instanceof Error ? e.message : String(e))],
 		};
 	}
 }
@@ -187,14 +188,17 @@ function readText(key: TextKey, value: unknown): Read<string> {
 	}
 	const result = QuestionSchema.shape[key].safeParse(value);
 	if (!result.success) {
+		// Only `name` has a pattern; everything else fails by not being text.
 		const hint = isPlainObject(value)
 			? 'A `: ` inside the text starts a nested field. Quote the whole value: "..."'
 			: typeof value === "string"
-				? describe(key)
+				? NAME_RULE_TEXT
 				: "Quote the value so it is read as text.";
-		return fail(
-			error("wrong-type", key, `\`${key}\`: ${firstIssue(result.error)}`, hint),
-		);
+		const message =
+			typeof value === "string"
+				? `\`${key}\` isn't a valid name.`
+				: `\`${key}\` must be text.`;
+		return fail(error("wrong-type", key, message, hint));
 	}
 	return result.data === undefined ? fail() : ok(result.data);
 }
@@ -425,13 +429,17 @@ function issueFindings(kind: "number" | "open", zodError: ZodError): Finding[] {
 			);
 		}
 		const sub = issue.path.map(String).join(".");
+		const said = issueSentence(sub || kind, issue);
 		return [
-			error(
-				"wrong-type",
-				sub ? `${kind}.${sub}` : kind,
-				issue.message,
-				describe(kind),
-			),
+			compact({
+				...error(
+					"wrong-type",
+					sub ? `${kind}.${sub}` : kind,
+					said.message,
+					said.hint ?? describe(kind),
+				),
+				detail: said.detail,
+			}),
 		];
 	});
 }
@@ -464,26 +472,6 @@ export function indexRanges(
 	walk(doc.contents, "");
 	return ranges;
 }
-
-function syntaxFinding(
-	message: string,
-	pos: readonly [number, number],
-	length: number,
-): Finding {
-	return {
-		...error("yaml-syntax", "", message),
-		range: clampRange(pos[0], pos[1], length),
-	};
-}
-
-/** A range that CodeMirror will accept: inside the text, non-empty where possible, `from <= to`. */
-function clampRange(from: number, to: number, length: number): Range {
-	const f = Math.min(Math.max(0, from), length);
-	return [f, Math.min(length, Math.max(f + 1, to))];
-}
-
-const firstIssue = (e: ZodError): string =>
-	e.issues[0]?.message ?? "invalid value";
 
 const isKnownKey = (key: string): key is SurfaceKey =>
 	(KNOWN_KEYS as readonly string[]).includes(key);

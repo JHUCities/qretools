@@ -7,8 +7,8 @@
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, PageHeader } from "@primer/react";
 import { SkeletonText } from "@primer/react/experimental";
+import { SCHEME_SINGULAR } from "../../core/copy.js";
 import type { SchemeKind } from "../../core/schemes.js";
-import { SCHEME_SINGULAR } from "../tree.js";
 
 /** The preview panes a file of each kind shows, by heading; Editing.tsx draws the same. */
 export function paneTitles(kind: "question" | SchemeKind): readonly string[] {
