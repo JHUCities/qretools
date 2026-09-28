@@ -21,7 +21,7 @@ import {
 } from "@primer/react";
 import { AriaStatus } from "@primer/react/experimental";
 import { useMemo } from "react";
-import { SCHEME_SINGULAR } from "../../core/copy.js";
+import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
 import { installUrl } from "../config.js";
@@ -36,6 +36,8 @@ import {
 	ownBranch,
 	schemeNameProblem,
 	sessionStatus,
+	signOutPlan,
+	writeBlocked,
 } from "../update.js";
 import { SESSION_STATUS, useApp, useEnv, useModel } from "./AppContext.js";
 import { BankFilter, Browser } from "./Browser.js";
@@ -46,6 +48,7 @@ import { MoveDialog } from "./MoveDialog.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";
+import { SignOutDialog } from "./SignOutDialog.js";
 
 export function App() {
 	const { dispatch, evaluations, signIn: signInConfig } = useApp();
@@ -92,6 +95,8 @@ export function App() {
 		model.pendingLink !== undefined &&
 		(model.session.kind === "connecting" ||
 			(model.session.kind === "connected" && model.loading.kind === "loading"));
+	const signingOut = model.browser.signingOut;
+	const signOut = signingOut && signOutPlan(model);
 	const saving = model.browser.saving;
 	const savingQuestion =
 		saving === undefined ? undefined : model.local.questions[saving.id];
@@ -349,6 +354,24 @@ export function App() {
 					dispatch={dispatch}
 				/>
 			)}
+			{signingOut && signOut && (
+				<SignOutDialog
+					questions={signOut.save.filter((f) => f.kind === "question").length}
+					shared={signOut.save.filter((f) => f.kind !== "question").length}
+					discard={signOut.discard.map(
+						(q) => evaluations.get(q, model.agency, env).draft.name ?? UNNAMED,
+					)}
+					blocked={signOut.blocked.map((f) =>
+						f.kind === "question"
+							? (evaluations.get(f, model.agency, env).draft.name ?? UNNAMED)
+							: `${SCHEME_NAME[f.kind]} ${f.name}`,
+					)}
+					saving={signingOut.phase === "saving"}
+					failure={signingOut.failure}
+					reason={writeBlocked(model)}
+					dispatch={dispatch}
+				/>
+			)}
 			{confirm && (
 				<ConfirmationDialog
 					title={
@@ -480,7 +503,9 @@ function Account({ model }: { model: Model }) {
 						)}
 					</ActionList.Group>
 					<ActionList.Divider />
-					<ActionList.Item onSelect={() => dispatch({ kind: "disconnected" })}>
+					<ActionList.Item
+						onSelect={() => dispatch({ kind: "signOutRequested" })}
+					>
 						<ActionList.LeadingVisual>
 							<SignOutIcon />
 						</ActionList.LeadingVisual>
