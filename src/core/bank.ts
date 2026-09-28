@@ -3,7 +3,7 @@
  * is described. Pure; the shell only carries the results to GitHub.
  */
 
-import { FOLDER_RULE_TEXT, NAME_RULE_TEXT } from "./copy.js";
+import { FOLDER_RULE_TEXT, NAME_RULE_TEXT, SCHEME_NAME } from "./copy.js";
 import type { Finding } from "./findings.js";
 import { err, ok, type Result } from "./result.js";
 import type { SchemeKind } from "./schemes.js";
@@ -103,13 +103,13 @@ export function describeChange(
 		: `Update ${name}: ${changed.join(", ")}`;
 }
 
-/** A scheme file's commit message: `Add scale agree5`, `Delete universe renters`. */
+/** A scheme file's commit message: `Add shared scale satisfied5`, `Update missing values`. */
 export const describeSchemeChange = (
 	kind: SchemeKind,
 	name: string,
 	op: "add" | "update" | "delete",
 ): string =>
-	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${kind === "missing" ? "missing values" : `${kind} ${name}`}`;
+	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${kind === "missing" ? SCHEME_NAME.missing : `${SCHEME_NAME[kind]} ${name}`}`;
 
 /**
  * The message for a commit of several files: the main file's line as the subject, the

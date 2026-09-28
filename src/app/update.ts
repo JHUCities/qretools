@@ -434,7 +434,7 @@ function step(model: Model, msg: Msg): Step {
 							{ id: q.id, path: to, expected: null, text: q.base.text },
 							{ path: q.base.path, expected: q.base.sha, text: null },
 						],
-						message: `Move ${fileName(q.base.path)} to questions/${moving.folder}`,
+						message: `Move ${fileName(q.base.path)} to ${moving.folder}`,
 					},
 				],
 			];
