@@ -4,6 +4,7 @@ import {
 	describeChangeSet,
 	describeSchemeChange,
 	FOLDER_PATTERN,
+	saveableName,
 } from "../core/bank.js";
 import { compact } from "../core/compact.js";
 import { locate } from "../core/findings.js";
@@ -284,7 +285,7 @@ function step(model: Model, msg: Msg): Step {
 			const as = writable(model);
 			if (!q || as === undefined) return [model, []];
 			// A bank file goes back to the path it was opened at. A draft's path is chosen
-			// once, deliberately: it decides the topic folder, and git would create an
+			// once, deliberately: it decides the folder, and git would create an
 			// unseen folder without a word. A scheme file's path follows from its kind
 			// and the name it was given at creation.
 			if (q.base !== undefined) return write(model, as, msg.id, q, q.base.path);
@@ -302,22 +303,17 @@ function step(model: Model, msg: Msg): Step {
 						]
 					: write(model, as, msg.id, q, path);
 			}
-			const where = bankLocation(
+			// Where it goes is the author's choice: the dialog opens with none chosen.
+			const name = saveableName(
 				parseSurface(q.source, envOf(model.local.schemes, model.remote.schemes))
 					.draft,
 			);
-			if (!where.ok)
-				return [
-					refuse(model, msg.id, where.error.message, where.error.hint),
-					[],
-				];
+			if (!name.ok)
+				return [refuse(model, msg.id, name.error.message, name.error.hint), []];
 			return [
 				{
 					...model,
-					browser: {
-						...model.browser,
-						saving: { id: msg.id, folder: where.value.folder },
-					},
+					browser: { ...model.browser, saving: { id: msg.id, folder: "" } },
 				},
 				[],
 			];
@@ -365,7 +361,7 @@ function step(model: Model, msg: Msg): Step {
 						closed,
 						saving.id,
 						`A question already exists at \`${where.value.path}\`.`,
-						"Open the bank's copy to change it, or choose another name or topic.",
+						"Open the bank's copy to change it, or choose another name or folder.",
 					),
 					[],
 				];
@@ -841,7 +837,7 @@ function stale(model: Model, msg: Msg): boolean {
 	}
 }
 
-/** The topic folder of a question path: `questions/<folder>/<name>.yaml`. */
+/** The folder of a question path: `questions/<folder>/<name>.yaml`. */
 export const folderOfPath = (path: Path): string => path.split("/")[1] ?? "";
 const fileName = (path: Path): string =>
 	(path.split("/").at(-1) ?? path).replace(/\.yaml$/, "");
@@ -857,7 +853,7 @@ export function moveProblem(
 ): string | undefined {
 	if (q.base === undefined) return "Only a question in the bank can move.";
 	if (!FOLDER_PATTERN.test(folder))
-		return "A topic folder is lower case letters, digits, `_` and `-`, starting with a letter.";
+		return "A folder is lower case letters, digits, `_` and `-`, starting with a letter.";
 	const to = movedPath(q.base.path, folder);
 	if (to === q.base.path) return "It is already in that folder.";
 	const sync = syncOf(q, remoteBlob(model.remote, q));

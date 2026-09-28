@@ -1,7 +1,8 @@
 /**
- * Where a new question goes in the bank. The folder is prefilled from the name
- * and is the author's to change: git creates any missing path, so a new topic
- * should be deliberate and visible, not a side effect of a typo.
+ * Where a new question goes in the bank: the author chooses the folder, and none is
+ * chosen when the dialog opens (nothing is read into the question's name). Git
+ * creates any missing path, so a new folder should be deliberate and visible, not a
+ * side effect of a typo.
  *
  * A native form: Enter submits, the primary button is its submit button, and what is
  * wrong is Primer's validation message, tied to the input.
@@ -12,7 +13,7 @@ import { useId } from "react";
 import { bankLocation } from "../../core/bank.js";
 import type { Draft } from "../../core/surface/draft.js";
 import type { Dispatch } from "../model.js";
-import { TopicField } from "./TopicField.js";
+import { FolderField } from "./FolderField.js";
 
 export function SaveDialog({
 	draft,
@@ -36,7 +37,7 @@ export function SaveDialog({
 	const problem = !where.ok
 		? where.error.message
 		: path !== undefined && taken(path)
-			? "A question already exists there. Choose another topic, or open the bank's copy to change it."
+			? "A question already exists there. Choose another folder, or open the bank's copy to change it."
 			: undefined;
 	const close = () => dispatch({ kind: "saveCancelled" });
 	return (
@@ -62,7 +63,7 @@ export function SaveDialog({
 					if (problem === undefined) dispatch({ kind: "saveConfirmed" });
 				}}
 			>
-				<TopicField
+				<FolderField
 					folder={folder}
 					folders={folders}
 					problem={problem}

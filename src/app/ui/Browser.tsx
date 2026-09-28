@@ -1,5 +1,5 @@
 /**
- * The bank as a file tree, with a filter that prunes it: questions by topic, then
+ * The bank as a file tree, with a filter that prunes it: questions by folder, then
  * the shared elements by kind. Everything shown is derived by tree.ts. Two trees, each
  * named by its visible heading: Tab moves between them, arrows within, as Primer's
  * TreeView guidelines describe.

@@ -9,15 +9,7 @@ import type { SchemeKind } from "./schemes.js";
 import type { Draft } from "./surface/draft.js";
 import { NAME_PATTERN } from "./surface/schema.js";
 
-/**
- * A new question is filed by the prefix of its name (`nhd_sat` → `nhd`). Only for
- * new drafts: a bank file keeps the path it was opened at, because the bank has
- * questions whose folder is not their prefix.
- */
-export const folderOf = (name: string): string => name.split("_")[0] ?? name;
-
-/** A draft can be saved once it has a valid name. Findings never block saving. */
-/** Topic folders are directory names, not variable names: hyphens are allowed. */
+/** Folders are directory names, not variable names: hyphens are allowed. */
 export const FOLDER_PATTERN = /^[a-z][a-z0-9_-]*$/;
 
 export interface BankLocation {
@@ -27,37 +19,55 @@ export interface BankLocation {
 }
 
 /**
- * Where a question belongs in the bank. The folder defaults to the name's prefix
- * but is the author's to choose: git creates any missing path, so a folder that
- * does not exist yet is a new topic, and that should be a deliberate act.
- * Findings never block saving; only a missing or malformed name does.
+ * A draft can be saved once it has a valid name; findings never block saving. The
+ * name says nothing about where the question goes: no convention of any one bank
+ * (such as a topic prefix) is read into it.
  */
-export function bankLocation(
-	draft: Draft,
-	folder?: string,
-): Result<BankLocation, Finding> {
+export function saveableName(draft: Draft): Result<string, Finding> {
 	const name = draft.name;
-	if (name === undefined || !NAME_PATTERN.test(name)) {
+	if (name === undefined || !NAME_PATTERN.test(name))
 		return err({
 			code: "hole",
 			severity: "hole",
 			path: "name",
 			message:
 				"A question needs a valid `name` before it can be saved to the bank.",
-			hint: "Lowercase letters, digits and underscores, starting with a letter, e.g. nhd_sat.",
+			hint: "Lowercase letters, digits and underscores, starting with a letter.",
 		});
-	}
-	const where = folder ?? folderOf(name);
-	if (!FOLDER_PATTERN.test(where)) {
+	return ok(name);
+}
+
+/**
+ * Where a question belongs in the bank: the folder is the author's to choose, never
+ * derived from the name. Git creates any missing path, so a folder that does not
+ * exist yet is a new one, and that should be a deliberate act.
+ */
+export function bankLocation(
+	draft: Draft,
+	folder: string,
+): Result<BankLocation, Finding> {
+	const name = saveableName(draft);
+	if (!name.ok) return name;
+	if (folder === "")
+		return err({
+			code: "hole",
+			severity: "hole",
+			path: "",
+			message: "Choose a folder.",
+		});
+	if (!FOLDER_PATTERN.test(folder))
 		return err({
 			code: "wrong-type",
 			severity: "error",
 			path: "",
-			message: `\`${where}\` is not a topic folder name.`,
+			message: `\`${folder}\` is not a folder name.`,
 			hint: "Lowercase letters, digits, hyphens and underscores, starting with a letter.",
 		});
-	}
-	return ok({ folder: where, name, path: `questions/${where}/${name}.yaml` });
+	return ok({
+		folder,
+		name: name.value,
+		path: `questions/${folder}/${name.value}.yaml`,
+	});
 }
 
 const FIELDS = [
