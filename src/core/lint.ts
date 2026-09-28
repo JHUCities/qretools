@@ -149,7 +149,7 @@ const legacyFields: Rule = ({ legacy }) =>
 					"info",
 					"legacy",
 					`Legacy fields kept verbatim: ${legacy.join(", ")}.`,
-					"They are not checked and are not exported to DDI. Move each into a real field when its meaning is settled.",
+					"They aren't checked and aren't exported to DDI. Move each into a real field when its meaning is settled.",
 				),
 			];
 

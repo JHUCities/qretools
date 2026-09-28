@@ -36,7 +36,7 @@ export function signInConfig(
 
 /** Where the app is installed on a repository: GitHub's own page, one literal. */
 export const installUrl = (appSlug: string): string =>
-	`https://github.com/apps/${appSlug}/installations/new`;
+	`https://github.com/apps/${appSlug}/installations/select_target`;
 
 /**
  * The template a new bank starts from (`VITE_BANK_TEMPLATE`, as owner/name): the

@@ -986,7 +986,7 @@ function openLink(model: Model, link: Link): Step {
 			: [
 					refused(
 						model,
-						`\`${link.file}\` is not on ${link.branch}.`,
+						`\`${link.file}\` isn't on ${link.branch}.`,
 						"It may have been moved, renamed or deleted.",
 					),
 					[],

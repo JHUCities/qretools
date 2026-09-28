@@ -92,7 +92,7 @@ export function readCodeMap(
 								error(
 									"unknown-key",
 									`${at}.${k}`,
-									`Option \`${code}\`: \`${k}\` is not an option field.`,
+									`Option \`${code}\`: \`${k}\` isn't an option field.`,
 									"An option has `label`, `title`, `variable` and `note`.",
 								),
 							);
