@@ -8,14 +8,16 @@
  * its repository here. The text, the checkbox and a pasted development token are
  * transient input, so component state; the token goes to the effects, never a Msg.
  */
-import { MarkGithubIcon } from "@primer/octicons-react";
+import { LinkExternalIcon, MarkGithubIcon } from "@primer/octicons-react";
 import {
 	Banner,
 	Button,
 	Checkbox,
 	FormControl,
+	LinkButton,
 	Stack,
 	TextInput,
+	VisuallyHidden,
 } from "@primer/react";
 import { useId, useRef, useState } from "react";
 import { TOKEN_PASTE } from "../flags.js";
@@ -78,6 +80,20 @@ export function SignIn({ model }: { model: Model }) {
 							session.failure.hint === undefined
 								? undefined
 								: inlineCode(session.failure.hint)
+						}
+						// An empty repository: GitHub's page for it offers the first file.
+						primaryAction={
+							session.failure.kind === "empty" ? (
+								<LinkButton
+									href={`https://github.com/${settings.owner}/${settings.repo}`}
+									target="_blank"
+									rel="noreferrer"
+									trailingVisual={LinkExternalIcon}
+								>
+									Open on GitHub
+									<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+								</LinkButton>
+							) : undefined
 						}
 					/>
 				)}

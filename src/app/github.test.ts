@@ -80,6 +80,40 @@ describe("GitHub adapter (Octokit)", () => {
 		});
 	});
 
+	it("an empty repository says so, with a hint that fits the permission", async () => {
+		const empty = (viewerPermission: string) =>
+			store(() =>
+				json({
+					data: {
+						viewer: { login: "iain", avatarUrl: "https://a/iain" },
+						repository: {
+							viewerPermission,
+							isEmpty: true,
+							defaultBranchRef: null,
+						},
+					},
+				}),
+			).s.whoAmI();
+		const own = await empty("ADMIN");
+		expect(own).toMatchObject({ ok: false, error: { kind: "empty" } });
+		expect(!own.ok && own.error.message).toMatch(/has no commits yet/);
+		expect(!own.ok && own.error.hint).toMatch(/Add a first file/);
+		const other = await empty("READ");
+		expect(!other.ok && other.error.hint).toMatch(
+			/Ask someone with write access/,
+		);
+		// A repository that is not there at all still says that.
+		const none = await store(() =>
+			json({
+				data: {
+					viewer: { login: "iain", avatarUrl: "https://a/iain" },
+					repository: null,
+				},
+			}),
+		).s.whoAmI();
+		expect(!none.ok && none.error.message).toMatch(/has no repository/);
+	});
+
 	it("maps a rejected token and no network to failures", async () => {
 		const auth = await store(() =>
 			json({ message: "Bad credentials" }, 401),
