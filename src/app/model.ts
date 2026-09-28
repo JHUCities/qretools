@@ -89,6 +89,42 @@ export interface Local {
 	readonly schemes: Readonly<Record<Id, SchemeEntry>>;
 }
 
+export interface WorkOf {
+	readonly repo: string;
+	readonly login?: string;
+}
+
+/**
+ * The key kept work is filed under: a bank and a person (empty before the login was
+ * recorded). GitHub's names ignore case, so the key does too. Neither a repository
+ * nor a login can contain `@`.
+ */
+export const workKey = ({ repo, login }: WorkOf): string =>
+	`${repo}@${login ?? ""}`.toLowerCase();
+
+/** `workKey`'s inverse, for showing whose kept work is whose. */
+export const parseWorkKey = (key: string): WorkOf => {
+	const at = key.lastIndexOf("@");
+	const login = key.slice(at + 1);
+	return { repo: key.slice(0, at), ...(login !== "" && { login }) };
+};
+
+const sameName = (a: string, b: string): boolean =>
+	a.toLowerCase() === b.toLowerCase();
+
+const hasFiles = (local: Local): boolean =>
+	Object.keys(local.questions).length + Object.keys(local.schemes).length > 0;
+
+/** Stored working copies, as read by the persisted schema (optional fields may be undefined). */
+const localOf = (stored: Pick<Persisted, "questions" | "schemes">): Local => ({
+	questions: Object.fromEntries(
+		stored.questions.map((q) => [q.id, compact(q) as Question]),
+	),
+	schemes: Object.fromEntries(
+		stored.schemes.map((e) => [e.id, compact(e) as SchemeEntry]),
+	),
+});
+
 /**
  * GitHub as last loaded or saved, by path, split by kind for the same reason: a
  * question saved or reloaded must not replace the scheme slice.
@@ -178,6 +214,13 @@ export interface Model {
 	readonly cursor?: { readonly id: Id; readonly offset: number };
 	/** A link that needs the bank (or another branch) before it can open. Never persisted. */
 	readonly pendingLink?: Link;
+	/**
+	 * Whose work `local` is: a bank (`owner/repo`) and, once someone has connected, the
+	 * login. Absent before anything was ever connected.
+	 */
+	readonly workOf?: WorkOf;
+	/** Other banks' and people's kept work, by `workKey`; never holds `workOf`'s own. */
+	readonly kept: Readonly<Record<string, Local>>;
 	/** Per file; content never carries it, so marking a scale "saving" leaves the environment alone. */
 	readonly activity: Readonly<Record<Id, Activity>>;
 	readonly nextId: Id;
@@ -372,19 +415,18 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	// would sit beside bank questions of the same name.
 	// Zod types an absent optional as possibly-undefined; `compact` makes it absent.
 	const local: Local = stored
-		? {
-				questions: Object.fromEntries(
-					stored.questions.map((q) => [q.id, compact(q) as Question]),
-				),
-				schemes: Object.fromEntries(
-					stored.schemes.map((e) => [e.id, compact(e) as SchemeEntry]),
-				),
-			}
+		? localOf(stored)
 		: { questions: {}, schemes: {} };
 	const settings = stored?.settings ?? DEFAULT_SETTINGS;
 	const repo = { owner: settings.owner, repo: settings.repo };
 	const opened: Model = {
 		local,
+		...(stored?.workOf !== undefined && {
+			workOf: compact(stored.workOf) as WorkOf,
+		}),
+		kept: Object.fromEntries(
+			Object.entries(stored?.kept ?? {}).map(([k, v]) => [k, localOf(v)]),
+		),
 		// The last GitHub state this browser knew is exactly what its bases record.
 		remote: remoteOfBases(local),
 		activity: {},
@@ -519,9 +561,51 @@ export function envOfRemote(schemes: Remote["schemes"]): Env {
 }
 
 export const toPersisted = (model: Model): Persisted => ({
-	version: 3,
+	version: 4,
 	nextId: model.nextId,
 	questions: Object.values(model.local.questions),
 	schemes: Object.values(model.local.schemes),
 	settings: model.settings,
+	...(model.workOf !== undefined && { workOf: model.workOf }),
+	kept: Object.fromEntries(
+		Object.entries(model.kept).map(([k, v]) => [
+			k,
+			{
+				questions: Object.values(v.questions),
+				schemes: Object.values(v.schemes),
+			},
+		]),
+	),
 });
+
+/**
+ * Someone is now connected to a bank: `local` becomes their work in it. The work in
+ * hand is set aside under its own bank and person, and theirs, if any was kept, comes
+ * back. Work recorded before logins were (`workOf` without one) is taken to be the
+ * next person's to connect to its bank. Runs before the bank loads, so `rebase` never
+ * sees another bank's or person's files. Nothing kept is ever dropped.
+ */
+export function adoptWork(model: Model, repo: string, login: string): Model {
+	const to: WorkOf = { repo, login };
+	const from = model.workOf;
+	// The same bank and person, or legacy work of this bank: it is theirs already.
+	if (
+		from === undefined ||
+		(sameName(from.repo, repo) && sameName(from.login ?? login, login))
+	)
+		return { ...model, workOf: to };
+	const stashed = hasFiles(model.local)
+		? { ...model.kept, [workKey(from)]: model.local }
+		: model.kept;
+	const legacy = workKey({ repo });
+	const key = stashed[workKey(to)] !== undefined ? workKey(to) : legacy;
+	const { [key]: theirs, ...rest } = stashed;
+	const local = theirs ?? { questions: {}, schemes: {} };
+	return {
+		...model,
+		workOf: to,
+		kept: theirs === undefined ? stashed : rest,
+		local,
+		remote: remoteOfBases(local),
+	};
+}

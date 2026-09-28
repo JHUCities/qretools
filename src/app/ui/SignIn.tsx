@@ -21,7 +21,7 @@ import {
 } from "@primer/react";
 import { useId, useRef, useState } from "react";
 import { TOKEN_PASTE } from "../flags.js";
-import type { Model } from "../model.js";
+import { type Local, type Model, parseWorkKey } from "../model.js";
 import { parseRepo } from "../storage.js";
 import { useApp } from "./AppContext.js";
 import { inlineCode } from "./Previews.js";
@@ -56,16 +56,19 @@ export function SignIn({ model }: { model: Model }) {
 		setToken("");
 		dispatch({ kind: "connectRequested", settings: next });
 	};
-	// Kept work is not tagged with its bank yet (FEATURES.md): signing in to another
-	// bank would show it there, where a save would put it. Say so before it happens.
-	const kept =
-		Object.keys(model.local.questions).length +
-		Object.keys(model.local.schemes).length;
-	const current = `${settings.owner}/${settings.repo}`;
-	const elsewhere =
-		kept > 0 &&
-		parsed.ok &&
-		`${parsed.value.owner}/${parsed.value.repo}` !== current;
+	// Unsaved work this browser keeps, by bank and person: it comes back when that
+	// person signs in to that bank, and never appears in another.
+	const count = (l: Local) =>
+		Object.keys(l.questions).length + Object.keys(l.schemes).length;
+	const held = [
+		...(model.workOf !== undefined && count(model.local) > 0
+			? [{ ...model.workOf, n: count(model.local) }]
+			: []),
+		...Object.entries(model.kept).map(([key, l]) => ({
+			...parseWorkKey(key),
+			n: count(l),
+		})),
+	].filter((w) => w.n > 0);
 	return (
 		<main className="signin" aria-labelledby={headingId}>
 			<Stack gap="normal" className="signin-column">
@@ -134,8 +137,6 @@ export function SignIn({ model }: { model: Model }) {
 							/>
 							<FormControl.Caption>
 								The GitHub repository that holds the bank, as owner/name.
-								{elsewhere &&
-									` Your ${kept === 1 ? "unsaved file belongs" : `${kept} unsaved files belong`} to ${current}: signing in here shows ${kept === 1 ? "it" : "them"} in this bank instead.`}
 							</FormControl.Caption>
 							{problem !== undefined && (
 								<FormControl.Validation variant="error">
@@ -199,6 +200,18 @@ export function SignIn({ model }: { model: Model }) {
 						)}
 					</Stack>
 				</form>
+				{held.length > 0 && (
+					<p className="quiet signin-kept">
+						Unsaved work in this browser, kept for its bank:{" "}
+						{held
+							.map(
+								(w) =>
+									`${w.repo}${w.login === undefined ? "" : ` (${w.login})`}: ${w.n} file${w.n === 1 ? "" : "s"}`,
+							)
+							.join("; ")}
+						.
+					</p>
+				)}
 				{/* A failed connection still holds the GitHub sign-in: a way to let it go. */}
 				{session.kind === "failed" && effects.hasToken() && (
 					<Button
