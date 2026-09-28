@@ -39,6 +39,7 @@ const ONCE = { request: { retries: 0 } } as const;
 export const makeGitHubStore = (
 	{ owner, repo }: Repo,
 	token: () => Promise<string>,
+	{ appToken }: { readonly appToken: boolean } = { appToken: true },
 	fetch: typeof globalThis.fetch = globalThis.fetch,
 	pacing = true,
 ): Store => {
@@ -119,6 +120,57 @@ export const makeGitHubStore = (
 			return err(failureOf(e));
 		}
 	}
+
+	/**
+	 * Is the GitHub App this token comes from installed on the repository? Its user
+	 * tokens list their installations: the one on the repository's owner, then, when it
+	 * covers only selected repositories, whether this is one of them.
+	 */
+	const installedHere = async (): Promise<Result<boolean, Failure>> => {
+		const list = await run(() =>
+			octokit
+				.request("GET /user/installations", { per_page: 100 })
+				.catch((e: unknown) => {
+					// Not a GitHub App token after all (a token pasted before tokens were
+					// marked): there are no installations to check.
+					if (
+						e instanceof RequestError &&
+						e.status === 403 &&
+						/authorized to a GitHub App/i.test(e.message)
+					)
+						return undefined;
+					throw e;
+				}),
+		);
+		if (!list.ok) return list;
+		if (list.value === undefined) return ok(true);
+		const installation = list.value.data.installations.find(
+			(i) =>
+				i.account !== null &&
+				"login" in i.account &&
+				i.account.login.toLowerCase() === owner.toLowerCase(),
+		);
+		if (installation === undefined) return ok(false);
+		if (installation.repository_selection === "all") return ok(true);
+		const full = `${owner}/${repo}`.toLowerCase();
+		for (let page = 1; ; page++) {
+			const repos = await run(() =>
+				octokit.request(
+					"GET /user/installations/{installation_id}/repositories",
+					{
+						installation_id: installation.id,
+						per_page: 100,
+						page,
+					},
+				),
+			);
+			if (!repos.ok) return repos;
+			const found = repos.value.data.repositories;
+			if (found.some((x) => x.full_name.toLowerCase() === full))
+				return ok(true);
+			if (found.length < 100) return ok(false);
+		}
+	};
 
 	const ensureBranch = async (
 		target: BranchTarget,
@@ -370,7 +422,12 @@ export const makeGitHubStore = (
 
 	return {
 		async whoAmI() {
-			const r = await graphql<WhoData>(WHO_QUERY, { owner, repo });
+			// Whether the app can write here is asked alongside, so it adds no wait; a
+			// pasted development token has no installations to ask about.
+			const [r, installed] = await Promise.all([
+				graphql<WhoData>(WHO_QUERY, { owner, repo }),
+				appToken ? installedHere() : Promise.resolve(ok(true)),
+			]);
 			if (!r.ok) return r;
 			const data = r.value.data;
 			const writable = ["WRITE", "MAINTAIN", "ADMIN"].includes(
@@ -395,10 +452,15 @@ export const makeGitHubStore = (
 						`GitHub has no repository ${owner}/${repo} for this token.`,
 					hint: "Check the owner and repository, and that the token can read it.",
 				});
+			if (!installed.ok) return installed;
 			return ok({
 				login: data.viewer.login,
 				avatarUrl: data.viewer.avatarUrl,
-				canWrite: writable,
+				access: !writable
+					? { kind: "readOnly" }
+					: installed.value
+						? { kind: "write" }
+						: { kind: "notInstalled" },
 				defaultBranch: branch,
 			});
 		},
@@ -532,6 +594,18 @@ function failureOf(e: unknown): Failure {
 		String(e);
 	// The token getter's own answer: no token, or the sign-in has ended.
 	if (e instanceof AuthError) return e.failure;
+	// GitHub's answer when the app a token comes from cannot act on the repository.
+	if (
+		e instanceof RequestError &&
+		e.status === 403 &&
+		/Resource not accessible by integration/i.test(message)
+	)
+		return {
+			kind: "notInstalled",
+			status: 403,
+			message: "The app can't write to this repository.",
+			hint: "Install the app on the repository, or allow it to write there (or ask an owner to).",
+		};
 	// Anything but Octokit's own error is a bug here, not an outage: say so.
 	if (!(e instanceof RequestError))
 		return {

@@ -55,7 +55,7 @@ const connected = (model: Model, canWrite = true): Model => ({
 		kind: "connected",
 		login: "iain",
 		avatarUrl: "https://a/iain",
-		canWrite,
+		access: canWrite ? { kind: "write" } : { kind: "readOnly" },
 		defaultBranch: "main",
 	},
 	loading: LOADED,
@@ -387,7 +387,7 @@ describe("connecting", () => {
 			result: ok({
 				login: "iain",
 				avatarUrl: "https://a/iain",
-				canWrite: true,
+				access: { kind: "write" },
 				defaultBranch: "main",
 			}),
 		});
@@ -499,7 +499,7 @@ describe("connecting", () => {
 				result: ok({
 					login: "iain",
 					avatarUrl: "https://a/iain",
-					canWrite: true,
+					access: { kind: "write" },
 					defaultBranch: "main",
 				}),
 			})[0],
@@ -763,7 +763,7 @@ describe("the author's own branch", () => {
 				result: ok({
 					login: "iain",
 					avatarUrl: "https://a/iain",
-					canWrite: true,
+					access: { kind: "write" },
 					defaultBranch: "main",
 				}),
 			},
@@ -1266,7 +1266,7 @@ describe("links while connecting", () => {
 			result: ok({
 				login: "iain",
 				avatarUrl: "https://a/iain",
-				canWrite: true,
+				access: { kind: "write" },
 				defaultBranch: "main",
 			}),
 		});
@@ -1393,6 +1393,36 @@ describe("signing in", () => {
 	});
 });
 
+describe("the app not installed on the repository", () => {
+	it("blocks writing with its own reason, and a refused save says so", () => {
+		const m = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q.yaml", "name: q\n", "name: q\ntext: x\n"),
+		]);
+		const [after] = update(
+			{ ...m, activity: { 1: { kind: "saving" } } },
+			{
+				kind: "committed",
+				changes: [
+					{ id: 1, path: "questions/q/q.yaml", expected: "s", text: "x" },
+				],
+				result: {
+					ok: false,
+					error: {
+						failure: {
+							kind: "notInstalled",
+							message: "The app you signed in with isn't installed.",
+						},
+					},
+				},
+			},
+		);
+		expect(after.session).toMatchObject({ access: { kind: "notInstalled" } });
+		expect(writeBlocked(after)).toMatch(/can't write/);
+		expect(sessionStatus(after)).toMatch(/can't write/);
+		expect(update(after, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
+	});
+});
+
 describe("the top bar's status", () => {
 	it("gives a reason whenever writing is blocked, and is empty in the steady state", () => {
 		const base = connected(fresh());
@@ -1405,6 +1435,13 @@ describe("the top bar's status", () => {
 				loading: { kind: "failed", failure: { kind: "network", message: "x" } },
 			},
 			connected(fresh(), false),
+			{
+				...base,
+				session: {
+					...(base.session as Extract<Model["session"], { kind: "connected" }>),
+					access: { kind: "notInstalled" },
+				},
+			},
 			{ ...base, activity: { 1: { kind: "saving" } } },
 			base,
 		];

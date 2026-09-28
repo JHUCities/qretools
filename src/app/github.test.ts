@@ -6,11 +6,12 @@ type Seen = { url: string; method: string; body: Record<string, unknown> };
 type Canned = (req: Seen) => Response;
 
 /** A store over a fake fetch that answers with `respond` and records every request. */
-function store(respond: Canned) {
+function store(respond: Canned, appToken = false) {
 	const seen: Seen[] = [];
 	const s = makeGitHubStore(
 		{ owner: "JHUCities", repo: "bas-question-bank" },
 		async () => "tok",
+		{ appToken },
 		(async (url: string, init: RequestInit = {}) => {
 			const req = {
 				url: String(url),
@@ -59,7 +60,7 @@ describe("GitHub adapter (Octokit)", () => {
 			value: {
 				login: "iain",
 				avatarUrl: "https://a/iain",
-				canWrite: false,
+				access: { kind: "readOnly" },
 				defaultBranch: "main",
 			},
 		});
@@ -76,8 +77,117 @@ describe("GitHub adapter (Octokit)", () => {
 			}),
 		);
 		expect(await writer.whoAmI()).toMatchObject({
-			value: { canWrite: true, defaultBranch: "trunk" },
+			value: { access: { kind: "write" }, defaultBranch: "trunk" },
 		});
+	});
+
+	it("knows whether the app it signed in with is installed on the repository", async () => {
+		const who = (viewerPermission = "WRITE") =>
+			json({
+				data: {
+					viewer: { login: "iain", avatarUrl: "https://a/iain" },
+					repository: {
+						viewerPermission,
+						isEmpty: false,
+						defaultBranchRef: { name: "main" },
+					},
+				},
+			});
+		const access = async (
+			installations: unknown[],
+			pages: unknown[][] = [],
+			viewerPermission = "WRITE",
+		) => {
+			const { s, seen } = store((req) => {
+				if (req.url.endsWith("/graphql")) return who(viewerPermission);
+				if (req.url.includes("/user/installations/7/repositories")) {
+					const page = Number(new URL(req.url).searchParams.get("page") ?? "1");
+					return json({ repositories: pages[page - 1] ?? [] });
+				}
+				return json({ installations });
+			}, true);
+			const r = await s.whoAmI();
+			return { access: r.ok ? r.value.access.kind : r.error.kind, seen };
+		};
+		const org = (selection: string, login = "JHUCities") => ({
+			id: 7,
+			account: { login },
+			repository_selection: selection,
+		});
+		expect((await access([org("all")])).access).toBe("write");
+		// The owner's login differs only in case.
+		expect((await access([org("all", "jhucities")])).access).toBe("write");
+		expect((await access([])).access).toBe("notInstalled");
+		expect((await access([org("all", "someone-else")])).access).toBe(
+			"notInstalled",
+		);
+		const full = (n: number) =>
+			Array.from({ length: n }, (_, i) => ({
+				full_name: `JHUCities/other-${i}`,
+			}));
+		// Selected repositories: found on the second page, or not at all.
+		expect(
+			(
+				await access(
+					[org("selected")],
+					[full(100), [{ full_name: "JHUCities/bas-question-bank" }]],
+				)
+			).access,
+		).toBe("write");
+		expect((await access([org("selected")], [full(3)])).access).toBe(
+			"notInstalled",
+		);
+		// Read only wins: installing the app would not help.
+		expect((await access([], [], "READ")).access).toBe("readOnly");
+	});
+
+	it("a token GitHub says is not an app's has nothing to check, and still signs in", async () => {
+		const { s } = store(
+			(req) =>
+				req.url.endsWith("/graphql")
+					? json({
+							data: {
+								viewer: { login: "iain", avatarUrl: "https://a/iain" },
+								repository: {
+									viewerPermission: "WRITE",
+									isEmpty: false,
+									defaultBranchRef: { name: "main" },
+								},
+							},
+						})
+					: json(
+							{
+								message:
+									"You must authenticate with an access token authorized to a GitHub App in order to list installations",
+							},
+							403,
+						),
+			true,
+		);
+		expect(await s.whoAmI()).toMatchObject({
+			ok: true,
+			value: { access: { kind: "write" } },
+		});
+	});
+
+	it("a pasted token asks nothing about installations", async () => {
+		const { s, seen } = store(() =>
+			json({
+				data: {
+					viewer: { login: "iain", avatarUrl: "https://a/iain" },
+					repository: {
+						viewerPermission: "WRITE",
+						isEmpty: false,
+						defaultBranchRef: { name: "main" },
+					},
+				},
+			}),
+		);
+		expect(await s.whoAmI()).toMatchObject({
+			ok: true,
+			value: { access: { kind: "write" } },
+		});
+		expect(seen.some((r) => r.url.includes("/user/installations"))).toBe(false);
 	});
 
 	it("an empty repository says so, with a hint that fits the permission", async () => {
@@ -122,6 +232,7 @@ describe("GitHub adapter (Octokit)", () => {
 		const down = makeGitHubStore(
 			{ owner: "o", repo: "r" },
 			async () => "tok",
+			{ appToken: false },
 			(async () => {
 				throw new TypeError("offline");
 			}) as typeof fetch,
@@ -444,6 +555,7 @@ describe("GitHub adapter (Octokit)", () => {
 		const s = makeGitHubStore(
 			{ owner: "o", repo: "r" },
 			async () => `tok${++n}`,
+			{ appToken: false },
 			(async (_url: string, init: RequestInit = {}) => {
 				headers.push(String(new Headers(init.headers).get("authorization")));
 				return new Response(
@@ -472,6 +584,7 @@ describe("GitHub adapter (Octokit)", () => {
 					message: "Your GitHub sign-in has ended.",
 				});
 			},
+			{ appToken: false },
 			(async () => new Response("{}")) as typeof fetch,
 			false,
 		);

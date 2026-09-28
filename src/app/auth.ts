@@ -17,6 +17,8 @@ export interface Credentials {
 	readonly expiresAt?: number;
 	readonly refresh?: string;
 	readonly refreshExpiresAt?: number;
+	/** Pasted in development, not issued by the GitHub App: no installations to check. */
+	readonly pasted?: true;
 }
 
 /** What the browser keeps across the round trip to GitHub, in session storage, used once. */

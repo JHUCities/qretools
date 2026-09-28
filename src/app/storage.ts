@@ -25,6 +25,8 @@ export interface Failure {
 		| "unreadable"
 		/** The repository exists but has no commits yet: nothing to branch from. */
 		| "empty"
+		/** The GitHub App signed in with is not installed on the repository: no writes. */
+		| "notInstalled"
 		/** The app declined before any request was made. */
 		| "refused";
 	readonly message: string;
@@ -89,7 +91,7 @@ export interface Who {
 	readonly login: string;
 	/** The account's picture, as GitHub serves it. */
 	readonly avatarUrl: string;
-	readonly canWrite: boolean;
+	readonly access: Access;
 	readonly defaultBranch: string;
 }
 
@@ -157,7 +159,22 @@ export interface CommitFailure {
 }
 
 /** A store over one repository; `token` is asked for before every request, so it may renew. */
-export type MakeStore = (repo: Repo, token: () => Promise<string>) => Store;
+export type MakeStore = (
+	repo: Repo,
+	token: () => Promise<string>,
+	/** A token from the GitHub App's sign-in (its installations can be checked), or pasted. */
+	how: { readonly appToken: boolean },
+) => Store;
+
+/**
+ * What this session may do to the bank. Read only wins over not installed: installing
+ * the app would not help someone without write access. Not installed means the person
+ * could write but the app they signed in with cannot.
+ */
+export type Access =
+	| { readonly kind: "write" }
+	| { readonly kind: "readOnly" }
+	| { readonly kind: "notInstalled" };
 
 /**
  * Where the credentials live: never in the Model. Session storage by default, local

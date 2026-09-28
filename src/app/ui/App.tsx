@@ -14,6 +14,7 @@ import {
 	ConfirmationDialog,
 	IconButton,
 	Link,
+	LinkButton,
 	Spinner,
 	Stack,
 	VisuallyHidden,
@@ -50,7 +51,7 @@ import { SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";
 
 export function App() {
-	const { dispatch, evaluations } = useApp();
+	const { dispatch, evaluations, signIn: signInConfig } = useApp();
 	const model = useModel((m) => m);
 	const env = useEnv();
 	const { local, browser, screen, activity } = model;
@@ -182,6 +183,36 @@ export function App() {
 								Try again
 							</Button>
 						)}
+						{/* The status says the app cannot write here; this is where to fix it. */}
+						{model.session.kind === "connected" &&
+							model.session.access.kind === "notInstalled" &&
+							signInConfig?.appSlug !== undefined && (
+								<LinkButton
+									size="small"
+									href={`https://github.com/apps/${signInConfig.appSlug}/installations/new`}
+									target="_blank"
+									rel="noreferrer"
+									trailingVisual={LinkExternalIcon}
+								>
+									Install the app
+									<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+								</LinkButton>
+							)}
+						{/* After installing in the other tab: ask GitHub again, no sign-in round trip. */}
+						{model.session.kind === "connected" &&
+							model.session.access.kind === "notInstalled" && (
+								<Button
+									size="small"
+									onClick={() =>
+										dispatch({
+											kind: "connectRequested",
+											settings: model.settings,
+										})
+									}
+								>
+									Check again
+								</Button>
+							)}
 					</Stack>
 					{signedIn && (
 						<ActionMenu>
