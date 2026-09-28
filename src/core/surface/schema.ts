@@ -147,7 +147,7 @@ export const QuestionSchema = z
 			),
 	})
 	.describe(
-		"A survey question and its documentation. Exactly one response domain is required: responses, number, or open.",
+		"A survey question and its documentation. It is answered exactly one way: responses, number, or open.",
 	);
 
 export type Surface = z.infer<typeof QuestionSchema>;

@@ -80,8 +80,7 @@ const PROMPT = {
 } as const;
 
 /** Neutral on purpose: the author may have typed a domain that parse rejected. */
-const DOMAIN_PROMPT =
-	"No usable response domain yet: responses, number, or open";
+const DOMAIN_PROMPT = "No way to answer yet: responses, number, or open";
 
 const slot = (value: string | undefined, path: "name" | "text"): Slot =>
 	value === undefined

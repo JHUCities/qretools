@@ -273,7 +273,7 @@ function readDomain(
 		return fail(
 			hole(
 				"",
-				"Add a response domain: `responses` (a code list), `number`, or `open` (free text).",
+				"Say how it's answered: `responses` (options to pick from), `number`, or `open` (free text).",
 				EXAMPLE,
 			),
 		);
@@ -282,7 +282,7 @@ function readDomain(
 		error(
 			"too-many-domains",
 			key,
-			`Only one response domain is allowed; \`${first}\` is already set.`,
+			`A question is answered one way only; \`${first}\` is already set.`,
 			`Remove \`${key}\` or \`${first}\`.`,
 		),
 	);
