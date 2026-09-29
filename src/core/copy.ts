@@ -40,3 +40,6 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 	instruction: "shared instruction",
 	missing: "missing values",
 };
+
+/** A quick fix's label: what the click will write. */
+export const fixLabel = (value: string): string => `Use \`${value}\``;

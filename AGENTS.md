@@ -1216,6 +1216,33 @@ merged, never marked: `variant_of` is a question's field. The index is rebuilt o
 change to `local` (shared files included), about 1.5 ms: nothing may assume it keeps its
 identity between keystrokes, unlike the Env.
 
+**Quick fixes, "create and use", and renaming drafts (owner, 2026-09-29).** One
+mechanism: a `Fix` is data on a finding (`label`, `edits: {path, value}[]`, in the
+document's terms like a Target), resolved against the text as it is now by
+`applyEdits` (surface/edit.ts): each edit rewrites the whole `key: value` pair at its
+path, trimmed (a path's range runs key to value end and a block value takes its trailing
+newline), the value quoted only where YAML needs it; a path the text no longer has makes
+it a no-op. Fixes are offered only when unambiguous and lossless: `matches-scale` for
+one match, the same codes (or stored values would change) and no option carrying its own
+`title`, `variable` or `note`; `matches-universe`/`matches-instruction` for one match;
+`unit-spelling` toward the bank's most common spelling (a tie goes to lowercase), none on
+a file that already has it. Msg `fixApplied` applies to the open file only, in `update`
+(never an editor command), and `editor.sync` now pushes the minimal change
+(`changeBetween`, common prefix and suffix) as its own undo step (`isolateHistory`), so a
+fix is one Cmd-Z and the caret outside it stays put; a GitHub fast-forward no longer sends
+the caret to the top (accepted: every outside change is its own undo step, so Cmd-Z
+after "Reload from GitHub" brings the local text back as an unsaved change; the history
+resets when another file opens). In the Findings list the fix is the item's one trailing action and
+wins over the link; in the editor it is the lint tooltip's own action button
+(`Diagnostic.actions`). **Create and use:** the name dialog (`browser.naming`, create or
+rename) asks a new universe or instruction for its text too; confirming adds the draft
+and rewrites the reference in the question it came from (`use: {id, path}`), staying
+there; a scale opens for its labels after the rewrite. Accepted: Cmd-Z in the question
+reverts the reference but leaves the draft file. **Renaming** is offered only for a
+shared file never saved (nothing on GitHub depends on its name); it rewrites every
+question in this tab that names it (`renameEdits`, from the parser's mentions), which
+become unsaved changes. Renaming a saved file is a path move across branches: backlog.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; off unless a mode's env file turns one on

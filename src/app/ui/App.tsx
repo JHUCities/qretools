@@ -40,8 +40,8 @@ import {
 	folderOfPath,
 	movedPath,
 	moveProblem,
+	namingProblem,
 	ownBranch,
-	schemeNameProblem,
 	sessionStatus,
 	signOutPlan,
 	writeBlocked,
@@ -97,7 +97,7 @@ export function App() {
 		() => schemeSections(treeInput, (e) => evaluations.scheme(e, env), index),
 		[treeInput, evaluations, env, index],
 	);
-	const creating = model.browser.creating;
+	const naming = model.browser.naming;
 	const moving = model.browser.moving;
 	const movingQuestion =
 		moving === undefined ? undefined : model.local.questions[moving.id];
@@ -393,11 +393,10 @@ export function App() {
 					dispatch={dispatch}
 				/>
 			)}
-			{creating && (
+			{naming && (
 				<SchemeNameDialog
-					kind={creating.kind}
-					name={creating.name}
-					problem={schemeNameProblem(model, creating.kind, creating.name)}
+					naming={naming}
+					problem={namingProblem(model, naming)}
 					dispatch={dispatch}
 				/>
 			)}

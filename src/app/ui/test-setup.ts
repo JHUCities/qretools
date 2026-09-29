@@ -26,3 +26,12 @@ if (
 	)
 		CSSStyleSheet.prototype.replaceSync = () => {};
 }
+
+// Primer's Dialog observes its size; jsdom has no ResizeObserver.
+if (typeof globalThis.ResizeObserver === "undefined") {
+	globalThis.ResizeObserver = class {
+		observe() {}
+		unobserve() {}
+		disconnect() {}
+	};
+}

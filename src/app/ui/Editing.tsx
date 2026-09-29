@@ -7,11 +7,12 @@
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, CounterLabel, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
-import { memo, type ReactNode, useMemo } from "react";
+import { memo, type ReactNode, useCallback, useMemo } from "react";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import {
 	type Finding,
+	type Fix,
 	inDocumentOrder,
 	type Range,
 	status,
@@ -108,6 +109,11 @@ function useActions(id: Id) {
 	return {
 		dispatch,
 		onTarget: (target: Target) => dispatch({ kind: "locationClicked", target }),
+		// Stable, so the editor's diagnostics are rebuilt only when the findings change.
+		onFix: useCallback(
+			(fix: Fix) => dispatch({ kind: "fixApplied", id, fix }),
+			[dispatch, id],
+		),
 		on: {
 			save: () => dispatch({ kind: "saveRequested", id }),
 			reload: () => dispatch({ kind: "reloadRequested", id }),
@@ -126,7 +132,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const remote = useModel((m) => m.remote);
 	const activity = useModel((m) => m.activity);
 	const env = useEnv();
-	const { dispatch, onTarget, on } = useActions(q.id);
+	const { dispatch, onTarget, onFix, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, agency, env);
 	const { findings, related } = useBankFindings(
@@ -138,8 +144,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	);
 	const [listed, flush] = useSettled(findings, SETTLE_MS, q.id);
 	const diagnostics = useMemo(
-		() => toDiagnostics(findings, ev.ranges),
-		[findings, ev.ranges],
+		() => toDiagnostics(findings, ev.ranges, onFix),
+		[findings, ev.ranges, onFix],
 	);
 	const also = useMemo(
 		() => alsoSaves(local, remote, ev.symbols.mentions, usersIn(index)),
@@ -201,6 +207,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 									flush={flush}
 									onTarget={onTarget}
 									related={related}
+									onFix={onFix}
 								/>
 							) : pane === "respondent" ? (
 								<Respondent view={ev.respondent} onTarget={onTarget} />
@@ -225,7 +232,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const activity = useModel((m) => m.activity);
 	const agency = useModel((m) => m.agency);
 	const env = useEnv();
-	const { dispatch, onTarget, on } = useActions(e.id);
+	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const eStale = useStale(e);
 	const ev = evaluations.scheme(e, env);
 	const { findings, related } = useBankFindings(
@@ -236,8 +243,8 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 		index,
 	);
 	const diagnostics = useMemo(
-		() => toDiagnostics(findings, ev.ranges),
-		[findings, ev.ranges],
+		() => toDiagnostics(findings, ev.ranges, onFix),
+		[findings, ev.ranges, onFix],
 	);
 	const [listed, flush] = useSettled(findings, SETTLE_MS, e.id);
 	const users =
@@ -269,6 +276,10 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						flush();
 						on.save();
 					},
+					...(e.kind !== "missing" &&
+						e.base === undefined && {
+							rename: () => dispatch({ kind: "schemeRenameOpened", id: e.id }),
+						}),
 				}}
 			/>
 			<div className="split">
@@ -307,6 +318,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									flush={flush}
 									onTarget={onTarget}
 									related={related}
+									onFix={onFix}
 								/>
 							) : pane === "value" ? (
 								<>
@@ -463,11 +475,13 @@ function SettledFindings({
 	flush,
 	onTarget,
 	related,
+	onFix,
 }: {
 	findings: readonly Finding[];
 	flush: () => void;
 	onTarget: (target: Target) => void;
 	related?: (f: Finding) => Related | undefined;
+	onFix: (fix: Fix) => void;
 }) {
 	return (
 		<div
@@ -482,6 +496,7 @@ function SettledFindings({
 				findings={findings}
 				onTarget={onTarget}
 				{...(related !== undefined && { related })}
+				onFix={onFix}
 			/>
 		</div>
 	);
@@ -566,6 +581,9 @@ function Inspector({
 									kind: "schemeCreateOpened",
 									scheme: m.scheme,
 									name: m.name,
+									// This question names it here: it will name whatever is chosen.
+									// Exactly where it is named: the path at the caret.
+									use: { id: q.id, path: at.path },
 								})
 							}
 						>

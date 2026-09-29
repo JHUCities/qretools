@@ -11,10 +11,10 @@ import {
 } from "@primer/octicons-react";
 import { ActionList, Details, Label } from "@primer/react";
 import { Fragment, memo, type ReactNode, useId } from "react";
-import { codeSpans } from "../../core/codeSpans.js";
+import { codeSpans, plainText } from "../../core/codeSpans.js";
 import { toFillIn } from "../../core/copy.js";
 import type { DdiDocument } from "../../core/ddi/document.js";
-import type { Finding, Status, Target } from "../../core/findings.js";
+import type { Finding, Fix, Status, Target } from "../../core/findings.js";
 import type {
 	CodebookView,
 	Hole,
@@ -293,11 +293,14 @@ export function Findings({
 	findings,
 	onTarget,
 	related,
+	onFix,
 }: {
 	findings: readonly Finding[];
 	onTarget?: OnTarget;
 	/** The other file a bank-level finding names, opened by an ordinary link. */
 	related?: (f: Finding) => Related | undefined;
+	/** Apply a finding's quick fix; absent where nothing can be edited. */
+	onFix?: (fix: Fix) => void;
 }) {
 	if (findings.length === 0)
 		return <p className="quiet">Nothing to fill in, fix, or reconsider.</p>;
@@ -317,6 +320,9 @@ export function Findings({
 			{findings.map((f, i) => {
 				const { Icon, className } = SEVERITY[f.severity];
 				const other = related?.(f);
+				// One slot beside the item: a fix, when there is one, wins over the link
+				// (the message still names the other files).
+				const fix = onFix === undefined ? undefined : f.fix;
 				return (
 					<ActionList.Item key={keys[i]} onSelect={() => onTarget(f)}>
 						<ActionList.LeadingVisual>
@@ -335,13 +341,20 @@ export function Findings({
 							</ActionList.Description>
 						)}
 						{/* Beside the item, never inside it: the item itself goes to this file's place. */}
-						{other !== undefined && (
+						{fix !== undefined ? (
 							<ActionList.TrailingAction
-								as="a"
-								href={other.href}
-								label={other.label}
-								icon={FileIcon}
+								label={plainText(fix.label)}
+								onClick={() => onFix?.(fix)}
 							/>
+						) : (
+							other !== undefined && (
+								<ActionList.TrailingAction
+									as="a"
+									href={other.href}
+									label={other.label}
+									icon={FileIcon}
+								/>
+							)
 						)}
 					</ActionList.Item>
 				);

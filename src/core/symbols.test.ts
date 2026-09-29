@@ -190,3 +190,36 @@ describe("the other files a finding names", () => {
 		).toEqual([]);
 	});
 });
+
+describe("the unit-spelling fix", () => {
+	const label = (k: string) => k;
+	const run = (files: Record<string, ReturnType<typeof symbols>>, k: string) =>
+		bankFindings(
+			k,
+			files[k] as ReturnType<typeof symbols>,
+			indexOf(Object.entries(files).map(([key, s]) => ({ key, symbols: s }))),
+			label,
+		)[0]?.fix;
+
+	it("moves toward the spelling most of the bank uses, and offers nothing to a file that has it", () => {
+		const files = {
+			a: symbols("name: a\nnumber:\n  unit: days\n"),
+			b: symbols("name: b\nnumber:\n  unit: days\n"),
+			c: symbols("name: c\nnumber:\n  unit: Days\n"),
+		};
+		expect(run(files, "c")).toEqual({
+			label: "Use `days`",
+			edits: [{ path: "number.unit", value: "days" }],
+		});
+		expect(run(files, "a")).toBeUndefined();
+	});
+
+	it("breaks a one-to-one tie toward lowercase, so exactly one side offers it", () => {
+		const files = {
+			a: symbols("name: a\nnumber:\n  unit: Days\n"),
+			b: symbols("name: b\nnumber:\n  unit: days\n"),
+		};
+		expect(run(files, "a")?.label).toBe("Use `days`");
+		expect(run(files, "b")).toBeUndefined();
+	});
+});
