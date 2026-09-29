@@ -3,18 +3,70 @@
  * text will be, the panes' real headings (structure, not data, so the outline is
  * stable and nothing shifts when the file arrives). Decorative: the top bar's status
  * says what is loading, once. A fragment, so its parts take the content's rows.
+ *
+ * Which panes a file shows is decided here, once (`panesOf`), and both this skeleton
+ * and the loaded views draw them through `Panes`, so the two cannot disagree.
  */
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, PageHeader } from "@primer/react";
 import { SkeletonText } from "@primer/react/experimental";
+import type { ReactNode } from "react";
 import { SCHEME_SINGULAR } from "../../core/copy.js";
 import type { SchemeKind } from "../../core/schemes.js";
 
-/** The preview panes a file of each kind shows, by heading; Editing.tsx draws the same. */
-export function paneTitles(kind: "question" | SchemeKind): readonly string[] {
-	return kind === "question"
-		? ["Findings", "As the respondent sees it", "As the codebook lists it"]
-		: ["Findings", SCHEME_SINGULAR[kind], "Used by"];
+export type FileKind = "question" | SchemeKind;
+export type PaneId =
+	| "findings"
+	| "respondent"
+	| "codebook"
+	| "value"
+	| "usedBy";
+
+/**
+ * The preview panes a file shows, in order. Another author's version (read only) has
+ * no "Used by": who names a shared file is known only for your own bank.
+ */
+export function panesOf(
+	kind: FileKind,
+	readOnly: boolean,
+): readonly { readonly id: PaneId; readonly title: string }[] {
+	if (kind === "question")
+		return [
+			{ id: "findings", title: "Findings" },
+			{ id: "respondent", title: "As the respondent sees it" },
+			{ id: "codebook", title: "As the codebook lists it" },
+		];
+	return [
+		{ id: "findings", title: "Findings" },
+		{ id: "value", title: SCHEME_SINGULAR[kind] },
+		...(readOnly ? [] : [{ id: "usedBy" as const, title: "Used by" }]),
+	];
+}
+
+/** Only a question you can edit has a cursor inspector under its editor. */
+export const hasInspector = (kind: FileKind, readOnly: boolean): boolean =>
+	kind === "question" && !readOnly;
+
+/** The panes `panesOf` lists: each a heading (plus an optional badge) and a body. */
+export function Panes({
+	kind,
+	readOnly,
+	badge = {},
+	body,
+}: {
+	kind: FileKind;
+	readOnly: boolean;
+	badge?: Partial<Record<PaneId, ReactNode>>;
+	body: (id: PaneId) => ReactNode;
+}) {
+	return panesOf(kind, readOnly).map(({ id, title }) => (
+		<article className="pane" key={id}>
+			<h3>
+				{title} {badge[id]}
+			</h3>
+			<div className="pane-body">{body(id)}</div>
+		</article>
+	));
 }
 
 /** Ragged, like YAML: the widths are decoration, not measurements. */
@@ -22,9 +74,12 @@ const CODE = ["40%", "70%", "85%", "55%", "30%", "65%", "45%", "75%"];
 
 export function FileSkeleton({
 	kind,
+	readOnly = false,
 	onBack,
 }: {
-	kind: "question" | SchemeKind;
+	kind: FileKind;
+	/** Another author's version: no inspector, no "Used by". */
+	readOnly?: boolean;
 	/** With a way back, the header is drawn too (a link waiting for the bank). */
 	onBack?: () => void;
 }) {
@@ -54,21 +109,21 @@ export function FileSkeleton({
 				</div>
 			)}
 			<div className="split">
-				<div className="left skeleton-code">
-					{CODE.map((width, i) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: fixed decoration
-						<SkeletonText key={i} size="bodySmall" maxWidth={width} />
-					))}
+				<div className="left">
+					<div className="editor skeleton-code">
+						{CODE.map((width, i) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: fixed decoration
+							<SkeletonText key={i} size="bodySmall" maxWidth={width} />
+						))}
+					</div>
+					{hasInspector(kind, readOnly) && <div className="inspector" />}
 				</div>
 				<div className="right">
-					{paneTitles(kind).map((title) => (
-						<article className="pane" key={title}>
-							<h3>{title}</h3>
-							<div className="pane-body">
-								<SkeletonText lines={3} />
-							</div>
-						</article>
-					))}
+					<Panes
+						kind={kind}
+						readOnly={readOnly}
+						body={() => <SkeletonText lines={3} />}
+					/>
 				</div>
 			</div>
 		</>

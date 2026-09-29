@@ -265,6 +265,23 @@ const SEVERITY_LABEL: Readonly<Record<Finding["severity"], string>> = {
  * to its place in the source; severity is an icon with its name, never colour alone.
  * In a read-only view, a plain list: nothing there is an action.
  */
+/**
+ * A key per finding that survives edits elsewhere in the text: what it says and where,
+ * plus which occurrence it is when the same finding is reported twice. A finding that
+ * stays keeps its element (and its focus); only a new one enters.
+ */
+export const findingKeys = (
+	findings: readonly Finding[],
+): readonly string[] => {
+	const seen = new Map<string, number>();
+	return findings.map((f) => {
+		const id = `${f.code}\u0000${f.path}\u0000${f.message}`;
+		const n = seen.get(id) ?? 0;
+		seen.set(id, n + 1);
+		return `${id}\u0000${n}`;
+	});
+};
+
 export function Findings({
 	findings,
 	onTarget,
@@ -274,24 +291,23 @@ export function Findings({
 }) {
 	if (findings.length === 0)
 		return <p className="quiet">Nothing to fill in, fix, or reconsider.</p>;
+	const keys = findingKeys(findings);
 	if (onTarget === undefined)
 		return (
 			<ul className="findings">
 				{findings.map((f, i) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
-					<li key={i} className="finding" data-severity={f.severity}>
+					<li key={keys[i]} className="finding" data-severity={f.severity}>
 						<FindingBody f={f} />
 					</li>
 				))}
 			</ul>
 		);
 	return (
-		<ActionList aria-label="Findings" variant="full">
+		<ActionList aria-label="Findings" variant="full" className="findings-list">
 			{findings.map((f, i) => {
 				const { Icon, className } = SEVERITY[f.severity];
 				return (
-					// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and the list is redrawn whole; identical findings can repeat
-					<ActionList.Item key={i} onSelect={() => onTarget(f)}>
+					<ActionList.Item key={keys[i]} onSelect={() => onTarget(f)}>
 						<ActionList.LeadingVisual>
 							<Icon
 								className={className}

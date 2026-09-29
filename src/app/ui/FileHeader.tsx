@@ -1,7 +1,14 @@
 /** The open file's header: identity, state, and the actions on it. */
 
 import { ArrowLeftIcon, SyncIcon, TrashIcon } from "@primer/octicons-react";
-import { Banner, Button, Label, PageHeader, Stack } from "@primer/react";
+import {
+	Banner,
+	Button,
+	Label,
+	PageHeader,
+	Stack,
+	VisuallyHidden,
+} from "@primer/react";
 import { useId } from "react";
 import { plainText } from "../../core/codeSpans.js";
 import { UNNAMED } from "../../core/copy.js";
@@ -57,6 +64,7 @@ export function FileHeader({
 	);
 	const saving = activity?.kind === "saving";
 	const nothing = !unsaved && also.length === 0;
+	const alsoText = `Also saves ${also.join(", ")}.`;
 	// Why a write cannot happen now is the session's (the top bar says it); the
 	// header says only what is this file's own: which unsaved shared files a save
 	// takes along. Nothing to save needs no explanation.
@@ -100,6 +108,19 @@ export function FileHeader({
 					</PageHeader.TrailingVisual>
 				</PageHeader.TitleArea>
 				<PageHeader.Actions>
+					{/*
+					 * What saving takes along, beside Save and on its line, so the header
+					 * never grows a row (it is the band the sidebar shares). Short and
+					 * truncated here; Save's description is the whole sentence.
+					 */}
+					{also.length > 0 && (
+						<>
+							<span className="also-saves quiet" aria-hidden title={alsoText}>
+								with {also.join(", ")}
+							</span>
+							<VisuallyHidden id={statusId}>{alsoText}</VisuallyHidden>
+						</>
+					)}
 					{on.move !== undefined && (
 						<Button
 							size="small"
@@ -137,13 +158,6 @@ export function FileHeader({
 						Save
 					</Button>
 				</PageHeader.Actions>
-				{also.length > 0 && (
-					<PageHeader.Description>
-						<span id={statusId} className="quiet">
-							Also saves {also.join(", ")}.
-						</span>
-					</PageHeader.Description>
-				)}
 			</PageHeader>
 			{activity?.kind === "failed" && (
 				<Banner

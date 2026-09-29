@@ -4,7 +4,7 @@
  * `sync` pushes the Model's text, diagnostics and schema in. The handle is
  * registered with the effects so `revealRange` can reach it.
  */
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { createEditor, type Editor, type EditorInputs } from "../editor.js";
 import { useApp } from "./AppContext.js";
 
@@ -28,7 +28,9 @@ export function EditorPane(inputs: EditorInputs) {
 		};
 	}, [dispatch, effects]);
 	const { id, text, diagnostics, schema, readOnly, label } = inputs;
-	useEffect(() => {
+	// Before paint: the first frame of a file already shows its text, never an empty
+	// editor that fills a frame later.
+	useLayoutEffect(() => {
 		editor.current?.sync({
 			id,
 			text,
