@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { indexOf } from "../core/symbols.js";
 import type { Local, Question, Remote, SchemeEntry } from "./model.js";
-import { rebase, remoteOf, type Sync, syncOf } from "./sync.js";
+import { rebase, remoteOf, type Sync, syncOf, usersIn } from "./sync.js";
 
 const blob = (sha: string, text: string) => ({ sha, text });
 const base = (path: string, sha: string, text: string) => ({ path, sha, text });
@@ -151,5 +152,29 @@ describe("rebase", () => {
 		]);
 		expect(again.questions).toBe(remote.questions);
 		expect(again.schemes).toBe(remote.schemes);
+	});
+});
+
+describe("usersIn", () => {
+	it("counts a question once, however many times it names the file", () => {
+		const index = indexOf([
+			{
+				key: 1,
+				symbols: {
+					defines: [],
+					mentions: [
+						{ scheme: "scale", name: "agree4", path: "responses" },
+						{ scheme: "scale", name: "agree4", path: "responses" },
+					],
+				},
+			},
+		]);
+		const scale = {
+			kind: "scale",
+			id: 9,
+			name: "agree4",
+			source: "",
+		} as SchemeEntry;
+		expect(usersIn(index)(scale)).toEqual([1]);
 	});
 });

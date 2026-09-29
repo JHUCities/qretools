@@ -82,8 +82,12 @@ describe("describeChange", () => {
 describe("describeMove", () => {
 	const before = draft("name: nhd_sat\ntext: Q?\n");
 	it("names the folder, and any fields saved with the move", () => {
-		expect(describeMove(before, before, "nhd_sat", "svy")).toBe(
+		expect(describeMove(before, before, "nhd_sat", "svy", false)).toBe(
 			"Move nhd_sat to svy",
+		);
+		// A change to no field (a comment, spacing, a legacy value) is still said.
+		expect(describeMove(before, before, "nhd_sat", "svy", true)).toBe(
+			"Move nhd_sat to svy and update text",
 		);
 		expect(
 			describeMove(
@@ -91,6 +95,7 @@ describe("describeMove", () => {
 				draft("name: nhd_sat\ntext: Q?\nnote: n\ninstruction: Select one\n"),
 				"nhd_sat",
 				"svy",
+				true,
 			),
 		).toBe("Move nhd_sat to svy and update instruction, note");
 	});

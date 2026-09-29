@@ -230,7 +230,10 @@ export function dependencies(
 export const usersIn =
 	(index: Index<Id>) =>
 	(e: SchemeEntry): readonly Id[] =>
-		e.kind === "missing" ? [] : usedBy(index, e.kind, e.name).map((s) => s.key);
+		e.kind === "missing"
+			? []
+			: // Once per question, however many times it names the file.
+				[...new Set(usedBy(index, e.kind, e.name).map((s) => s.key))];
 
 /**
  * What saving a question also saves, as the author should see it: each unsaved scheme
