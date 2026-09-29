@@ -27,6 +27,7 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import issueDraftSvg from "@primer/octicons/build/svg/issue-draft-16.svg?raw";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
@@ -188,19 +189,29 @@ const MARK_CLASS = {
 	legacy: Decoration.mark({ class: "cm-legacy" }),
 } as const;
 
+/** Primer's dashed circle, parsed once and cloned per chip. */
+let holeIcon: HTMLTemplateElement | undefined;
+
 /**
- * A hole as Hazel draws one: a small box after the colon. Decorative (the finding
- * says it in words, to a screen reader too), so hidden from assistive technology;
- * the "?" is CSS content, never text, so it cannot be selected or copied.
+ * A hole, drawn after the colon as the Findings panel draws it: Primer's dashed
+ * circle (`IssueDraftIcon`), so one shape means "to fill in" everywhere. Decorative
+ * (the finding says it in words, to a screen reader too), so hidden from assistive
+ * technology, and never text, so it cannot be selected or copied.
  */
 class HoleChip extends WidgetType {
 	override eq(other: WidgetType): boolean {
 		return other instanceof HoleChip;
 	}
 	toDOM(): HTMLElement {
+		if (holeIcon === undefined) {
+			holeIcon = document.createElement("template");
+			holeIcon.innerHTML = issueDraftSvg;
+			holeIcon.content.firstElementChild?.setAttribute("focusable", "false");
+		}
 		const chip = document.createElement("span");
 		chip.className = "cm-hole";
 		chip.setAttribute("aria-hidden", "true");
+		chip.append(holeIcon.content.cloneNode(true));
 		return chip;
 	}
 }
@@ -238,6 +249,17 @@ const macCompletionKeys = Prec.highest(
  * The editor in Primer's own terms: every colour is one of Primer's tokens, which are
  * CSS variables, so one theme serves light and dark alike. Holes are invitations, not
  * mistakes: dashed and tinted, never red.
+ *
+ * Contrast (WCAG 2.2, measured 2026-09-29 against Primer primitives 11.10, light and
+ * dark, the themes the app loads): every text colour is at least 4.5:1 on the editor,
+ * the active line and the hole and lint tints; underlines and the hole icon at least
+ * 3:1 (1.4.11). One accepted shortfall (owner, 2026-09-29): muted text (comments,
+ * punctuation, `legacy`) on the selection, as low as 2.94:1 in dark over the active
+ * line. `drawSelection` paints selection behind the text, so only the background could
+ * change, and a paler one would leave the selection barely distinct from the active
+ * line; Primer's own pairing does the same. Meaning never rests on colour alone
+ * (1.4.1): holes and warnings share amber but differ in form (dashed and a circle,
+ * wavy), as do errors and names (a wavy line, a text colour).
  */
 const primerTheme = EditorView.theme({
 	"&": {
@@ -325,29 +347,30 @@ const primerTheme = EditorView.theme({
 	// The core's marks. Each colour wins however the highlighter's spans nest with
 	// ours (inside or outside), so a code keeps its colour although YAML calls it a key.
 	".cm-ref, .cm-ref *": {
-		color: "var(--color-prettylights-syntax-string-regexp)",
+		color: "var(--prettylights-syntax-stringRegexp)",
 	},
 	".cm-code, .cm-code *": {
-		color: "var(--color-prettylights-syntax-constant)",
+		color: "var(--prettylights-syntax-constant)",
 	},
 	".cm-legacy, .cm-legacy *": {
-		color: "var(--color-prettylights-syntax-comment)",
+		color: "var(--prettylights-syntax-comment)",
 	},
-	// A hole: Hazel's small box with a question mark, in Primer's attention colours.
+	// A hole: the dashed circle, one em square so it matches the glyphs and never
+	// grows the line. The asset has no fill and a fixed 16px size; both set here.
 	".cm-hole": {
 		display: "inline-block",
+		inlineSize: "1em",
+		blockSize: "1em",
 		marginInlineStart: "var(--base-size-4)",
-		paddingInline: "var(--base-size-4)",
-		fontFamily: "var(--fontStack-monospace)",
-		fontSize: "var(--text-caption-size)",
-		lineHeight: "1",
 		verticalAlign: "text-bottom",
 		color: "var(--fgColor-attention)",
-		backgroundColor: "var(--bgColor-attention-muted)",
-		border: "var(--borderWidth-thin) solid var(--fgColor-attention)",
-		borderRadius: "var(--borderRadius-small)",
 	},
-	".cm-hole::before": { content: '"?"' },
+	".cm-hole svg": {
+		display: "block",
+		inlineSize: "100%",
+		blockSize: "100%",
+		fill: "currentColor",
+	},
 	// Where a chip sits, CodeMirror's own point marker for the same hole would be a
 	// second one. The lint point is a widget at side 0, so it comes just before the chip.
 	".cm-lintPoint-hint:has(+ .cm-hole)": {
@@ -383,11 +406,11 @@ const primerHighlight = syntaxHighlighting(
 	HighlightStyle.define([
 		{
 			tag: [tags.propertyName, tags.definition(tags.propertyName)],
-			color: "var(--color-prettylights-syntax-entity)",
+			color: "var(--prettylights-syntax-entity)",
 		},
 		{
 			tag: [tags.comment, tags.separator, tags.punctuation, tags.meta],
-			color: "var(--color-prettylights-syntax-comment)",
+			color: "var(--prettylights-syntax-comment)",
 		},
 		{ tag: tags.invalid, color: "var(--fgColor-danger)" },
 	]),
