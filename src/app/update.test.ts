@@ -1171,7 +1171,18 @@ describe("moving a question", () => {
 			),
 		]);
 
-	it("is one commit of the saved version at the new path, and the old path gone", () => {
+	const move = (m: Model, folder = "svy") =>
+		update(update(m, { kind: "moveRequested", id: 1, folder })[0], {
+			kind: "moveConfirmed",
+		});
+	const target = {
+		owner: "JHUCities",
+		repo: "bas-question-bank",
+		branch: "qretools-iain",
+		defaultBranch: "main",
+	};
+
+	it("also saves: the current text at the new path, and the old path gone, in one commit", () => {
 		const [asked] = update(edited(), { kind: "moveRequested", id: 1 });
 		expect(asked.browser.moving).toEqual({ id: 1, folder: "nhd" });
 		const [chosen] = update(asked, {
@@ -1181,26 +1192,108 @@ describe("moving a question", () => {
 		const [, cmds] = update(chosen, { kind: "moveConfirmed" });
 		expect(cmds[0]).toEqual({
 			kind: "commit",
-			target: {
-				owner: "JHUCities",
-				repo: "bas-question-bank",
-				branch: "qretools-iain",
-				defaultBranch: "main",
-			},
+			target,
 			changes: [
 				{
 					id: 1,
 					path: "questions/svy/nhd_sat.yaml",
 					expected: null,
-					text: "name: nhd_sat\n",
+					text: "name: nhd_sat\nnote: unsaved\n",
 				},
+				{ path: "questions/nhd/nhd_sat.yaml", expected: "s", text: null },
+			],
+			message: "Move nhd_sat to svy and update note",
+		});
+	});
+
+	it("a question moved unchanged says only that it moved", () => {
+		const m = withBank(connected(fresh()), [
+			bankQuestion(1, "questions/nhd/nhd_sat.yaml", "name: nhd_sat\n"),
+		]);
+		const [, cmds] = move(m);
+		expect(cmds[0]).toMatchObject({
+			kind: "commit",
+			changes: [
+				{ path: "questions/svy/nhd_sat.yaml", expected: null },
 				{ path: "questions/nhd/nhd_sat.yaml", expected: "s", text: null },
 			],
 			message: "Move nhd_sat to svy",
 		});
 	});
 
-	it("after the commit the file keeps its edits, its base moves, GitHub's copy moves, and the link is replaced", () => {
+	const withScale = (m: Model, remoteText?: string): Model => {
+		const yn: SchemeEntry = {
+			kind: "scale",
+			id: 10,
+			name: "yn",
+			source: "labels:\n  1: Yes\n  2: No\n",
+			base: {
+				path: "scales/yn.yaml",
+				sha: "s-yn",
+				text: "labels:\n  1: Yes\n",
+			},
+		};
+		const local = { ...m.local, schemes: { 10: yn } };
+		const remote = remoteOfBases(local);
+		return {
+			...m,
+			local,
+			remote:
+				remoteText === undefined
+					? remote
+					: {
+							...remote,
+							schemes: {
+								"scales/yn.yaml": { sha: "theirs", text: remoteText },
+							},
+						},
+		};
+	};
+	const naming = () =>
+		withBank(connected(fresh()), [
+			bankQuestion(
+				1,
+				"questions/nhd/nhd_sat.yaml",
+				"name: nhd_sat\nresponses: yn\n",
+			),
+		]);
+
+	it("takes along an unsaved scale the question names, listed under With:", () => {
+		const [m, cmds] = move(withScale(naming()));
+		const cmd = cmds[0];
+		expect(
+			cmd?.kind === "commit" &&
+				cmd.changes.map((c) => [c.id, c.path, c.expected, c.text === null]),
+		).toEqual([
+			[1, "questions/svy/nhd_sat.yaml", null, false],
+			[10, "scales/yn.yaml", "s-yn", false],
+			[undefined, "questions/nhd/nhd_sat.yaml", "s", true],
+		]);
+		expect(cmd?.kind === "commit" && cmd.message).toBe(
+			"Move nhd_sat to svy\n\nWith:\n- Update shared scale yn",
+		);
+		expect(m.activity[10]).toEqual({ kind: "saving" });
+	});
+
+	it("a named scale GitHub also changed stops the move before any request, naming it", () => {
+		const [refused, cmds] = move(withScale(naming(), "labels:\n  1: Y\n"));
+		expect(cmds).toEqual([]);
+		expect(
+			refused.activity[1]?.kind === "failed" &&
+				refused.activity[1].failure.message,
+		).toMatch(/`yn`/);
+	});
+
+	it("a plain save of a bank file expects its base and deletes nothing", () => {
+		const [, cmds] = update(edited(), { kind: "saveRequested", id: 1 });
+		expect(cmds[0]).toMatchObject({
+			kind: "commit",
+			changes: [{ id: 1, path: "questions/nhd/nhd_sat.yaml", expected: "s" }],
+		});
+		expect(cmds[0]?.kind === "commit" && cmds[0].changes).toHaveLength(1);
+	});
+
+	it("after the commit the file is in sync at its new path, GitHub's copy moves, and the link is replaced", () => {
 		const m = { ...edited(), screen: { kind: "editing" as const, id: 1 } };
 		const [done, cmds] = update(m, {
 			kind: "committed",
@@ -1209,16 +1302,22 @@ describe("moving a question", () => {
 					id: 1,
 					path: "questions/svy/nhd_sat.yaml",
 					expected: null,
-					text: "name: nhd_sat\n",
+					text: "name: nhd_sat\nnote: unsaved\n",
 				},
 				{ path: "questions/nhd/nhd_sat.yaml", expected: "s", text: null },
 			],
-			result: ok({ shas: { "questions/svy/nhd_sat.yaml": "s" } }),
+			result: ok({ shas: { "questions/svy/nhd_sat.yaml": "s2" } }),
 		});
-		expect(done.local.questions[1]).toMatchObject({
+		const q = done.local.questions[1] as Question;
+		expect(q).toMatchObject({
 			source: "name: nhd_sat\nnote: unsaved\n",
-			base: { path: "questions/svy/nhd_sat.yaml", sha: "s" },
+			base: {
+				path: "questions/svy/nhd_sat.yaml",
+				sha: "s2",
+				text: "name: nhd_sat\nnote: unsaved\n",
+			},
 		});
+		expect(syncOf(q, remoteBlob(done.remote, q))).toBe("inSync");
 		expect(Object.keys(done.remote.questions)).toEqual([
 			"questions/svy/nhd_sat.yaml",
 		]);

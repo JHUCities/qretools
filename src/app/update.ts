@@ -2,6 +2,7 @@ import {
 	bankLocation,
 	describeChange,
 	describeChangeSet,
+	describeMove,
 	describeSchemeChange,
 	FOLDER_PATTERN,
 	saveableName,
@@ -427,22 +428,16 @@ function step(model: Model, msg: Msg): Step {
 			const problem = moveProblem(model, q, moving.folder);
 			if (problem !== undefined) return [refuse(closed, q.id, problem), []];
 			const to = movedPath(q.base.path, moving.folder);
-			// Like `git mv`: the saved version moves; unsaved edits stay unsaved, and a
-			// commit that says "move" hides no change of content.
-			return [
-				withActivity(closed, q.id, { kind: "saving" }),
-				[
-					{
-						kind: "commit",
-						target: targetOf(model.settings, as),
-						changes: [
-							{ id: q.id, path: to, expected: null, text: q.base.text },
-							{ path: q.base.path, expected: q.base.sha, text: null },
-						],
-						message: `Move ${fileName(q.base.path)} to ${moving.folder}`,
-					},
-				],
-			];
+			// A move also saves (owner, 2026-09-29): the working text at the new path,
+			// the old path deleted, and the scheme files it names, as a save would.
+			const env = envOf(model.local.schemes, model.remote.schemes);
+			const subject = describeMove(
+				parseSurface(q.base.text, env).draft,
+				parseSurface(q.source, env).draft,
+				fileName(q.base.path),
+				moving.folder,
+			);
+			return write(closed, as, q.id, q, to, subject);
 		}
 
 		case "committed": {
@@ -760,6 +755,7 @@ function write(
 	id: Id,
 	q: Entry,
 	path: string,
+	subject?: string,
 ): Step {
 	const own = syncOf(q, remoteBlob(model.remote, q));
 	if (own === "conflict")
@@ -792,20 +788,26 @@ function write(
 			),
 			[],
 		];
+	// Saved somewhere else than its base (a move): the old path goes in the same commit.
+	const moved: Change[] =
+		q.base !== undefined && q.base.path !== path
+			? [{ path: q.base.path, expected: q.base.sha, text: null }]
+			: [];
 	// The file being saved comes first: a refused commit reports on `changes[0]`.
 	return commitFiles(
 		model,
 		as,
-		[changeOf(q, path), ...claimedChanges(deps.include)],
+		[changeOf(q, path), ...claimedChanges(deps.include), ...moved],
 		[q, ...deps.include],
+		subject,
 	);
 }
 
-/** Writing a working file at a path: expected to be at its base, or not there yet. */
+/** Writing a working file at a path: expected at its base when that is the path, else not there yet. */
 const changeOf = (f: Entry, path: Path): Change => ({
 	id: f.id,
 	path,
-	expected: f.base?.sha ?? null,
+	expected: f.base?.path === path ? f.base.sha : null,
 	text: f.source,
 });
 
@@ -825,6 +827,8 @@ function commitFiles(
 	as: Connected,
 	changes: readonly Change[],
 	files: readonly Entry[],
+	/** The first file's line, when the caller has a better one than `messageOf` (a move). */
+	subject?: string,
 ): Step {
 	const busy = changes.reduce<Model>(
 		(m, c) =>
@@ -840,7 +844,7 @@ function commitFiles(
 				target: targetOf(model.settings, as),
 				changes,
 				message: describeChangeSet(
-					first === undefined ? "" : messageOf(model, first),
+					subject ?? (first === undefined ? "" : messageOf(model, first)),
 					others.map((e) => messageOf(model, e)),
 				),
 			},
