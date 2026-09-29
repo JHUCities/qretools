@@ -3,7 +3,7 @@
  * they live, how each is read, and the environment questions are read against.
  * Pure; the shell decides which text of a file counts (the saved bank version).
  */
-import type { Finding, Range } from "./findings.js";
+import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { missingCollisions } from "./lint.js";
 import type { Code } from "./surface/draft.js";
 import {
@@ -91,10 +91,13 @@ export function evaluateScheme(
 		// The missing list is compared with itself only if it were a scale; it is not.
 		findings:
 			kind === "scale"
-				? [
-						...findings,
-						...missingCollisions(scale.codes, env.missing, "labels"),
-					]
+				? inDocumentOrder(
+						[
+							...findings,
+							...missingCollisions(scale.codes, env.missing, "labels"),
+						],
+						ranges,
+					)
 				: findings,
 		ranges,
 		value: { kind: "labels", codes: scale.codes },

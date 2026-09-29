@@ -102,6 +102,22 @@ export function pathAt(
 	return best;
 }
 
+/**
+ * Findings in the order the author reads the source: by where each lives (`locate`),
+ * so the list reads top to bottom with the text and a finding keeps its place while
+ * others come and go. Holes for fields not yet written live at the end, where they
+ * will be typed. Stable: findings at one place keep the order they were reported in.
+ */
+export function inDocumentOrder(
+	findings: readonly Finding[],
+	ranges: Readonly<Record<string, Range>>,
+): readonly Finding[] {
+	return findings
+		.map((f) => ({ f, from: locate(f, ranges)[0] }))
+		.sort((a, b) => a.from - b.from)
+		.map(({ f }) => f);
+}
+
 /** What a click points at, in the document's own terms; resolved to a range only when acted on. */
 export type Target = Pick<Finding, "path" | "severity"> & {
 	readonly range?: Range;
