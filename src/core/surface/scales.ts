@@ -3,11 +3,11 @@
  * question names it (`responses: satisfied5`). Scales are a bank-level value the
  * shell loads and the core is given; one file per scale, body `labels: {code: label}`.
  */
-import { isMap, parseDocument } from "yaml";
+import { isMap, isScalar, parseDocument } from "yaml";
 import type { Finding } from "../findings.js";
-import { readCodeMap } from "./codes.js";
+import { EXAMPLE, readCodeMap } from "./codes.js";
 import type { Code } from "./draft.js";
-import { yamlErrors } from "./read.js";
+import { hole, yamlErrors } from "./read.js";
 
 export interface Scale {
 	readonly codes: readonly Code[];
@@ -39,6 +39,12 @@ export function parseScale(text: string): ParsedScale {
 			],
 		};
 	}
+	// Written but empty: a hole, as for any key (see `opened`), not a wrong type.
+	const empty = isScalar(node) ? (node.value as unknown) : undefined;
+	if (isScalar(node) && (empty === null || empty === ""))
+		return {
+			findings: [...syntax, hole("labels", "`labels` is empty.", EXAMPLE)],
+		};
 	const read = readCodeMap(doc, node, "labels", false);
 	return read.value === undefined
 		? { findings: [...syntax, ...read.findings] }

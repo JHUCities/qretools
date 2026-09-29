@@ -11,13 +11,13 @@ describe("status", () => {
 		expect(statusOf("")).toEqual({ kind: "incomplete", holes: 4, errors: 0 });
 		expect(
 			statusOf(
-				"name: q\ntext: Do you rent?\nintent: Prevalence of renting among adults\nopen:\n",
+				"name: q\ntext: Do you rent?\nintent: Prevalence of renting among adults\nopen: {}\n",
 			),
 		).toEqual({
 			kind: "complete",
 		});
 		expect(
-			statusOf("name: q\ntext: Do you rent?\nintent: Housing\nopen:\n"),
+			statusOf("name: q\ntext: Do you rent?\nintent: Housing\nopen: {}\n"),
 		).toEqual({ kind: "advice", count: 1 });
 		expect(
 			statusOf("name: q\ntext: Do you rent?\nintent: Housing\nwording: x\n"),

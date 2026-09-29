@@ -16,12 +16,12 @@ import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
 import type { Domain, Draft, Named } from "./draft.js";
 import {
 	type Env,
+	inScope,
 	listNames,
 	type Mention,
-	type Scheme,
 	type TextEntry,
 } from "./env.js";
-import { type Mark, marksOf } from "./marks.js";
+import { holeChips, type Mark, marksOf, ordered } from "./marks.js";
 import {
 	clampRange,
 	EMPTY_HINT,
@@ -36,7 +36,6 @@ import {
 	yamlError,
 	yamlErrors,
 } from "./read.js";
-import type { Scales } from "./scales.js";
 import {
 	DOMAIN_KEYS,
 	describe,
@@ -57,6 +56,8 @@ export interface Parsed {
 	readonly ranges: Readonly<Record<string, Range>>;
 	/** Every scheme name written, resolved or not. */
 	readonly mentions: readonly Mention[];
+	/** Where each value written as nothing at all starts, by path: the points holes are drawn at. */
+	readonly empties: Readonly<Record<string, number>>;
 	/** What the editor colours by meaning: resolved names, codes, `legacy`, holes. */
 	readonly marks: readonly Mark[];
 }
@@ -67,7 +68,7 @@ const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older form
 
 export function parseSurface(text: string, env: Env): Parsed {
 	const doc = parseDocument(text, { prettyErrors: false });
-	const ranges = indexRanges(doc, text.length);
+	const { ranges, empties } = indexDocument(doc, text.length);
 	const syntax = yamlErrors(doc.errors, text.length);
 
 	const js = toJs(doc);
@@ -82,6 +83,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			draft: {},
 			findings: [...syntax, ...js.findings, notAMap],
 			ranges,
+			empties,
 			mentions: [],
 			marks: [],
 		};
@@ -112,12 +114,8 @@ export function parseSurface(text: string, env: Env): Parsed {
 		instruction: instructionText,
 		...plain
 	} = fields;
-	const universe = refOrProse("universe", universeText, env.universes);
-	const instruction = refOrProse(
-		"instruction",
-		instructionText,
-		env.instructions,
-	);
+	const universe = refOrProse("universe", universeText, env);
+	const instruction = refOrProse("instruction", instructionText, env);
 	const scale = scaleName(doc);
 	const mentions: Mention[] = [
 		...(scale === undefined
@@ -129,7 +127,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		}),
 	];
 	const legacy = readLegacy(data.legacy);
-	const domain = readDomain(doc, data, ranges, env.scales);
+	const domain = readDomain(doc, data, ranges, env);
 	const draft: Draft = compact({
 		...plain,
 		universe: universe.value,
@@ -138,21 +136,26 @@ export function parseSurface(text: string, env: Env): Parsed {
 		domain: domain.value,
 	});
 
+	const findings = [
+		...syntax,
+		...js.findings,
+		...unknown,
+		...fieldFindings,
+		...universe.findings,
+		...instruction.findings,
+		...legacy.findings,
+		...domain.findings,
+	];
 	return {
 		draft,
-		findings: [
-			...syntax,
-			...js.findings,
-			...unknown,
-			...fieldFindings,
-			...universe.findings,
-			...instruction.findings,
-			...legacy.findings,
-			...domain.findings,
-		],
+		findings,
 		ranges,
+		empties,
 		mentions,
-		marks: marksOf(doc, mentions, env, text.length),
+		marks: ordered([
+			...marksOf(doc, mentions, env, text.length),
+			...holeChips(findings, empties),
+		]),
 	};
 }
 
@@ -221,11 +224,12 @@ function readLegacy(value: unknown): Read<readonly string[]> {
 function refOrProse(
 	key: "universe" | "instruction",
 	text: string | undefined,
-	scheme: Scheme<TextEntry>,
+	env: Env,
 ): Read<Named<TextEntry>> {
 	if (text === undefined) return fail();
 	const name = nameIn(text);
 	if (name === undefined) return ok({ kind: "text", text });
+	const scheme = inScope(env, key);
 	const value = scheme[name];
 	if (value === undefined)
 		return fail(
@@ -255,8 +259,8 @@ function scaleName(doc: Document): string | undefined {
 function readDomain(
 	doc: Document,
 	data: Record<string, unknown>,
-	ranges: Record<string, Range>,
-	scales: Scales,
+	ranges: Readonly<Record<string, Range>>,
+	env: Env,
 ): Read<Domain> {
 	const present = DOMAIN_KEYS.filter((k) => k in data).sort(
 		(a, b) =>
@@ -292,43 +296,55 @@ function readDomain(
 					},
 				]
 			: [];
+	const select =
+		first === "responses" ? readSelect(data.select) : fail<"one" | "many">();
+	const value = data[first];
+	// Written but empty: a hole, as for any key (see `opened`), never an empty domain.
 	const read =
-		first === "responses"
-			? readResponses(doc, data.select, scales)
-			: first === "number"
-				? readNumber(data.number)
-				: readOpen(data.open);
+		value === null || value === ""
+			? fail<Domain>(hole(first, `\`${first}\` is empty.`, EMPTY_DOMAIN[first]))
+			: first === "responses"
+				? readResponses(doc, select.value ?? "one", env)
+				: first === "number"
+					? readNumber(value)
+					: readOpen(value);
 	return {
 		...read,
-		findings: [...read.findings, ...tooMany, ...ignoredSelect],
+		findings: [
+			...read.findings,
+			...select.findings,
+			...tooMany,
+			...ignoredSelect,
+		],
 	};
 }
 
+const EMPTY_DOMAIN: Readonly<Record<(typeof DOMAIN_KEYS)[number], string>> = {
+	responses: EXAMPLE,
+	number: "Add `min:`, `max:`… under it, or write `number: {}` for any number.",
+	open: "Add `max_length:` under it, or write `open: {}` for any text.",
+};
+
 function readResponses(
 	doc: Document,
-	select: unknown,
-	scales: Scales,
+	select: "one" | "many",
+	env: Env,
 ): Read<Domain> {
-	const selectRead = readSelect(select);
-	const chosen = selectRead.value ?? "one";
 	const node = isMap(doc.contents)
 		? doc.contents.get("responses", true)
 		: undefined;
 	const name = scaleName(doc);
-	const read =
-		node === undefined || (isScalar(node) && node.value === null)
-			? fail<Domain>(hole("responses", "`responses` is empty.", EXAMPLE))
-			: name !== undefined
-				? readScaleName(name, scales, chosen)
-				: readInlineOptions(doc, node, chosen);
-	return { ...read, findings: [...read.findings, ...selectRead.findings] };
+	return name !== undefined
+		? readScaleName(name, env, select)
+		: readInlineOptions(doc, node, select);
 }
 
 function readScaleName(
 	name: string,
-	scales: Scales,
+	env: Env,
 	select: "one" | "many",
 ): Read<Domain> {
+	const scales = inScope(env, "scale");
 	const scale = scales[name];
 	if (scale === undefined) {
 		const names = Object.keys(scales);
@@ -381,7 +397,7 @@ function readSelect(value: unknown): Read<"one" | "many"> {
 }
 
 function readNumber(value: unknown): Read<Domain> {
-	const { rest, holes } = opened(value ?? {}, "number");
+	const { rest, holes } = opened(value, "number");
 	const result = NumberDomainSchema.safeParse(rest);
 	if (!result.success)
 		return fail(...issueFindings("number", result.error), ...holes);
@@ -401,7 +417,7 @@ function readNumber(value: unknown): Read<Domain> {
 }
 
 function readOpen(value: unknown): Read<Domain> {
-	const { rest, holes } = opened(value ?? {}, "open");
+	const { rest, holes } = opened(value, "open");
 	const result = OpenDomainSchema.safeParse(rest);
 	if (!result.success)
 		return fail(...issueFindings("open", result.error), ...holes);
@@ -441,13 +457,23 @@ function issueFindings(kind: "number" | "open", zodError: ZodError): Finding[] {
 
 /** Where each path is in a text. Depends on nothing but the YAML, so any file kind can use it. */
 export const rangesOf = (text: string): Readonly<Record<string, Range>> =>
-	indexRanges(parseDocument(text, { prettyErrors: false }), text.length);
+	indexDocument(parseDocument(text, { prettyErrors: false }), text.length)
+		.ranges;
 
-export function indexRanges(
-	doc: Document,
-	length: number,
-): Record<string, Range> {
+export interface DocumentIndex {
+	/** Source range of every `key` and nested `key.subkey`, plus `""` for the whole text. */
+	readonly ranges: Readonly<Record<string, Range>>;
+	/**
+	 * Where each value written as nothing at all (`key:` and the line ends) starts,
+	 * just after the colon. A hole finding at one of these paths is drawn there.
+	 */
+	readonly empties: Readonly<Record<string, number>>;
+}
+
+/** One walk over the YAML AST, by path. Any file kind can use it. */
+export function indexDocument(doc: Document, length: number): DocumentIndex {
 	const ranges: Record<string, Range> = { "": [0, length] };
+	const empties: Record<string, number> = {};
 	const walk = (node: unknown, prefix: string): void => {
 		if (!isMap(node)) return;
 		for (const pair of node.items) {
@@ -461,11 +487,14 @@ export function indexRanges(
 					? pair.value.range[1]
 					: pair.key.range[1];
 			ranges[path] = clampRange(from, to, length);
-			walk(pair.value, path);
+			const v = pair.value;
+			if (isScalar(v) && v.value === null && v.source === "" && v.range)
+				empties[path] = clampRange(v.range[0], v.range[0], length)[0];
+			walk(v, path);
 		}
 	};
 	walk(doc.contents, "");
-	return ranges;
+	return { ranges, empties };
 }
 
 const isKnownKey = (key: string): key is SurfaceKey =>

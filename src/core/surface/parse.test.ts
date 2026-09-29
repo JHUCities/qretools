@@ -128,7 +128,7 @@ describe("parseSurface", () => {
 			`${f.severity}:${f.code}@${f.path}`;
 		const full = "name: q\ntext: Q?\nintent: Prevalence of a thing\n";
 		expect(
-			parseSurface(`${full}title:\nopen:\n`, EMPTY_ENV).findings.map(brief),
+			parseSurface(`${full}title:\nopen: {}\n`, EMPTY_ENV).findings.map(brief),
 		).toEqual(["hole:hole@title"]);
 		const num = parseSurface(
 			`${full}number:\n  min:\n  unit: years\n`,
@@ -152,8 +152,40 @@ describe("parseSurface", () => {
 		).toEqual({ code: "a", label: "Yes" });
 		// An empty optional's hint says the line may simply go.
 		expect(
-			parseSurface(`${full}source:\nopen:\n`, EMPTY_ENV).findings[0]?.hint,
+			parseSurface(`${full}source:\nopen: {}\n`, EMPTY_ENV).findings[0]?.hint,
 		).toMatch(/remove the line/);
+	});
+
+	it("a domain written empty is a hole at its key, and no domain", () => {
+		const full = "name: q\ntext: Q?\nintent: Prevalence of a thing\n";
+		for (const [key, hint] of [
+			["number", /number: \{\}/],
+			["open", /open: \{\}/],
+			["responses", /1: Yes/],
+		] as const) {
+			const p = parseSurface(`${full}${key}:\n`, EMPTY_ENV);
+			expect(p.findings.map(brief)).toEqual([`hole:hole@${key}`]);
+			expect(p.findings[0]?.message).toBe(`\`${key}\` is empty.`);
+			expect(p.findings[0]?.hint).toMatch(hint);
+			expect(p.draft.domain).toBeUndefined();
+		}
+		// An empty `responses:` still reads its `select`.
+		expect(
+			parseSurface(`${full}responses:\nselect:\n`, EMPTY_ENV).findings.map(
+				brief,
+			),
+		).toEqual(["hole:hole@responses", "hole:hole@select"]);
+	});
+
+	it("an option's label written empty is a hole at the label, absent at the option", () => {
+		const full =
+			"name: q\ntext: Q?\nintent: Prevalence of a thing\nselect: many\n";
+		expect(
+			parseSurface(
+				`${full}responses:\n  a:\n    label:\n  b:\n    title: B\n`,
+				EMPTY_ENV,
+			).findings.map(brief),
+		).toEqual(["hole:hole@responses.a.label", "hole:hole@responses.b"]);
 	});
 
 	it("reads number and open domains, and select many", () => {
@@ -171,7 +203,7 @@ describe("parseSurface", () => {
 			kind: "open",
 			maxLength: 200,
 		});
-		expect(parseSurface("open:\n", EMPTY_ENV).draft.domain).toEqual({
+		expect(parseSurface("open: {}\n", EMPTY_ENV).draft.domain).toEqual({
 			kind: "open",
 		});
 		expect(

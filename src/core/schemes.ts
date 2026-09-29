@@ -14,8 +14,13 @@ import {
 	parseTextEntry,
 	type TextEntry,
 } from "./surface/env.js";
-import { type Mark, schemeMarksOf } from "./surface/marks.js";
-import { indexRanges } from "./surface/parse.js";
+import {
+	holeChips,
+	labelMarksOf,
+	type Mark,
+	ordered,
+} from "./surface/marks.js";
+import { indexDocument } from "./surface/parse.js";
 import { parseScale, type Scale } from "./surface/scales.js";
 
 /** `missing` is a scheme file too, but one list for the bank, never named by a question. */
@@ -83,16 +88,19 @@ export function evaluateScheme(
 	env: Env,
 ): SchemeEvaluation {
 	const doc = parseDocument(source, { prettyErrors: false });
-	const ranges = indexRanges(doc, source.length);
+	const { ranges, empties } = indexDocument(doc, source.length);
 	if (kind === "universe" || kind === "instruction") {
-		const marks = schemeMarksOf("text", doc, source.length);
 		const { entry, findings } = parseTextEntry(source);
+		const marks = holeChips(findings, empties);
 		return entry === undefined
 			? { findings, ranges, marks }
 			: { findings, ranges, marks, value: { kind: "text", text: entry.text } };
 	}
-	const marks = schemeMarksOf("labels", doc, source.length);
 	const { scale, findings } = parseScale(source);
+	const marks = ordered([
+		...labelMarksOf(doc, source.length),
+		...holeChips(findings, empties),
+	]);
 	if (scale === undefined) return { findings, ranges, marks };
 	return {
 		// The missing list is compared with itself only if it were a scale; it is not.

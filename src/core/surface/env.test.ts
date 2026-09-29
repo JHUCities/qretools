@@ -14,7 +14,7 @@ const env: Env = {
 			?.codes ?? [],
 };
 const base =
-	"name: q\ntext: Do you rent?\nintent: Prevalence of renting among adults\nopen:\n";
+	"name: q\ntext: Do you rent?\nintent: Prevalence of renting among adults\nopen: {}\n";
 
 describe("parseTextEntry", () => {
 	it("reads a text file, and reports what is wrong with one", () => {

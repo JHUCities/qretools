@@ -153,7 +153,7 @@ describe("editing", () => {
 	it("a click names a place; update resolves it against the open question's text", () => {
 		const [m] = update(fresh(), {
 			kind: "questionCreated",
-			text: "name: q\ntext:\nintent: i\nopen:\n",
+			text: "name: q\ntext:\nintent: i\nopen: {}\n",
 		});
 		const [, cmds] = update(m, {
 			kind: "locationClicked",
@@ -162,7 +162,10 @@ describe("editing", () => {
 		const cmd = cmds[0];
 		expect(
 			cmd?.kind === "revealRange" &&
-				"name: q\ntext:\nintent: i\nopen:\n".slice(cmd.range[0], cmd.range[1]),
+				"name: q\ntext:\nintent: i\nopen: {}\n".slice(
+					cmd.range[0],
+					cmd.range[1],
+				),
 		).toBe("text:");
 	});
 });
@@ -171,7 +174,7 @@ describe("saving", () => {
 	const draftModel = () =>
 		update(fresh(), {
 			kind: "questionCreated",
-			text: "name: nhd_new\ntext: Q?\nintent: Prevalence of a thing\nopen:\n",
+			text: "name: nhd_new\ntext: Q?\nintent: Prevalence of a thing\nopen: {}\n",
 		})[0];
 
 	it("does nothing without write access", () => {

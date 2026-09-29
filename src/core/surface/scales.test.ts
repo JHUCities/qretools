@@ -41,6 +41,13 @@ describe("parseScale", () => {
 		]);
 		expect(() => parseScale("labels: [")).not.toThrow();
 	});
+
+	it("`labels:` written empty is a hole, not a wrong type", () => {
+		const { scale, findings } = parseScale("labels:\n");
+		expect(scale).toBeUndefined();
+		expect(findings.map(brief)).toEqual(["hole:hole@labels"]);
+		expect(findings[0]?.message).toBe("`labels` is empty.");
+	});
 });
 
 describe("named scales in a question", () => {
