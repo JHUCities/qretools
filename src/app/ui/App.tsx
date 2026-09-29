@@ -287,7 +287,9 @@ export function App() {
 				{model.session.kind === "connecting" ? (
 					// Whether there will be a bank is not known yet: neither the sign-in
 					// form nor the workspace's shape; the top bar says what is happening.
-					<main className="content" aria-busy="true" />
+					// Not `.content`: that spans every row of the workspace's grid, and
+					// here, in the shell's own grid, it pushed the header to the bottom.
+					<main className="connecting" aria-busy="true" />
 				) : !signedIn ? (
 					<SignIn model={model} />
 				) : (
