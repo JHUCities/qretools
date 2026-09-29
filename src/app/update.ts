@@ -1236,7 +1236,7 @@ export function writeBlocked(model: Model): string | undefined {
 	if (model.session.kind !== "connected") return "Sign in to save";
 	if (model.session.access.kind === "readOnly") return "Read access only";
 	if (model.session.access.kind === "notInstalled")
-		return "The app can't write to this repository, so nothing can be saved";
+		return "The app can't save to this bank";
 	if (model.loading.kind === "failed") return "The bank didn't load";
 	if (model.loading.kind !== "loaded") return "Loading the bank…";
 	// One commit at a time: two in flight naming the same file would make the second

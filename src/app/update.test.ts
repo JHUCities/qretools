@@ -1434,8 +1434,8 @@ describe("the app not installed on the repository", () => {
 			},
 		);
 		expect(after.session).toMatchObject({ access: { kind: "notInstalled" } });
-		expect(writeBlocked(after)).toMatch(/can't write/);
-		expect(sessionStatus(after)).toMatch(/can't write/);
+		expect(writeBlocked(after)).toMatch(/can't save to this bank/);
+		expect(sessionStatus(after)).toMatch(/can't save to this bank/);
 		expect(update(after, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
 	});
 });
