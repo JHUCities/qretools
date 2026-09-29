@@ -1,12 +1,12 @@
 /**
  * The cursor inspector, after Hazel's: what is at the caret, in the document's own
- * terms. A field says what it is for and what is wrong there; a reference field also
- * lists the names in scope; a name written there says what it names, or that nothing
- * by that name exists. Pure: the shell adds what needs the bank (who uses a name,
+ * terms. A field says what it is for; a reference field also lists the names in scope; a name written there says what it names, or that nothing
+ * by that name exists. What is wrong is the Findings panel's and the editor's to say, not
+ * this. Pure: the shell adds what needs the bank (who uses a name,
  * which file to open) around it.
  */
 import type { Evaluation } from "./evaluate.js";
-import { type Finding, locate, pathAt } from "./findings.js";
+import { pathAt } from "./findings.js";
 import {
 	type Env,
 	inScope,
@@ -27,8 +27,6 @@ export interface Inspection {
 	/** Its field, e.g. `responses`; absent at the document level (a blank line, the end). */
 	readonly key?: SurfaceKey;
 	readonly description: string;
-	/** Findings underlined at the caret: the ones the editor marks there. */
-	readonly findings: readonly Finding[];
 	/** For a field that may name a shared element: every name in scope. */
 	readonly names?: readonly string[];
 	/** The name written at the caret; `value` absent means nothing has that name. */
@@ -47,9 +45,9 @@ const SCHEME_OF: Partial<Record<SurfaceKey, NamedScheme>> = {
 
 /**
  * What is at `offset` in the evaluated text; undefined only inside a key the surface
- * does not know. Between top-level fields and at the end is the document itself, where
- * the holes of absent required fields are placed: where the author will type them; on an
- * indented line under a block map (a new code under `responses`), it is that map.
+ * does not know. Between top-level fields and at the end is the document itself (the
+ * question's description); on an indented line under a block map (a new code under
+ * `responses`), it is that map.
  * Clamped.
  * `source` is the text `ev` was evaluated from.
  */
@@ -63,17 +61,10 @@ export function inspect(
 	const at = settled(source, Math.min(Math.max(0, offset), end));
 	const path = pathAt(ev.ranges, at);
 	const top = path.split(".")[0] ?? "";
-	// The findings the editor underlines at the caret. An absent field's hole is placed
-	// at the end of the text, so it shows exactly where the author will type the field.
-	const findings = ev.findings.filter((f) => {
-		const [from, to] = locate(f, ev.ranges);
-		return from <= at && at <= to;
-	});
 	if (path === "")
 		return {
 			path,
 			description: QuestionSchema.description ?? "",
-			findings,
 		};
 	if (!(KNOWN_KEYS as readonly string[]).includes(top)) return undefined;
 	const key = top as SurfaceKey;
@@ -87,7 +78,6 @@ export function inspect(
 		path,
 		key,
 		description: describe(key),
-		findings,
 		...(scheme !== undefined && {
 			names: Object.keys(inScope(env, scheme)).sort(),
 		}),
