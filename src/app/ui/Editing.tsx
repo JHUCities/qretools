@@ -381,9 +381,11 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 }
 
 /**
- * The findings list as it stood at the last pause (`useSettled`). Reaching for it (a
- * pointer down, or focus arriving) catches it up first, so a click or a key acts on a
- * finding that is still there: one that went away is gone before the click lands.
+ * The findings list as it stood at the last pause (`useSettled`). Reaching for it
+ * catches it up before any press: the pointer entering the list, or keyboard focus
+ * arriving. Never on the press itself: an item moving between pointer down and click
+ * would send the click to another finding. (A slightly stale click is harmless: its
+ * target is a path, resolved against the text as it is now.)
  * Nothing here is a live region: the list changes silently, the count beside it says
  * how many there are.
  */
@@ -397,7 +399,14 @@ function SettledFindings({
 	onTarget: (target: Target) => void;
 }) {
 	return (
-		<div onPointerDownCapture={flush} onFocusCapture={flush}>
+		<div
+			onPointerEnter={flush}
+			onFocusCapture={(e) => {
+				// Keyboard focus only: a pointer press also focuses, mid-click.
+				if (e.target instanceof Element && e.target.matches(":focus-visible"))
+					flush();
+			}}
+		>
 			<Findings findings={findings} onTarget={onTarget} />
 		</div>
 	);
