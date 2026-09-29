@@ -21,6 +21,7 @@ import {
 	type Scheme,
 	type TextEntry,
 } from "./env.js";
+import { type Mark, marksOf } from "./marks.js";
 import {
 	clampRange,
 	EMPTY_HINT,
@@ -46,6 +47,7 @@ import {
 	QuestionSchema,
 	REQUIRED_KEYS,
 	type SurfaceKey,
+	TEXT_KEYS,
 } from "./schema.js";
 
 export interface Parsed {
@@ -55,19 +57,10 @@ export interface Parsed {
 	readonly ranges: Readonly<Record<string, Range>>;
 	/** Every scheme name written, resolved or not. */
 	readonly mentions: readonly Mention[];
+	/** What the editor colours by meaning: resolved names, codes, `legacy`, holes. */
+	readonly marks: readonly Mark[];
 }
 
-const TEXT_KEYS = [
-	"name",
-	"title",
-	"text",
-	"intent",
-	"concept",
-	"universe",
-	"instruction",
-	"source",
-	"note",
-] as const;
 type TextKey = (typeof TEXT_KEYS)[number];
 
 const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older format go under \`legacy\`.`;
@@ -90,6 +83,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			findings: [...syntax, ...js.findings, notAMap],
 			ranges,
 			mentions: [],
+			marks: [],
 		};
 	}
 	const data = js.value;
@@ -158,6 +152,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		],
 		ranges,
 		mentions,
+		marks: marksOf(doc, mentions, env, text.length),
 	};
 }
 

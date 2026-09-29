@@ -158,6 +158,18 @@ export const KNOWN_KEYS = Object.keys(
 ) as readonly SurfaceKey[];
 export const REQUIRED_KEYS = ["name", "text", "intent"] as const;
 export const DOMAIN_KEYS = ["responses", "number", "open"] as const;
+/** Fields whose value is one line of text (or a name); written empty, each is a hole. */
+export const TEXT_KEYS = [
+	"name",
+	"title",
+	"text",
+	"intent",
+	"concept",
+	"universe",
+	"instruction",
+	"source",
+	"note",
+] as const;
 
 /** One line of a scale, for completion info: `1 Strongly agree · 2 Agree`. */
 export const scaleSummary = (scale: Scale): string =>
