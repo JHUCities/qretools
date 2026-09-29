@@ -4,6 +4,7 @@ import {
 	AlertIcon,
 	CheckCircleIcon,
 	ChevronRightIcon,
+	FileIcon,
 	InfoIcon,
 	IssueDraftIcon,
 	XCircleIcon,
@@ -282,12 +283,21 @@ export const findingKeys = (
 	});
 };
 
+/** Another file a finding is about, as a link beside it (a draft has no address, so none). */
+export interface Related {
+	readonly href: string;
+	readonly label: string;
+}
+
 export function Findings({
 	findings,
 	onTarget,
+	related,
 }: {
 	findings: readonly Finding[];
 	onTarget?: OnTarget;
+	/** The other file a bank-level finding names, opened by an ordinary link. */
+	related?: (f: Finding) => Related | undefined;
 }) {
 	if (findings.length === 0)
 		return <p className="quiet">Nothing to fill in, fix, or reconsider.</p>;
@@ -306,6 +316,7 @@ export function Findings({
 		<ActionList aria-label="Findings" variant="full" className="findings-list">
 			{findings.map((f, i) => {
 				const { Icon, className } = SEVERITY[f.severity];
+				const other = related?.(f);
 				return (
 					<ActionList.Item key={keys[i]} onSelect={() => onTarget(f)}>
 						<ActionList.LeadingVisual>
@@ -322,6 +333,15 @@ export function Findings({
 									<span className="detail">{f.detail}</span>
 								)}
 							</ActionList.Description>
+						)}
+						{/* Beside the item, never inside it: the item itself goes to this file's place. */}
+						{other !== undefined && (
+							<ActionList.TrailingAction
+								as="a"
+								href={other.href}
+								label={other.label}
+								icon={FileIcon}
+							/>
 						)}
 					</ActionList.Item>
 				);

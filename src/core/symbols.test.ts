@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { Finding } from "./findings.js";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
-import { bankFindings, indexOf, symbolsOf, usedBy } from "./symbols.js";
+import {
+	bankFindings,
+	indexOf,
+	othersOf,
+	schemeSymbols,
+	symbolsOf,
+	usedBy,
+} from "./symbols.js";
 
 const symbols = (text: string) => symbolsOf(parseSurface(text, EMPTY_ENV));
 
@@ -47,5 +55,138 @@ describe("the bank index", () => {
 			/also defined by b/,
 		);
 		expect(bankFindings("a", bank.a, index, label)).toEqual([]);
+	});
+});
+
+describe("duplication across the bank", () => {
+	const label = (k: string) => k;
+	const indexed = (files: Record<string, ReturnType<typeof symbols>>) =>
+		indexOf(Object.entries(files).map(([key, s]) => ({ key, symbols: s })));
+	const codes = (
+		files: Record<string, ReturnType<typeof symbols>>,
+		k: string,
+	) =>
+		bankFindings(
+			k,
+			files[k] as ReturnType<typeof symbols>,
+			indexed(files),
+			label,
+		).map((f) => `${f.severity}:${f.code}@${f.path}`);
+
+	it("finds the same question text, as written or apart from case and punctuation, on each file", () => {
+		const files = {
+			a: symbols("name: a\ntext: Are you registered to vote?\n"),
+			b: symbols("name: b\ntext: are you registered to vote\n"),
+			c: symbols("name: c\ntext: Something else entirely?\n"),
+		};
+		const index = indexed(files);
+		const [f] = bankFindings("a", files.a, index, label);
+		expect(f).toMatchObject({
+			code: "duplicate-text",
+			severity: "warning",
+			path: "text",
+			others: ["b"],
+		});
+		expect(f?.message).toBe(
+			"The same question text is in `b` (apart from case or punctuation).",
+		);
+		expect(codes(files, "b")).toEqual(["warning:duplicate-text@text"]);
+		expect(codes(files, "c")).toEqual([]);
+	});
+
+	it("says nothing about a pair either side marks as a variant, and flags a name that isn't a question", () => {
+		const files = {
+			a: symbols(
+				"name: a\ntext: How much more should we spend?\nvariant_of:\n  b: split ballot, less\n",
+			),
+			b: symbols("name: b\ntext: How much more should we spend?\n"),
+			c: symbols("name: c\ntext: Other\nvariant_of:\n  nobody: why\n"),
+		};
+		expect(codes(files, "a")).toEqual([]);
+		expect(codes(files, "b")).toEqual([]);
+		expect(codes(files, "c")).toEqual([
+			"warning:unknown-variant@variant_of.nobody",
+		]);
+	});
+
+	it("compares response lists by labels, codes ignored, and like with like", () => {
+		const files = {
+			a: symbols("name: a\nresponses:\n  1: Often\n  2: Never\n"),
+			b: symbols("name: b\nresponses:\n  x: often\n  y: never\n"),
+			c: symbols("name: c\nresponses: often2\n"),
+		};
+		expect(codes(files, "a")).toEqual(["warning:duplicate-list@responses"]);
+		expect(codes(files, "c")).toEqual([]);
+	});
+
+	it("finds two shared scales with the same labels", () => {
+		const files = {
+			yesno01: schemeSymbols("scale", {
+				kind: "labels",
+				codes: [
+					{ code: "0", label: "No" },
+					{ code: "1", label: "Yes" },
+				],
+			}),
+			yes_no_01: schemeSymbols("scale", {
+				kind: "labels",
+				codes: [
+					{ code: "0", label: "No" },
+					{ code: "1", label: "Yes" },
+				],
+			}),
+		};
+		const index = indexed(files);
+		expect(
+			bankFindings("yesno01", files.yesno01, index, label)[0]?.message,
+		).toBe("The same labels are in the shared scale `yes_no_01`.");
+	});
+
+	it("flags a unit spelled differently, never the same unit written twice", () => {
+		const files = {
+			a: symbols("name: a\nnumber:\n  unit: days\n"),
+			b: symbols("name: b\nnumber:\n  unit: Days\n"),
+			c: symbols("name: c\nnumber:\n  unit: days\n"),
+		};
+		expect(codes(files, "a")).toEqual(["warning:unit-spelling@number.unit"]);
+		expect(bankFindings("b", files.b, indexed(files), label)[0]?.message).toBe(
+			"`Days` is written `days` in `a`, `c`.",
+		);
+	});
+
+	it("notes similar wording as info, quoting the other", () => {
+		const files = {
+			a: symbols(
+				"name: a\ntext: How strongly do you agree that Black residents are treated fairly by police officers in your own neighborhood these days?\n",
+			),
+			b: symbols(
+				"name: b\ntext: How strongly do you agree that White residents are treated fairly by police officers in your own neighborhood these days?\n",
+			),
+		};
+		const [f] = bankFindings("a", files.a, indexed(files), label);
+		expect(f).toMatchObject({
+			code: "similar-text",
+			severity: "info",
+			others: ["b"],
+		});
+		expect(f?.message).toMatch(/^Reads like `b`: “How strongly/);
+	});
+});
+
+describe("the other files a finding names", () => {
+	it("are read from the finding, so an older copy (a list settling after typing) still has them", () => {
+		const files = {
+			a: symbols("name: a\ntext: Same?\n"),
+			b: symbols("name: b\ntext: Same?\n"),
+		};
+		const index = indexOf(
+			Object.entries(files).map(([key, s]) => ({ key, symbols: s })),
+		);
+		const [before] = bankFindings("a", files.a, index, (k) => k);
+		const settled = { ...before } as Finding;
+		expect(othersOf<string>(settled)).toEqual(["b"]);
+		expect(
+			othersOf({ code: "hole", severity: "hole", path: "", message: "" }),
+		).toEqual([]);
 	});
 });

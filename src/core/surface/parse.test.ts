@@ -251,3 +251,30 @@ describe("parseSurface", () => {
 		expect(decimals?.message).toBe("`decimals` must be at least 0.");
 	});
 });
+
+describe("variant_of", () => {
+	const at = (text: string) => parseSurface(text, EMPTY_ENV);
+
+	it("reads each question named, with why the two differ", () => {
+		const p = at("name: a\nvariant_of:\n  b: split ballot, lower range\n");
+		expect(p.variants).toEqual([
+			{ name: "b", path: "variant_of.b", why: "split ballot, lower range" },
+		]);
+		expect(p.findings.filter((f) => f.path.startsWith("variant_of"))).toEqual(
+			[],
+		);
+	});
+
+	it("makes an empty reason, or an empty field, a hole; a bad name an error", () => {
+		const codes = (text: string) =>
+			at(text)
+				.findings.filter((f) => f.path.startsWith("variant_of"))
+				.map((f) => `${f.severity}@${f.path}`);
+		expect(codes("variant_of:\n  b:\n")).toEqual(["hole@variant_of.b"]);
+		expect(codes("variant_of:\n")).toEqual(["hole@variant_of"]);
+		expect(codes("variant_of:\n  Not A Name: why\n")).toEqual([
+			"error@variant_of.Not A Name",
+		]);
+		expect(codes("variant_of: b\n")).toEqual(["error@variant_of"]);
+	});
+});

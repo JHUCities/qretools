@@ -9,6 +9,7 @@
  * without one), "text must end in ?" (stems like "Please indicate..." are fine).
  */
 import type { Finding, LintCode } from "./findings.js";
+import { fold, labelsKey } from "./fold.js";
 import { type Code, type Draft, optionVariable } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
 
@@ -191,9 +192,6 @@ const optionVariables: Rule = ({ name, domain }) => {
 	});
 };
 
-const pairs = (codes: readonly { code: string; label: string }[]): string =>
-	JSON.stringify(codes.map((c) => [c.code, normalise(c.label)]));
-
 /** An inline list that duplicates a shared scale: the extract-to-shared refactoring, offered, not forced. */
 const matchesScale: Rule = ({ domain }, env) => {
 	if (
@@ -202,11 +200,19 @@ const matchesScale: Rule = ({ domain }, env) => {
 		domain.codes.length === 0
 	)
 		return [];
-	const key = pairs(domain.codes);
-	const matches = Object.entries(env.scales)
-		.filter(([, s]) => pairs(s.codes) === key)
-		.map(([n]) => n);
+	// The same definition of "the same list" as the bank index: labels folded, codes aside.
+	const key = labelsKey(domain.codes);
+	const matching = Object.entries(env.scales).filter(
+		([, s]) => labelsKey(s.codes) === key,
+	);
+	const matches = matching.map(([n]) => n);
 	if (matches.length === 0) return [];
+	const codes = (cs: readonly Code[]) => cs.map((c) => c.code).join(" ");
+	const apart = matching.every(
+		([, s]) => codes(s.codes) === codes(domain.codes),
+	)
+		? ""
+		: " (apart from codes)";
 	const which =
 		matches.length === 1
 			? `the shared scale \`${matches[0]}\``
@@ -214,13 +220,39 @@ const matchesScale: Rule = ({ domain }, env) => {
 	return [
 		advise(
 			"matches-scale",
-			"info",
+			"warning",
 			"responses",
-			`These responses match ${which}.`,
+			`These responses match ${which}${apart}.`,
 			`Write \`responses: ${matches[0]}\` to share it, so a change to the scale reaches every question that uses it.`,
 		),
 	];
 };
+
+/**
+ * A universe or instruction written out that a shared one already says: a duplicate
+ * of a shared entry, so "use the name". Compared folded (case and punctuation ignored).
+ */
+const matchesShared =
+	(key: "universe" | "instruction"): Rule =>
+	(draft, env) => {
+		const value = draft[key];
+		if (value?.kind !== "text") return [];
+		const entries = key === "universe" ? env.universes : env.instructions;
+		const folded = fold(value.text);
+		const matches = Object.entries(entries)
+			.filter(([, e]) => fold(e.text) === folded)
+			.map(([n]) => n);
+		if (matches.length === 0) return [];
+		return [
+			advise(
+				key === "universe" ? "matches-universe" : "matches-instruction",
+				"warning",
+				key,
+				`This is the shared ${key} ${matches.map((m) => `\`${m}\``).join(", ")}.`,
+				`Write \`${key}: ${matches[0]}\` to share it, so a change reaches every question that uses it.`,
+			),
+		];
+	};
 
 /** A response code that the bank reserves for missing data would be unreadable in the dataset. */
 const missingCode: Rule = ({ domain }, env) =>
@@ -261,6 +293,8 @@ const RULES: readonly Rule[] = [
 	legacyFields,
 	optionVariables,
 	matchesScale,
+	matchesShared("universe"),
+	matchesShared("instruction"),
 	missingCode,
 ];
 

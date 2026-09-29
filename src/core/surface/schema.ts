@@ -139,6 +139,12 @@ export const QuestionSchema = z
 			.describe(
 				"Documentation not shown to the respondent: fills, randomization, history.",
 			),
+		variant_of: z
+			.record(z.string().regex(NAME_PATTERN, NAME_RULE_TEXT), z.string())
+			.optional()
+			.describe(
+				"Questions this one deliberately resembles, each with why they differ, e.g. dem_inclo: split ballot, lower range. Silences the duplicate finding for that pair.",
+			),
 		legacy: z
 			.record(z.string(), z.unknown())
 			.optional()

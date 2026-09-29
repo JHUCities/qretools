@@ -13,6 +13,7 @@ import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import {
 	type Finding,
 	inDocumentOrder,
+	type Range,
 	status,
 	type Target,
 } from "../../core/findings.js";
@@ -27,8 +28,15 @@ import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
 } from "../../core/surface/schema.js";
-import { bankFindings, type Index, usedBy } from "../../core/symbols.js";
+import {
+	bankFindings,
+	type Index,
+	othersOf,
+	type Symbols,
+	usedBy,
+} from "../../core/symbols.js";
 import { toDiagnostics } from "../diagnostics.js";
+import { formatLink } from "../link.js";
 import {
 	envOfRemote,
 	fileOf,
@@ -38,7 +46,7 @@ import {
 	type SchemeEntry,
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
-import { branchOwner, hrefOf, writeBlocked } from "../update.js";
+import { branchOwner, hrefOf, linkBranch, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
@@ -47,6 +55,7 @@ import {
 	Codebook,
 	Ddi,
 	Findings,
+	type Related,
 	Respondent,
 	StatusBadge,
 } from "./Previews.js";
@@ -113,7 +122,6 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const agency = useModel((m) => m.agency);
 	const blocked = useModel(writeBlocked);
 	const ddiSchema = useModel((m) => m.ddiSchema);
-	const questions = useModel((m) => m.local.questions);
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
 	const activity = useModel((m) => m.activity);
@@ -121,22 +129,13 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const { dispatch, onTarget, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, agency, env);
-	const findings = useMemo(() => {
-		// Another file's name, as a bank-level finding cites it.
-		const label = (id: Id): string => {
-			const other = questions[id];
-			if (!other) return UNNAMED;
-			return (
-				evaluations.get(other, agency, env).draft.name ??
-				other.base?.path ??
-				UNNAMED
-			);
-		};
-		return inDocumentOrder(
-			[...ev.findings, ...bankFindings(q.id, ev.symbols, index, label)],
-			ev.ranges,
-		);
-	}, [ev, index, q.id, questions, evaluations, agency, env]);
+	const { findings, related } = useBankFindings(
+		q.id,
+		ev.findings,
+		ev.symbols,
+		ev.ranges,
+		index,
+	);
 	const [listed, flush] = useSettled(findings, SETTLE_MS, q.id);
 	const diagnostics = useMemo(
 		() => toDiagnostics(findings, ev.ranges),
@@ -201,6 +200,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 									findings={listed}
 									flush={flush}
 									onTarget={onTarget}
+									related={related}
 								/>
 							) : pane === "respondent" ? (
 								<Respondent view={ev.respondent} onTarget={onTarget} />
@@ -228,11 +228,18 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const { dispatch, onTarget, on } = useActions(e.id);
 	const eStale = useStale(e);
 	const ev = evaluations.scheme(e, env);
-	const diagnostics = useMemo(
-		() => toDiagnostics(ev.findings, ev.ranges),
-		[ev],
+	const { findings, related } = useBankFindings(
+		e.id,
+		ev.findings,
+		ev.symbols,
+		ev.ranges,
+		index,
 	);
-	const [listed, flush] = useSettled(ev.findings, SETTLE_MS, e.id);
+	const diagnostics = useMemo(
+		() => toDiagnostics(findings, ev.ranges),
+		[findings, ev.ranges],
+	);
+	const [listed, flush] = useSettled(findings, SETTLE_MS, e.id);
 	const users =
 		e.kind === "missing"
 			? undefined
@@ -288,7 +295,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						kind={e.kind}
 						readOnly={false}
 						badge={{
-							findings: <StatusBadge status={status(ev.findings)} />,
+							findings: <StatusBadge status={status(findings)} />,
 							usedBy: users !== undefined && (
 								<CounterLabel>{users.length}</CounterLabel>
 							),
@@ -299,6 +306,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									findings={listed}
 									flush={flush}
 									onTarget={onTarget}
+									related={related}
 								/>
 							) : pane === "value" ? (
 								<>
@@ -386,14 +394,80 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
  * Nothing here is a live region: the list changes silently, the count beside it says
  * how many there are.
  */
+/**
+ * A file's own findings with the bank's added: what another file repeats or also
+ * defines, each linked to that file. Names are labels only; a draft has no link.
+ */
+function useBankFindings(
+	id: Id,
+	own: readonly Finding[],
+	symbols: Symbols,
+	ranges: Readonly<Record<string, Range>>,
+	index: Index<Id>,
+): {
+	readonly findings: readonly Finding[];
+	readonly related: (f: Finding) => Related | undefined;
+} {
+	const { evaluations } = useApp();
+	const agency = useModel((m) => m.agency);
+	const local = useModel((m) => m.local);
+	const owner = useModel((m) => m.settings.owner);
+	const repo = useModel((m) => m.settings.repo);
+	const branch = useModel(linkBranch);
+	const env = useEnv();
+	return useMemo(() => {
+		// Another file's name, as a bank-level finding cites it.
+		const label = (other: Id): string => {
+			const q = local.questions[other];
+			if (q)
+				return (
+					evaluations.get(q, agency, env).draft.name ?? q.base?.path ?? UNNAMED
+				);
+			return local.schemes[other]?.name ?? UNNAMED;
+		};
+		const bank = bankFindings(id, symbols, index, label);
+		// From the finding itself: the list shows settled, older objects while typing.
+		const related = (f: Finding): Related | undefined => {
+			const other = othersOf<Id>(f)[0];
+			if (other === undefined || branch === undefined) return undefined;
+			const path = (local.questions[other] ?? local.schemes[other])?.base?.path;
+			return path === undefined
+				? undefined
+				: {
+						href: formatLink({ repo: `${owner}/${repo}`, branch, file: path }),
+						label: `Open ${label(other)}`,
+					};
+		};
+		return {
+			findings: inDocumentOrder([...own, ...bank], ranges),
+			related,
+		};
+	}, [
+		id,
+		own,
+		symbols,
+		ranges,
+		index,
+		local,
+		evaluations,
+		agency,
+		env,
+		owner,
+		repo,
+		branch,
+	]);
+}
+
 function SettledFindings({
 	findings,
 	flush,
 	onTarget,
+	related,
 }: {
 	findings: readonly Finding[];
 	flush: () => void;
 	onTarget: (target: Target) => void;
+	related?: (f: Finding) => Related | undefined;
 }) {
 	return (
 		<div
@@ -404,7 +478,11 @@ function SettledFindings({
 					flush();
 			}}
 		>
-			<Findings findings={findings} onTarget={onTarget} />
+			<Findings
+				findings={findings}
+				onTarget={onTarget}
+				{...(related !== undefined && { related })}
+			/>
 		</div>
 	);
 }
