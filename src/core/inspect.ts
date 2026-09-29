@@ -47,8 +47,10 @@ const SCHEME_OF: Partial<Record<SurfaceKey, NamedScheme>> = {
 
 /**
  * What is at `offset` in the evaluated text; undefined only inside a key the surface
- * does not know. Between fields and at the end is the document itself, where the holes
- * of absent required fields are placed: where the author will type them. Clamped.
+ * does not know. Between top-level fields and at the end is the document itself, where
+ * the holes of absent required fields are placed: where the author will type them; on an
+ * indented line under a block map (a new code under `responses`), it is that map.
+ * Clamped.
  * `source` is the text `ev` was evaluated from.
  */
 export function inspect(
