@@ -36,7 +36,8 @@ export type PrintKind =
 	| "unit"
 	| "scale"
 	| "universe-file"
-	| "instruction-file";
+	| "instruction-file"
+	| "concept-file";
 
 /** Content a file writes, as written (`raw`) and folded (`key`), at a path in it. */
 export interface Fingerprint {
@@ -127,13 +128,15 @@ export function schemeSymbols(
 			? value.codes.length > 0
 				? [listPrint("scale", "labels", value.codes)]
 				: []
-			: [
-					print(
-						kind === "universe" ? "universe-file" : "instruction-file",
-						"text",
-						value.text,
-					),
-				];
+			: value.kind === "concept"
+				? [print("concept-file", "label", value.concept.label)]
+				: [
+						print(
+							kind === "universe" ? "universe-file" : "instruction-file",
+							"text",
+							value.text,
+						),
+					];
 	return { ...none, fingerprints: fingerprints.filter((f) => f.key !== "") };
 }
 
@@ -303,6 +306,12 @@ const SAID: Readonly<
 		where: "is the shared instruction",
 		hint: "Keep one and have questions name it.",
 	},
+	"concept-file": {
+		code: "duplicate-concept",
+		what: "The same label",
+		where: "is the shared concept",
+		hint: "One concept, one label: keep one and have questions name it.",
+	},
 };
 
 /**
@@ -323,6 +332,7 @@ function towardMajority<K>(
 	);
 	if (best === undefined || best[0] === mine.raw) return undefined;
 	return {
+		kind: "edit",
 		label: fixLabel(best[0]),
 		edits: [{ path: mine.path, value: best[0] }],
 	};

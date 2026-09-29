@@ -14,9 +14,9 @@ const lintOf = (source: string) =>
 	);
 
 describe("lint", () => {
-	it("has nothing to say about the examples", () => {
-		expect(lintOf(nhdSat)).toEqual([]);
-		expect(lintOf(nhdNyrs)).toEqual([]);
+	it("has nothing to say about the examples but their concepts, written as prose rather than shared", () => {
+		expect(lintOf(nhdSat)).toEqual(["warning:concept-prose@concept"]);
+		expect(lintOf(nhdNyrs)).toEqual(["warning:concept-prose@concept"]);
 	});
 
 	const table: Array<[title: string, source: string, expected: string[]]> = [
@@ -212,6 +212,7 @@ describe("the fix a shared-entry match offers", () => {
 		expect(
 			fixOf("name: q\nresponses:\n  1: Often\n  2: Never\n", { often2: scale }),
 		).toEqual({
+			kind: "edit",
 			label: "Use `often2`",
 			edits: [{ path: "responses", value: "often2" }],
 		});
@@ -258,7 +259,9 @@ describe("applying a fix", () => {
 				(f) => f.code === code,
 			)?.fix;
 			expect(fix).toBeDefined();
-			source = applyEdits(source, fix?.edits ?? []) ?? source;
+			source =
+				(fix && "edits" in fix ? applyEdits(source, fix.edits) : undefined) ??
+				source;
 		}
 		expect(source).toBe(
 			"name: q\nuniverse: adults\nresponses: often2\nselect: one\n",
@@ -268,5 +271,43 @@ describe("applying a fix", () => {
 				f.code.startsWith("matches-"),
 			),
 		).toEqual([]);
+	});
+});
+
+describe("a concept written as prose", () => {
+	const env = {
+		...EMPTY_ENV,
+		concepts: { trust_gov: { label: "Trust in government" } },
+	};
+	const found = (text: string) =>
+		lint(parseSurface(text, env).draft, env).filter((f) =>
+			f.code.includes("concept"),
+		);
+
+	it("is advice to share it, with a fix that creates it from the words", () => {
+		expect(found("name: q\nconcept: Racial identification\n")).toMatchObject([
+			{
+				code: "concept-prose",
+				severity: "warning",
+				fix: {
+					label: "Make it a shared concept `racial_identification`",
+					create: {
+						scheme: "concept",
+						name: "racial_identification",
+						text: "Racial identification",
+						path: "concept",
+					},
+				},
+			},
+		]);
+	});
+
+	it("is pointed at the shared concept with that label, when there is one", () => {
+		expect(found("name: q\nconcept: trust in government.\n")).toMatchObject([
+			{
+				code: "matches-concept",
+				fix: { edits: [{ path: "concept", value: "trust_gov" }] },
+			},
+		]);
 	});
 });

@@ -14,12 +14,21 @@ import type { Dispatch, Naming } from "../model.js";
 import { inlineCode } from "./Previews.js";
 
 const EXAMPLES: Readonly<Record<NamedScheme, string>> = {
+	concept: "neighborhood_satisfaction",
 	scale: "satisfied5",
 	universe: "owners",
 	instruction: "select_one",
 };
 
+const PLACEHOLDER: Readonly<Record<NamedScheme, string>> = {
+	concept: "Neighborhood satisfaction",
+	scale: "",
+	universe: "Owners only",
+	instruction: "Select all that apply",
+};
+
 const FIELD: Readonly<Record<NamedScheme, string>> = {
+	concept: "concept",
 	scale: "responses",
 	universe: "universe",
 	instruction: "instruction",
@@ -108,22 +117,23 @@ export function SchemeNameDialog({
 					</FormControl>
 					{withText && (
 						<FormControl>
-							<FormControl.Label>Text</FormControl.Label>
+							<FormControl.Label>
+								{kind === "concept" ? "Label" : "Text"}
+							</FormControl.Label>
 							<Textarea
 								block
 								rows={2}
 								resize="vertical"
 								value={text}
-								placeholder={
-									kind === "universe" ? "Owners only" : "Select all that apply"
-								}
+								placeholder={PLACEHOLDER[kind]}
 								onChange={(e) =>
 									dispatch({ kind: "schemeTextChanged", text: e.target.value })
 								}
 							/>
 							<FormControl.Caption>
-								The wording, as respondents or interviewers read it. You can
-								also write it later.
+								{kind === "concept"
+									? "The concept as people say it. Add its definition in the file."
+									: "The wording, as respondents or interviewers read it. You can also write it later."}
 							</FormControl.Caption>
 						</FormControl>
 					)}

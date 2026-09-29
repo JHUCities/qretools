@@ -10,7 +10,7 @@
 import { type Document, isMap, isNode, isScalar, parseDocument } from "yaml";
 import type { ZodError } from "zod";
 import { compact } from "../compact.js";
-import { NAME_RULE_TEXT } from "../copy.js";
+import { NAME_RULE_TEXT, SCHEME_NAME } from "../copy.js";
 import type { Finding, Range } from "../findings.js";
 import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
 import type { Domain, Draft, Named } from "./draft.js";
@@ -19,7 +19,7 @@ import {
 	inScope,
 	listNames,
 	type Mention,
-	type TextEntry,
+	type SchemeEntries,
 } from "./env.js";
 import { holeChips, type Mark, marksOf, ordered } from "./marks.js";
 import {
@@ -122,16 +122,18 @@ export function parseSurface(text: string, env: Env): Parsed {
 	const {
 		universe: universeText,
 		instruction: instructionText,
+		concept: conceptText,
 		...plain
 	} = fields;
 	const universe = refOrProse("universe", universeText, env);
 	const instruction = refOrProse("instruction", instructionText, env);
+	const concept = refOrProse("concept", conceptText, env);
 	const scale = scaleName(doc);
 	const mentions: Mention[] = [
 		...(scale === undefined
 			? []
 			: [{ scheme: "scale", name: scale, path: "responses" } as const]),
-		...(["universe", "instruction"] as const).flatMap((key) => {
+		...(["concept", "universe", "instruction"] as const).flatMap((key) => {
 			const name = nameIn(fields[key]);
 			return name === undefined ? [] : [{ scheme: key, name, path: key }];
 		}),
@@ -141,6 +143,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	const domain = readDomain(doc, data, ranges, env);
 	const draft: Draft = compact({
 		...plain,
+		concept: concept.value,
 		universe: universe.value,
 		instruction: instruction.value,
 		legacy: legacy.value,
@@ -152,6 +155,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		...js.findings,
 		...unknown,
 		...fieldFindings,
+		...concept.findings,
 		...universe.findings,
 		...instruction.findings,
 		...legacy.findings,
@@ -275,32 +279,37 @@ function readLegacy(value: unknown): Read<readonly string[]> {
 }
 
 /**
- * Syntax decides: a bare identifier is a name in a scheme, anything else is prose.
- * A name that resolves is a reference; one that does not is a hole, and the hint
- * says what exists and that a sentence is also fine.
+ * A field that names a shared entry, or says it in words: a bare identifier is a name,
+ * which must resolve (else a hole, offering to create it); anything else is prose. A
+ * concept is always meant to be shared, so its prose is lint's advice, not the parse's.
  */
-function refOrProse(
-	key: "universe" | "instruction",
+function refOrProse<K extends "universe" | "instruction" | "concept">(
+	key: K,
 	text: string | undefined,
 	env: Env,
-): Read<Named<TextEntry>> {
+): Read<Named<SchemeEntries[K]>> {
 	if (text === undefined) return fail();
 	const name = nameIn(text);
 	if (name === undefined) return ok({ kind: "text", text });
 	const scheme = inScope(env, key);
 	const value = scheme[name];
 	if (value === undefined)
-		return fail(
-			hole(
+		return fail({
+			...hole(
 				key,
 				`No ${key} named \`${name}\`.`,
-				listNames(key, Object.keys(scheme), true),
+				listNames(key, Object.keys(scheme), key !== "concept"),
 			),
-		);
+			fix: {
+				kind: "create",
+				label: `New ${SCHEME_NAME[key]} \`${name}\``,
+				create: { scheme: key, name, text: "", path: key },
+			},
+		});
 	return ok({ kind: "ref", name, value });
 }
 
-/** The one rule for universe and instruction: a bare identifier is a name. */
+/** The one rule for concept, universe and instruction: a bare identifier is a name. */
 const nameIn = (text: string | undefined): string | undefined =>
 	text !== undefined && NAME_PATTERN.test(text) ? text : undefined;
 
@@ -410,7 +419,14 @@ function readScaleName(
 			names.length === 0
 				? "No shared scales are loaded; write the options inline."
 				: listNames("scale", names, false);
-		return fail(hole("responses", `No scale named \`${name}\`.`, hint));
+		return fail({
+			...hole("responses", `No scale named \`${name}\`.`, hint),
+			fix: {
+				kind: "create",
+				label: `New ${SCHEME_NAME.scale} \`${name}\``,
+				create: { scheme: "scale", name, text: "", path: "responses" },
+			},
+		});
 	}
 	return ok({ kind: "responses", codes: scale.codes, select, scale: name });
 }

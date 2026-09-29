@@ -386,6 +386,7 @@ export const TEMPLATES: ReadonlyArray<{
  * missing template shows the shape codes take (quoted, since `-8` is not a key YAML keeps as text).
  */
 export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
+	concept: "label:\n",
 	scale: "labels:\n  1:\n  2:\n",
 	universe: "text:\n",
 	instruction: "text:\n",

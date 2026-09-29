@@ -13,6 +13,7 @@ import type { Finding, Fix, LintCode } from "./findings.js";
 import { fold, labelsKey } from "./fold.js";
 import { type Code, type Draft, optionVariable } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
+import { nameFrom } from "./surface/schema.js";
 
 type Rule = (draft: Draft, env: Env) => readonly Finding[];
 
@@ -34,6 +35,7 @@ const advise = (
 
 /** Name a shared entry in place of what is written at `path`. */
 const nameFix = (path: string, name: string): Fix => ({
+	kind: "edit",
 	label: fixLabel(name),
 	edits: [{ path, value: name }],
 });
@@ -277,6 +279,52 @@ const matchesShared =
 		];
 	};
 
+/**
+ * A concept is shared by nature (DDI, ISO/IEC 11179, a concept library): one written
+ * as prose is advice. When a shared concept already has that label, name it; else make
+ * it one, the dialog prefilled with a name made from the words and the words as label.
+ */
+const conceptProse: Rule = ({ concept }, env) => {
+	if (concept?.kind !== "text") return [];
+	const folded = fold(concept.text);
+	const matches = Object.entries(env.concepts)
+		.filter(([, c]) => fold(c.label) === folded)
+		.map(([n]) => n);
+	if (matches.length > 0)
+		return [
+			advise(
+				"matches-concept",
+				"warning",
+				"concept",
+				`This is the shared concept ${matches.map((m) => `\`${m}\``).join(", ")}.`,
+				`Write \`concept: ${matches[0]}\`, so questions measuring it are found together.`,
+				matches.length === 1 && matches[0] !== undefined
+					? nameFix("concept", matches[0])
+					: undefined,
+			),
+		];
+	const name = nameFrom(concept.text, "concept");
+	return [
+		advise(
+			"concept-prose",
+			"warning",
+			"concept",
+			"Concepts are shared: this one is written only here.",
+			"Make it a shared concept, so every question measuring it names the same one.",
+			{
+				kind: "create",
+				label: `Make it a shared concept \`${name}\``,
+				create: {
+					scheme: "concept",
+					name,
+					text: concept.text.trim(),
+					path: "concept",
+				},
+			},
+		),
+	];
+};
+
 /** A response code that the bank reserves for missing data would be unreadable in the dataset. */
 const missingCode: Rule = ({ domain }, env) =>
 	domain?.kind !== "responses" || domain.scale !== undefined
@@ -318,6 +366,7 @@ const RULES: readonly Rule[] = [
 	matchesScale,
 	matchesShared("universe"),
 	matchesShared("instruction"),
+	conceptProse,
 	missingCode,
 ];
 

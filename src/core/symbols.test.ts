@@ -208,6 +208,7 @@ describe("the unit-spelling fix", () => {
 			c: symbols("name: c\nnumber:\n  unit: Days\n"),
 		};
 		expect(run(files, "c")).toEqual({
+			kind: "edit",
 			label: "Use `days`",
 			edits: [{ path: "number.unit", value: "days" }],
 		});
@@ -221,5 +222,30 @@ describe("the unit-spelling fix", () => {
 		};
 		expect(run(files, "a")?.label).toBe("Use `days`");
 		expect(run(files, "b")).toBeUndefined();
+	});
+});
+
+describe("two concept files with the same label", () => {
+	it("report on each other", () => {
+		const files = {
+			trust: schemeSymbols("concept", {
+				kind: "concept",
+				concept: { label: "Trust in government" },
+			}),
+			gov_trust: schemeSymbols("concept", {
+				kind: "concept",
+				concept: { label: "trust in government." },
+			}),
+		};
+		const index = indexOf(
+			Object.entries(files).map(([key, s]) => ({ key, symbols: s })),
+		);
+		expect(
+			bankFindings("trust", files.trust, index, (k) => k)[0],
+		).toMatchObject({
+			code: "duplicate-concept",
+			path: "label",
+			others: ["gov_trust"],
+		});
 	});
 });

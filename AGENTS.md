@@ -1243,6 +1243,30 @@ shared file never saved (nothing on GitHub depends on its name); it rewrites eve
 question in this tab that names it (`renameEdits`, from the parser's mentions), which
 become unsaved changes. Renaming a saved file is a path move across branches: backlog.
 
+**Concepts are shared (owner, 2026-09-29).** Reverses step 8's "concepts stay free
+text". In DDI a Concept (after ISO/IEC 11179) lives in a ConceptScheme and questions and
+variables refer to it; Colectica keeps concept libraries; CLOSER maps every question to a
+controlled vocabulary (being aligned with ELSST). So `concept:` is a reference: a bare
+identifier must name a file in `concepts/` (else a hole offering "New shared concept"),
+and prose is kept and exported as before but is a **warning** (`concept-prose`, owner's
+choice over a hole) whose fix opens the name dialog prefilled from the words (`nameFrom`:
+"Racial identification" → `racial_identification`, the words as the label); prose equal
+to a shared concept's label is `matches-concept` with "Use the name". A concept file is
+`label:` (required) and `definition:` (optional): a short label and a meaning, as DDI keeps
+`Label` apart from `Description`, not `text:`. A reference elaborates to one shared
+`Concept` (`concept-<name>`: ConceptName, Label, Description), referenced by question and
+variable; codebook and tree titles use the label. Two concept files with the same label
+are `duplicate-concept`. Concepts come first in the tree (what is measured, then how it
+is asked). A fix can now also create (`Fix` is `edits` or `create {scheme, name, text,
+path}`), so every unknown shared name's hole offers "New shared …" in the Findings list.
+Kinds became data where a new kind would otherwise add branches: `SHAPE` (labels, text,
+concept) drives reading, previews and editor schemas; the GitHub loader's queries are
+built from `FOLDERS`, so a new kind's folder is read without editing them; persisted
+work needed no version bump (the kind list only widened). Not yet: `broader` concepts
+(DDI's `BroaderReference`, not `SubclassOfReference`; needs shared files to mention each
+other, a cycle check, and exporting the chain), and links to an external vocabulary such
+as ELSST.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; off unless a mode's env file turns one on

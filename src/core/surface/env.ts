@@ -6,7 +6,17 @@
 import { isMap, parseDocument } from "yaml";
 import type { Finding } from "../findings.js";
 import type { Code } from "./draft.js";
-import { error, hole, isPlainObject, yamlError, yamlErrors } from "./read.js";
+import {
+	EMPTY_HINT,
+	error,
+	fail,
+	hole,
+	isPlainObject,
+	ok,
+	type Read,
+	yamlError,
+	yamlErrors,
+} from "./read.js";
 import type { Scale } from "./scales.js";
 
 export type Scheme<T> = Readonly<Record<string, T>>;
@@ -15,7 +25,17 @@ export interface TextEntry {
 	readonly text: string;
 }
 
+/**
+ * A shared concept, as DDI's Concept (after ISO/IEC 11179): a short label people say,
+ * and what it means. Its name is its filename.
+ */
+export interface ConceptEntry {
+	readonly label: string;
+	readonly definition?: string;
+}
+
 export interface Env {
+	readonly concepts: Scheme<ConceptEntry>;
 	readonly scales: Scheme<Scale>;
 	readonly universes: Scheme<TextEntry>;
 	readonly instructions: Scheme<TextEntry>;
@@ -24,7 +44,7 @@ export interface Env {
 }
 
 /** A scheme a question can name. `missing` is not one: it is a list, never named. */
-export type NamedScheme = "scale" | "universe" | "instruction";
+export type NamedScheme = "concept" | "scale" | "universe" | "instruction";
 
 /**
  * A name a question writes in a reference position, whether or not it resolves.
@@ -39,6 +59,7 @@ export interface Mention {
 
 /** What each named scheme holds. */
 export interface SchemeEntries {
+	readonly concept: ConceptEntry;
 	readonly scale: Scale;
 	readonly universe: TextEntry;
 	readonly instruction: TextEntry;
@@ -50,6 +71,7 @@ export const inScope = <S extends NamedScheme>(
 	scheme: S,
 ): Scheme<SchemeEntries[S]> => {
 	const byScheme: { readonly [K in NamedScheme]: Scheme<SchemeEntries[K]> } = {
+		concept: env.concepts,
 		scale: env.scales,
 		universe: env.universes,
 		instruction: env.instructions,
@@ -58,6 +80,7 @@ export const inScope = <S extends NamedScheme>(
 };
 
 export const EMPTY_ENV: Env = {
+	concepts: {},
 	scales: {},
 	universes: {},
 	instructions: {},
@@ -120,6 +143,88 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 			],
 		};
 	return { entry: { text }, findings: [...syntax, ...unknown] };
+}
+
+export interface ParsedConcept {
+	readonly entry?: ConceptEntry;
+	readonly findings: readonly Finding[];
+}
+
+/** A concept file: `label:` (required) and `definition:` (optional). */
+export function parseConcept(source: string): ParsedConcept {
+	const doc = parseDocument(source, { prettyErrors: false });
+	const syntax: Finding[] = yamlErrors(doc.errors, source.length);
+	let js: unknown;
+	try {
+		js = doc.toJS() ?? {};
+	} catch (e) {
+		return {
+			findings: [
+				...syntax,
+				yamlError(e instanceof Error ? e.message : String(e)),
+			],
+		};
+	}
+	if ((doc.contents !== null && !isMap(doc.contents)) || !isPlainObject(js))
+		return {
+			findings: [
+				...syntax,
+				error(
+					"not-a-map",
+					"",
+					"A concept is a `label:` line, and a `definition:` if you like.",
+				),
+			],
+		};
+	const unknown = Object.keys(js)
+		.filter((k) => k !== "label" && k !== "definition")
+		.map((k) =>
+			error(
+				"unknown-key",
+				k,
+				`\`${k}\` isn't a field here.`,
+				"The fields are `label` and `definition`.",
+			),
+		);
+	const text = (key: "label" | "definition"): Read<string> => {
+		const v = js[key];
+		if (v === undefined)
+			return key === "label"
+				? fail(
+						hole("label", "Add a `label:` line: the concept as people say it."),
+					)
+				: fail();
+		if (v === null || (typeof v === "string" && v.trim() === ""))
+			return fail(
+				hole(
+					key,
+					`\`${key}\` is empty.`,
+					key === "definition" ? EMPTY_HINT : undefined,
+				),
+			);
+		if (typeof v !== "string")
+			return fail(error("wrong-type", key, `\`${key}\` must be text.`));
+		return ok(v);
+	};
+	const label = text("label");
+	const definition = text("definition");
+	const findings = [
+		...syntax,
+		...unknown,
+		...label.findings,
+		...definition.findings,
+	];
+	return label.value === undefined
+		? { findings }
+		: {
+				entry: {
+					label: label.value,
+					...(definition.value !== undefined && {
+						definition: definition.value,
+					}),
+				},
+				findings,
+			};
 }
 
 /** The hint under an unresolved name: what exists, and that a sentence is also fine. */
