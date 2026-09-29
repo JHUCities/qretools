@@ -5,14 +5,23 @@
  */
 
 import { ArrowLeftIcon } from "@primer/octicons-react";
-import { Button, Label, Link, PageHeader } from "@primer/react";
+import { Button, CounterLabel, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
 import { memo, type ReactNode, useMemo } from "react";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
-import { status, type Target } from "../../core/findings.js";
+import {
+	type Finding,
+	inDocumentOrder,
+	status,
+	type Target,
+} from "../../core/findings.js";
 import { inspect } from "../../core/inspect.js";
-import { evaluateScheme, kindAt } from "../../core/schemes.js";
+import {
+	evaluateScheme,
+	kindAt,
+	type SchemeEvaluation,
+} from "../../core/schemes.js";
 import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
@@ -32,7 +41,7 @@ import { branchOwner, hrefOf, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
-import { FileSkeleton } from "./FileSkeleton.js";
+import { FileSkeleton, Panes } from "./FileSkeleton.js";
 import {
 	Codebook,
 	Ddi,
@@ -41,6 +50,14 @@ import {
 	Respondent,
 	StatusBadge,
 } from "./Previews.js";
+import { useSettled } from "./useSettled.js";
+
+/**
+ * How long typing must pause before the findings list catches up with the text. The
+ * editor's underlines and the pane's count stay live; only the list waits, so it does
+ * not reshuffle under the author mid-word.
+ */
+const SETTLE_MS = 400;
 
 /** JSON Schemas for scheme files never change, so they are made once. */
 const SCHEME_SCHEMAS = {
@@ -115,8 +132,12 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				UNNAMED
 			);
 		};
-		return [...ev.findings, ...bankFindings(q.id, ev.symbols, index, label)];
+		return inDocumentOrder(
+			[...ev.findings, ...bankFindings(q.id, ev.symbols, index, label)],
+			ev.ranges,
+		);
 	}, [ev, index, q.id, questions, evaluations, agency, env]);
+	const [listed, flush] = useSettled(findings, SETTLE_MS, q.id);
 	const diagnostics = useMemo(
 		() => toDiagnostics(findings, ev.ranges),
 		[findings, ev.ranges],
@@ -149,17 +170,20 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				blocked={blocked}
 				also={also}
 				stale={stale}
-				on={
-					q.base === undefined
-						? on
-						: {
-								...on,
-								move: () => dispatch({ kind: "moveRequested", id: q.id }),
-							}
-				}
+				on={{
+					...on,
+					save: () => {
+						flush();
+						on.save();
+					},
+					...(q.base !== undefined && {
+						move: () => dispatch({ kind: "moveRequested", id: q.id }),
+					}),
+				}}
 			/>
 			<div className="split">
-				<section className="left" aria-label="Question source">
+				{/* Leaving the editor (by blur, which bubbles in React) is a pause. */}
+				<section className="left" aria-label="Question source" onBlur={flush}>
 					<EditorPane
 						id={q.id}
 						text={q.source}
@@ -169,27 +193,26 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 					/>
 					<Inspector q={q} ev={ev} index={index} />
 				</section>
-				<ScrollableRegion className="right" aria-label="Previews">
-					<article className="pane">
-						<h3>
-							Findings <StatusBadge status={status(findings)} />
-						</h3>
-						<div className="pane-body">
-							<Findings findings={findings} onTarget={onTarget} />
-						</div>
-					</article>
-					<article className="pane">
-						<h3>As the respondent sees it</h3>
-						<div className="pane-body">
-							<Respondent view={ev.respondent} onTarget={onTarget} />
-						</div>
-					</article>
-					<article className="pane">
-						<h3>As the codebook lists it</h3>
-						<div className="pane-body">
-							<Codebook view={ev.codebook} onTarget={onTarget} />
-						</div>
-					</article>
+				{/* Keyed by file: each opens scrolled to the top (React: reset state with a key). */}
+				<ScrollableRegion key={q.id} className="right" aria-label="Previews">
+					<Panes
+						kind="question"
+						readOnly={false}
+						badge={{ findings: <StatusBadge status={status(findings)} /> }}
+						body={(pane) =>
+							pane === "findings" ? (
+								<SettledFindings
+									findings={listed}
+									flush={flush}
+									onTarget={onTarget}
+								/>
+							) : pane === "respondent" ? (
+								<Respondent view={ev.respondent} onTarget={onTarget} />
+							) : pane === "codebook" ? (
+								<Codebook view={ev.codebook} onTarget={onTarget} />
+							) : null
+						}
+					/>
 					<Ddi document={ev.ddi} schema={ddiSchema} problems={problems} />
 				</ScrollableRegion>
 			</div>
@@ -213,6 +236,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 		() => toDiagnostics(ev.findings, ev.ranges),
 		[ev],
 	);
+	const [listed, flush] = useSettled(ev.findings, SETTLE_MS, e.id);
 	const users =
 		e.kind === "missing"
 			? undefined
@@ -236,10 +260,20 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				activity={activity[e.id]}
 				blocked={blocked}
 				stale={eStale}
-				on={on}
+				on={{
+					...on,
+					save: () => {
+						flush();
+						on.save();
+					},
+				}}
 			/>
 			<div className="split">
-				<section className="left" aria-label={`${SINGULAR[e.kind]} source`}>
+				<section
+					className="left"
+					aria-label={`${SINGULAR[e.kind]} source`}
+					onBlur={flush}
+				>
 					<EditorPane
 						id={e.id}
 						text={e.source}
@@ -252,85 +286,120 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						label={`${SINGULAR[e.kind]} ${e.name}: source (YAML)`}
 					/>
 				</section>
-				<ScrollableRegion className="right" aria-label="Previews">
-					<article className="pane">
-						<h3>
-							Findings <StatusBadge status={status(ev.findings)} />
-						</h3>
-						<div className="pane-body">
-							<Findings findings={ev.findings} onTarget={onTarget} />
-						</div>
-					</article>
-					<article className="pane">
-						<h3>{SINGULAR[e.kind]}</h3>
-						<div className="pane-body">
-							{ev.value === undefined ? (
-								<p className="quiet">Nothing readable yet.</p>
-							) : ev.value.kind === "text" ? (
-								<p>{ev.value.text}</p>
-							) : (
-								<ul className="cb-values">
-									{ev.value.codes.map((c, i) => (
-										// Codes may repeat while being edited, so the position is the key.
-										// biome-ignore lint/suspicious/noArrayIndexKey: see above
-										<li key={i}>
-											<code className="code">{c.code}</code> {c.label}
-										</li>
-									))}
-								</ul>
-							)}
-							{unsaved && (
-								<p className="quiet">
-									Questions in this browser already use this version. The bank
-									gets it when you save to your branch and your pull request is
-									merged.
-								</p>
-							)}
-						</div>
-					</article>
-					<article className="pane">
-						<h3>
-							{users === undefined ? "Used by" : `Used by ${users.length}`}
-						</h3>
-						<div className="pane-body">
-							{users === undefined ? (
-								<p className="quiet">
-									Every variable in the bank uses the missing values.
-								</p>
-							) : users.length === 0 ? (
-								<p className="quiet">No question names it.</p>
-							) : !inEffect ? (
-								<p className="fg-attention">
-									This can't be read yet, so each of these shows a field to fill
-									in where it names <code className="code">{e.name}</code>.
-								</p>
-							) : null}
-							{users !== undefined && users.length > 0 && (
-								<ul className="used-by">
-									{users.map((id) => {
-										const q = questions[id];
-										const name =
-											q === undefined
-												? undefined
-												: evaluations.get(q, agency, env).draft.name;
-										return (
-											<li key={id}>
-												<FileLink
-													id={id}
-													onOpen={() => dispatch({ kind: "fileOpened", id })}
-												>
-													{name ?? UNNAMED}
-												</FileLink>
-											</li>
-										);
-									})}
-								</ul>
-							)}
-						</div>
-					</article>
+				<ScrollableRegion key={e.id} className="right" aria-label="Previews">
+					<Panes
+						kind={e.kind}
+						readOnly={false}
+						badge={{
+							findings: <StatusBadge status={status(ev.findings)} />,
+							usedBy: users !== undefined && (
+								<CounterLabel>{users.length}</CounterLabel>
+							),
+						}}
+						body={(pane) =>
+							pane === "findings" ? (
+								<SettledFindings
+									findings={listed}
+									flush={flush}
+									onTarget={onTarget}
+								/>
+							) : pane === "value" ? (
+								<>
+									<SchemeValueView value={ev.value} />
+									{unsaved && (
+										<p className="quiet">
+											Questions in this browser already use this version. The
+											bank gets it when you save to your branch and your pull
+											request is merged.
+										</p>
+									)}
+								</>
+							) : pane === "usedBy" ? (
+								<>
+									{users === undefined ? (
+										<p className="quiet">
+											Every variable in the bank uses the missing values.
+										</p>
+									) : users.length === 0 ? (
+										<p className="quiet">No question names it.</p>
+									) : !inEffect ? (
+										<p className="fg-attention">
+											This can't be read yet, so each of these shows a field to
+											fill in where it names{" "}
+											<code className="code">{e.name}</code>.
+										</p>
+									) : null}
+									{users !== undefined && users.length > 0 && (
+										<ul className="used-by">
+											{users.map((id) => {
+												const q = questions[id];
+												const name =
+													q === undefined
+														? undefined
+														: evaluations.get(q, agency, env).draft.name;
+												return (
+													<li key={id}>
+														<FileLink
+															id={id}
+															onOpen={() =>
+																dispatch({ kind: "fileOpened", id })
+															}
+														>
+															{name ?? UNNAMED}
+														</FileLink>
+													</li>
+												);
+											})}
+										</ul>
+									)}
+								</>
+							) : null
+						}
+					/>
 				</ScrollableRegion>
 			</div>
 		</>
+	);
+}
+
+/** What a scale, universe or instruction says, or that it can't be read yet. */
+function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
+	if (value === undefined)
+		return <p className="quiet">Nothing readable yet.</p>;
+	if (value.kind === "text") return <p>{value.text}</p>;
+	return (
+		<ul className="cb-values">
+			{value.codes.map((c, i) => (
+				// Codes may repeat while being edited, so the position is the key.
+				// biome-ignore lint/suspicious/noArrayIndexKey: see above
+				<li key={i}>
+					<code className="code">{c.code}</code> {c.label}
+				</li>
+			))}
+		</ul>
+	);
+}
+
+/**
+ * The findings list as it stood at the last pause (`useSettled`). Reaching for it (a
+ * pointer down, or focus arriving) catches it up first, so a click or a key acts on a
+ * finding that is still there: one that went away is gone before the click lands.
+ * Nothing here is a live region: the list changes silently, the count beside it says
+ * how many there are.
+ */
+function SettledFindings({
+	findings,
+	flush,
+	onTarget,
+}: {
+	findings: readonly Finding[];
+	flush: () => void;
+	onTarget: (target: Target) => void;
+}) {
+	return (
+		<div onPointerDownCapture={flush} onFocusCapture={flush}>
+			<Findings findings={findings} onTarget={onTarget} />
+		</div>
 	);
 }
 
@@ -363,9 +432,11 @@ function Inspector({
 	const at = cursor?.id === q.id ? inspect(ev, env, cursor.offset) : undefined;
 	if (at === undefined)
 		return (
-			<aside className="inspector quiet" aria-label="At the cursor">
-				Put the cursor in a field to see what it is for.
-			</aside>
+			<InspectorBox>
+				<p className="quiet">
+					Put the cursor in a field to see what it is for.
+				</p>
+			</InspectorBox>
 		);
 	const m = at.mention;
 	const file =
@@ -379,7 +450,7 @@ function Inspector({
 			? 0
 			: new Set(usedBy(index, m.scheme, m.name).map((s) => s.key)).size;
 	return (
-		<aside className="inspector" aria-label="At the cursor">
+		<InspectorBox>
 			<p>
 				{at.key === undefined ? (
 					<b>Question. </b>
@@ -435,6 +506,20 @@ function Inspector({
 					{inlineCode(f.message)}
 				</p>
 			))}
+		</InspectorBox>
+	);
+}
+
+/**
+ * The inspector's fixed box (four lines; app.css): what does not fit scrolls, and
+ * Primer's ScrollableRegion makes it focusable and a named region only then.
+ */
+export function InspectorBox({ children }: { children?: ReactNode }) {
+	return (
+		<aside className="inspector" aria-label="At the cursor">
+			<ScrollableRegion className="inspector-body" aria-label="At the cursor">
+				{children}
+			</ScrollableRegion>
 		</aside>
 	);
 }
@@ -526,7 +611,7 @@ export function ForeignView({
 			</div>
 			{file === undefined ? (
 				// The top bar's status says what is loading; this is its shape.
-				<FileSkeleton kind={kind ?? "question"} />
+				<FileSkeleton kind={kind ?? "question"} readOnly />
 			) : (
 				<div className="split">
 					<section className="left" aria-label="Their source">
@@ -545,31 +630,27 @@ export function ForeignView({
 							label={`${whose(screen.branch)} of ${screen.path} (YAML, read only)`}
 						/>
 					</section>
-					<ScrollableRegion className="right" aria-label="Previews">
-						<article className="pane">
-							<h3>
-								Findings <StatusBadge status={status(findings)} />
-							</h3>
-							<div className="pane-body">
-								<Findings findings={findings} />
-							</div>
-						</article>
-						{ev && (
-							<>
-								<article className="pane">
-									<h3>As the respondent sees it</h3>
-									<div className="pane-body">
-										<Respondent view={ev.respondent} />
-									</div>
-								</article>
-								<article className="pane">
-									<h3>As the codebook lists it</h3>
-									<div className="pane-body">
-										<Codebook view={ev.codebook} />
-									</div>
-								</article>
-							</>
-						)}
+					<ScrollableRegion
+						key={screen.path}
+						className="right"
+						aria-label="Previews"
+					>
+						<Panes
+							kind={kind ?? "question"}
+							readOnly
+							badge={{ findings: <StatusBadge status={status(findings)} /> }}
+							body={(pane) =>
+								pane === "findings" ? (
+									<Findings findings={findings} />
+								) : pane === "respondent" && ev ? (
+									<Respondent view={ev.respondent} />
+								) : pane === "codebook" && ev ? (
+									<Codebook view={ev.codebook} />
+								) : pane === "value" ? (
+									<SchemeValueView value={scheme?.value} />
+								) : null
+							}
+						/>
 					</ScrollableRegion>
 				</div>
 			)}

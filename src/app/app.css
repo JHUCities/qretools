@@ -1,5 +1,7 @@
 /* Layout and the previews; colours, spacing, type and breakpoints come from Primer's tokens. */
 @import "@primer/primitives/dist/css/functional/size/viewport.css";
+@import "@primer/primitives/dist/css/base/motion/motion.css";
+@import "@primer/primitives/dist/css/functional/motion/motion.css";
 body {
 	margin: 0;
 	background: var(--bgColor-default);
@@ -266,7 +268,10 @@ body {
 /* The editor's place while a file loads: code-like lines, with the editor's inset. */
 .skeleton-code {
 	padding: var(--base-size-16);
+	display: flex;
+	flex-direction: column;
 	gap: var(--base-size-8);
+	overflow: hidden;
 }
 
 /* The open file: header, then source beside previews. */
@@ -276,6 +281,19 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: var(--base-size-8);
+}
+/*
+ * "with scale agree4" beside Save: one line, cut short with an ellipsis rather than
+ * wrap; its title and Save's description hold the whole sentence. The width is a
+ * design decision (about a scale's name and a count), named once.
+ */
+.also-saves {
+	max-inline-size: 16rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-body-size-small);
+	align-self: center;
 }
 .split {
 	display: grid;
@@ -312,14 +330,37 @@ body {
 	flex-direction: column;
 	gap: var(--base-size-16);
 }
+/*
+ * The cursor inspector: always four lines tall, whatever the caret is on, so the
+ * editor above it never changes height as the caret moves; more than four lines
+ * scroll inside it. `lh` is its own line height, so the four lines follow the type.
+ */
 .inspector {
+	--inspector-padding: var(--base-size-8);
+	flex: none;
+	box-sizing: border-box;
+	block-size: calc(
+		4lh +
+		2 *
+		var(--inspector-padding) +
+		var(--borderWidth-thin)
+	);
 	border-top: var(--borderWidth-thin) solid var(--borderColor-default);
-	padding: var(--base-size-8) var(--base-size-12);
 	font-size: var(--text-body-size-small);
 	background: var(--bgColor-muted);
 }
+.inspector-body {
+	box-sizing: border-box;
+	block-size: 100%;
+	padding: var(--inspector-padding) var(--base-size-12);
+	overscroll-behavior: contain;
+	scrollbar-gutter: stable;
+	display: flex;
+	flex-direction: column;
+	gap: var(--base-size-4);
+}
 .inspector p {
-	margin: var(--base-size-2) 0;
+	margin: 0;
 }
 
 /* Preview panels. */
@@ -460,6 +501,24 @@ button.hole {
 }
 .cb-meta dd {
 	margin: 0;
+}
+
+/*
+ * A finding that appears fades in and rises a few pixels; one that goes leaves at once.
+ * Only opacity and translate move (never height, which would move its neighbours), and
+ * nothing moves for someone who has asked for less motion.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	.findings > li,
+	.findings-list > li {
+		transition:
+			opacity var(--motion-duration-micro) var(--motion-easing-enter),
+			translate var(--motion-duration-micro) var(--motion-easing-enter);
+		@starting-style {
+			opacity: 0;
+			translate: 0 var(--base-size-4);
+		}
+	}
 }
 
 /* Findings: severity is data, carried by the label and the edge, never by colour alone. */
