@@ -8,7 +8,6 @@ import { createEvaluations } from "./evaluations.js";
 import { formatLink } from "./link.js";
 import {
 	allFiles,
-	DEFAULT_SETTINGS,
 	envOf,
 	fileOf,
 	type Id,
@@ -36,7 +35,13 @@ import {
 	writeBlocked,
 } from "./update.js";
 
-const fresh = (): Model => init({ work: ok(undefined), hasToken: false })[0];
+const fresh = (): Model =>
+	init({
+		work: ok(undefined),
+		hasToken: false,
+		defaultBank: { owner: "JHUCities", repo: "bas-question-bank" },
+	})[0];
+const SETTINGS = { owner: "octo-org", repo: "survey-bank", remember: false };
 const run = (model: Model, ...msgs: Msg[]) =>
 	msgs.reduce<ReturnType<typeof update>>(
 		([m], msg) => update(m, msg),
@@ -126,6 +131,18 @@ describe("init", () => {
 			kind: "connect",
 			repo: { owner: "JHUCities", repo: "bas-question-bank" },
 		});
+	});
+
+	it("offers the build's default bank when nothing is stored, and an empty field without one", () => {
+		const bank = { owner: "octo-org", repo: "bank-template" };
+		const [offered] = init({
+			work: ok(undefined),
+			hasToken: false,
+			defaultBank: bank,
+		});
+		expect(offered.settings).toEqual({ ...bank, remember: false });
+		const [empty] = init({ work: ok(undefined), hasToken: false });
+		expect(empty.settings).toEqual({ owner: "", repo: "", remember: false });
 	});
 
 	it("keeps an unreadable store as a failure, not a crash", () => {
@@ -386,12 +403,12 @@ describe("connecting", () => {
 	it("connect, then load the bank, then merge it: every file becomes an entry of the kind its path says", () => {
 		const [m1, c1] = update(fresh(), {
 			kind: "connectRequested",
-			settings: DEFAULT_SETTINGS,
+			settings: SETTINGS,
 		});
 		expect(m1.session.kind).toBe("connecting");
 		expect(c1.find((c) => c.kind === "connect")).toEqual({
 			kind: "connect",
-			repo: { owner: "JHUCities", repo: "bas-question-bank" },
+			repo: { owner: "octo-org", repo: "survey-bank" },
 		});
 		const [m2, c2] = update(m1, {
 			kind: "connected",
@@ -1427,7 +1444,7 @@ describe("links while connecting", () => {
 
 describe("signing in", () => {
 	it("keeps the settings and leaves for GitHub", () => {
-		const settings = { ...DEFAULT_SETTINGS, remember: true };
+		const settings = { ...SETTINGS, remember: true };
 		const [m, cmds] = update(fresh(), { kind: "signInRequested", settings });
 		expect(m.session).toEqual({ kind: "connecting", toGitHub: true });
 		expect(cmds.map((c) => c.kind)).toEqual([

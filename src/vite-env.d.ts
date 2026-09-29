@@ -12,6 +12,8 @@ interface ImportMetaEnv {
 	readonly VITE_GITHUB_APP_SLUG?: string;
 	/** The template a new bank starts from, as owner/name (the sign-in page links it). */
 	readonly VITE_BANK_TEMPLATE?: string;
+	/** The bank the sign-in page offers first, as owner/name; absent means an empty field. */
+	readonly VITE_DEFAULT_BANK?: string;
 }
 
 interface ImportMeta {

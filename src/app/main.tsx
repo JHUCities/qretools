@@ -8,7 +8,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ok, type Result } from "../core/result.js";
 import { type Callback, callbackOf, PendingSchema } from "./auth.js";
-import { bankTemplate, signInConfig } from "./config.js";
+import { bankTemplate, defaultBank, signInConfig } from "./config.js";
 import { PENDING_KEY } from "./effects.js";
 import { makeGitHubStore } from "./github.js";
 import { warnOnLeave } from "./model.js";
@@ -30,6 +30,7 @@ if (root) {
 		// No storage (a private window, blocked site data): start fresh.
 	}
 	const template = bankTemplate(import.meta.env);
+	const bank = defaultBank(import.meta.env);
 	const config = signInConfig(
 		import.meta.env,
 		location.origin,
@@ -55,6 +56,7 @@ if (root) {
 		{
 			work: started.work,
 			...(started.settings !== undefined && { settings: started.settings }),
+			...(bank !== undefined && { defaultBank: bank }),
 			notices: started.notices,
 			hasToken:
 				browserCredentialStore.load() !== null || returned !== undefined,

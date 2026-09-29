@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { bankTemplate, installUrl, signInConfig } from "./config.js";
+import {
+	bankTemplate,
+	defaultBank,
+	installUrl,
+	signInConfig,
+} from "./config.js";
 
 const env = (values: Record<string, string>) =>
 	values as unknown as ImportMetaEnv;
@@ -22,6 +27,24 @@ describe("the template a new bank starts from", () => {
 		expect(
 			bankTemplate(env({ VITE_BANK_TEMPLATE: "not a repository" })),
 		).toBeUndefined();
+	});
+});
+
+describe("the bank the sign-in page offers first", () => {
+	it("is read as owner/name, or a pasted URL", () => {
+		expect(defaultBank(env({ VITE_DEFAULT_BANK: "a/b" }))).toEqual({
+			owner: "a",
+			repo: "b",
+		});
+		expect(
+			defaultBank(env({ VITE_DEFAULT_BANK: "https://github.com/a/b" })),
+		).toEqual({ owner: "a", repo: "b" });
+	});
+
+	it("is absent when not set, blank or malformed: an empty field", () => {
+		expect(defaultBank(env({}))).toBeUndefined();
+		expect(defaultBank(env({ VITE_DEFAULT_BANK: " " }))).toBeUndefined();
+		expect(defaultBank(env({ VITE_DEFAULT_BANK: "nope" }))).toBeUndefined();
 	});
 });
 
