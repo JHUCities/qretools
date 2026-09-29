@@ -1071,20 +1071,22 @@ export function linkOf(model: Model): string | undefined {
  * `linkOf`: the branch the file was read from.
  */
 export function hrefOf(model: Model, f: Entry): string | undefined {
-	if (
-		model.session.kind !== "connected" ||
-		model.loading.kind !== "loaded" ||
-		f.base === undefined
-	)
-		return undefined;
+	const branch = linkBranch(model);
+	if (branch === undefined || f.base === undefined) return undefined;
 	return formatLink({
 		repo: `${model.settings.owner}/${model.settings.repo}`,
-		branch:
-			model.loading.from === "default"
-				? model.session.defaultBranch
-				: ownBranch(model.session.login),
+		branch,
 		file: f.base.path,
 	});
+}
+
+/** The branch links to working files name: the one the bank was read from; undefined before the load. */
+export function linkBranch(model: Model): string | undefined {
+	if (model.session.kind !== "connected" || model.loading.kind !== "loaded")
+		return undefined;
+	return model.loading.from === "default"
+		? model.session.defaultBranch
+		: ownBranch(model.session.login);
 }
 
 /** Whether a different file is open: a navigation, which the browser should record. */

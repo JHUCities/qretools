@@ -56,6 +56,8 @@ export interface Parsed {
 	readonly ranges: Readonly<Record<string, Range>>;
 	/** Every scheme name written, resolved or not. */
 	readonly mentions: readonly Mention[];
+	/** The questions this one says it deliberately resembles (`variant_of`); resolved by the bank index. */
+	readonly variants: readonly Variant[];
 	/** Where each value written as nothing at all starts, by path: the points holes are drawn at. */
 	readonly empties: Readonly<Record<string, number>>;
 	/** What the editor colours by meaning: resolved names, codes, `legacy`, holes. */
@@ -63,6 +65,13 @@ export interface Parsed {
 }
 
 type TextKey = (typeof TEXT_KEYS)[number];
+
+/** A question named under `variant_of`, and why the two differ. */
+export interface Variant {
+	readonly name: string;
+	readonly path: string;
+	readonly why: string;
+}
 
 const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older format go under \`legacy\`.`;
 
@@ -85,6 +94,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			ranges,
 			empties,
 			mentions: [],
+			variants: [],
 			marks: [],
 		};
 	}
@@ -127,6 +137,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		}),
 	];
 	const legacy = readLegacy(data.legacy);
+	const variants = readVariants(data.variant_of);
 	const domain = readDomain(doc, data, ranges, env);
 	const draft: Draft = compact({
 		...plain,
@@ -144,6 +155,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		...universe.findings,
 		...instruction.findings,
 		...legacy.findings,
+		...variants.findings,
 		...domain.findings,
 	];
 	return {
@@ -152,6 +164,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		ranges,
 		empties,
 		mentions,
+		variants: variants.value ?? [],
 		marks: ordered([
 			...marksOf(doc, mentions, env, text.length),
 			...holeChips(findings, empties),
@@ -202,6 +215,51 @@ function readText(key: TextKey, value: unknown): Read<string> {
 }
 
 /** Legacy values are never read; only the field names are kept, so a lint can say they are there. */
+/**
+ * `variant_of`: other questions by name, each with why the two differ. Written empty,
+ * or with an empty reason, it is a hole like any opened key; whether a name exists is
+ * the bank index's to say, since the parser sees one file.
+ */
+function readVariants(value: unknown): Read<readonly Variant[]> {
+	if (value === undefined) return fail();
+	if (value === null || value === "")
+		return fail(hole("variant_of", "`variant_of` is empty.", EMPTY_HINT));
+	if (!isPlainObject(value))
+		return fail(
+			error(
+				"wrong-type",
+				"variant_of",
+				"`variant_of` must be a map of `question: why they differ` lines.",
+			),
+		);
+	const variants: Variant[] = [];
+	const findings: Finding[] = [];
+	for (const [name, why] of Object.entries(value)) {
+		const path = `variant_of.${name}`;
+		if (!NAME_PATTERN.test(name))
+			findings.push(
+				error(
+					"wrong-type",
+					path,
+					`\`${name}\` isn't a valid name.`,
+					NAME_RULE_TEXT,
+				),
+			);
+		else if (why === null || (typeof why === "string" && why.trim() === ""))
+			findings.push(
+				hole(
+					path,
+					"Say why the two differ.",
+					"For example: split ballot, lower range.",
+				),
+			);
+		else if (typeof why !== "string")
+			findings.push(error("wrong-type", path, "The reason must be text."));
+		else variants.push({ name, path, why });
+	}
+	return { value: variants, findings };
+}
+
 function readLegacy(value: unknown): Read<readonly string[]> {
 	if (value === undefined || value === null) return fail();
 	if (!isPlainObject(value))

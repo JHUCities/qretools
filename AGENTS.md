@@ -101,7 +101,9 @@ bank", as Primer's layout guidance advises for a pane full of links.
    Typically students draft, then upload. Scope: Create, Read, Upload, Delete questions,
    elaborated to DDI.
 2. **Survey composer** (deferred): composes questions into an instrument with skips,
-   variables, loops, randomization. See "Lookahead" below.
+   variables, loops, randomization. See "Lookahead" below. **A separate tool, not a mode
+   of this question editor (owner, 2026-09-29):** what this one owes it is a core that
+   can be reused as a library (the bank index in `symbols.ts` above all).
 3. **Undefined** (deferred).
 
 Storage and auth are deferred until all three roles are hashed out. Do not build them.
@@ -1163,6 +1165,47 @@ empty strings in `BankSettings` stand for "none chosen", and a build without the
 with nothing stored but a sign-in held, connects to an empty name and fails on the
 sign-in page (the shipped `.env` sets it). Open: a JHUCities member with
 push access saves to `qretools-<login>` in the template itself; a ruleset there, or accept.
+
+**Duplication across the bank (owner, 2026-09-29).** A bank made with the tool should
+avoid repeating itself, so duplicates are findings, found at three strengths as code
+clones are (Roy and Cordy's exact, renamed and near-miss types): the same as written;
+the same once case, punctuation and spacing are folded (`fold.ts`; response lists
+compared by labels, codes ignored); and similar question wording (word overlap at 0.9 or
+more). The first two are **warnings** on each file involved, naming the others; similar
+wording is **info** (owner chose it after measuring: at 0.8, 39 pairs on the reference
+bank, nearly all deliberate parallel items such as black/white or walk/bike). Measured
+on the reference bank (472 files): 9 pairs of identical shared scales, 6 pairs of
+identical question text, 2 repeated inline lists; units barely occur (2 of 16 number
+questions have one), so a unit is compared only for spelling (`days` beside `Days`), and
+shared number formats (DDI's `ManagedNumericRepresentation`) wait until a bank has formats
+worth sharing. **Where each check lives:** a literal equal to a shared entry is the
+parse's (lint against the Env: `matches-scale`, now a warning, and `matches-universe`,
+`matches-instruction`); anything between files is the bank index's
+(`symbols.ts`: `symbolsOf`/`schemeSymbols` give each file's fingerprints, `indexOf` one
+map of them, `bankFindings` the findings), never the parser's, whose result must not
+depend on other files. Like is compared with like (a question's list with other
+questions' lists, a shared scale with other scales), so nothing is reported twice.
+Shared files are now in the index. Similar wording is computed for the open file only
+(all pairs would be quadratic per keystroke): measured 1.5 ms for the index and at most
+0.4 ms per file. **Deliberate pairs** are `variant_of: {other: why they differ}` on a
+question (owner named it; `same_as` was rejected as claiming identity): either side
+silences the pair; an empty reason is a hole; a name no question has is a bank finding,
+not a hole. It is surface-only for now: DDI's Comparison module (`GenericMap`/`ItemMap`
+with a `Correspondence` whose `Difference` is the reason) is the export target once a
+bank-level export exists. **Jump to the other file:** each bank finding carries its
+`others`; the Findings list draws a link beside the item (Primer's
+`ActionList.TrailingAction` as an `<a href>`, so a click navigates with history and a
+modified click opens a new tab natively), and the item itself still goes to this file's
+place. A draft has no address, so no link; a finding naming several files links the
+first. Not in the tree's badges (they would need all pairs per keystroke). After-pass:
+one definition of "the same list" (`labelsKey` in fold.ts: labels folded, codes aside)
+serves `matches-scale` and the index, which now says "(apart from codes)"; `fold` folds
+punctuation but keeps symbols ("$50" is not "50%"; counts unchanged on the bank); a link
+is read from the finding's own `others` (`othersOf`), never by object identity, since the
+Findings list shows settled, older objects while the author types. Shared scales are
+merged, never marked: `variant_of` is a question's field. The index is rebuilt on any
+change to `local` (shared files included), about 1.5 ms: nothing may assume it keeps its
+identity between keystrokes, unlike the Env.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)

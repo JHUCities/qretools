@@ -166,6 +166,8 @@ describe("usersIn", () => {
 						{ scheme: "scale", name: "agree4", path: "responses" },
 						{ scheme: "scale", name: "agree4", path: "responses" },
 					],
+					variants: [],
+					fingerprints: [],
 				},
 			},
 		]);

@@ -22,6 +22,7 @@ import {
 } from "./surface/marks.js";
 import { indexDocument } from "./surface/parse.js";
 import { parseScale, type Scale } from "./surface/scales.js";
+import { type Symbols, schemeSymbols } from "./symbols.js";
 
 /** `missing` is a scheme file too, but one list for the bank, never named by a question. */
 export type SchemeKind = NamedScheme | "missing";
@@ -79,6 +80,8 @@ export interface SchemeEvaluation {
 	readonly marks: readonly Mark[];
 	/** Absent while the file does not read as its kind. */
 	readonly value?: SchemeValue;
+	/** What it writes that another shared file may repeat, for the bank index. */
+	readonly symbols: Symbols;
 }
 
 /** A scheme file, read as its kind. Total: any text evaluates. */
@@ -87,6 +90,15 @@ export function evaluateScheme(
 	source: string,
 	env: Env,
 ): SchemeEvaluation {
+	const read = readScheme(kind, source, env);
+	return { ...read, symbols: schemeSymbols(kind, read.value) };
+}
+
+function readScheme(
+	kind: SchemeKind,
+	source: string,
+	env: Env,
+): Omit<SchemeEvaluation, "symbols"> {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
 	if (kind === "universe" || kind === "instruction") {

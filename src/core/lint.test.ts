@@ -134,7 +134,7 @@ describe("scheme lints", () => {
 			env,
 		);
 		expect(same.map((f) => `${f.severity}:${f.code}@${f.path}`)).toEqual([
-			"info:matches-scale@responses",
+			"warning:matches-scale@responses",
 		]);
 		expect(same[0]?.message).toMatch(/agree4/);
 		const reserved = lint(
@@ -147,5 +147,48 @@ describe("scheme lints", () => {
 		expect(
 			lint(parseSurface(`${head}responses: agree4\n`, env).draft, env),
 		).toEqual([]);
+	});
+});
+
+describe("a universe or instruction a shared one already says", () => {
+	it("is pointed at the shared entry, apart from case and punctuation", () => {
+		const env = {
+			...EMPTY_ENV,
+			universes: { adults: { text: "All adults 18 and older" } },
+			instructions: { selectall: { text: "Select all that apply." } },
+		};
+		const text =
+			"name: q\nuniverse: all adults 18 and older.\ninstruction: Select all that apply\n";
+		const found = lint(parseSurface(text, env).draft, env).filter((f) =>
+			f.code.startsWith("matches-"),
+		);
+		expect(found.map((f) => `${f.severity}:${f.code}@${f.path}`)).toEqual([
+			"warning:matches-universe@universe",
+			"warning:matches-instruction@instruction",
+		]);
+		expect(found[0]?.hint).toMatch(/universe: adults/);
+	});
+});
+
+describe("an inline list and a shared scale", () => {
+	it("are the same list whatever the codes, as the bank index says, and the finding says so", () => {
+		const env = {
+			...EMPTY_ENV,
+			scales: {
+				often3: {
+					codes: [
+						{ code: "1", label: "Often" },
+						{ code: "2", label: "Never" },
+					],
+				},
+			},
+		};
+		const [f] = lint(
+			parseSurface("name: q\nresponses:\n  a: often\n  b: Never.\n", env).draft,
+			env,
+		).filter((x) => x.code === "matches-scale");
+		expect(f?.message).toBe(
+			"These responses match the shared scale `often3` (apart from codes).",
+		);
 	});
 });

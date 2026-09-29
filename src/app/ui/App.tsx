@@ -77,17 +77,21 @@ export function App() {
 		() => treeOf(treeInput, (q) => evaluations.get(q, model.agency, env)),
 		[treeInput, model.agency, evaluations, env],
 	);
-	// The bank's symbol table: which variables each question defines and which
-	// scheme names it writes. Rebuilt from cached evaluations, so cheap per keystroke.
+	// The bank's symbol table: what each file defines, names and writes, questions and
+	// shared files alike. Rebuilt from cached evaluations, so cheap per keystroke.
 	const index = useMemo(
 		() =>
-			indexOf(
-				Object.values(model.local.questions).map((q) => ({
+			indexOf([
+				...Object.values(model.local.questions).map((q) => ({
 					key: q.id,
 					symbols: evaluations.get(q, model.agency, env).symbols,
 				})),
-			),
-		[model.local.questions, model.agency, evaluations, env],
+				...Object.values(model.local.schemes).map((e) => ({
+					key: e.id,
+					symbols: evaluations.scheme(e, env).symbols,
+				})),
+			]),
+		[model.local, model.agency, evaluations, env],
 	);
 	const sections = useMemo(
 		() => schemeSections(treeInput, (e) => evaluations.scheme(e, env), index),

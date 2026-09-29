@@ -30,9 +30,20 @@ export type LintCode =
 	| "duplicate-option-variable"
 	| "option-variable-prefix"
 	| "matches-scale"
+	| "matches-universe"
+	| "matches-instruction"
 	| "missing-code"
 	/** Bank-level: another question defines the same variable. */
-	| "duplicate-variable";
+	| "duplicate-variable"
+	/** Bank-level: the same content written in two files (see symbols.ts). */
+	| "duplicate-text"
+	| "duplicate-list"
+	| "duplicate-scale"
+	| "duplicate-universe"
+	| "duplicate-instruction"
+	| "unit-spelling"
+	| "similar-text"
+	| "unknown-variant";
 
 export type FindingCode = ParseCode | LintCode | "ddi-invalid";
 
