@@ -48,7 +48,14 @@ const BaseSchema = z.strictObject({
 	text: z.string(),
 });
 
-const SCHEME_KIND = z.enum(["scale", "universe", "instruction", "missing"]);
+// Widening this list reads older work unchanged: no version bump for a new kind.
+const SCHEME_KIND = z.enum([
+	"concept",
+	"scale",
+	"universe",
+	"instruction",
+	"missing",
+]);
 
 /**
  * Version 3: working copies split by kind, each with the base it started from. The

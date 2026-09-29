@@ -19,6 +19,7 @@ export const FOLDER_RULE_TEXT =
 
 /** Each kind of shared element, singular, as a heading or a "New …" item says it. */
 export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
+	concept: "concept",
 	scale: "scale",
 	universe: "universe",
 	instruction: "instruction",
@@ -27,6 +28,7 @@ export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 
 /** Each kind, plural, as a section of the tree names it. */
 export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
+	concept: "Concepts",
 	scale: "Scales",
 	universe: "Universes",
 	instruction: "Instructions",
@@ -35,6 +37,7 @@ export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 
 /** Each kind in running text: "shared scale", "missing values". */
 export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
+	concept: "shared concept",
 	scale: "shared scale",
 	universe: "shared universe",
 	instruction: "shared instruction",

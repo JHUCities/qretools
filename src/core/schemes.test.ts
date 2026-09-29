@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	conceptSource,
 	evaluateScheme,
 	kindAt,
 	SCHEME_KINDS,
@@ -8,6 +9,7 @@ import {
 } from "./schemes.js";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
+import { nameFrom } from "./surface/schema.js";
 
 const brief = (f: { severity: string; code: string; path: string }) =>
 	`${f.severity}:${f.code}@${f.path}`;
@@ -85,5 +87,62 @@ describe("schemeEnv", () => {
 			{ scheme: "scale", name: "broken", path: "responses" },
 			{ scheme: "universe", name: "renters", path: "universe" },
 		]);
+	});
+});
+
+describe("a concept file", () => {
+	it("reads a label and a definition; a missing label is a hole", () => {
+		expect(
+			evaluateScheme(
+				"concept",
+				"label: Neighborhood satisfaction\ndefinition: How content residents are.\n",
+				EMPTY_ENV,
+			).value,
+		).toEqual({
+			kind: "concept",
+			concept: {
+				label: "Neighborhood satisfaction",
+				definition: "How content residents are.",
+			},
+		});
+		expect(
+			evaluateScheme("concept", "definition: x\n", EMPTY_ENV).findings.map(
+				(f) => `${f.severity}@${f.path}`,
+			),
+		).toEqual(["hole@label"]);
+		expect(
+			evaluateScheme(
+				"concept",
+				"label: x\nlabels: y\n",
+				EMPTY_ENV,
+			).findings.map((f) => f.code),
+		).toEqual(["unknown-key"]);
+	});
+
+	it("lives in concepts/, is in the environment by its name, and starts from its label", () => {
+		expect(schemePath("concept", "trust")).toBe("concepts/trust.yaml");
+		expect(kindAt("concepts/trust.yaml")).toEqual({
+			kind: "concept",
+			name: "trust",
+		});
+		expect(
+			schemeEnv([{ kind: "concept", name: "trust", text: "label: Trust\n" }])
+				.concepts,
+		).toEqual({ trust: { label: "Trust" } });
+		expect(conceptSource(" Trust: in government ")).toBe(
+			'label: "Trust: in government"\n',
+		);
+	});
+});
+
+describe("names made from words", () => {
+	it("are always valid names", () => {
+		expect(nameFrom("Racial identification", "concept")).toBe(
+			"racial_identification",
+		);
+		expect(nameFrom("  Trust (in) gov't!  ", "concept")).toBe("trust_in_gov_t");
+		expect(nameFrom("2nd language", "concept")).toBe("concept_2nd_language");
+		expect(nameFrom("Café", "concept")).toBe("cafe");
+		expect(nameFrom("!!!", "concept")).toBe("concept");
 	});
 });

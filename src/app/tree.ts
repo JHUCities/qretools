@@ -12,6 +12,7 @@ import {
 	type SchemeEvaluation,
 	type SchemeKind,
 } from "../core/schemes.js";
+import { conceptLabel } from "../core/surface/draft.js";
 import { type Index, usedBy } from "../core/symbols.js";
 import type { Entry, Id, Model, Question, SchemeEntry } from "./model.js";
 
@@ -60,7 +61,11 @@ export function treeOf(
 		const leaf: Leaf = {
 			...marks(model, q),
 			name: ev.draft.name,
-			title: ev.draft.title ?? ev.draft.concept,
+			title:
+				ev.draft.title ??
+				(ev.draft.concept === undefined
+					? undefined
+					: conceptLabel(ev.draft.concept)),
 			status: status(ev.findings),
 		};
 		const folder = folderOfQuestion(q);

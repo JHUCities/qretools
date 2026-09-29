@@ -15,6 +15,7 @@ import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 import { RequestError } from "@octokit/request-error";
 import { err, ok, type Result } from "../core/result.js";
+import { FOLDERS } from "../core/schemes.js";
 import {
 	AuthError,
 	type BranchTarget,
@@ -384,9 +385,7 @@ export const makeGitHubStore = (
 				bank: `refs/heads/${target.defaultBranch}`,
 				head: ref,
 				questions: `${ref}:questions`,
-				scales: `${ref}:scales`,
-				universes: `${ref}:universes`,
-				instructions: `${ref}:instructions`,
+				...folderVariables(ref),
 				missing: `${ref}:missing.yaml`,
 			},
 			"bankRef",
@@ -405,8 +404,6 @@ export const makeGitHubStore = (
 				blobFile(`questions/${folder.name}/${e.name}`, e),
 			),
 		);
-		const flat = (folder: string, tree: Tree | undefined) =>
-			(tree?.entries ?? []).flatMap((e) => blobFile(`${folder}/${e.name}`, e));
 		const missing = data.missing
 			? blobFile("missing.yaml", {
 					name: "missing.yaml",
@@ -416,13 +413,7 @@ export const makeGitHubStore = (
 			: [];
 		const compare = data.bankRef?.compare;
 		return ok({
-			files: [
-				...questions,
-				...flat("scales", data.scales),
-				...flat("universes", data.universes),
-				...flat("instructions", data.instructions),
-				...missing,
-			],
+			files: [...questions, ...schemeFiles(data), ...missing],
 			exists: data.mine !== null && data.mine !== undefined,
 			aheadBy: compare?.aheadBy ?? 0,
 			behindBy: compare?.behindBy ?? 0,
@@ -498,20 +489,17 @@ export const makeGitHubStore = (
 		async readWithSchemes(target, path) {
 			const ref = target.branch;
 			const r = await graphql<{
-				repository: {
-					file: { oid: string; text: string | null } | null;
-					scales?: Tree;
-					universes?: Tree;
-					instructions?: Tree;
-					missing?: Entry["object"] | null;
-				} | null;
+				repository:
+					| ({
+							file: { oid: string; text: string | null } | null;
+							missing?: Entry["object"] | null;
+					  } & Folders)
+					| null;
 			}>(FOREIGN_QUERY, {
 				owner,
 				repo,
 				at: `${ref}:${path}`,
-				scales: `${ref}:scales`,
-				universes: `${ref}:universes`,
-				instructions: `${ref}:instructions`,
+				...folderVariables(ref),
 				missing: `${ref}:missing.yaml`,
 			});
 			if (!r.ok) return r;
@@ -523,16 +511,10 @@ export const makeGitHubStore = (
 					status: 404,
 					message: `\`${path}\` isn't on ${ref}.`,
 				});
-			const flat = (folder: string, tree: Tree | undefined) =>
-				(tree?.entries ?? []).flatMap((e) =>
-					blobFile(`${folder}/${e.name}`, e),
-				);
 			return ok({
 				file: { path, sha: file.oid, text: file.text },
 				schemes: [
-					...flat("scales", data.scales),
-					...flat("universes", data.universes),
-					...flat("instructions", data.instructions),
+					...schemeFiles(data),
 					...(data.missing
 						? blobFile("missing.yaml", {
 								name: "missing.yaml",
@@ -694,20 +676,19 @@ interface WhoData {
 }
 
 interface BankData {
-	readonly repository?: {
-		readonly mine?: { readonly name: string } | null;
-		readonly bankRef?: {
-			readonly compare?: {
-				readonly aheadBy: number;
-				readonly behindBy: number;
-			} | null;
-		} | null;
-		readonly questions?: Tree;
-		readonly scales?: Tree;
-		readonly universes?: Tree;
-		readonly instructions?: Tree;
-		readonly missing?: Entry["object"] | null;
-	} | null;
+	readonly repository?:
+		| ({
+				readonly mine?: { readonly name: string } | null;
+				readonly bankRef?: {
+					readonly compare?: {
+						readonly aheadBy: number;
+						readonly behindBy: number;
+					} | null;
+				} | null;
+				readonly questions?: Tree;
+				readonly missing?: Entry["object"] | null;
+		  } & Folders)
+		| null;
 }
 
 const WHO_QUERY = `query Who($owner: String!, $repo: String!) {
@@ -722,24 +703,40 @@ const WHO_QUERY = `query Who($owner: String!, $repo: String!) {
  */
 const FLAT =
 	"... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } }";
-const FOREIGN_QUERY = `query Foreign($owner: String!, $repo: String!, $at: String!, $scales: String!, $universes: String!, $instructions: String!, $missing: String!) {
+/**
+ * The shared kinds' folders, one GraphQL alias and variable each, from the one table
+ * (`FOLDERS`): a new kind is read without touching the queries. Folder names are
+ * lowercase words, so they are safe as aliases.
+ */
+const SHARED = Object.values(FOLDERS);
+const folderVariables = (ref: string): Record<string, string> =>
+	Object.fromEntries(SHARED.map((f) => [f, `${ref}:${f}`]));
+const FOLDER_PARAMS = SHARED.map((f) => `$${f}: String!`).join(", ");
+const FOLDER_FIELDS = SHARED.map(
+	(f) => `${f}: object(expression: $${f}) { ${FLAT} }`,
+).join("\n    ");
+type Folders = { readonly [folder: string]: Tree | undefined };
+const schemeFiles = (data: Folders): File[] =>
+	SHARED.flatMap((folder) =>
+		(data[folder]?.entries ?? []).flatMap((e) =>
+			blobFile(`${folder}/${e.name}`, e),
+		),
+	);
+
+const FOREIGN_QUERY = `query Foreign($owner: String!, $repo: String!, $at: String!, ${FOLDER_PARAMS}, $missing: String!) {
   repository(owner: $owner, name: $repo) {
     file: object(expression: $at) { ... on Blob { oid text } }
-    scales: object(expression: $scales) { ${FLAT} }
-    universes: object(expression: $universes) { ${FLAT} }
-    instructions: object(expression: $instructions) { ${FLAT} }
+    ${FOLDER_FIELDS}
     missing: object(expression: $missing) { ... on Blob { oid text isBinary isTruncated } }
   }
 }`;
-const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, $scales: String!, $universes: String!, $instructions: String!, $missing: String!) {
+const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, ${FOLDER_PARAMS}, $missing: String!) {
   repository(owner: $owner, name: $repo) {
     mine: ref(qualifiedName: $ref) { name }
     bankRef: ref(qualifiedName: $bank) { compare(headRef: $head) { aheadBy behindBy } }
     questions: object(expression: $questions) { ... on Tree { entries { name type object {
       ... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } } } } } }
-    scales: object(expression: $scales) { ${FLAT} }
-    universes: object(expression: $universes) { ${FLAT} }
-    instructions: object(expression: $instructions) { ${FLAT} }
+    ${FOLDER_FIELDS}
     missing: object(expression: $missing) { ... on Blob { oid text isBinary isTruncated } }
   }
 }`;

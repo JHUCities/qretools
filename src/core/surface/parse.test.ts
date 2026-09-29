@@ -278,3 +278,54 @@ describe("variant_of", () => {
 		expect(codes("variant_of: b\n")).toEqual(["error@variant_of"]);
 	});
 });
+
+describe("concept", () => {
+	const env = {
+		...EMPTY_ENV,
+		concepts: { trust: { label: "Trust in government" } },
+	};
+
+	it("names a shared concept; a name no concept has is a hole offering to create it", () => {
+		expect(parseSurface("concept: trust\n", env).draft.concept).toMatchObject({
+			kind: "ref",
+			name: "trust",
+		});
+		const hole = parseSurface("concept: income\n", env).findings.find(
+			(f) => f.path === "concept",
+		);
+		expect(hole).toMatchObject({
+			severity: "hole",
+			message: "No concept named `income`.",
+			fix: {
+				label: "New shared concept `income`",
+				create: {
+					scheme: "concept",
+					name: "income",
+					text: "",
+					path: "concept",
+				},
+			},
+		});
+		expect(hole?.hint).not.toMatch(/sentence/);
+	});
+
+	it("keeps prose, which lint calls advice", () => {
+		expect(
+			parseSurface("concept: racial identification\n", env).draft.concept,
+		).toEqual({ kind: "text", text: "racial identification" });
+	});
+});
+
+describe("an unknown scale name", () => {
+	it("is a hole offering to create the scale, like any shared name", () => {
+		const hole = parseSurface(
+			"name: q\nresponses: agree9\n",
+			EMPTY_ENV,
+		).findings.find((f) => f.path === "responses");
+		expect(hole?.fix).toEqual({
+			kind: "create",
+			label: "New shared scale `agree9`",
+			create: { scheme: "scale", name: "agree9", text: "", path: "responses" },
+		});
+	});
+});

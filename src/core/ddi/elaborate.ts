@@ -23,7 +23,7 @@ import {
 	definedVariables,
 	type Named,
 } from "../surface/draft.js";
-import type { TextEntry } from "../surface/env.js";
+import type { ConceptEntry, TextEntry } from "../surface/env.js";
 import {
 	codeValue,
 	type DdiDocument,
@@ -63,7 +63,7 @@ export function elaborate(
 	const named = (suffix: string) => identity(agency, `${qid}.${suffix}`);
 
 	const concept = maybe(draft.concept, (c) =>
-		item("Concept", named("concept"), { ConceptName: [intl(c)] }),
+		conceptItem(c, agency, named("concept")),
 	);
 	const universe = maybe(draft.universe, (u) =>
 		universeItem(u, agency, named("universe")),
@@ -125,6 +125,27 @@ export function elaborate(
 			...(missingItems?.items ?? []),
 		].filter((it) => it !== undefined),
 	);
+}
+
+/**
+ * A shared concept is the bank's one Concept (ISO/IEC 11179, as DDI has it): its name,
+ * its label, and its definition as the Description. Prose, advice to share it, stays
+ * this question's own, as before.
+ */
+function conceptItem(
+	c: Named<ConceptEntry>,
+	agency: string,
+	own: Identity,
+): Item {
+	return c.kind === "text"
+		? item("Concept", own, { ConceptName: [intl(c.text)] })
+		: item("Concept", identity(agency, `concept-${c.name}`), {
+				ConceptName: [intl(c.name)],
+				Label: [structured(c.value.label)],
+				...(c.value.definition !== undefined && {
+					Description: structured(c.value.definition),
+				}),
+			});
 }
 
 /** Prose is this question's own universe; a reference is the bank's, named as the bank names it. */

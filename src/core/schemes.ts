@@ -8,9 +8,11 @@ import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { missingCollisions } from "./lint.js";
 import type { Code } from "./surface/draft.js";
 import {
+	type ConceptEntry,
 	EMPTY_ENV,
 	type Env,
 	type NamedScheme,
+	parseConcept,
 	parseTextEntry,
 	type TextEntry,
 } from "./surface/env.js";
@@ -28,20 +30,38 @@ import { type Symbols, schemeSymbols } from "./symbols.js";
 export type SchemeKind = NamedScheme | "missing";
 export type Kind = "question" | SchemeKind;
 
+/** In the tree's order: what is measured, then how it is asked, then missing data. */
 export const SCHEME_KINDS: readonly SchemeKind[] = [
+	"concept",
 	"scale",
 	"universe",
 	"instruction",
 	"missing",
 ];
 
-const FOLDERS: Readonly<Record<NamedScheme, string>> = {
+/** Where each named kind lives in the bank. The loader reads these folders. */
+export const FOLDERS: Readonly<Record<NamedScheme, string>> = {
+	concept: "concepts",
 	scale: "scales",
 	universe: "universes",
 	instruction: "instructions",
 };
 
 export const MISSING_NAME = "missing";
+
+/**
+ * What a kind's file holds, which decides how it is read, previewed and started: a
+ * `labels:` map, one `text:` line, or a concept's `label:` and `definition:`.
+ */
+export type Shape = "labels" | "text" | "concept";
+
+export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
+	concept: "concept",
+	scale: "labels",
+	universe: "text",
+	instruction: "text",
+	missing: "labels",
+};
 
 /** The path a scheme file lives at. The name is the filename; nothing inside repeats it. */
 export const schemePath = (kind: SchemeKind, name: string): string =>
@@ -71,7 +91,8 @@ export function kindAt(
 /** What a scheme file says, for its preview. */
 export type SchemeValue =
 	| { readonly kind: "labels"; readonly codes: readonly Code[] }
-	| { readonly kind: "text"; readonly text: string };
+	| { readonly kind: "text"; readonly text: string }
+	| { readonly kind: "concept"; readonly concept: ConceptEntry };
 
 export interface SchemeEvaluation {
 	readonly findings: readonly Finding[];
@@ -101,12 +122,19 @@ function readScheme(
 ): Omit<SchemeEvaluation, "symbols"> {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
-	if (kind === "universe" || kind === "instruction") {
+	if (SHAPE[kind] === "text") {
 		const { entry, findings } = parseTextEntry(source);
 		const marks = holeChips(findings, empties);
 		return entry === undefined
 			? { findings, ranges, marks }
 			: { findings, ranges, marks, value: { kind: "text", text: entry.text } };
+	}
+	if (SHAPE[kind] === "concept") {
+		const { entry, findings } = parseConcept(source);
+		const marks = holeChips(findings, empties);
+		return entry === undefined
+			? { findings, ranges, marks }
+			: { findings, ranges, marks, value: { kind: "concept", concept: entry } };
 	}
 	const { scale, findings } = parseScale(source);
 	const marks = ordered([
@@ -144,12 +172,19 @@ export interface SchemeFile {
  * why. A second missing list cannot exist (one path), so the last one read wins.
  */
 export function schemeEnv(files: readonly SchemeFile[]): Env {
+	const concepts: Record<string, ConceptEntry> = {};
 	const scales: Record<string, Scale> = {};
 	const universes: Record<string, TextEntry> = {};
 	const instructions: Record<string, TextEntry> = {};
 	let missing: readonly Code[] = EMPTY_ENV.missing;
 	for (const f of files) {
+		if (f.kind === "concept") {
+			const { entry } = parseConcept(f.text);
+			if (entry !== undefined) concepts[f.name] = entry;
+			continue;
+		}
 		if (f.kind === "universe" || f.kind === "instruction") {
+			// SHAPE "text": a universe or an instruction, each its own namespace.
 			const { entry } = parseTextEntry(f.text);
 			if (entry !== undefined)
 				(f.kind === "universe" ? universes : instructions)[f.name] = entry;
@@ -160,8 +195,12 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		if (f.kind === "scale") scales[f.name] = scale;
 		else missing = scale.codes;
 	}
-	return { scales, universes, instructions, missing };
+	return { concepts, scales, universes, instructions, missing };
 }
+
+/** A concept file with its label; the definition is written in the file afterwards. */
+export const conceptSource = (label: string): string =>
+	stringify({ label: label.trim() }, { lineWidth: 0 });
 
 /** A universe or instruction file saying `text`, quoted only where YAML needs it. */
 export const textEntrySource = (text: string): string =>

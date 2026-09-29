@@ -8,6 +8,7 @@
 import type { Evaluation } from "./evaluate.js";
 import { pathAt } from "./findings.js";
 import {
+	type ConceptEntry,
 	type Env,
 	inScope,
 	type NamedScheme,
@@ -33,11 +34,12 @@ export interface Inspection {
 	readonly mention?: {
 		readonly scheme: NamedScheme;
 		readonly name: string;
-		readonly value?: Scale | TextEntry;
+		readonly value?: Scale | TextEntry | ConceptEntry;
 	};
 }
 
 const SCHEME_OF: Partial<Record<SurfaceKey, NamedScheme>> = {
+	concept: "concept",
 	responses: "scale",
 	universe: "universe",
 	instruction: "instruction",

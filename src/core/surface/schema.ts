@@ -13,6 +13,24 @@ import type { Scale } from "./scales.js";
 
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
+/**
+ * A name made from words, for a shared entry created from what a question wrote:
+ * "Racial identification" → `racial_identification`. Always a valid name: `fallback`
+ * when no letters or digits are left, and prefixed by it when the words start with one.
+ */
+export function nameFrom(words: string, fallback: string): string {
+	const slug = words
+		.normalize("NFKD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "")
+		.slice(0, 60)
+		.replace(/_+$/, "");
+	if (slug === "") return fallback;
+	return /^[a-z]/.test(slug) ? slug : `${fallback}_${slug}`;
+}
+
 export const NumberDomainSchema = z
 	.strictObject({
 		min: z.number().optional().describe("Smallest acceptable value."),
@@ -222,6 +240,12 @@ export function questionJsonSchema(
 				: b,
 		);
 	}
+	if (props.concept)
+		props.concept = withNames(
+			props.concept,
+			Object.keys(env.concepts),
+			(n) => env.concepts[n]?.label ?? n,
+		);
 	if (props.universe)
 		props.universe = withNames(
 			props.universe,
@@ -247,6 +271,21 @@ export const LabelsFileSchema = z.strictObject({
 });
 export const labelsJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(LabelsFileSchema) as Record<string, unknown>;
+
+/** The schema of a concept file: its label, and what it means. */
+export const ConceptFileSchema = z.strictObject({
+	label: z
+		.string()
+		.describe("The concept as people say it, e.g. Neighborhood satisfaction."),
+	definition: z
+		.string()
+		.optional()
+		.describe(
+			"What the concept means, so every question naming it measures the same thing.",
+		),
+});
+export const conceptJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(ConceptFileSchema) as Record<string, unknown>;
 
 /** The schema of a universe or instruction file: one `text:` line. */
 export const TextEntryFileSchema = z.strictObject({

@@ -458,6 +458,11 @@ describe("GitHub adapter (Octokit)", () => {
 				{ name: "renters.yaml", type: "blob", object: blob("text: Renters\n") },
 			],
 		},
+		concepts: {
+			entries: [
+				{ name: "trust.yaml", type: "blob", object: blob("label: Trust\n") },
+			],
+		},
 		// A bank without instructions: GitHub answers null.
 		instructions: null,
 		missing: blob('labels:\n  "-8": NR\n'),
@@ -470,6 +475,7 @@ describe("GitHub adapter (Octokit)", () => {
 		const r = await s.loadBank(target);
 		expect(r.ok && r.value.files.map((f) => f.path)).toEqual([
 			"questions/nhd/nhd_sat.yaml",
+			"concepts/trust.yaml",
 			"scales/agree4.yaml",
 			"universes/renters.yaml",
 			"missing.yaml",
@@ -480,6 +486,19 @@ describe("GitHub adapter (Octokit)", () => {
 			1,
 		]);
 		expect(seen).toHaveLength(1);
+		// Every shared kind's folder is asked for, from the one table.
+		const body = seen[0]?.body as
+			| { variables: Record<string, string> }
+			| undefined;
+		const variables = body?.variables ?? {};
+		expect(Object.keys(variables)).toEqual(
+			expect.arrayContaining([
+				"concepts",
+				"scales",
+				"universes",
+				"instructions",
+			]),
+		);
 	});
 
 	it("before the first save, loads the bank instead, keeping the data GitHub sends with its errors", async () => {
@@ -499,7 +518,7 @@ describe("GitHub adapter (Octokit)", () => {
 		});
 		const r = await s.loadBank(target);
 		expect(r.ok && r.value.from).toBe("default");
-		expect(r.ok && r.value.files).toHaveLength(4);
+		expect(r.ok && r.value.files).toHaveLength(5);
 		expect(seen).toHaveLength(2);
 	});
 

@@ -6,6 +6,8 @@
  * can mark it in place. Severity `hole` means "required, not yet filled in".
  */
 
+import type { NamedScheme } from "./surface/env.js";
+
 export type Severity = "hole" | "error" | "warning" | "info";
 
 /** Reported by the tolerant parse: what is missing, malformed, or ignored. */
@@ -32,6 +34,8 @@ export type LintCode =
 	| "matches-scale"
 	| "matches-universe"
 	| "matches-instruction"
+	| "matches-concept"
+	| "concept-prose"
 	| "missing-code"
 	/** Bank-level: another question defines the same variable. */
 	| "duplicate-variable"
@@ -41,6 +45,7 @@ export type LintCode =
 	| "duplicate-scale"
 	| "duplicate-universe"
 	| "duplicate-instruction"
+	| "duplicate-concept"
 	| "unit-spelling"
 	| "similar-text"
 	| "unknown-variant";
@@ -71,11 +76,29 @@ export interface Edit {
 	readonly value: string;
 }
 
-/** One click, one undoable change to the text being edited. */
-export interface Fix {
-	readonly label: string;
-	readonly edits: readonly Edit[];
-}
+/**
+ * What a finding offers to do: rewrite the text being edited (one click, one undo), or
+ * create the shared entry a question names and point the question at it (the name
+ * dialog, prefilled).
+ */
+export type Fix =
+	| {
+			readonly kind: "edit";
+			readonly label: string;
+			readonly edits: readonly Edit[];
+	  }
+	| {
+			readonly kind: "create";
+			readonly label: string;
+			readonly create: {
+				readonly scheme: NamedScheme;
+				readonly name: string;
+				/** The wording or label to start from; may be empty. */
+				readonly text: string;
+				/** Where the question names it, to be pointed at the name chosen. */
+				readonly path: string;
+			};
+	  };
 
 export const holes = (findings: readonly Finding[]): readonly Finding[] =>
 	findings.filter((f) => f.severity === "hole");

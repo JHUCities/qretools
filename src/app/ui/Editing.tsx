@@ -23,9 +23,13 @@ import {
 	evaluateScheme,
 	kindAt,
 	type SchemeEvaluation,
+	SHAPE,
+	type Shape,
 } from "../../core/schemes.js";
+import { inScope } from "../../core/surface/env.js";
 import type { Mark } from "../../core/surface/marks.js";
 import {
+	conceptJsonSchema,
 	labelsJsonSchema,
 	textEntryJsonSchema,
 } from "../../core/surface/schema.js";
@@ -70,9 +74,11 @@ import { useSettled } from "./useSettled.js";
 const SETTLE_MS = 400;
 
 /** JSON Schemas for scheme files never change, so they are made once. */
-const SCHEME_SCHEMAS = {
+/** One per file shape (core `SHAPE`). */
+const SCHEME_SCHEMAS: Readonly<Record<Shape, Record<string, unknown>>> = {
 	labels: labelsJsonSchema(),
 	text: textEntryJsonSchema(),
+	concept: conceptJsonSchema(),
 };
 
 /**
@@ -256,10 +262,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const inEffect =
 		e.kind === "missing"
 			? env.missing.length > 0
-			: e.kind === "scale"
-				? env.scales[e.name] !== undefined
-				: (e.kind === "universe" ? env.universes : env.instructions)[e.name] !==
-					undefined;
+			: inScope(env, e.kind)[e.name] !== undefined;
 	return (
 		<>
 			<FileHeader
@@ -293,11 +296,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						text={e.source}
 						diagnostics={diagnostics}
 						marks={ev.marks}
-						schema={
-							e.kind === "universe" || e.kind === "instruction"
-								? SCHEME_SCHEMAS.text
-								: SCHEME_SCHEMAS.labels
-						}
+						schema={SCHEME_SCHEMAS[SHAPE[e.kind]]}
 						label={`${SINGULAR[e.kind]} ${e.name}: source (YAML)`}
 					/>
 				</section>
@@ -379,11 +378,22 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	);
 }
 
-/** What a scale, universe or instruction says, or that it can't be read yet. */
+/** What a shared file says, or that it can't be read yet. */
 function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 	if (value === undefined)
 		return <p className="quiet">Nothing readable yet.</p>;
 	if (value.kind === "text") return <p>{value.text}</p>;
+	if (value.kind === "concept")
+		return (
+			<>
+				<p>
+					<b>{value.concept.label}</b>
+				</p>
+				{value.concept.definition !== undefined && (
+					<p>{value.concept.definition}</p>
+				)}
+			</>
+		);
 	return (
 		<ul className="cb-values">
 			{value.codes.map((c, i) => (
@@ -558,7 +568,9 @@ function Inspector({
 						{SCHEME_NAME[m.scheme]}{" "}
 						{"codes" in m.value
 							? m.value.codes.map((c) => `${c.code} ${c.label}`).join(" · ")
-							: `“${m.value.text}”`}
+							: "label" in m.value
+								? `“${m.value.label}”`
+								: `“${m.value.text}”`}
 						, used by {users} question{users === 1 ? "" : "s"}.{" "}
 						{file && (
 							<FileLink
@@ -718,11 +730,9 @@ export function ForeignView({
 							diagnostics={diagnostics}
 							marks={marks}
 							schema={
-								kind === "question"
+								kind === undefined || kind === "question"
 									? evaluations.schema(env)
-									: kind === "universe" || kind === "instruction"
-										? SCHEME_SCHEMAS.text
-										: SCHEME_SCHEMAS.labels
+									: SCHEME_SCHEMAS[SHAPE[kind]]
 							}
 							readOnly
 							label={`${whose(screen.branch)} of ${screen.path} (YAML, read only)`}
