@@ -110,7 +110,7 @@ describe("scheme references in the previews", () => {
 				parseScale('labels:\n  "-8": Item non-response\n').scale?.codes ?? [],
 		};
 		const d = parseSurface(
-			"name: q\ntext: Q?\nintent: i\nuniverse: renters\ninstruction: select_one\nopen:\n",
+			"name: q\ntext: Q?\nintent: i\nuniverse: renters\ninstruction: select_one\nopen: {}\n",
 			env,
 		).draft;
 		expect(respondentView(d).instruction).toEqual({
@@ -121,7 +121,7 @@ describe("scheme references in the previews", () => {
 		expect(cb.universe).toEqual({ text: "Renters only", ref: "renters" });
 		expect(cb.missing).toBe("-8 (Item non-response)");
 		const prose = parseSurface(
-			"name: q\ntext: Q?\nintent: i\nuniverse: Everyone here\nopen:\n",
+			"name: q\ntext: Q?\nintent: i\nuniverse: Everyone here\nopen: {}\n",
 			EMPTY_ENV,
 		).draft;
 		expect(codebookView(prose, EMPTY_ENV).universe).toEqual({

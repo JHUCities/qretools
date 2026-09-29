@@ -260,7 +260,7 @@ describe("schemes", () => {
 			instructions: { select_one: { text: "Select one" } },
 		};
 		const { draft, findings } = parseSurface(
-			"name: q\ntext: Q?\nintent: Prevalence of x among renters\nuniverse: renters\ninstruction: select_one\nopen:\n",
+			"name: q\ntext: Q?\nintent: Prevalence of x among renters\nuniverse: renters\ninstruction: select_one\nopen: {}\n",
 			env,
 		);
 		expect(findings).toEqual([]);
@@ -350,7 +350,11 @@ describe("schemes", () => {
 			(v.VariableRepresentation as JsonObject).ValueRepresentation,
 		).toEqual(question(doc, "nhd_nyrs").ResponseDomain);
 		const open = itemOf(
-			elaborate(parseSurface("name: q\nopen:\n", EMPTY_ENV).draft, AGENCY, []),
+			elaborate(
+				parseSurface("name: q\nopen: {}\n", EMPTY_ENV).draft,
+				AGENCY,
+				[],
+			),
 			"Variable",
 			"variable-q",
 		);
@@ -373,7 +377,7 @@ describe("schemes", () => {
 	});
 
 	it("no name or no domain: no variable, and so no missing values to reference", () => {
-		for (const text of ["text: Q?\nopen:\n", "name: q\ntext: Q?\n"]) {
+		for (const text of ["text: Q?\nopen: {}\n", "name: q\ntext: Q?\n"]) {
 			const doc = elaborate(
 				parseSurface(text, EMPTY_ENV).draft,
 				AGENCY,

@@ -41,22 +41,22 @@ describe("lint", () => {
 		],
 		[
 			"double-barreled text",
-			"name: q\ntext: How satisfied are you with the cost and reliability of buses?\nintent: Prevalence of satisfaction with buses\nopen:\n",
+			"name: q\ntext: How satisfied are you with the cost and reliability of buses?\nintent: Prevalence of satisfaction with buses\nopen: {}\n",
 			["info:double-barreled@text"],
 		],
 		[
 			"“or” offers alternatives and is not flagged",
-			"name: q\ntext: Do you rent or own your home?\nintent: Prevalence of housing tenure types\nopen:\n",
+			"name: q\ntext: Do you rent or own your home?\nintent: Prevalence of housing tenure types\nopen: {}\n",
 			[],
 		],
 		[
 			"thin intent",
-			"name: q\ntext: Do you rent?\nintent: Housing\nopen:\n",
+			"name: q\ntext: Do you rent?\nintent: Housing\nopen: {}\n",
 			["info:thin-intent@intent"],
 		],
 		[
 			"intent that repeats the text",
-			"name: q\ntext: Do you rent your home today?\nintent: do you rent your home today?\nopen:\n",
+			"name: q\ntext: Do you rent your home today?\nintent: do you rent your home today?\nopen: {}\n",
 			["info:thin-intent@intent"],
 		],
 	];
@@ -74,7 +74,7 @@ describe("lint", () => {
 		for (const text of quiet) {
 			expect(
 				lintOf(
-					`name: q\ntext: "${text}"\nintent: Prevalence of the thing being measured here\nopen:\n`,
+					`name: q\ntext: "${text}"\nintent: Prevalence of the thing being measured here\nopen: {}\n`,
 				),
 			).toEqual([]);
 		}
@@ -105,7 +105,7 @@ describe("parse findings added with the lints", () => {
 
 	it("select without responses is reported as ignored", () => {
 		const { findings } = parseSurface(
-			`${base}select: many\nopen:\n`,
+			`${base}select: many\nopen: {}\n`,
 			EMPTY_ENV,
 		);
 		expect(findings.map((f) => `${f.severity}:${f.code}@${f.path}`)).toEqual([

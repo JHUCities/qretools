@@ -7,7 +7,12 @@
  */
 import type { Evaluation } from "./evaluate.js";
 import { type Finding, locate, pathAt } from "./findings.js";
-import type { Env, NamedScheme, TextEntry } from "./surface/env.js";
+import {
+	type Env,
+	inScope,
+	type NamedScheme,
+	type TextEntry,
+} from "./surface/env.js";
 import type { Scale } from "./surface/scales.js";
 import {
 	describe,
@@ -39,16 +44,6 @@ const SCHEME_OF: Partial<Record<SurfaceKey, NamedScheme>> = {
 	universe: "universe",
 	instruction: "instruction",
 };
-
-const inScope = (
-	env: Env,
-	scheme: NamedScheme,
-): Readonly<Record<string, Scale | TextEntry>> =>
-	scheme === "scale"
-		? env.scales
-		: scheme === "universe"
-			? env.universes
-			: env.instructions;
 
 /**
  * What is at `offset` in the evaluated text; undefined only inside a key the surface

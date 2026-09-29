@@ -12,7 +12,7 @@ describe("the bank index", () => {
 			"name: b\nselect: many\nresponses:\n  x: { label: X, variable: shared }\n  y: Y\n",
 		),
 		c: symbols("name: c\nresponses:\n  x: { label: X }\nnumber:\n  min: 0\n"),
-		d: symbols("name: shared\nopen:\n"),
+		d: symbols("name: shared\nopen: {}\n"),
 		e: symbols("universe: All respondents\n"),
 	};
 	const index = indexOf(

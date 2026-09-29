@@ -37,6 +37,26 @@ export interface Mention {
 	readonly path: string;
 }
 
+/** What each named scheme holds. */
+export interface SchemeEntries {
+	readonly scale: Scale;
+	readonly universe: TextEntry;
+	readonly instruction: TextEntry;
+}
+
+/** The names in scope for a scheme: the one place a name is looked up. */
+export const inScope = <S extends NamedScheme>(
+	env: Env,
+	scheme: S,
+): Scheme<SchemeEntries[S]> => {
+	const byScheme: { readonly [K in NamedScheme]: Scheme<SchemeEntries[K]> } = {
+		scale: env.scales,
+		universe: env.universes,
+		instruction: env.instructions,
+	};
+	return byScheme[scheme];
+};
+
 export const EMPTY_ENV: Env = {
 	scales: {},
 	universes: {},

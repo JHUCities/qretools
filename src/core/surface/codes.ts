@@ -72,9 +72,10 @@ export function readCodeMap(
 			const obj = isPlainObject(raw) ? raw : {};
 			const label = obj.label;
 			if (label === undefined || label === null || label === "") {
+				// Written empty, the hole is the `label` line itself; absent, it is the option.
 				findings.push(
 					hole(
-						at,
+						label === undefined ? at : `${at}.label`,
 						`Option \`${code}\` has no label.`,
 						"Add `label: ...` under it.",
 					),

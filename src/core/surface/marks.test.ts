@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type Finding, locate } from "../findings.js";
+import { parseDocument } from "yaml";
+import type { Finding } from "../findings.js";
 import { evaluateScheme, type SchemeKind } from "../schemes.js";
 import { EMPTY_ENV, type Env } from "./env.js";
 import type { Mark } from "./marks.js";
-import { parseSurface } from "./parse.js";
+import { indexDocument, parseSurface } from "./parse.js";
 import { parseScale } from "./scales.js";
 
 const QUESTIONS = import.meta.glob(
@@ -56,8 +57,8 @@ describe("marksOf", () => {
 		].join("\n");
 		const { marks } = parseSurface(text, ENV);
 		expect(shown(text, marks)).toEqual([
-			"ref:adults",
 			`hole@${text.indexOf("title:") + "title:".length}`,
+			"ref:adults",
 			"code:1",
 			"code:010",
 			"legacy:legacy:\n  old:\n  kept: x",
@@ -73,7 +74,7 @@ describe("marksOf", () => {
 		expect(parseSurface(unknown, ENV).marks).toEqual([]);
 	});
 
-	it("marks empty option fields and domain fields, not an empty number or legacy", () => {
+	it("marks empty option fields, domain fields and domains, not legacy", () => {
 		const options =
 			"select: many\nresponses:\n  a:\n    label: A\n    title:\n";
 		expect(shown(options, parseSurface(options, ENV).marks)).toEqual([
@@ -85,6 +86,7 @@ describe("marksOf", () => {
 			`hole@${number.length - 1}`,
 		]);
 		expect(parseSurface("number:\nlegacy:\n", ENV).marks).toEqual([
+			{ kind: "hole", range: [7, 7] },
 			{ kind: "legacy", range: [8, 15] },
 		]);
 	});
@@ -120,23 +122,31 @@ describe("scheme file marks", () => {
 	});
 });
 
-/** A chip must agree with `opened()`'s rule: every hole mark sits where a hole finding is. */
-const agrees = (
+/**
+ * Chips and hole findings agree both ways: every chip is a hole finding at a value
+ * written empty, and every such finding has exactly one chip, where the value starts.
+ */
+function agrees(
 	marks: readonly Mark[],
 	findings: readonly Finding[],
-	ranges: Parameters<typeof locate>[1],
-) =>
-	marks
-		.filter((m) => m.kind === "hole")
-		.every((m) =>
-			findings.some((f) => {
-				if (f.severity !== "hole") return false;
-				const [from, to] = locate(f, ranges);
-				return from <= m.range[0] && m.range[0] <= to;
-			}),
-		);
+	empties: Readonly<Record<string, number>>,
+): void {
+	const chips = marks.filter((m) => m.kind === "hole").map((m) => m.range[0]);
+	const holes = findings.filter((f) => f.severity === "hole");
+	for (const at of chips)
+		expect(holes.some((f) => empties[f.path] === at)).toBe(true);
+	for (const f of holes) {
+		const at = empties[f.path];
+		if (at === undefined) continue;
+		expect(chips.filter((c) => c === at)).toHaveLength(1);
+	}
+}
 
-describe("every hole mark is a hole finding", () => {
+const emptiesOf = (text: string) =>
+	indexDocument(parseDocument(text, { prettyErrors: false }), text.length)
+		.empties;
+
+describe("hole chips and hole findings agree", () => {
 	const envs: readonly [string, Env][] = [
 		["empty", EMPTY_ENV],
 		["with scales", ENV],
@@ -145,7 +155,7 @@ describe("every hole mark is a hole finding", () => {
 		for (const [label, env] of envs)
 			it(`${path}, ${label} environment`, () => {
 				const p = parseSurface(text, env);
-				expect(agrees(p.marks, p.findings, p.ranges)).toBe(true);
+				agrees(p.marks, p.findings, p.empties);
 			});
 
 	const kinds: readonly SchemeKind[] = ["scale", "missing"];
@@ -153,20 +163,43 @@ describe("every hole mark is a hole finding", () => {
 		for (const kind of kinds)
 			it(`${path} as ${kind}`, () => {
 				const ev = evaluateScheme(kind, text, ENV);
-				expect(agrees(ev.marks, ev.findings, ev.ranges)).toBe(true);
+				agrees(ev.marks, ev.findings, emptiesOf(text));
 			});
 
-	it("holds on hand-written edge cases", () => {
+	it("holds on hand-written questions, each with a chip", () => {
 		for (const text of [
 			"name:\ntitle:\nselect:\nresponses:\n",
+			"number:\n",
+			"open:\n",
+			"responses:\n",
 			"number:\n  min:\nresponses:\n  1:\nselect:\n",
 			"responses:\n  1:\n    label:\n    title:\n  2: B\nselect: many\n",
 			"open:\n  max_length:\nfoo:\n",
 			"universe:\ninstruction:\nlegacy:\n  a:\n",
 		]) {
 			const p = parseSurface(text, ENV);
-			expect(agrees(p.marks, p.findings, p.ranges), text).toBe(true);
-			expect(p.marks.some((m) => m.kind === "hole")).toBe(true);
+			agrees(p.marks, p.findings, p.empties);
+			expect(
+				p.marks.some((m) => m.kind === "hole"),
+				text,
+			).toBe(true);
+		}
+	});
+
+	it("holds on hand-written scheme files, each with a chip", () => {
+		for (const [kind, text] of [
+			["scale", "labels:\n"],
+			["missing", "labels:\n"],
+			["scale", "labels:\n  1: Yes\n  2:\n"],
+			["universe", "text:\n"],
+			["instruction", "text:\n"],
+		] as const) {
+			const ev = evaluateScheme(kind, text, ENV);
+			agrees(ev.marks, ev.findings, emptiesOf(text));
+			expect(
+				ev.marks.some((m) => m.kind === "hole"),
+				text,
+			).toBe(true);
 		}
 	});
 });
