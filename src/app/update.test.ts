@@ -187,6 +187,37 @@ describe("editing", () => {
 	});
 });
 
+describe("a quick fix", () => {
+	const opened = () =>
+		update(fresh(), {
+			kind: "questionCreated",
+			text: "name: q\nnumber:\n  unit: Days\n",
+		})[0];
+	const fix = {
+		label: "Use `days`",
+		edits: [{ path: "number.unit", value: "days" }],
+	};
+
+	it("rewrites the open question's text, and only its slice of the Model", () => {
+		const m = opened();
+		const [next, cmds] = update(m, { kind: "fixApplied", id: 1, fix });
+		expect(next.local.questions[1]?.source).toBe(
+			"name: q\nnumber:\n  unit: days\n",
+		);
+		expect(next.local.schemes).toBe(m.local.schemes);
+		expect(next.remote).toBe(m.remote);
+		expect(cmds.at(-1)?.kind).toBe("persist");
+	});
+
+	it("does nothing when its place is gone, or no file is open", () => {
+		const m = opened();
+		const gone = { ...fix, edits: [{ path: "universe", value: "x" }] };
+		expect(update(m, { kind: "fixApplied", id: 1, fix: gone })[0]).toBe(m);
+		const closed = update(m, { kind: "listOpened" })[0];
+		expect(update(closed, { kind: "fixApplied", id: 1, fix })[0]).toBe(closed);
+	});
+});
+
 describe("saving", () => {
 	const draftModel = () =>
 		update(fresh(), {
@@ -586,17 +617,22 @@ describe("scheme files", () => {
 			kind: "schemeCreateOpened",
 			scheme: "scale",
 		});
-		expect(asked.browser.creating).toEqual({ kind: "scale", name: "" });
+		expect(asked.browser.naming).toEqual({
+			kind: "scale",
+			name: "",
+			text: "",
+			purpose: { kind: "create" },
+		});
 		expect(schemeNameProblem(asked, "scale", "")).toMatch(/name/);
 		expect(schemeNameProblem(asked, "scale", "Agree 5")).toMatch(
 			/Lowercase letters, digits and underscores/,
 		);
 		// Confirming an unusable name does nothing.
-		expect(update(asked, { kind: "schemeCreateConfirmed" })[0]).toBe(asked);
+		expect(update(asked, { kind: "schemeNamingConfirmed" })[0]).toBe(asked);
 		const [made] = run(
 			asked,
 			{ kind: "schemeNameChanged", name: "agree5" },
-			{ kind: "schemeCreateConfirmed" },
+			{ kind: "schemeNamingConfirmed" },
 		);
 		const id = firstId(made);
 		expect(made.local.schemes[id]).toMatchObject({
@@ -605,7 +641,7 @@ describe("scheme files", () => {
 		});
 		expect(made.local.schemes[id]?.base).toBeUndefined();
 		expect(made.screen).toEqual({ kind: "editing", id });
-		expect(made.browser.creating).toBeUndefined();
+		expect(made.browser.naming).toBeUndefined();
 		expect(schemeNameProblem(made, "scale", "agree5")).toMatch(
 			/already exists/,
 		);
@@ -636,7 +672,7 @@ describe("scheme files", () => {
 			connected(fresh()),
 			{ kind: "schemeCreateOpened", scheme: "universe" },
 			{ kind: "schemeNameChanged", name: "renters" },
-			{ kind: "schemeCreateConfirmed" },
+			{ kind: "schemeNamingConfirmed" },
 		);
 		const id = firstId(made);
 		const [, cmds] = update(made, { kind: "saveRequested", id });
@@ -777,7 +813,7 @@ describe("writing waits for this session's load", () => {
 			fresh(),
 			{ kind: "schemeCreateOpened", scheme: "scale" },
 			{ kind: "schemeNameChanged", name: "mine" },
-			{ kind: "schemeCreateConfirmed" },
+			{ kind: "schemeNamingConfirmed" },
 		);
 		const env = envOf(m.local.schemes, m.remote.schemes);
 		expect(Object.keys(env.scales)).toContain("agree4");
@@ -878,7 +914,10 @@ describe("the cursor inspector's messages", () => {
 			scheme: "universe",
 			name: "renters",
 		});
-		expect(m.browser.creating).toEqual({ kind: "universe", name: "renters" });
+		expect(m.browser.naming).toMatchObject({
+			kind: "universe",
+			name: "renters",
+		});
 		expect(schemeNameProblem(m, "universe", "renters")).toBeUndefined();
 	});
 });
@@ -1870,5 +1909,110 @@ describe("signing out", () => {
 		expect(
 			update(asking, { kind: "signOutDiscardConfirmed" })[0].session.kind,
 		).toBe("anonymous");
+	});
+});
+
+describe("naming a shared file from a question", () => {
+	const asked = (text: string) =>
+		update(fresh(), { kind: "questionCreated", text })[0];
+
+	it("creates a universe with its text and points the question at the name chosen, staying on it", () => {
+		const m = asked("name: q\nuniverse: rent\n");
+		const [done] = run(
+			m,
+			{
+				kind: "schemeCreateOpened",
+				scheme: "universe",
+				name: "rent",
+				use: { id: 1, path: "universe" },
+			},
+			{ kind: "schemeNameChanged", name: "renters" },
+			{ kind: "schemeTextChanged", text: "Renters only" },
+			{ kind: "schemeNamingConfirmed" },
+		);
+		expect(done.local.questions[1]?.source).toBe(
+			"name: q\nuniverse: renters\n",
+		);
+		const made = Object.values(done.local.schemes)[0];
+		expect(made).toMatchObject({
+			kind: "universe",
+			name: "renters",
+			source: "text: Renters only\n",
+		});
+		expect(done.screen).toEqual({ kind: "editing", id: 1 });
+		expect(done.browser.naming).toBeUndefined();
+	});
+
+	it("opens a new scale for its labels, after pointing the question at it", () => {
+		const m = asked("name: q\nresponses: agr\n");
+		const [done] = run(
+			m,
+			{
+				kind: "schemeCreateOpened",
+				scheme: "scale",
+				name: "agr",
+				use: { id: 1, path: "responses" },
+			},
+			{ kind: "schemeNameChanged", name: "agree4" },
+			{ kind: "schemeNamingConfirmed" },
+		);
+		expect(done.local.questions[1]?.source).toBe(
+			"name: q\nresponses: agree4\n",
+		);
+		const made = Object.values(done.local.schemes)[0];
+		expect(done.screen).toEqual({ kind: "editing", id: made?.id });
+	});
+});
+
+describe("renaming a draft shared file", () => {
+	const drafted = () => {
+		const [m] = run(
+			fresh(),
+			{ kind: "questionCreated", text: "name: a\nuniverse: rent\n" },
+			{ kind: "questionCreated", text: "name: b\nuniverse: other\n" },
+			{ kind: "schemeCreateOpened", scheme: "universe" },
+			{ kind: "schemeNameChanged", name: "rent" },
+			{ kind: "schemeNamingConfirmed" },
+		);
+		return m;
+	};
+
+	it("renames it and the questions in this tab that name it, touching no others", () => {
+		const m = drafted();
+		const id = Object.values(m.local.schemes)[0]?.id ?? -1;
+		const [done] = run(
+			m,
+			{ kind: "schemeRenameOpened", id },
+			{ kind: "schemeNameChanged", name: "renters" },
+			{ kind: "schemeNamingConfirmed" },
+		);
+		expect(done.local.schemes[id]?.name).toBe("renters");
+		expect(done.local.questions[1]?.source).toBe(
+			"name: a\nuniverse: renters\n",
+		);
+		expect(done.local.questions[2]).toBe(m.local.questions[2]);
+	});
+
+	it("keeps its own name free (no change is not taken), and refuses a saved file", () => {
+		const m = drafted();
+		const e = Object.values(m.local.schemes)[0];
+		if (!e) throw new Error("no file");
+		const [same] = update(m, { kind: "schemeRenameOpened", id: e.id });
+		expect(same.browser.naming?.name).toBe("rent");
+		const saved = {
+			...m,
+			local: {
+				...m.local,
+				schemes: {
+					[e.id]: {
+						...e,
+						base: { path: "universes/rent.yaml", sha: "s", text: e.source },
+					},
+				},
+			},
+		};
+		expect(update(saved, { kind: "schemeRenameOpened", id: e.id })[0]).toBe(
+			saved,
+		);
 	});
 });

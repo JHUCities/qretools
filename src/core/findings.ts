@@ -61,6 +61,20 @@ export interface Finding {
 	readonly detail?: string;
 	/** Present when the finding has its own position (syntax errors); otherwise look up `path`. */
 	readonly range?: Range;
+	/** What the finding offers to do about itself, when that is unambiguous and loses nothing. */
+	readonly fix?: Fix;
+}
+
+/** Set the value at `path` (the whole `key: value` pair is rewritten; see surface/edit.ts). */
+export interface Edit {
+	readonly path: string;
+	readonly value: string;
+}
+
+/** One click, one undoable change to the text being edited. */
+export interface Fix {
+	readonly label: string;
+	readonly edits: readonly Edit[];
 }
 
 export const holes = (findings: readonly Finding[]): readonly Finding[] =>

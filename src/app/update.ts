@@ -10,7 +10,8 @@ import {
 import { compact } from "../core/compact.js";
 import { FOLDER_RULE_TEXT, NAME_RULE_TEXT, SCHEME_NAME } from "../core/copy.js";
 import { locate } from "../core/findings.js";
-import { MISSING_NAME, schemePath } from "../core/schemes.js";
+import { MISSING_NAME, schemePath, textEntrySource } from "../core/schemes.js";
+import { applyEdits, renameEdits } from "../core/surface/edit.js";
 import type { NamedScheme } from "../core/surface/env.js";
 import { parseSurface, rangesOf } from "../core/surface/parse.js";
 import { NAME_PATTERN } from "../core/surface/schema.js";
@@ -29,6 +30,7 @@ import {
 	type Id,
 	type Model,
 	type Msg,
+	type Naming,
 	otherAuthor,
 	otherBank,
 	ownWork,
@@ -78,6 +80,17 @@ function step(model: Model, msg: Msg): Step {
 			return model.screen.kind === "editing"
 				? persist([withSource(model, model.screen.id, msg.text), []])
 				: [model, []];
+
+		case "fixApplied": {
+			// Like typing: only the open file, which the author can edit. A path the text
+			// no longer has (it changed since the fix was offered) changes nothing.
+			const q = current(model);
+			if (!q || q.id !== msg.id) return [model, []];
+			const text = applyEdits(q.source, msg.fix.edits);
+			return text === undefined || text === q.source
+				? [model, []]
+				: persist([withSource(model, q.id, text), []]);
+		}
 
 		case "locationClicked": {
 			// A click names a place in the document's terms. It becomes a range here,
@@ -189,7 +202,15 @@ function step(model: Model, msg: Msg): Step {
 						...model,
 						browser: {
 							...model.browser,
-							creating: { kind: msg.scheme, name: msg.name ?? "" },
+							naming: {
+								kind: msg.scheme,
+								name: msg.name ?? "",
+								text: "",
+								purpose: {
+									kind: "create",
+									...(msg.use !== undefined && { use: msg.use }),
+								},
+							},
 						},
 					},
 					[],
@@ -208,39 +229,87 @@ function step(model: Model, msg: Msg): Step {
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
 		}
 
-		case "schemeNameChanged":
-			return model.browser.creating === undefined
-				? [model, []]
-				: [
-						{
-							...model,
-							browser: {
-								...model.browser,
-								creating: { ...model.browser.creating, name: msg.name },
-							},
-						},
-						[],
-					];
-
-		case "schemeCreateCancelled":
-			return [{ ...model, browser: withoutCreating(model.browser) }, []];
-
-		case "schemeCreateConfirmed": {
-			const creating = model.browser.creating;
-			if (
-				creating === undefined ||
-				schemeNameProblem(model, creating.kind, creating.name) !== undefined
-			)
+		case "schemeRenameOpened": {
+			// Only a draft: a saved file's name is its path on GitHub, and other branches'.
+			const e = model.local.schemes[msg.id];
+			if (!e || e.kind === "missing" || e.base !== undefined)
 				return [model, []];
-			const [next, id] = add(
-				{ ...model, browser: withoutCreating(model.browser) },
+			return [
 				{
-					kind: creating.kind,
-					name: creating.name,
-					source: SCHEME_TEMPLATES[creating.kind],
+					...model,
+					browser: {
+						...model.browser,
+						naming: {
+							kind: e.kind,
+							name: e.name,
+							text: "",
+							purpose: { kind: "rename", id: e.id },
+						},
+					},
 				},
-			);
-			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
+				[],
+			];
+		}
+
+		case "schemeNameChanged":
+		case "schemeTextChanged": {
+			const naming = model.browser.naming;
+			if (naming === undefined) return [model, []];
+			const changed =
+				msg.kind === "schemeNameChanged"
+					? { ...naming, name: msg.name }
+					: { ...naming, text: msg.text };
+			return [{ ...model, browser: { ...model.browser, naming: changed } }, []];
+		}
+
+		case "schemeNamingCancelled":
+			return [{ ...model, browser: withoutNaming(model.browser) }, []];
+
+		case "schemeNamingConfirmed": {
+			const naming = model.browser.naming;
+			if (naming === undefined || namingProblem(model, naming) !== undefined)
+				return [model, []];
+			const closed = { ...model, browser: withoutNaming(model.browser) };
+			if (naming.purpose.kind === "rename") {
+				const { id } = naming.purpose;
+				const e = model.local.schemes[id];
+				if (!e || e.kind === "missing" || e.base !== undefined)
+					return [closed, []];
+				const renamed = withFile(closed, { ...e, name: naming.name });
+				return persist([
+					renameReferences(renamed, e.kind, e.name, naming.name),
+					[],
+				]);
+			}
+			const source =
+				naming.kind !== "scale" && naming.text.trim() !== ""
+					? textEntrySource(naming.text)
+					: SCHEME_TEMPLATES[naming.kind];
+			const [added, id] = add(closed, {
+				kind: naming.kind,
+				name: naming.name,
+				source,
+			});
+			// The question that named it now names the file, whatever name was chosen.
+			const { use } = naming.purpose;
+			const q = use === undefined ? undefined : added.local.questions[use.id];
+			const used =
+				use === undefined || q === undefined
+					? added
+					: withSource(
+							added,
+							q.id,
+							applyEdits(q.source, [{ path: use.path, value: naming.name }]) ??
+								q.source,
+						);
+			// A universe or instruction is complete with its text: stay on the question.
+			// A scale needs its labels written, so it opens.
+			const stay =
+				use !== undefined && q !== undefined && naming.kind !== "scale";
+			return persist([
+				stay ? used : { ...used, screen: { kind: "editing", id } },
+				[],
+			]);
 		}
 
 		case "deleteRequested": {
@@ -1208,11 +1277,12 @@ export function schemeNameProblem(
 	model: Model,
 	kind: NamedScheme,
 	name: string,
+	self?: Id,
 ): string | undefined {
 	if (name === "") return "Give it a name.";
 	if (!NAME_PATTERN.test(name)) return NAME_RULE_TEXT;
 	return Object.values(model.local.schemes).some(
-		(e) => e.kind === kind && e.name === name,
+		(e) => e.kind === kind && e.name === name && e.id !== self,
 	)
 		? `A ${SCHEME_NAME[kind]} named \`${name}\` already exists.`
 		: undefined;
@@ -1227,8 +1297,37 @@ const withoutSaving = (browser: Model["browser"]): Model["browser"] =>
 const withoutConfirm = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, confirmDelete: undefined });
 
-const withoutCreating = (browser: Model["browser"]): Model["browser"] =>
-	compact({ ...browser, creating: undefined });
+const withoutNaming = (browser: Model["browser"]): Model["browser"] =>
+	compact({ ...browser, naming: undefined });
+
+/**
+ * What stops the name dialog's answer: the name rule, or another shared file of the
+ * kind with that name. A file being renamed does not stand in its own way.
+ */
+export function namingProblem(
+	model: Model,
+	naming: Naming,
+): string | undefined {
+	const self = naming.purpose.kind === "rename" ? naming.purpose.id : undefined;
+	return schemeNameProblem(model, naming.kind, naming.name, self);
+}
+
+/** Every question in this tab that names the file by its old name now names the new one. */
+function renameReferences(
+	model: Model,
+	scheme: NamedScheme,
+	from: string,
+	to: string,
+): Model {
+	let next = model;
+	for (const q of Object.values(model.local.questions)) {
+		const edits = renameEdits(q.source, scheme, from, to);
+		const text = edits.length === 0 ? undefined : applyEdits(q.source, edits);
+		if (text !== undefined && text !== q.source)
+			next = withSource(next, q.id, text);
+	}
+	return next;
+}
 
 const current = (model: Model): Entry | undefined =>
 	model.screen.kind === "editing" ? fileOf(model, model.screen.id) : undefined;

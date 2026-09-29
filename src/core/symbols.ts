@@ -11,7 +11,8 @@
  * lists, codes ignored); and, for question text only, similar wording (word overlap),
  * computed for one file at a time against the index, never for every pair.
  */
-import type { Finding } from "./findings.js";
+import { fixLabel } from "./copy.js";
+import type { Finding, Fix } from "./findings.js";
 import { fold, labelsKey } from "./fold.js";
 import type { SchemeKind, SchemeValue } from "./schemes.js";
 import {
@@ -304,6 +305,29 @@ const SAID: Readonly<
 	},
 };
 
+/**
+ * The spelling most of the bank uses, offered to a file that spells it otherwise; none
+ * when this file already has the most common one (the others should change). A tie
+ * goes to lowercase, then to sort order, so every file offers the same one.
+ */
+function towardMajority<K>(
+	mine: Fingerprint,
+	others: readonly Printed<K>[],
+): Fix | undefined {
+	const count = new Map<string, number>([[mine.raw, 1]]);
+	for (const s of others) count.set(s.raw, (count.get(s.raw) ?? 0) + 1);
+	const lower = (x: string) => (x === x.toLowerCase() ? 0 : 1);
+	const [best] = [...count].sort(
+		([a, m], [b, n]) =>
+			n - m || lower(a) - lower(b) || (a < b ? -1 : a > b ? 1 : 0),
+	);
+	if (best === undefined || best[0] === mine.raw) return undefined;
+	return {
+		label: fixLabel(best[0]),
+		edits: [{ path: mine.path, value: best[0] }],
+	};
+}
+
 const listed = (names: readonly string[]): string =>
 	names.map((n) => `\`${n}\``).join(", ");
 
@@ -371,6 +395,7 @@ export function bankFindings<K>(
 			if (spelled.length === 0) return [];
 			const keys = spelled.map((s) => s.key);
 			const ways = [...new Set(spelled.map((s) => `\`${s.raw}\``))];
+			const fix = towardMajority(f, sites);
 			return [
 				{
 					code: "unit-spelling",
@@ -379,6 +404,7 @@ export function bankFindings<K>(
 					message: `\`${f.raw}\` is written ${ways.join(" or ")} in ${listed(names(keys))}.`,
 					hint: "Spell a unit the same way everywhere, so the codebook shows one unit.",
 					others: keys,
+					...(fix !== undefined && { fix }),
 				},
 			];
 		}

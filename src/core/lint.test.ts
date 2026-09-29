@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import nhdNyrs from "../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../examples/nhd_sat.yaml?raw";
 import { lint } from "./lint.js";
+import { applyEdits } from "./surface/edit.js";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
 
@@ -190,5 +191,82 @@ describe("an inline list and a shared scale", () => {
 		expect(f?.message).toBe(
 			"These responses match the shared scale `often3` (apart from codes).",
 		);
+	});
+});
+
+describe("the fix a shared-entry match offers", () => {
+	const scale = {
+		codes: [
+			{ code: "1", label: "Often" },
+			{ code: "2", label: "Never" },
+		],
+	};
+	const fixOf = (text: string, scales: Record<string, typeof scale>) => {
+		const env = { ...EMPTY_ENV, scales };
+		return lint(parseSurface(text, env).draft, env).find(
+			(f) => f.code === "matches-scale",
+		)?.fix;
+	};
+
+	it("names the scale when that loses nothing", () => {
+		expect(
+			fixOf("name: q\nresponses:\n  1: Often\n  2: Never\n", { often2: scale }),
+		).toEqual({
+			label: "Use `often2`",
+			edits: [{ path: "responses", value: "often2" }],
+		});
+	});
+
+	it("is withheld for two matches, other codes, or options carrying their own documentation", () => {
+		expect(
+			fixOf("name: q\nresponses:\n  1: Often\n  2: Never\n", {
+				a: scale,
+				b: scale,
+			}),
+		).toBeUndefined();
+		expect(
+			fixOf("name: q\nresponses:\n  a: Often\n  b: Never\n", { often2: scale }),
+		).toBeUndefined();
+		expect(
+			fixOf(
+				"name: q\nresponses:\n  1: { label: Often, note: kept }\n  2: Never\n",
+				{ often2: scale },
+			),
+		).toBeUndefined();
+	});
+});
+
+describe("applying a fix", () => {
+	it("clears the finding it came from", () => {
+		const env = {
+			...EMPTY_ENV,
+			scales: {
+				often2: {
+					codes: [
+						{ code: "1", label: "Often" },
+						{ code: "2", label: "Never" },
+					],
+				},
+			},
+			universes: { adults: { text: "All adults" } },
+		};
+		const text =
+			"name: q\nuniverse: all adults\nresponses:\n  1: Often\n  2: Never\nselect: one\n";
+		let source = text;
+		for (const code of ["matches-scale", "matches-universe"]) {
+			const fix = lint(parseSurface(source, env).draft, env).find(
+				(f) => f.code === code,
+			)?.fix;
+			expect(fix).toBeDefined();
+			source = applyEdits(source, fix?.edits ?? []) ?? source;
+		}
+		expect(source).toBe(
+			"name: q\nuniverse: adults\nresponses: often2\nselect: one\n",
+		);
+		expect(
+			lint(parseSurface(source, env).draft, env).filter((f) =>
+				f.code.startsWith("matches-"),
+			),
+		).toEqual([]);
 	});
 });

@@ -8,7 +8,7 @@
  * follows from its text.
  */
 import { compact } from "../core/compact.js";
-import type { Finding, Range, Target } from "../core/findings.js";
+import type { Finding, Fix, Range, Target } from "../core/findings.js";
 import type { Result } from "../core/result.js";
 import { kindAt, type SchemeKind, schemeEnv } from "../core/schemes.js";
 import type { Env, NamedScheme } from "../core/surface/env.js";
@@ -139,8 +139,12 @@ export interface Browser {
 	readonly saving?: { readonly id: Id; readonly folder: string };
 	/** The move dialog for a bank question: which one, and the folder being chosen. */
 	readonly moving?: { readonly id: Id; readonly folder: string };
-	/** The name dialog for a new scale, universe or instruction: a scheme file is named before it exists. */
-	readonly creating?: { readonly kind: NamedScheme; readonly name: string };
+	/**
+	 * The name dialog: a new scale, universe or instruction is named before it exists
+	 * (with its text, for a universe or instruction), optionally to be used at once by
+	 * the question it was asked from; or a draft shared file is renamed.
+	 */
+	readonly naming?: Naming;
 	/**
 	 * Signing out with unsaved work: asking what to do with it, or saving it first. A
 	 * failed save comes back here, never on a file.
@@ -220,8 +224,24 @@ export interface Model {
 	readonly ddiSchema: DdiSchema;
 }
 
+export interface Naming {
+	readonly kind: NamedScheme;
+	readonly name: string;
+	/** A universe's or instruction's wording; unused for a scale. */
+	readonly text: string;
+	readonly purpose:
+		| {
+				readonly kind: "create";
+				/** The question that named it, and where: that reference is rewritten to the name chosen. */
+				readonly use?: { readonly id: Id; readonly path: string };
+		  }
+		| { readonly kind: "rename"; readonly id: Id };
+}
+
 export type Msg =
 	| { readonly kind: "edited"; readonly text: string }
+	/** A finding's quick fix, clicked: edits in the document's terms, applied to the text as it is now. */
+	| { readonly kind: "fixApplied"; readonly id: Id; readonly fix: Fix }
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "cursorMoved"; readonly offset: number }
 	/** The browser's address changed (a pasted link, Back, Forward); read when handled. */
@@ -250,10 +270,15 @@ export type Msg =
 			readonly scheme: SchemeKind;
 			/** Prefilled, as when the inspector offers to create a name a question already uses. */
 			readonly name?: string;
+			/** The question and place that named it, to be pointed at the name chosen. */
+			readonly use?: { readonly id: Id; readonly path: string };
 	  }
+	/** Rename a shared file that has never been saved: nothing on GitHub depends on its name. */
+	| { readonly kind: "schemeRenameOpened"; readonly id: Id }
 	| { readonly kind: "schemeNameChanged"; readonly name: string }
-	| { readonly kind: "schemeCreateConfirmed" }
-	| { readonly kind: "schemeCreateCancelled" }
+	| { readonly kind: "schemeTextChanged"; readonly text: string }
+	| { readonly kind: "schemeNamingConfirmed" }
+	| { readonly kind: "schemeNamingCancelled" }
 	| { readonly kind: "deleteRequested"; readonly id: Id }
 	| { readonly kind: "deleteCancelled" }
 	| { readonly kind: "saveRequested"; readonly id: Id }

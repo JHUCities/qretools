@@ -8,7 +8,8 @@
  * "single-select needs a residual option" (bipolar scales are exhaustive
  * without one), "text must end in ?" (stems like "Please indicate..." are fine).
  */
-import type { Finding, LintCode } from "./findings.js";
+import { fixLabel } from "./copy.js";
+import type { Finding, Fix, LintCode } from "./findings.js";
 import { fold, labelsKey } from "./fold.js";
 import { type Code, type Draft, optionVariable } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
@@ -21,12 +22,20 @@ const advise = (
 	path: string,
 	message: string,
 	hint: string,
+	fix?: Fix,
 ): Finding => ({
 	code,
 	severity,
 	path,
 	message,
 	hint,
+	...(fix !== undefined && { fix }),
+});
+
+/** Name a shared entry in place of what is written at `path`. */
+const nameFix = (path: string, name: string): Fix => ({
+	label: fixLabel(name),
+	edits: [{ path, value: name }],
 });
 
 const normalise = (s: string): string =>
@@ -217,6 +226,14 @@ const matchesScale: Rule = ({ domain }, env) => {
 		matches.length === 1
 			? `the shared scale \`${matches[0]}\``
 			: `the shared scales ${matches.map((m) => `\`${m}\``).join(", ")}`;
+	// Offered only when naming the scale loses nothing: one match, the same codes (or
+	// the stored values would change), and no option carrying its own documentation or
+	// variable name, which the scale cannot hold.
+	const only = matches.length === 1 ? matches[0] : undefined;
+	const plain = domain.codes.every(
+		(c) =>
+			c.title === undefined && c.variable === undefined && c.note === undefined,
+	);
 	return [
 		advise(
 			"matches-scale",
@@ -224,6 +241,9 @@ const matchesScale: Rule = ({ domain }, env) => {
 			"responses",
 			`These responses match ${which}${apart}.`,
 			`Write \`responses: ${matches[0]}\` to share it, so a change to the scale reaches every question that uses it.`,
+			only !== undefined && apart === "" && plain
+				? nameFix("responses", only)
+				: undefined,
 		),
 	];
 };
@@ -250,6 +270,9 @@ const matchesShared =
 				key,
 				`This is the shared ${key} ${matches.map((m) => `\`${m}\``).join(", ")}.`,
 				`Write \`${key}: ${matches[0]}\` to share it, so a change reaches every question that uses it.`,
+				matches.length === 1 && matches[0] !== undefined
+					? nameFix(key, matches[0])
+					: undefined,
 			),
 		];
 	};

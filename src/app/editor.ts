@@ -8,6 +8,7 @@
  * transaction, and become decorations only here.
  */
 import { startCompletion } from "@codemirror/autocomplete";
+import { isolateHistory } from "@codemirror/commands";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
@@ -136,10 +137,13 @@ export function createEditor(
 				schema = next;
 				updateSchema(view, next as never);
 			}
-			if (text !== view.state.doc.toString()) {
+			const now = view.state.doc.toString();
+			if (text !== now) {
+				// Only what differs, as its own undo step: a quick fix is one Cmd-Z, and
+				// the caret outside the change stays where it was.
 				view.dispatch({
-					changes: { from: 0, to: view.state.doc.length, insert: text },
-					annotations: external.of(true),
+					changes: changeBetween(now, text),
+					annotations: [external.of(true), isolateHistory.of("full")],
 				});
 			}
 			// One transaction: findings and marks describe the same text, so they never
@@ -162,6 +166,24 @@ export function createEditor(
 		destroy() {
 			view.destroy();
 		},
+	};
+}
+
+/** The one change that turns `a` into `b`: whatever lies between their common prefix and suffix. */
+export function changeBetween(
+	a: string,
+	b: string,
+): { readonly from: number; readonly to: number; readonly insert: string } {
+	const most = Math.min(a.length, b.length);
+	let start = 0;
+	while (start < most && a[start] === b[start]) start++;
+	let end = 0;
+	while (end < most - start && a[a.length - 1 - end] === b[b.length - 1 - end])
+		end++;
+	return {
+		from: start,
+		to: a.length - end,
+		insert: b.slice(start, b.length - end),
 	};
 }
 

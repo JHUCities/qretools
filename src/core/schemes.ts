@@ -3,7 +3,7 @@
  * they live, how each is read, and the environment questions are read against.
  * Pure; the shell decides which text of a file counts (the saved bank version).
  */
-import { parseDocument } from "yaml";
+import { parseDocument, stringify } from "yaml";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { missingCollisions } from "./lint.js";
 import type { Code } from "./surface/draft.js";
@@ -162,3 +162,7 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	}
 	return { scales, universes, instructions, missing };
 }
+
+/** A universe or instruction file saying `text`, quoted only where YAML needs it. */
+export const textEntrySource = (text: string): string =>
+	stringify({ text: text.trim() }, { lineWidth: 0 });

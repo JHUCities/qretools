@@ -22,6 +22,8 @@ export interface HeaderActions {
 	readonly remove: () => void;
 	/** Absent for a file that cannot move: a draft, or a scheme file (named by its path). */
 	readonly move?: () => void;
+	/** Only for a shared file never saved: its name is not yet anyone else's. Local, so never blocked. */
+	readonly rename?: () => void;
 	/** Back to the bank: shown on narrow screens, where the tree and the file are separate views. */
 	readonly close?: () => void;
 }
@@ -120,6 +122,11 @@ export function FileHeader({
 							</span>
 							<VisuallyHidden id={statusId}>{alsoText}</VisuallyHidden>
 						</>
+					)}
+					{on.rename !== undefined && (
+						<Button size="small" onClick={on.rename}>
+							Rename…
+						</Button>
 					)}
 					{on.move !== undefined && (
 						<Button
