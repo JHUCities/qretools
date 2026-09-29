@@ -3,6 +3,11 @@
  * first key under a parent, and for an empty value that has known choices (an
  * enum, or the shared scale names). Generic over the JSON Schema in the editor's
  * state; it knows nothing about surveys.
+ *
+ * One rule for what an option shows beside it: a name's content, on its own row
+ * (`detail`: a shared instruction's text, a scale's labels), never what a field
+ * means, and never a floating info panel. A field's meaning is the cursor
+ * inspector's, once the field is written.
  */
 import type {
 	Completion,
@@ -37,7 +42,7 @@ function valuesOf(node: SchemaNode | undefined): readonly Completion[] {
 						{
 							label: String(o.const),
 							type: "enum",
-							...(o.description !== undefined && { info: o.description }),
+							...(o.description !== undefined && { detail: o.description }),
 						},
 					],
 		),
@@ -70,17 +75,18 @@ export function schemaCompletion(
 		return null;
 	const options: Completion[] = Object.entries(node.properties)
 		.filter(([name]) => !siblings.includes(name))
-		.map(([name, sub], i) => ({
+		.map(([name], i) => ({
 			label: name,
 			type: "property",
 			// Keep the schema's order (name, text, intent first), not the alphabet's.
 			boost: 50 - i,
 			apply: `${name}: `,
-			...(sub.description !== undefined && { info: sub.description }),
 		}));
 	return options.length === 0
 		? null
-		: { from: context.pos - typed.length, options, validFor: /^\w*$/ };
+		: // No `validFor`: once a prefix is typed, the package completes it, so this list
+			// must be asked again (and step aside) rather than kept, or keys appear twice.
+			{ from: context.pos - typed.length, options };
 }
 
 /**
@@ -121,3 +127,26 @@ function scope(
 	}
 	return { node: undefined, siblings: [] };
 }
+
+/**
+ * The package's options under the same rule: a value's description (a string `info`)
+ * moves to its row as `detail`; a key's rendered panel, and whatever the package itself
+ * puts in `detail` (a type name, "Default value"), go. Everything else is kept.
+ */
+export const withoutInfo =
+	(
+		source: (
+			context: CompletionContext,
+		) => CompletionResult | null | readonly never[],
+	): ((context: CompletionContext) => CompletionResult | null) =>
+	(context) => {
+		const result = source(context);
+		// The package answers "nothing here" with an empty array.
+		if (result === null || !("options" in result)) return null;
+		return {
+			...result,
+			options: result.options.map(({ info, detail: _own, ...option }) =>
+				typeof info === "string" ? { ...option, detail: info } : option,
+			),
+		};
+	};

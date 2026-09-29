@@ -231,6 +231,15 @@ emit a Universe item and resolve the link in role 2.
   findings with `setDiagnostics` (holes map to CodeMirror's otherwise unused `hint`
   severity), and add `complete.ts` for the cases the package does not cover: a blank
   line, the first key under a parent, an empty enum value.
+  **Completion shows no info panel (owner, 2026-09-29):** it floated beside the list as
+  a second pill. What a name refers to is its `detail`, on its own row (a shared
+  instruction's text, a scale's labels), muted and truncated, the list one fixed width
+  while it shows content; keys carry none (the inspector explains a field once it is
+  written). The package's options pass through `withoutInfo`; whatever the package puts in
+  `detail` (a type name, "Default value") is dropped. The package now loads under Vitest
+  (`server.deps.inline`), so complete.ts has tests. Fixed on the
+  way: our key list kept itself valid while the author typed a prefix, so the package's
+  keys joined it and every key appeared twice.
 
 - **On a Mac, completion opens with Cmd-I or Option-Esc (VS Code's bindings), set in
   `editor.ts`.** macOS often takes Ctrl-Space for input-source switching, and
