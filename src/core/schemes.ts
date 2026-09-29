@@ -3,6 +3,7 @@
  * they live, how each is read, and the environment questions are read against.
  * Pure; the shell decides which text of a file counts (the saved bank version).
  */
+import { parseDocument } from "yaml";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { missingCollisions } from "./lint.js";
 import type { Code } from "./surface/draft.js";
@@ -13,7 +14,8 @@ import {
 	parseTextEntry,
 	type TextEntry,
 } from "./surface/env.js";
-import { rangesOf } from "./surface/parse.js";
+import { type Mark, schemeMarksOf } from "./surface/marks.js";
+import { indexRanges } from "./surface/parse.js";
 import { parseScale, type Scale } from "./surface/scales.js";
 
 /** `missing` is a scheme file too, but one list for the bank, never named by a question. */
@@ -68,6 +70,8 @@ export type SchemeValue =
 export interface SchemeEvaluation {
 	readonly findings: readonly Finding[];
 	readonly ranges: Readonly<Record<string, Range>>;
+	/** What the editor colours by meaning: codes and holes (see marks.ts). */
+	readonly marks: readonly Mark[];
 	/** Absent while the file does not read as its kind. */
 	readonly value?: SchemeValue;
 }
@@ -78,15 +82,18 @@ export function evaluateScheme(
 	source: string,
 	env: Env,
 ): SchemeEvaluation {
-	const ranges = rangesOf(source);
+	const doc = parseDocument(source, { prettyErrors: false });
+	const ranges = indexRanges(doc, source.length);
 	if (kind === "universe" || kind === "instruction") {
+		const marks = schemeMarksOf("text", doc, source.length);
 		const { entry, findings } = parseTextEntry(source);
 		return entry === undefined
-			? { findings, ranges }
-			: { findings, ranges, value: { kind: "text", text: entry.text } };
+			? { findings, ranges, marks }
+			: { findings, ranges, marks, value: { kind: "text", text: entry.text } };
 	}
+	const marks = schemeMarksOf("labels", doc, source.length);
 	const { scale, findings } = parseScale(source);
-	if (scale === undefined) return { findings, ranges };
+	if (scale === undefined) return { findings, ranges, marks };
 	return {
 		// The missing list is compared with itself only if it were a scale; it is not.
 		findings:
@@ -100,6 +107,7 @@ export function evaluateScheme(
 					)
 				: findings,
 		ranges,
+		marks,
 		value: { kind: "labels", codes: scale.codes },
 	};
 }
