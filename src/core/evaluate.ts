@@ -4,7 +4,7 @@
  */
 import type { DdiDocument } from "./ddi/document.js";
 import { elaborate } from "./ddi/elaborate.js";
-import type { Finding, Range } from "./findings.js";
+import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { lint } from "./lint.js";
 import {
 	type CodebookView,
@@ -19,7 +19,7 @@ import { type Symbols, symbolsOf } from "./symbols.js";
 
 export interface Evaluation {
 	readonly draft: Draft;
-	/** Parse findings, then lint advice. */
+	/** Parse findings and lint advice, in document order. */
 	readonly findings: readonly Finding[];
 	readonly ranges: Readonly<Record<string, Range>>;
 	readonly ddi: DdiDocument;
@@ -34,7 +34,7 @@ export function evaluate(source: string, agency: string, env: Env): Evaluation {
 	const { draft, findings, ranges } = parsed;
 	return {
 		draft,
-		findings: [...findings, ...lint(draft, env)],
+		findings: inDocumentOrder([...findings, ...lint(draft, env)], ranges),
 		ranges,
 		ddi: elaborate(draft, agency, env.missing),
 		respondent: respondentView(draft),
