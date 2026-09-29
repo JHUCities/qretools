@@ -153,9 +153,9 @@ const macCompletionKeys = Prec.highest(
 );
 
 /**
- * The editor in Primer's own terms: every colour is one of Primer's `--codeMirror-*`
- * (or overlay and border) tokens, which are CSS variables, so one theme serves light
- * and dark alike. Holes are invitations, not mistakes: dashed and tinted, never red.
+ * The editor in Primer's own terms: every colour is one of Primer's tokens, which are
+ * CSS variables, so one theme serves light and dark alike. Holes are invitations, not
+ * mistakes: dashed and tinted, never red.
  */
 const primerTheme = EditorView.theme({
 	"&": {
@@ -206,6 +206,39 @@ const primerTheme = EditorView.theme({
 		color: "var(--fgColor-default)",
 		backgroundColor: "var(--bgColor-muted)",
 	},
+	// Problems by severity, told apart by line style as well as colour (so colour-
+	// vision deficiency never hides one): wavy for errors and warnings, dotted for
+	// info. Primer tokens replace CodeMirror's fixed-colour squiggle images. Holes
+	// (hint) keep a border, so one inside an error range draws both lines.
+	".cm-lintRange-error": {
+		backgroundImage: "none",
+		textDecoration: "underline wavy var(--fgColor-danger)",
+		textDecorationThickness: "var(--borderWidth-thin)",
+		textUnderlinePosition: "under",
+	},
+	".cm-lintPoint-error:after": { borderBottomColor: "var(--fgColor-danger)" },
+	".cm-diagnostic-error": { borderLeftColor: "var(--fgColor-danger)" },
+	".cm-lintRange-warning": {
+		backgroundImage: "none",
+		textDecoration: "underline wavy var(--fgColor-attention)",
+		textDecorationThickness: "var(--borderWidth-thin)",
+		textUnderlinePosition: "under",
+	},
+	".cm-lintPoint-warning:after": {
+		borderBottomColor: "var(--fgColor-attention)",
+	},
+	".cm-diagnostic-warning": { borderLeftColor: "var(--fgColor-attention)" },
+	".cm-lintRange-info": {
+		backgroundImage: "none",
+		textDecoration: "underline dotted var(--fgColor-accent)",
+		textDecorationThickness: "var(--borderWidth-thick)",
+		textUnderlinePosition: "under",
+	},
+	".cm-lintPoint-info:after": { borderBottomColor: "var(--fgColor-accent)" },
+	".cm-diagnostic-info": { borderLeftColor: "var(--fgColor-accent)" },
+	".cm-lintRange-active": { backgroundColor: "var(--bgColor-accent-muted)" },
+	// Step 2 marks a name that resolves to a shared scale, universe or instruction.
+	".cm-ref": { color: "var(--color-prettylights-syntax-string-regexp)" },
 	".cm-lintRange-hint": {
 		backgroundImage: "none",
 		backgroundColor: "var(--bgColor-attention-muted)",
@@ -221,29 +254,26 @@ const primerTheme = EditorView.theme({
 	},
 });
 
-/** Syntax colours from Primer's `--codeMirror-syntax-*` tokens (YAML needs few). */
+/**
+ * Colour marks roles, not grammar. The author's words stay plain at full contrast;
+ * field names take Primer's entity colour; comments and punctuation are muted (not
+ * read by the tool; step 2 mutes the `legacy` block the same way). No bold or italic,
+ * keywords uncoloured. YAML's grammar gives every plain value one `content` tag and
+ * every key, response codes included, `definition(propertyName)`, so telling codes,
+ * constants and resolved names apart is the parser's job (step 2's decorations). These
+ * are Primer's prettylights tokens, what github.com highlights code with; they would
+ * follow Primer's colour-blind themes too, were the app to load them (it loads light
+ * and dark only).
+ */
 const primerHighlight = syntaxHighlighting(
 	HighlightStyle.define([
-		{ tag: tags.comment, color: "var(--codeMirror-syntax-fgColor-comment)" },
 		{
 			tag: [tags.propertyName, tags.definition(tags.propertyName)],
-			color: "var(--codeMirror-syntax-fgColor-entity)",
+			color: "var(--color-prettylights-syntax-entity)",
 		},
 		{
-			tag: [tags.string, tags.special(tags.string), tags.content],
-			color: "var(--codeMirror-syntax-fgColor-string)",
-		},
-		{
-			tag: [tags.number, tags.bool, tags.null, tags.atom],
-			color: "var(--codeMirror-syntax-fgColor-constant)",
-		},
-		{
-			tag: [tags.keyword, tags.typeName, tags.labelName],
-			color: "var(--codeMirror-syntax-fgColor-keyword)",
-		},
-		{
-			tag: [tags.punctuation, tags.separator, tags.meta],
-			color: "var(--codeMirror-syntax-fgColor-support)",
+			tag: [tags.comment, tags.separator, tags.punctuation, tags.meta],
+			color: "var(--color-prettylights-syntax-comment)",
 		},
 		{ tag: tags.invalid, color: "var(--fgColor-danger)" },
 	]),
