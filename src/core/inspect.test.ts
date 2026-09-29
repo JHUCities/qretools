@@ -26,7 +26,7 @@ describe("pathAt", () => {
 
 describe("inspect", () => {
 	it("a resolved name: the field, what it names, and the names in scope", () => {
-		expect(inspect(ev, env, at("renters"))).toMatchObject({
+		expect(inspect(ev, env, source, at("renters"))).toMatchObject({
 			path: "universe",
 			key: "universe",
 			names: ["adults", "renters"],
@@ -36,25 +36,45 @@ describe("inspect", () => {
 				value: { text: "Renters" },
 			},
 		});
-		expect(inspect(ev, env, at("renters"))?.description).toMatch(/\w/);
+		expect(inspect(ev, env, source, at("renters"))?.description).toMatch(/\w/);
 	});
 
 	it("an unresolved name has no value, and shows the hole the editor underlines there", () => {
-		const i = inspect(ev, env, at("select_x"));
+		const i = inspect(ev, env, source, at("select_x"));
 		expect(i?.mention).toEqual({ scheme: "instruction", name: "select_x" });
 		expect(i?.findings.map((f) => f.severity)).toEqual(["hole"]);
 	});
 
 	it("a plain field has no names; outside any field there is nothing; offsets are clamped", () => {
-		const text = inspect(ev, env, at("Q?"));
+		const text = inspect(ev, env, source, at("Q?"));
 		expect(text).toMatchObject({ key: "text" });
 		expect(text?.names).toBeUndefined();
-		expect(() => inspect(ev, env, 10_000)).not.toThrow();
+		expect(() => inspect(ev, env, source, 10_000)).not.toThrow();
+	});
+
+	it("a space just typed at the end of a value stays in its field", () => {
+		for (const text of [
+			"name: a\ntext: How are \n",
+			"name: a\ntext: How are ",
+		]) {
+			const ev = evaluate(text, "org.example", env);
+			const after = text.indexOf("are ") + "are ".length;
+			expect(inspect(ev, env, text, after)?.key).toBe("text");
+		}
+		// A blank line is still the document, indented or not.
+		const blank = "name: a\n  \ntext: hi\n";
+		const ev = evaluate(blank, "org.example", env);
+		expect(inspect(ev, env, blank, 10)?.key).toBeUndefined();
 	});
 
 	it("between fields and at the end is the document, with the holes of absent fields", () => {
 		const text = "name: a\ntext: hi\n";
-		const doc = inspect(evaluate(text, "org.example", env), env, text.length);
+		const doc = inspect(
+			evaluate(text, "org.example", env),
+			env,
+			text,
+			text.length,
+		);
 		expect(doc?.key).toBeUndefined();
 		expect(doc?.findings.map((f) => f.path).sort()).toEqual(["", "intent"]);
 	});

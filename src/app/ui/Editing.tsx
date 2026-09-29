@@ -441,7 +441,8 @@ function Inspector({
 	const env = useEnv();
 	const cursor = useModel((m) => m.cursor);
 	const schemes = useModel((m) => m.local.schemes);
-	const at = cursor?.id === q.id ? inspect(ev, env, cursor.offset) : undefined;
+	const at =
+		cursor?.id === q.id ? inspect(ev, env, q.source, cursor.offset) : undefined;
 	if (at === undefined)
 		return (
 			<InspectorBox>

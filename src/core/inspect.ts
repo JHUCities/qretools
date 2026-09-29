@@ -49,14 +49,16 @@ const SCHEME_OF: Partial<Record<SurfaceKey, NamedScheme>> = {
  * What is at `offset` in the evaluated text; undefined only inside a key the surface
  * does not know. Between fields and at the end is the document itself, where the holes
  * of absent required fields are placed: where the author will type them. Clamped.
+ * `source` is the text `ev` was evaluated from.
  */
 export function inspect(
 	ev: Evaluation,
 	env: Env,
+	source: string,
 	offset: number,
 ): Inspection | undefined {
 	const [, end] = ev.ranges[""] ?? [0, 0];
-	const at = Math.min(Math.max(0, offset), end);
+	const at = settled(source, Math.min(Math.max(0, offset), end));
 	const path = pathAt(ev.ranges, at);
 	const top = path.split(".")[0] ?? "";
 	// The findings the editor underlines at the caret. An absent field's hole is placed
@@ -95,4 +97,16 @@ export function inspect(
 			},
 		}),
 	};
+}
+
+/**
+ * The caret moved back over the spaces and tabs just before it, on its own line. YAML
+ * drops a plain value's trailing spaces from its range, so a caret after a space just
+ * typed (`text: How are |`) would otherwise fall outside the field and read as the
+ * document, flipping back with the next letter.
+ */
+function settled(source: string, offset: number): number {
+	let at = offset;
+	while (at > 0 && (source[at - 1] === " " || source[at - 1] === "\t")) at -= 1;
+	return at;
 }
