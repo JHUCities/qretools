@@ -944,8 +944,8 @@ load failed, and hiding the author's work then would cost more than it helps.
 so signed out (anonymous or failed) the app is a sign-in page, with no tree, editor or
 "New". **Revised the same day:** the page is the form, as github.com's own sign-in: one
 narrow column, a "Repository" field written `owner/name` (GitHub's form; a pasted URL
-works; `parseRepo` in storage.ts, once, on submit; a default bank from `DEFAULT_SETTINGS`,
-a visible build default), "Remember on this device", a full-width
+works; `parseRepo` in storage.ts, once, on submit; prefilled from the build
+setting `VITE_DEFAULT_BANK`, the public template in `.env`; absent, the field is empty), "Remember on this device", a full-width
 "Sign in with GitHub"; the development token field under the flag. The Bank dialog and
 "Change bank…" are gone: kept work is not scoped to its bank yet (FEATURES.md), so
 switching banks is signing out and in. A failed connection still holding a GitHub
@@ -1150,6 +1150,19 @@ and handed to the view through `createApp`'s `ViewConfig`, not the effects'.
   messages and hints with one; US spelling. Examples are neutral (no BAS names).
   Library errors (YAML, Zod, GraphQL, Octokit, Ajv) are wrapped in a plain sentence,
   the original kept as detail.
+
+**The default bank is a build setting, the public template (owner, 2026-09-29).** The
+sign-in page's Repository field is prefilled from `VITE_DEFAULT_BANK` (`defaultBank` in
+config.ts, read once in main.tsx, passed to `init` as `Flags.defaultBank`), never a
+literal in `src/`; it had been a private bank most visitors could not open. Its own
+setting, not derived from `VITE_BANK_TEMPLATE`: a team may reuse a template and keep its
+own bank. Absent, the field is empty (`repoText`, never a lone "/"); stored settings
+still win, so returning visitors keep their bank. A GitHub App user token reads public
+repositories without an installation, per GitHub's docs (not yet verified live). Accepted:
+empty strings in `BankSettings` stand for "none chosen", and a build without the setting,
+with nothing stored but a sign-in held, connects to an empty name and fails on the
+sign-in page (the shipped `.env` sets it). Open: a JHUCities member with
+push access saves to `qretools-<login>` in the template itself; a ruleset there, or accept.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
