@@ -65,6 +65,11 @@ describe("inspect", () => {
 		const blank = "name: a\n  \ntext: hi\n";
 		const ev = evaluate(blank, "org.example", env);
 		expect(inspect(ev, env, blank, 10)?.key).toBeUndefined();
+		// An indented new line under a block map is that map: the author is about to
+		// type another code.
+		const codes = "name: a\nresponses:\n  1: A\n  ";
+		const onCodes = evaluate(codes, "org.example", env);
+		expect(inspect(onCodes, env, codes, codes.length)?.key).toBe("responses");
 	});
 
 	it("between fields and at the end is the document, with the holes of absent fields", () => {
