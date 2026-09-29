@@ -18,9 +18,14 @@ import {
 	LinkButton,
 	Spinner,
 	Stack,
+	Truncate,
 	VisuallyHidden,
 } from "@primer/react";
-import { AriaStatus } from "@primer/react/experimental";
+import {
+	AriaStatus,
+	SkeletonAvatar,
+	SkeletonBox,
+} from "@primer/react/experimental";
 import { useMemo } from "react";
 import { plainText } from "../../core/codeSpans.js";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
@@ -62,6 +67,7 @@ export function App() {
 	const signedIn =
 		model.session.kind === "connecting" || model.session.kind === "connected";
 	const loading = bankLoading(model);
+	const status = sessionStatus(model);
 	// The tree is drawn from these slices only, so a caret move does not redraw it.
 	const treeInput = useMemo(
 		() => ({ local, browser, screen, activity }),
@@ -177,8 +183,16 @@ export function App() {
 						className="status"
 					>
 						{busy(model) && <Spinner size="small" srText={null} />}
+						{/*
+						 * One line, cut short rather than wrap the header; the live region and
+						 * the tooltip keep the whole text.
+						 */}
 						<AriaStatus as="span" id={SESSION_STATUS} className="quiet session">
-							{sessionStatus(model) ?? ""}
+							{status !== undefined && (
+								<Truncate as="span" title={status} maxWidth="100%">
+									{status}
+								</Truncate>
+							)}
 						</AriaStatus>
 						{model.loading.kind === "failed" && (
 							<Button
@@ -219,7 +233,22 @@ export function App() {
 								</Button>
 							)}
 					</Stack>
-					{signedIn && (
+					{/*
+					 * While signing in, the places "New" and the avatar will take, at their
+					 * sizes, so the header neither grows nor narrows when they arrive.
+					 */}
+					{model.session.kind === "connecting" && (
+						<>
+							<span className="new-placeholder" aria-hidden>
+								<Button leadingVisual={PlusIcon} tabIndex={-1} inert>
+									New
+								</Button>
+								<SkeletonBox />
+							</span>
+							<SkeletonAvatar size={32} />
+						</>
+					)}
+					{model.session.kind === "connected" && (
 						<ActionMenu>
 							<ActionMenu.Anchor>
 								<Button leadingVisual={PlusIcon}>New</Button>
