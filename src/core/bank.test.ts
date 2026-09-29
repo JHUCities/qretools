@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { bankLocation, describeChange, saveableName } from "./bank.js";
+import {
+	bankLocation,
+	describeChange,
+	describeMove,
+	saveableName,
+} from "./bank.js";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
 
@@ -71,5 +76,22 @@ describe("describeChange", () => {
 
 	it("copes with nameless drafts", () => {
 		expect(describeChange(undefined, draft(""))).toBe("Add question");
+	});
+});
+
+describe("describeMove", () => {
+	const before = draft("name: nhd_sat\ntext: Q?\n");
+	it("names the folder, and any fields saved with the move", () => {
+		expect(describeMove(before, before, "nhd_sat", "svy")).toBe(
+			"Move nhd_sat to svy",
+		);
+		expect(
+			describeMove(
+				before,
+				draft("name: nhd_sat\ntext: Q?\nnote: n\ninstruction: Select one\n"),
+				"nhd_sat",
+				"svy",
+			),
+		).toBe("Move nhd_sat to svy and update instruction, note");
 	});
 });

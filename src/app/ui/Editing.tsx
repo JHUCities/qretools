@@ -37,7 +37,7 @@ import {
 	type Question,
 	type SchemeEntry,
 } from "../model.js";
-import { alsoSaves, isUnsaved, remoteBlob, syncOf } from "../sync.js";
+import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
 import { branchOwner, hrefOf, writeBlocked } from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
@@ -144,12 +144,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		[findings, ev.ranges],
 	);
 	const also = useMemo(
-		() =>
-			alsoSaves(local, remote, ev.symbols.mentions, (e) =>
-				e.kind === "missing"
-					? []
-					: usedBy(index, e.kind, e.name).map((s) => s.key),
-			),
+		() => alsoSaves(local, remote, ev.symbols.mentions, usersIn(index)),
 		[local, remote, ev.symbols.mentions, index],
 	);
 	// Schema validation runs over the whole document: only when the document changes,

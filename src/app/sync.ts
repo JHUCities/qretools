@@ -6,6 +6,7 @@
  */
 import { kindAt, schemePath } from "../core/schemes.js";
 import type { Mention } from "../core/surface/env.js";
+import { type Index, usedBy } from "../core/symbols.js";
 import type {
 	Blob,
 	Entry,
@@ -224,6 +225,12 @@ export function dependencies(
 	}
 	return { include, blocked };
 }
+
+/** The questions naming a scheme file, for `alsoSaves` (nothing names the missing list). */
+export const usersIn =
+	(index: Index<Id>) =>
+	(e: SchemeEntry): readonly Id[] =>
+		e.kind === "missing" ? [] : usedBy(index, e.kind, e.name).map((s) => s.key);
 
 /**
  * What saving a question also saves, as the author should see it: each unsaved scheme

@@ -1,9 +1,11 @@
 /**
- * Moving a bank question to another folder: one commit, the saved version at the
- * new path and the old path gone, like `git mv`. Only the folder changes. Why a folder
- * cannot be used is `update`'s rule (`moveProblem`), shown as the author types, as
- * Primer's validation message on the field. A native form: Enter in the new folder's
- * name moves (a native select does not submit on Enter).
+ * Moving a bank question to another folder. A move also saves (owner, 2026-09-29):
+ * one commit writes the question as it is now at the new path, deletes the old one,
+ * and takes along the unsaved shared files it names, as Save does. Only the folder
+ * changes, never the filename. Why a folder cannot be used is `update`'s rule
+ * (`moveProblem`), shown as the author types, as Primer's validation message on the
+ * field; why nothing can be written now is `writeBlocked`. A native form: Enter in the
+ * new folder's name moves (a native select does not submit on Enter).
  */
 import { Dialog } from "@primer/react";
 import { useId } from "react";
@@ -17,6 +19,8 @@ export function MoveDialog({
 	folder,
 	folders,
 	problem,
+	blocked,
+	also,
 	dispatch,
 }: {
 	readonly from: string;
@@ -26,10 +30,15 @@ export function MoveDialog({
 	readonly folder: string;
 	readonly folders: readonly string[];
 	readonly problem: string | undefined;
+	/** Why nothing can be written now (`writeBlocked`), or undefined. */
+	readonly blocked: string | undefined;
+	/** Unsaved shared files the move takes along (`alsoSaves`). */
+	readonly also: readonly string[];
 	readonly dispatch: Dispatch;
 }) {
 	const formId = useId();
 	const close = () => dispatch({ kind: "moveCancelled" });
+	const refused = problem ?? blocked;
 	return (
 		<Dialog
 			title="Move to another folder"
@@ -41,8 +50,8 @@ export function MoveDialog({
 					content: "Move",
 					type: "submit",
 					form: formId,
-					inactive: problem !== undefined,
-					"aria-disabled": problem !== undefined || undefined,
+					inactive: refused !== undefined,
+					"aria-disabled": refused !== undefined || undefined,
 				},
 			]}
 		>
@@ -50,7 +59,7 @@ export function MoveDialog({
 				id={formId}
 				onSubmit={(e) => {
 					e.preventDefault();
-					if (problem === undefined) dispatch({ kind: "moveConfirmed" });
+					if (refused === undefined) dispatch({ kind: "moveConfirmed" });
 				}}
 			>
 				<FolderField
@@ -64,10 +73,10 @@ export function MoveDialog({
 							{folder !== current && folder !== "" && (
 								<>
 									<code className="code">{from}</code> →{" "}
-									<code className="code">{to}</code>.{" "}
+									<code className="code">{to}</code>.
 								</>
 							)}
-							The saved version moves; unsaved changes stay unsaved.
+							{also.length > 0 && ` Also saves ${also.join(", ")}.`}
 						</>
 					}
 				/>

@@ -33,7 +33,7 @@ import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
 import { installUrl } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
-import { alsoSaves, isUnsaved } from "../sync.js";
+import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
 import { bankFolders, schemeSections, treeOf } from "../tree.js";
 import {
 	bankLoading,
@@ -379,6 +379,13 @@ export function App() {
 					folder={moving.folder}
 					folders={bankFolders(model)}
 					problem={moveProblem(model, movingQuestion, moving.folder)}
+					blocked={writeBlocked(model)}
+					also={alsoSaves(
+						model.local,
+						model.remote,
+						evaluations.get(movingQuestion, model.agency, env).symbols.mentions,
+						usersIn(index),
+					)}
 					dispatch={dispatch}
 				/>
 			)}
@@ -400,10 +407,7 @@ export function App() {
 						model.local,
 						model.remote,
 						evaluations.get(savingQuestion, model.agency, env).symbols.mentions,
-						(e) =>
-							e.kind === "missing"
-								? []
-								: usedBy(index, e.kind, e.name).map((s) => s.key),
+						usersIn(index),
 					)}
 					dispatch={dispatch}
 				/>

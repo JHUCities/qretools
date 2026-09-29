@@ -92,15 +92,37 @@ export function describeChange(
 	if (before === undefined && after === undefined) return `Update ${name}`;
 	if (before === undefined) return `Add ${name}`;
 	if (after === undefined) return `Delete ${name}`;
+	const changed = changedFields(before, after);
+	return changed.length === 0
+		? `Update ${name}`
+		: `Update ${name}: ${changed.join(", ")}`;
+}
+
+/**
+ * A move's commit message: `Move nhd_sat to svy`, and the fields changed with it
+ * (`… and update note`), since a move also saves (owner, 2026-09-29).
+ */
+export function describeMove(
+	before: Draft,
+	after: Draft,
+	name: string,
+	folder: string,
+): string {
+	const changed = changedFields(before, after);
+	return changed.length === 0
+		? `Move ${name} to ${folder}`
+		: `Move ${name} to ${folder} and update ${changed.join(", ")}`;
+}
+
+/** The surface fields that differ, in the surface language's order; the domain by its kind. */
+function changedFields(before: Draft, after: Draft): readonly string[] {
 	const changed: string[] = FIELDS.filter(
 		(k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]),
 	);
 	if (JSON.stringify(before.domain) !== JSON.stringify(after.domain)) {
 		changed.push(after.domain?.kind ?? before.domain?.kind ?? "responses");
 	}
-	return changed.length === 0
-		? `Update ${name}`
-		: `Update ${name}: ${changed.join(", ")}`;
+	return changed;
 }
 
 /** A scheme file's commit message: `Add shared scale satisfied5`, `Update missing values`. */
