@@ -107,11 +107,15 @@ export function describeMove(
 	after: Draft,
 	name: string,
 	folder: string,
+	/** The text differs at all: a comment, spacing or a legacy value changes no field. */
+	textChanged: boolean,
 ): string {
 	const changed = changedFields(before, after);
-	return changed.length === 0
-		? `Move ${name} to ${folder}`
-		: `Move ${name} to ${folder} and update ${changed.join(", ")}`;
+	return changed.length > 0
+		? `Move ${name} to ${folder} and update ${changed.join(", ")}`
+		: textChanged
+			? `Move ${name} to ${folder} and update text`
+			: `Move ${name} to ${folder}`;
 }
 
 /** The surface fields that differ, in the surface language's order; the domain by its kind. */

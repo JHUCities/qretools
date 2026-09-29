@@ -436,6 +436,7 @@ function step(model: Model, msg: Msg): Step {
 				parseSurface(q.source, env).draft,
 				fileName(q.base.path),
 				moving.folder,
+				q.source !== q.base.text,
 			);
 			return write(closed, as, q.id, q, to, subject);
 		}
