@@ -6,6 +6,5 @@ dist/
 worker/.wrangler/
 worker/.dev.vars
 
-# Project notes kept locally, not in the repository.
-AGENTS.md
+# The backlog is kept locally, not in the repository.
 FEATURES.md
