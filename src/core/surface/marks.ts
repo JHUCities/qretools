@@ -83,7 +83,7 @@ export function holeChips(
 ): readonly Mark[] {
 	const paths = new Set(
 		findings
-			.filter((f) => f.severity === "hole" && f.path in empties)
+			.filter((f) => f.severity === "hole" && Object.hasOwn(empties, f.path))
 			.map((f) => f.path),
 	);
 	return [...paths].flatMap((path) => {
