@@ -370,12 +370,6 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 /** The DDI agency identifier for this bank: Johns Hopkins 21st Century Cities. A constant for now; see FEATURES.md, "Generality". */
 const AGENCY = "edu.jhu.21cc";
 
-export const DEFAULT_SETTINGS: BankSettings = {
-	owner: "JHUCities",
-	repo: "bas-question-bank",
-	remember: false,
-};
-
 const SCALE_FILES = import.meta.glob("../examples/scales/*.yaml", {
 	query: "?raw",
 	import: "default",
@@ -394,8 +388,10 @@ const EXAMPLE_SCALES: Scales = Object.fromEntries(
 export interface Flags {
 	/** This tab's work, already validated by the shell; a failure is shown, never fatal. */
 	readonly work: Result<Work | undefined, Failure>;
-	/** The stored default bank; the work's own bank wins over it. */
+	/** The bank settings stored on this device; the work's own bank wins over them. */
 	readonly settings?: BankSettings;
+	/** The build's default bank, used when nothing is stored; absent means an empty field. */
+	readonly defaultBank?: Repo;
 	/** Said once at startup (what an upgrade could not bring along). */
 	readonly notices?: readonly Failure[];
 	/** Whether a token is on hand, so connecting can start at once. */
@@ -416,7 +412,10 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	// would sit beside bank questions of the same name.
 	// Zod types an absent optional as possibly-undefined; `compact` makes it absent.
 	const local: Local = stored ? localOf(stored) : EMPTY_LOCAL;
-	const settings = startingSettings(flags.settings, stored, DEFAULT_SETTINGS);
+	const settings = startingSettings(flags.settings, stored, {
+		...(flags.defaultBank ?? { owner: "", repo: "" }),
+		remember: false,
+	});
 	const repo = { owner: settings.owner, repo: settings.repo };
 	const opened: Model = {
 		local,

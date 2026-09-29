@@ -26,7 +26,7 @@ import { plainText } from "../../core/codeSpans.js";
 import { installUrl } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import { hasOwnWork, type Model } from "../model.js";
-import { parseRepo } from "../storage.js";
+import { parseRepo, repoText } from "../storage.js";
 import { useApp } from "./AppContext.js";
 import { failureDescription } from "./Previews.js";
 
@@ -34,7 +34,7 @@ export function SignIn({ model }: { model: Model }) {
 	const { dispatch, effects, signIn: config, template } = useApp();
 	const { settings, session } = model;
 	const [text, setText] = useState(
-		model.pendingLink?.repo ?? `${settings.owner}/${settings.repo}`,
+		model.pendingLink?.repo ?? repoText(settings),
 	);
 	const [remember, setRemember] = useState(settings.remember);
 	const [token, setToken] = useState("");
@@ -61,7 +61,7 @@ export function SignIn({ model }: { model: Model }) {
 		dispatch({ kind: "connectRequested", settings: next });
 	};
 	// This tab's unsaved work belongs to its bank: signing in to another sets it aside.
-	const current = `${settings.owner}/${settings.repo}`;
+	const current = repoText(settings);
 	const elsewhere =
 		hasOwnWork(model) &&
 		parsed.ok &&

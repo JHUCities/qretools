@@ -68,10 +68,14 @@ export function parseRepo(
 		repo === ".."
 	)
 		return err(
-			"Write the repository as owner/name, for example JHUCities/bas-question-bank.",
+			"Write the repository as owner/name, for example octo-org/survey-bank.",
 		);
 	return ok({ owner, repo });
 }
+
+/** A bank as the Repository field writes it, `owner/name`; empty when none is set. */
+export const repoText = ({ owner, repo }: Repo): string =>
+	owner === "" || repo === "" ? "" : `${owner}/${repo}`;
 
 /** A repository on the forge. */
 export interface Repo {
