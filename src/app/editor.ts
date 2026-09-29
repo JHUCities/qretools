@@ -262,8 +262,11 @@ const primerTheme = EditorView.theme({
 		backgroundColor: "var(--codeMirror-gutters-bgColor)",
 		borderRight: "var(--borderWidth-thin) solid var(--borderColor-default)",
 	},
+	// Not `--codeMirror-gutterMarker-fgColor-default`: Primer sets it to the page
+	// background, which left the number (and the fold arrow) unreadable. This class is
+	// on the active line in every gutter.
 	".cm-activeLineGutter": {
-		color: "var(--codeMirror-gutterMarker-fgColor-default)",
+		color: "var(--fgColor-default)",
 		backgroundColor: "var(--codeMirror-activeline-bgColor)",
 	},
 	".cm-matchingBracket, &.cm-focused .cm-matchingBracket": {
