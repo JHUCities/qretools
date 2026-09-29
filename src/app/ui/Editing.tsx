@@ -22,6 +22,7 @@ import {
 	kindAt,
 	type SchemeEvaluation,
 } from "../../core/schemes.js";
+import type { Mark } from "../../core/surface/marks.js";
 import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
@@ -188,6 +189,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						id={q.id}
 						text={q.source}
 						diagnostics={diagnostics}
+						marks={ev.marks}
 						schema={evaluations.schema(env)}
 						label={`Question ${ev.draft.name ?? UNNAMED}: source (YAML)`}
 					/>
@@ -278,6 +280,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						id={e.id}
 						text={e.source}
 						diagnostics={diagnostics}
+						marks={ev.marks}
 						schema={
 							e.kind === "universe" || e.kind === "instruction"
 								? SCHEME_SCHEMAS.text
@@ -533,6 +536,9 @@ export function InspectorBox({ children }: { children?: ReactNode }) {
 	);
 }
 
+/** One empty list, so an editor with nothing to mark is not re-synced for a new one. */
+const NO_MARKS: readonly Mark[] = [];
+
 /** Whose version a branch holds, as a person would say it. */
 const whose = (branch: string): string => {
 	const owner = branchOwner(branch);
@@ -541,7 +547,8 @@ const whose = (branch: string): string => {
 
 /**
  * Another author's version of a file, from a link: read only (owner, 2026-09-25).
- * Evaluated against your environment, so it reads here as it would in your bank.
+ * Evaluated against their branch's shared files (`envOfRemote`), so names resolve,
+ * and are coloured, as they do for them.
  */
 export function ForeignView({
 	screen,
@@ -579,6 +586,7 @@ export function ForeignView({
 	);
 	const findings = ev?.findings ?? scheme?.findings ?? [];
 	const ranges = ev?.ranges ?? scheme?.ranges ?? {};
+	const marks = ev?.marks ?? scheme?.marks ?? NO_MARKS;
 	const diagnostics = useMemo(
 		() => toDiagnostics(findings, ranges),
 		[findings, ranges],
@@ -628,6 +636,7 @@ export function ForeignView({
 							id={-1}
 							text={file.text}
 							diagnostics={diagnostics}
+							marks={marks}
 							schema={
 								kind === "question"
 									? evaluations.schema(env)
