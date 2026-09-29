@@ -5,7 +5,7 @@
  * prose or a resolved reference into the bank's schemes, never a dangling name
  * (an unresolved name is a hole and absent here).
  */
-import type { TextEntry } from "./env.js";
+import type { ConceptEntry, TextEntry } from "./env.js";
 
 export interface Code {
 	readonly code: string;
@@ -48,12 +48,17 @@ export type Named<T> = Prose | Ref<T>;
 export const textOf = (n: Named<TextEntry>): string =>
 	n.kind === "text" ? n.text : n.value.text;
 
+/** A concept as people say it: its label when shared, else what was written. */
+export const conceptLabel = (n: Named<ConceptEntry>): string =>
+	n.kind === "text" ? n.text : n.value.label;
+
 export interface Draft {
 	readonly name?: string;
 	readonly title?: string;
 	readonly text?: string;
 	readonly intent?: string;
-	readonly concept?: string;
+	/** A shared concept by name; prose is kept (and exported as before) but is advice to share it. */
+	readonly concept?: Named<ConceptEntry>;
 	readonly universe?: Named<TextEntry>;
 	readonly instruction?: Named<TextEntry>;
 	readonly source?: string;

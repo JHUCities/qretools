@@ -10,7 +10,12 @@ import {
 import { compact } from "../core/compact.js";
 import { FOLDER_RULE_TEXT, NAME_RULE_TEXT, SCHEME_NAME } from "../core/copy.js";
 import { locate } from "../core/findings.js";
-import { MISSING_NAME, schemePath, textEntrySource } from "../core/schemes.js";
+import {
+	conceptSource,
+	MISSING_NAME,
+	schemePath,
+	textEntrySource,
+} from "../core/schemes.js";
 import { applyEdits, renameEdits } from "../core/surface/edit.js";
 import type { NamedScheme } from "../core/surface/env.js";
 import { parseSurface, rangesOf } from "../core/surface/parse.js";
@@ -86,7 +91,27 @@ function step(model: Model, msg: Msg): Step {
 			// no longer has (it changed since the fix was offered) changes nothing.
 			const q = current(model);
 			if (!q || q.id !== msg.id) return [model, []];
-			const text = applyEdits(q.source, msg.fix.edits);
+			const { fix } = msg;
+			// A shared entry to create: the name dialog, prefilled, pointed back at this place.
+			if (fix.kind === "create") {
+				const { scheme, name, text, path } = fix.create;
+				return [
+					{
+						...model,
+						browser: {
+							...model.browser,
+							naming: {
+								kind: scheme,
+								name,
+								text,
+								purpose: { kind: "create", use: { id: q.id, path } },
+							},
+						},
+					},
+					[],
+				];
+			}
+			const text = applyEdits(q.source, fix.edits);
 			return text === undefined || text === q.source
 				? [model, []]
 				: persist([withSource(model, q.id, text), []]);
@@ -281,10 +306,13 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				]);
 			}
+			const written = naming.text.trim() !== "";
 			const source =
-				naming.kind !== "scale" && naming.text.trim() !== ""
-					? textEntrySource(naming.text)
-					: SCHEME_TEMPLATES[naming.kind];
+				written && naming.kind === "concept"
+					? conceptSource(naming.text)
+					: written && naming.kind !== "scale"
+						? textEntrySource(naming.text)
+						: SCHEME_TEMPLATES[naming.kind];
 			const [added, id] = add(closed, {
 				kind: naming.kind,
 				name: naming.name,

@@ -130,3 +130,22 @@ describe("scheme references in the previews", () => {
 		expect(codebookView(prose, EMPTY_ENV).missing).toBeUndefined();
 	});
 });
+
+describe("the codebook title from a concept", () => {
+	it("is a shared concept's label, or the prose written", () => {
+		const env = {
+			...EMPTY_ENV,
+			concepts: { trust: { label: "Trust in government" } },
+		};
+		const titleOf = (text: string) =>
+			codebookView(parseSurface(text, env).draft, env).title;
+		expect(titleOf("name: q\nconcept: trust\n")).toEqual({
+			kind: "filled",
+			text: "Trust in government",
+		});
+		expect(titleOf("name: q\nconcept: racial identification\n")).toEqual({
+			kind: "filled",
+			text: "racial identification",
+		});
+	});
+});

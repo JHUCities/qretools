@@ -42,6 +42,7 @@ describe("findings that name another file", () => {
 
 describe("a finding with a fix", () => {
 	const fix = {
+		kind: "edit" as const,
 		label: "Use `days`",
 		edits: [{ path: "number.unit", value: "days" }],
 	};

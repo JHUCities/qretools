@@ -194,6 +194,7 @@ describe("a quick fix", () => {
 			text: "name: q\nnumber:\n  unit: Days\n",
 		})[0];
 	const fix = {
+		kind: "edit" as const,
 		label: "Use `days`",
 		edits: [{ path: "number.unit", value: "days" }],
 	};
@@ -2014,5 +2015,41 @@ describe("renaming a draft shared file", () => {
 		expect(update(saved, { kind: "schemeRenameOpened", id: e.id })[0]).toBe(
 			saved,
 		);
+	});
+});
+
+describe("making a concept shared from a question", () => {
+	it("opens the name dialog prefilled from the words, then creates it and points the question at it", () => {
+		const [m] = update(fresh(), {
+			kind: "questionCreated",
+			text: "name: q\nconcept: Racial identification\n",
+		});
+		const fix = {
+			kind: "create" as const,
+			label: "Make it a shared concept `racial_identification`",
+			create: {
+				scheme: "concept" as const,
+				name: "racial_identification",
+				text: "Racial identification",
+				path: "concept",
+			},
+		};
+		const [asked] = update(m, { kind: "fixApplied", id: 1, fix });
+		expect(asked.browser.naming).toEqual({
+			kind: "concept",
+			name: "racial_identification",
+			text: "Racial identification",
+			purpose: { kind: "create", use: { id: 1, path: "concept" } },
+		});
+		const [done] = update(asked, { kind: "schemeNamingConfirmed" });
+		expect(done.local.questions[1]?.source).toBe(
+			"name: q\nconcept: racial_identification\n",
+		);
+		expect(Object.values(done.local.schemes)[0]).toMatchObject({
+			kind: "concept",
+			name: "racial_identification",
+			source: "label: Racial identification\n",
+		});
+		expect(done.screen).toEqual({ kind: "editing", id: 1 });
 	});
 });

@@ -28,6 +28,8 @@ describe("select-many options", () => {
 		expect(lint(draft, EMPTY_ENV).map(brief)).toEqual([
 			"warning:no-none-option@select",
 			"info:legacy-fields@legacy",
+			// Its concept is prose: concepts are shared.
+			"warning:concept-prose@concept",
 		]);
 	});
 

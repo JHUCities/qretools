@@ -177,6 +177,8 @@ describe("schemeSections", () => {
 		expect(
 			s.map((x) => [x.kind, x.leaves.map((l) => [l.name, l.usedBy])]),
 		).toEqual([
+			// Concepts first: what is measured, then how it is asked.
+			["concept", []],
 			[
 				"scale",
 				[

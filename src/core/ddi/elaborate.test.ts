@@ -393,3 +393,46 @@ describe("schemes", () => {
 		).toBeUndefined();
 	});
 });
+
+describe("a shared concept", () => {
+	const env = {
+		...EMPTY_ENV,
+		concepts: {
+			nhd_satisfaction: {
+				label: "Neighborhood satisfaction",
+				definition: "How content residents are with where they live.",
+			},
+		},
+	};
+
+	it("is one Concept named as the bank names it, with its label and definition, referenced by question and variable", () => {
+		const { draft, findings } = parseSurface(
+			"name: q\ntext: Q?\nintent: Prevalence of neighborhood satisfaction\nconcept: nhd_satisfaction\nopen: {}\n",
+			env,
+		);
+		expect(findings).toEqual([]);
+		const doc = elaborate(draft, AGENCY, env.missing);
+		expect(validate(doc)).toEqual([]);
+		expect(Object.keys(doc.Concept ?? {})).toEqual([
+			`${AGENCY}:concept-nhd_satisfaction:1`,
+		]);
+		const c = itemOf(doc, "Concept", "concept-nhd_satisfaction");
+		expect(JSON.stringify(c.Label)).toMatch(/Neighborhood satisfaction/);
+		expect(JSON.stringify(c.Description)).toMatch(/How content residents/);
+		const ref = [
+			{ $type: "Concept", value: [AGENCY, "concept-nhd_satisfaction", "1"] },
+		];
+		expect(question(doc, "q").ConceptReference).toEqual(ref);
+		expect(itemOf(doc, "Variable", "variable-q").ConceptReference).toEqual(ref);
+	});
+
+	it("written as prose, is still this question's own Concept, as before", () => {
+		const { draft } = parseSurface(
+			"name: q\ntext: Q?\nintent: i\nconcept: neighborhood satisfaction\nopen: {}\n",
+			env,
+		);
+		const doc = elaborate(draft, AGENCY, env.missing);
+		expect(validate(doc)).toEqual([]);
+		expect(Object.keys(doc.Concept ?? {})).toEqual([`${AGENCY}:q.concept:1`]);
+	});
+});

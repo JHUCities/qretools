@@ -11,6 +11,7 @@ import { compact } from "./compact.js";
 import { UNNAMED } from "./copy.js";
 import {
 	type Code,
+	conceptLabel,
 	type Domain,
 	type Draft,
 	type Named,
@@ -143,7 +144,10 @@ export function codebookView(draft: Draft, env: Env): CodebookView {
 
 /** The codebook title: `title`, else the concept, else the name. Upper-casing is the shell's. */
 function title(draft: Draft): Slot {
-	const source = draft.title ?? draft.concept ?? draft.name;
+	const source =
+		draft.title ??
+		(draft.concept === undefined ? undefined : conceptLabel(draft.concept)) ??
+		draft.name;
 	return source === undefined
 		? { kind: "hole", path: "name", prompt: PROMPT.title }
 		: { kind: "filled", text: source };
