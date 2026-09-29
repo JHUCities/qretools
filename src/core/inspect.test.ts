@@ -39,10 +39,10 @@ describe("inspect", () => {
 		expect(inspect(ev, env, source, at("renters"))?.description).toMatch(/\w/);
 	});
 
-	it("an unresolved name has no value, and shows the hole the editor underlines there", () => {
+	it("an unresolved name has no value (the finding is the Findings panel's to say)", () => {
 		const i = inspect(ev, env, source, at("select_x"));
 		expect(i?.mention).toEqual({ scheme: "instruction", name: "select_x" });
-		expect(i?.findings.map((f) => f.severity)).toEqual(["hole"]);
+		expect(i).not.toHaveProperty("findings");
 	});
 
 	it("a plain field has no names; outside any field there is nothing; offsets are clamped", () => {
@@ -80,7 +80,8 @@ describe("inspect", () => {
 			text,
 			text.length,
 		);
+		// The document level: no key, and the question's own description.
 		expect(doc?.key).toBeUndefined();
-		expect(doc?.findings.map((f) => f.path).sort()).toEqual(["", "intent"]);
+		expect(doc?.description).toMatch(/survey question/i);
 	});
 });

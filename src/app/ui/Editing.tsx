@@ -47,7 +47,6 @@ import {
 	Codebook,
 	Ddi,
 	Findings,
-	inlineCode,
 	Respondent,
 	StatusBadge,
 } from "./Previews.js";
@@ -410,14 +409,6 @@ function SettledFindings({
 	);
 }
 
-/** A finding's severity as one of the colour utilities: the text says the rest. */
-const SEVERITY_COLOUR: Readonly<Record<string, string>> = {
-	hole: "fg-attention",
-	warning: "fg-attention",
-	error: "fg-danger",
-	info: "fg-accent",
-};
-
 /**
  * Hazel's cursor inspector: what is at the caret. The core says what the field is and
  * what a name there names; this adds what needs the bank: who else uses the name, the
@@ -486,8 +477,10 @@ function Inspector({
 						)}
 					</p>
 				) : (
-					// The hole below says the name is unknown; this offers the fix.
+					// What is under the cursor: a name nothing has, and the way to create it.
 					<p>
+						No {SCHEME_NAME[m.scheme]} is named{" "}
+						<code className="code">{m.name}</code>.{" "}
 						<Button
 							variant="link"
 							onClick={() =>
@@ -502,18 +495,13 @@ function Inspector({
 						</Button>
 					</p>
 				))}
-			{at.names !== undefined && m === undefined && (
+			{at.names !== undefined && (m === undefined || m.value === undefined) && (
 				<p className="quiet">
 					{at.names.length === 0
 						? "No shared names of this kind yet."
 						: `Or name a shared one: ${at.names.slice(0, 12).join(", ")}${at.names.length > 12 ? ", …" : ""}.`}
 				</p>
 			)}
-			{at.findings.map((f) => (
-				<p key={`${f.code}:${f.path}`} className={SEVERITY_COLOUR[f.severity]}>
-					{inlineCode(f.message)}
-				</p>
-			))}
 		</InspectorBox>
 	);
 }
