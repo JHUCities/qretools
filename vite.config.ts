@@ -24,7 +24,7 @@ export default defineConfig({
 		setupFiles: ["src/app/ui/test-setup.ts"],
 		server: {
 			// Primer components import their CSS modules; Node cannot load .css unless Vite transforms them.
-			deps: { inline: [/@primer\//] },
+			deps: { inline: [/@primer\//, "codemirror-json-schema"] },
 		},
 	},
 });

@@ -33,7 +33,7 @@ import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import type { Range } from "../core/findings.js";
 import type { Mark } from "../core/surface/marks.js";
-import { schemaCompletion } from "./complete.js";
+import { schemaCompletion, withoutInfo } from "./complete.js";
 
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
 const external = Annotation.define<boolean>();
@@ -75,7 +75,7 @@ export function createEditor(
 		yaml(),
 		// We compose the schema features ourselves. The package's bundled extension
 		// adds its own linter, which would double-report and call holes errors.
-		yamlLanguage.data.of({ autocomplete: yamlCompletion() }),
+		yamlLanguage.data.of({ autocomplete: withoutInfo(yamlCompletion()) }),
 		yamlLanguage.data.of({ autocomplete: schemaCompletion }),
 		// No schema hover: the cursor inspector shows a field's description, and a
 		// finding's tooltip shows the finding; a third tooltip repeated both.
@@ -308,6 +308,22 @@ const primerTheme = EditorView.theme({
 	".cm-tooltip-autocomplete > ul > li[aria-selected]": {
 		color: "var(--fgColor-default)",
 		backgroundColor: "var(--bgColor-accent-muted)",
+	},
+	// What a name refers to, on its own row (complete.ts): muted, 6.11:1 light and
+	// 7.05:1 dark, 5.37 and 6.46 on the selected row. The row already truncates with an
+	// ellipsis, and the detail comes last, so it gives way before the name does.
+	".cm-completionDetail": {
+		color: "var(--fgColor-muted)",
+		fontStyle: "normal",
+		marginInlineStart: "var(--base-size-8)",
+	},
+	// A list that shows content keeps one width while the filter narrows it, so it never
+	// jumps as the author types.
+	".cm-tooltip-autocomplete:has(.cm-completionDetail)": {
+		inlineSize: "min(60ch, 95vw)",
+	},
+	".cm-tooltip-autocomplete:has(.cm-completionDetail) > ul": {
+		inlineSize: "100%",
 	},
 	".cm-panels": {
 		color: "var(--fgColor-default)",
