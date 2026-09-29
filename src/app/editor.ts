@@ -3,19 +3,35 @@
  * owns the text while a keystroke is in flight; the Model owns it otherwise.
  * `sync` is idempotent: it pushes the Model's text in only when it differs
  * (loading an example), always pushes the current diagnostics, and pushes the
- * JSON Schema when it is a new value (the bank's scales changed).
+ * JSON Schema when it is a new value (the bank's scales changed). The core's marks
+ * (resolved names, codes, `legacy`, holes) arrive with the diagnostics, in the same
+ * transaction, and become decorations only here.
  */
 import { startCompletion } from "@codemirror/autocomplete";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
-import { Annotation, Compartment, EditorState, Prec } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
+import {
+	Annotation,
+	Compartment,
+	EditorState,
+	Prec,
+	type Range as Ranged,
+	StateEffect,
+	StateField,
+} from "@codemirror/state";
+import {
+	Decoration,
+	type DecorationSet,
+	keymap,
+	WidgetType,
+} from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import type { Range } from "../core/findings.js";
+import type { Mark } from "../core/surface/marks.js";
 import { schemaCompletion } from "./complete.js";
 
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
@@ -26,6 +42,8 @@ export interface EditorInputs {
 	readonly id: number;
 	readonly text: string;
 	readonly diagnostics: readonly Diagnostic[];
+	/** What the core colours by meaning; drawn as decorations, never decided here. */
+	readonly marks: readonly Mark[];
 	readonly schema: object;
 	/** Another author's version, from a link: shown, never edited. */
 	readonly readOnly?: boolean;
@@ -65,6 +83,7 @@ export function createEditor(
 		EditorView.lineWrapping,
 		primerTheme,
 		primerHighlight,
+		semantics,
 		// The accessible name of the text area, which changes with the file open.
 		label.of(EditorView.contentAttributes.of({ "aria-label": "Source" })),
 		readOnly.of(EditorState.readOnly.of(false)),
@@ -84,6 +103,7 @@ export function createEditor(
 			id,
 			text,
 			diagnostics,
+			marks,
 			schema: next,
 			readOnly: lock = false,
 			label: name = "Source (YAML)",
@@ -121,7 +141,14 @@ export function createEditor(
 					annotations: external.of(true),
 				});
 			}
-			view.dispatch(setDiagnostics(view.state, [...diagnostics]));
+			// One transaction: findings and marks describe the same text, so they never
+			// show against different versions of it.
+			view.dispatch({
+				effects: [
+					...asArray(setDiagnostics(view.state, [...diagnostics]).effects),
+					setSemantics.of(marks),
+				],
+			});
 		},
 		reveal([from, to]) {
 			// Never throw from a click: clamp to the document as it is now.
@@ -135,6 +162,61 @@ export function createEditor(
 			view.destroy();
 		},
 	};
+}
+
+const asArray = <T>(x: T | readonly T[] | undefined): readonly T[] =>
+	x === undefined ? [] : Array.isArray(x) ? x : [x as T];
+
+/** The core's marks for the text as it is now; mapped through edits until the next ones. */
+const setSemantics = StateEffect.define<readonly Mark[]>();
+
+const semantics = StateField.define<DecorationSet>({
+	create: () => Decoration.none,
+	update(decorations, tr) {
+		let next = decorations.map(tr.changes);
+		for (const e of tr.effects)
+			if (e.is(setSemantics))
+				next = decorationsOf(e.value, tr.state.doc.length);
+		return next;
+	},
+	provide: (field) => EditorView.decorations.from(field),
+});
+
+const MARK_CLASS = {
+	ref: Decoration.mark({ class: "cm-ref" }),
+	code: Decoration.mark({ class: "cm-code" }),
+	legacy: Decoration.mark({ class: "cm-legacy" }),
+} as const;
+
+/**
+ * A hole as Hazel draws one: a small box after the colon. Decorative (the finding
+ * says it in words, to a screen reader too), so hidden from assistive technology;
+ * the "?" is CSS content, never text, so it cannot be selected or copied.
+ */
+class HoleChip extends WidgetType {
+	override eq(other: WidgetType): boolean {
+		return other instanceof HoleChip;
+	}
+	toDOM(): HTMLElement {
+		const chip = document.createElement("span");
+		chip.className = "cm-hole";
+		chip.setAttribute("aria-hidden", "true");
+		return chip;
+	}
+}
+
+const HOLE = Decoration.widget({ widget: new HoleChip(), side: 1 });
+
+/** Clamped to the document as it is now: a mark past its end is dropped, never thrown. */
+function decorationsOf(marks: readonly Mark[], length: number): DecorationSet {
+	const list: Ranged<Decoration>[] = [];
+	for (const { kind, range } of marks) {
+		const from = Math.min(Math.max(0, range[0]), length);
+		const to = Math.min(Math.max(from, range[1]), length);
+		if (kind === "hole") list.push(HOLE.range(from));
+		else if (to > from) list.push(MARK_CLASS[kind].range(from, to));
+	}
+	return Decoration.set(list, true);
 }
 
 /**
@@ -237,8 +319,37 @@ const primerTheme = EditorView.theme({
 	".cm-lintPoint-info:after": { borderBottomColor: "var(--fgColor-accent)" },
 	".cm-diagnostic-info": { borderLeftColor: "var(--fgColor-accent)" },
 	".cm-lintRange-active": { backgroundColor: "var(--bgColor-accent-muted)" },
-	// Step 2 marks a name that resolves to a shared scale, universe or instruction.
-	".cm-ref": { color: "var(--color-prettylights-syntax-string-regexp)" },
+	// The core's marks. Each colour wins however the highlighter's spans nest with
+	// ours (inside or outside), so a code keeps its colour although YAML calls it a key.
+	".cm-ref, .cm-ref *": {
+		color: "var(--color-prettylights-syntax-string-regexp)",
+	},
+	".cm-code, .cm-code *": {
+		color: "var(--color-prettylights-syntax-constant)",
+	},
+	".cm-legacy, .cm-legacy *": {
+		color: "var(--color-prettylights-syntax-comment)",
+	},
+	// A hole: Hazel's small box with a question mark, in Primer's attention colours.
+	".cm-hole": {
+		display: "inline-block",
+		marginInlineStart: "var(--base-size-4)",
+		paddingInline: "var(--base-size-4)",
+		fontFamily: "var(--fontStack-monospace)",
+		fontSize: "var(--text-caption-size)",
+		lineHeight: "1",
+		verticalAlign: "text-bottom",
+		color: "var(--fgColor-attention)",
+		backgroundColor: "var(--bgColor-attention-muted)",
+		border: "var(--borderWidth-thin) solid var(--fgColor-attention)",
+		borderRadius: "var(--borderRadius-small)",
+	},
+	".cm-hole::before": { content: '"?"' },
+	// Where a chip sits, CodeMirror's own point marker for the same hole would be a
+	// second one. The lint point is a widget at side 0, so it comes just before the chip.
+	".cm-lintPoint-hint:has(+ .cm-hole)": {
+		display: "none",
+	},
 	".cm-lintRange-hint": {
 		backgroundImage: "none",
 		backgroundColor: "var(--bgColor-attention-muted)",
@@ -257,10 +368,10 @@ const primerTheme = EditorView.theme({
 /**
  * Colour marks roles, not grammar. The author's words stay plain at full contrast;
  * field names take Primer's entity colour; comments and punctuation are muted (not
- * read by the tool; step 2 mutes the `legacy` block the same way). No bold or italic,
+ * read by the tool; the `legacy` block is muted the same way, by its mark). No bold or italic,
  * keywords uncoloured. YAML's grammar gives every plain value one `content` tag and
  * every key, response codes included, `definition(propertyName)`, so telling codes,
- * constants and resolved names apart is the parser's job (step 2's decorations). These
+ * constants and resolved names apart is the core's job (its marks, drawn as decorations). These
  * are Primer's prettylights tokens, what github.com highlights code with; they would
  * follow Primer's colour-blind themes too, were the app to load them (it loads light
  * and dark only).

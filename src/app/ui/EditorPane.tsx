@@ -1,7 +1,7 @@
 /**
  * CodeMirror inside React. The component owns only the editor's lifecycle; the
  * editor object (editor.ts) owns the text while a keystroke is in flight, and
- * `sync` pushes the Model's text, diagnostics and schema in. The handle is
+ * `sync` pushes the Model's text, diagnostics, marks and schema in. The handle is
  * registered with the effects so `revealRange` can reach it.
  */
 import { useLayoutEffect, useRef } from "react";
@@ -27,7 +27,7 @@ export function EditorPane(inputs: EditorInputs) {
 			editor.current = null;
 		};
 	}, [dispatch, effects]);
-	const { id, text, diagnostics, schema, readOnly, label } = inputs;
+	const { id, text, diagnostics, marks, schema, readOnly, label } = inputs;
 	// Before paint: the first frame of a file already shows its text, never an empty
 	// editor that fills a frame later.
 	useLayoutEffect(() => {
@@ -35,10 +35,11 @@ export function EditorPane(inputs: EditorInputs) {
 			id,
 			text,
 			diagnostics,
+			marks,
 			schema,
 			...(readOnly !== undefined && { readOnly }),
 			...(label !== undefined && { label }),
 		});
-	}, [id, text, diagnostics, schema, readOnly, label]);
+	}, [id, text, diagnostics, marks, schema, readOnly, label]);
 	return <div ref={host} className="editor" />;
 }
