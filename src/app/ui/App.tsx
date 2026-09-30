@@ -7,7 +7,6 @@ import {
 	PlusIcon,
 	SignOutIcon,
 	SunIcon,
-	TasklistIcon,
 } from "@primer/octicons-react";
 import {
 	ActionList,
@@ -168,18 +167,8 @@ export function App() {
 						gap="condensed"
 						className="brand"
 					>
-						{/* A placeholder mark until qretools has a logo. */}
-						<TasklistIcon size={24} />
-						{/* Text lines up with text: the name and the path share a baseline. */}
-						<Stack
-							direction="horizontal"
-							align="baseline"
-							gap="condensed"
-							className="path"
-						>
-							<h1>qretools</h1>
-							<Context model={model} />
-						</Stack>
+						<h1>qretools</h1>
+						<Context model={model} />
 						<Branch model={model} />
 					</Stack>
 					{/*
