@@ -598,7 +598,6 @@ export interface DocumentIndex {
 	readonly empties: Readonly<Record<string, number>>;
 }
 
-/** One walk over the YAML AST, by path. Any file kind can use it. */
 /**
  * A hole at a key written with nothing after it is a point where its value starts, just
  * after the colon: where the author types, and one marker in the editor (CodeMirror
@@ -614,6 +613,7 @@ export const pointAt =
 			: f;
 	};
 
+/** One walk over the YAML AST, by path. Any file kind can use it. */
 export function indexDocument(doc: Document, length: number): DocumentIndex {
 	const ranges: Record<string, Range> = { "": [0, length] };
 	const empties: Record<string, number> = {};
