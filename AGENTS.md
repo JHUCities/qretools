@@ -1355,21 +1355,21 @@ deliberate departure from Primer React's Link, which sets a 0.8px offset (it cut
 Sans' descenders) and turns a muted link blue without an underline. One rule in app.css
 on `[class*="prc-Link-Link"]` (Primer's rules are zero-specificity `:where()`; inline
 links under Primer's underline preference are left alone). An external link's icon is
-spaced by a margin, not a space, so the underline stops at the words.
+spaced by a margin, not a space, so the underline stops at the words. A link that is a code
+chip (the inspector's shared name) shows hover as an accent border on the chip instead:
+an underline fell on the chip's own bottom border.
 
 **The inspector tells the field from its value (owner, 2026-09-30).** A definition list
-of labelled rows: "Field" (or "Question" between fields) with the path and what the
-field is for, in muted text as reference; then, when a shared name is written, a row
-labelled with its kind ("Shared scale", "Shared unit", …) holding the name, "used by N",
-"Open x", and its value (a scale's codes muted, a text quoted) or, for a name nothing has,
-"New shared …" and the names in scope. The kind is the row's label, not a Primer `Label`
-chip (a second tag saying the same, and 20px tall in 18px lines). The label column keeps
-one width whatever it holds (every label, unseen and of no height, inside the first
-label), so values never shift sideways; no row gap, and chips at line height 1 inside it,
-so two rows of two lines fill the fixed four exactly (measured: no scroll). A longer value
-(a scale of seven codes, a long universe) still scrolls inside the box, as before. With
-nothing named yet, the kind's row offers "Name a shared one: …", the same phrase as
-under a name nothing has.
+of two labelled rows. "Field" (or "Question" between fields): the path and what the
+field is for, muted, as reference. "Value", when the field can name a shared entry: the
+name as a linked chip that opens its file, then "shared scale · used by N questions"; a
+name nothing has, "New shared …" and the names in scope; nothing named yet, "Name a shared
+one: …". "Field", not "key": the authors' word, and the app's; "key" is YAML's. The
+entry's content is not repeated (the previews show it: a scale's options are in the
+respondent's pane). The label column keeps one width whatever it holds (every label,
+unseen and of no height, inside the first label), so values never shift sideways; no row
+gap, and chips at line height 1 inside it, so the rows fit the fixed four lines (measured:
+no scroll).
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)

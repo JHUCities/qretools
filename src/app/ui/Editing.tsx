@@ -7,7 +7,7 @@
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, CounterLabel, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
-import { Fragment, memo, type ReactNode, useCallback, useMemo } from "react";
+import { memo, type ReactNode, useCallback, useMemo } from "react";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import {
@@ -552,8 +552,6 @@ function Inspector({
 			? 0
 			: new Set(usedBy(index, m.scheme, m.name).map((s) => s.key)).size;
 	const scheme = m?.scheme ?? at.scheme;
-	const kind =
-		scheme === undefined ? undefined : capitalise(SCHEME_NAME[scheme]);
 	const names =
 		at.names === undefined
 			? undefined
@@ -585,37 +583,25 @@ function Inspector({
 				</dd>
 				{m !== undefined && (
 					<>
-						<dt>{kind}</dt>
+						<dt>Value</dt>
 						{m.value !== undefined ? (
+							// The name, opening its file; what it is and who uses it. Its content is
+							// the previews' (the respondent's pane shows a scale's options).
 							<dd>
-								<div>
-									<code className="code">{m.name}</code>{" "}
-									<span className="quiet">
-										used by {users} question{users === 1 ? "" : "s"}
-									</span>{" "}
-									{file && (
-										<FileLink
-											id={file.id}
-											onOpen={() =>
-												dispatch({ kind: "fileOpened", id: file.id })
-											}
-										>
-											Open {m.name}
-										</FileLink>
-									)}
-								</div>
-								<div>
-									{"codes" in m.value
-										? m.value.codes.map((c, i) => (
-												// Codes may repeat while being edited, so the position is the key.
-												// biome-ignore lint/suspicious/noArrayIndexKey: see above
-												<Fragment key={i}>
-													{i > 0 && <span className="quiet"> · </span>}
-													<span className="quiet">{c.code}</span> {c.label}
-												</Fragment>
-											))
-										: `“${"label" in m.value ? m.value.label : m.value.text}”`}
-								</div>
+								{file ? (
+									<FileLink
+										id={file.id}
+										onOpen={() => dispatch({ kind: "fileOpened", id: file.id })}
+									>
+										<code className="code">{m.name}</code>
+									</FileLink>
+								) : (
+									<code className="code">{m.name}</code>
+								)}{" "}
+								<span className="quiet">
+									{SCHEME_NAME[m.scheme]} · used by {users} question
+									{users === 1 ? "" : "s"}
+								</span>
 							</dd>
 						) : (
 							// A name nothing has, and the way to create it.
@@ -647,9 +633,9 @@ function Inspector({
 					</>
 				)}
 				{/* Nothing named yet, where a shared one can be: the names in scope. */}
-				{m === undefined && kind !== undefined && names !== undefined && (
+				{m === undefined && scheme !== undefined && names !== undefined && (
 					<>
-						<dt>{kind}</dt>
+						<dt>Value</dt>
 						<dd className="quiet">Name a shared one: {names}</dd>
 					</>
 				)}
@@ -837,12 +823,5 @@ function FileLink({
 	);
 }
 
-const capitalise = (s: string): string =>
-	s.charAt(0).toUpperCase() + s.slice(1);
-
 /** The inspector's row labels, all of them, for the column's width. */
-const INSPECT_LABELS: readonly string[] = [
-	"Question",
-	"Field",
-	...Object.values(SCHEME_NAME).map(capitalise),
-];
+const INSPECT_LABELS: readonly string[] = ["Question", "Field", "Value"];

@@ -41,6 +41,16 @@ body {
 .external-icon {
 	margin-inline-start: var(--base-size-4);
 }
+/*
+ * A link that is a code chip shows hover on the chip, its border in the accent colour:
+ * an underline would fall on the chip's own bottom border.
+ */
+[class*="prc-Link-Link"]:has(> .code):hover {
+	text-decoration-line: none;
+}
+[class*="prc-Link-Link"]:hover > .code {
+	border-color: var(--borderColor-accent-emphasis);
+}
 
 /*
  * GitHub's typefaces, self-hosted (main.tsx imports them): Mona Sans for the interface,
