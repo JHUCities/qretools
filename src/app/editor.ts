@@ -24,6 +24,7 @@ import {
 import {
 	Decoration,
 	type DecorationSet,
+	hoverTooltip,
 	keymap,
 	ViewPlugin,
 	WidgetType,
@@ -259,9 +260,29 @@ function decorationsOf(marks: readonly Mark[], length: number): DecorationSet {
 	return Decoration.set(list, true);
 }
 
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+
 /** Cmd on a Mac, Ctrl elsewhere (Ctrl-click on a Mac is the context menu). */
 const isMod = (e: MouseEvent | KeyboardEvent): boolean =>
-	/Mac|iPhone|iPad/.test(navigator.platform) ? e.metaKey : e.ctrlKey;
+	IS_MAC ? e.metaKey : e.ctrlKey;
+
+/**
+ * The shared name (a `ref` mark) at `pos`, if any. With a side, as a hover reports it,
+ * a name that only ends (or starts) at `pos` on the other side is not under the pointer.
+ */
+export function refRangeAt(
+	state: EditorState,
+	pos: number,
+	side = 0,
+): { from: number; to: number } | undefined {
+	let found: { from: number; to: number } | undefined;
+	state.field(semantics).between(pos, pos, (from, to, value) => {
+		if (value.spec.class !== "cm-ref") return;
+		if ((from === pos && side < 0) || (to === pos && side > 0)) return;
+		found = { from, to };
+	});
+	return found;
+}
 
 /**
  * Go to definition, as an IDE has it. Mod-click on a shared name (the core marked it
@@ -269,6 +290,9 @@ const isMod = (e: MouseEvent | KeyboardEvent): boolean =>
  * does. F12 does the same at the caret, and only there (elsewhere F12 is the
  * browser's). While Mod is held the names underline, as VS Code's do: the state is a
  * class on the content, set as CodeMirror's own crosshairCursor sets its cursor.
+ * Hovering a name offers the same as a button in a tooltip, with the keys that do it;
+ * a hover can't be reached from the keyboard, so F12 and the inspector's linked chip
+ * are that route. Not on another author's version (read only), which never follows.
  * `update` decides what the name opens; this only says where the author pointed.
  */
 function followDefinition(onFollow: (offset: number) => void) {
@@ -301,15 +325,45 @@ function followDefinition(onFollow: (offset: number) => void) {
 				),
 		},
 	);
-	const refAt = (view: EditorView, pos: number): boolean => {
-		let found = false;
-		view.state.field(semantics).between(pos, pos, (_from, _to, value) => {
-			if (value.spec.class === "cm-ref") found = true;
-		});
-		return found;
-	};
 	return [
 		held,
+		hoverTooltip(
+			(view, pos, side) => {
+				if (view.state.readOnly) return null;
+				const ref = refRangeAt(view.state, pos, side);
+				if (ref === undefined) return null;
+				return {
+					pos: ref.from,
+					end: ref.to,
+					above: false,
+					// Drawn as a finding's tooltip is (the one on `legacy`, say), in the lint
+					// tooltip's own markup, so it looks the same: the keys as its text, the action
+					// as its button, as a quick fix's is. Lint's styles are loaded (sync always
+					// sets diagnostics); a CodeMirror upgrade renaming its classes would leave
+					// this unstyled, which only a look at it would catch.
+					create: () => {
+						const dom = document.createElement("ul");
+						dom.className = "cm-tooltip-lint";
+						const item = document.createElement("li");
+						item.className = "cm-diagnostic cm-diagnostic-info";
+						const keys = document.createElement("span");
+						keys.className = "cm-diagnosticText";
+						keys.textContent = `${IS_MAC ? "⌘" : "Ctrl"}-click or F12`;
+						const go = document.createElement("button");
+						go.type = "button";
+						go.className = "cm-diagnosticAction";
+						go.textContent = "Go to definition";
+						go.addEventListener("click", () => onFollow(ref.from));
+						item.append(keys, go);
+						dom.append(item);
+						return { dom };
+					},
+				};
+			},
+			// Closed by any edit: the button's offset was taken when it was drawn, and a
+			// click must never follow a place that has since moved.
+			{ hideOnChange: true },
+		),
 		EditorView.domEventHandlers({
 			mousedown(e, view) {
 				if (!isMod(e) || e.button !== 0) return false;
@@ -326,7 +380,7 @@ function followDefinition(onFollow: (offset: number) => void) {
 				key: "F12",
 				run: (view) => {
 					const head = view.state.selection.main.head;
-					if (!refAt(view, head)) return false;
+					if (refRangeAt(view.state, head) === undefined) return false;
 					onFollow(head);
 					return true;
 				},
