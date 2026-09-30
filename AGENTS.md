@@ -1287,7 +1287,7 @@ on a kind became branches on its shape (`SHAPE`), and the stored kinds are
 sites). The reference bank's two `unit: days` questions show a hole until it has
 `units/days.yaml`: the owner's edit, never ours.
 
-**A link to qretools itself (owner, 2026-09-30).** "qretools on GitHub" sits at the foot
+**A link to qretools itself (owner, 2026-09-30).** "About qretools" sits at the foot
 of the sidebar, below the tree, and last on the sign-in page, so it is there signed in or
 not; the account menu (hidden, and not about the account) and a header "?" (one more
 control for one link) were considered and declined. Primer has no footer component, so
@@ -1296,8 +1296,8 @@ footer, not the page's) with the shared `ExternalLink`. The address is `SOURCE_U
 config.ts, a constant: where the tool lives is a fact about the tool, not a bank. **The
 sidebar's second row is now `.sidebar-body`** (rows `minmax(0, 1fr) auto`: the scrolling
 `.trees`, then `.sidebar-foot`), so `.sidebar`'s direct children are `.band` and
-`.sidebar-body`; measured, the foot does not move whatever the tree holds. The label
-becomes "About qretools" once the repository's README is on `main`.
+`.sidebar-body`; measured, the foot does not move whatever the tree holds. It read
+"qretools on GitHub" until the repository had a README to land on.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
