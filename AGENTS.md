@@ -240,6 +240,20 @@ emit a Universe item and resolve the link in role 2.
   (`server.deps.inline`), so complete.ts has tests. Fixed on the
   way: our key list kept itself valid while the author typed a prefix, so the package's
   keys joined it and every key appeared twice.
+  **Where the caret is comes from the core's parse (owner, 2026-09-30).** `placeAt` in
+  src/core/surface/place.ts reads the text with the `yaml` package, as the core
+  does, holes and half-typed text included, and descends by key columns: a value under
+  a path, or a key under a parent beside the keys already written. Only the caret's own
+  line is read as text (its indent and the word being typed). It replaced regexes over
+  the whole text, a backwards scan by indentation, and top-level-only values, so values
+  and keys now complete at any depth (`number.unit`, keys inside an option's map), and a
+  caret inside a word inserts nothing. CodeMirror's Lezer YAML tree was tried first and
+  failed 6 of 10 cases (after trailing spaces or at the end of the text it has no node;
+  `number:\n  mi` is `number`'s value). Making the editor's tree our parser (a Lezer
+  `Parser` over `yaml`) was considered and declined: codemirror-json-schema walks
+  lang-yaml's node names, and highlighting, folding and indentation would be rebuilt.
+  Lezer draws the text, our parse says what it means, as with colour. No StateField:
+  completion parses when asked (about a millisecond), since nothing else needs it.
 
 - **On a Mac, completion opens with Cmd-I or Option-Esc (VS Code's bindings), set in
   `editor.ts`.** macOS often takes Ctrl-Space for input-source switching, and
