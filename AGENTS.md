@@ -1357,6 +1357,20 @@ on `[class*="prc-Link-Link"]` (Primer's rules are zero-specificity `:where()`; i
 links under Primer's underline preference are left alone). An external link's icon is
 spaced by a margin, not a space, so the underline stops at the words.
 
+**The inspector tells the field from its value (owner, 2026-09-30).** A definition list
+of labelled rows: "Field" (or "Question" between fields) with the path and what the
+field is for, in muted text as reference; then, when a shared name is written, a row
+labelled with its kind ("Shared scale", "Shared unit", …) holding the name, "used by N",
+"Open x", and its value (a scale's codes muted, a text quoted) or, for a name nothing has,
+"New shared …" and the names in scope. The kind is the row's label, not a Primer `Label`
+chip (a second tag saying the same, and 20px tall in 18px lines). The label column keeps
+one width whatever it holds (every label, unseen and of no height, inside the first
+label), so values never shift sideways; no row gap, and chips at line height 1 inside it,
+so two rows of two lines fill the fixed four exactly (measured: no scroll). A longer value
+(a scale of seven codes, a long universe) still scrolls inside the box, as before. With
+nothing named yet, the kind's row offers "Name a shared one: …", the same phrase as
+under a name nothing has.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; off unless a mode's env file turns one on
