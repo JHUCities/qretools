@@ -2,7 +2,7 @@
 import { undo } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it, vi } from "vitest";
-import { changeBetween, createEditor } from "./editor.js";
+import { changeBetween, createEditor, refRangeAt } from "./editor.js";
 
 describe("the change an outside edit makes", () => {
 	it("turns one text into the other, touching nothing outside the common start and end", () => {
@@ -135,6 +135,19 @@ describe("go to definition in the editor", () => {
 			}),
 		);
 		expect(followed).toEqual([from + 3]);
+		editor.destroy();
+	});
+
+	it("finds the name under the pointer, and not one that only touches it on the other side", () => {
+		const { editor, view, from } = setup();
+		const to = from + 6;
+		const name = { from, to };
+		expect(refRangeAt(view.state, from + 3)).toEqual(name);
+		expect(refRangeAt(view.state, from, 1)).toEqual(name);
+		expect(refRangeAt(view.state, from, -1)).toBeUndefined();
+		expect(refRangeAt(view.state, to, -1)).toEqual(name);
+		expect(refRangeAt(view.state, to, 1)).toBeUndefined();
+		expect(refRangeAt(view.state, 2)).toBeUndefined();
 		editor.destroy();
 	});
 });
