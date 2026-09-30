@@ -9,6 +9,29 @@ body {
 }
 
 /*
+ * Links hover as github.com's and primer.style's do: underlined, in their own colour, at
+ * the font's own underline position. Primer React's Link sets a 0.8px offset (it sits on
+ * the descenders in Mona Sans) and turns a muted link blue without an underline; this
+ * overrides both, for Primer's Link only (menu items and icon buttons are not it); its
+ * rules are zero-specificity `:where()`, so an attribute selector is enough. Relies on
+ * Primer's CSS-module prefix `prc-Link-Link`: renamed in an upgrade, hover falls back
+ * to Primer's own, a cosmetic loss.
+ */
+[class*="prc-Link-Link"] {
+	text-underline-offset: auto;
+}
+/* Not inline links: Primer's link-underline preference inverts their hover. */
+[class*="prc-Link-Link"]:not([data-inline="true"]):hover {
+	text-decoration-line: underline;
+}
+[class*="prc-Link-Link"][data-muted="true"]:hover {
+	color: var(--fgColor-muted);
+}
+.external-icon {
+	margin-inline-start: var(--base-size-4);
+}
+
+/*
  * GitHub's typefaces, self-hosted (main.tsx imports them): Mona Sans for the interface,
  * Monaspace Neon for code. Primer's BaseStyles reads --fontStack-system. A custom
  * property can't extend its old value, so Primer's fallbacks (primitives 11.10) are

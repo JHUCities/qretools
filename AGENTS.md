@@ -1345,6 +1345,14 @@ meets the file header's). `.sidebar-body`'s rows: that group (`.sidebar-tools`),
 tree, the foot. Narrow screens now show the branch and "behind" (the
 sidebar is its own view); the avatar menu's "Your branch on GitHub" is gone.
 
+**Links hover as github.com's do (owner, 2026-09-30).** Underlined on hover, in their
+own colour, at the font's own underline position (`text-underline-offset: auto`); a
+deliberate departure from Primer React's Link, which sets a 0.8px offset (it cut Mona
+Sans' descenders) and turns a muted link blue without an underline. One rule in app.css
+on `[class*="prc-Link-Link"]` (Primer's rules are zero-specificity `:where()`; inline
+links under Primer's underline preference are left alone). An external link's icon is
+spaced by a margin, not a space, so the underline stops at the words.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; off unless a mode's env file turns one on

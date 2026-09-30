@@ -18,7 +18,9 @@ export function ExternalLink({
 }) {
 	return (
 		<Link href={href} target="_blank" rel="noreferrer" muted={muted}>
-			{children} <LinkExternalIcon size={12} aria-hidden />
+			{children}
+			{/* Spaced by a margin, not a space: a space would be underlined on hover. */}
+			<LinkExternalIcon size={12} aria-hidden className="external-icon" />
 			<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
 		</Link>
 	);
