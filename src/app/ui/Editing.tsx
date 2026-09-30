@@ -49,6 +49,7 @@ import {
 	type Model,
 	type Question,
 	type SchemeEntry,
+	schemeFileNamed,
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
 import { branchOwner, hrefOf, linkBranch, writeBlocked } from "../update.js";
@@ -542,11 +543,7 @@ function Inspector({
 		);
 	const m = at.mention;
 	const file =
-		m === undefined
-			? undefined
-			: Object.values(schemes).find(
-					(e) => e.kind === m.scheme && e.name === m.name,
-				);
+		m === undefined ? undefined : schemeFileNamed(schemes, m.scheme, m.name);
 	const users =
 		m === undefined
 			? 0
@@ -593,10 +590,10 @@ function Inspector({
 										id={file.id}
 										onOpen={() => dispatch({ kind: "fileOpened", id: file.id })}
 									>
-										<code className="code">{m.name}</code>
+										<code className="code code-ref">{m.name}</code>
 									</FileLink>
 								) : (
-									<code className="code">{m.name}</code>
+									<code className="code code-ref">{m.name}</code>
 								)}{" "}
 								<span className="quiet">
 									{SCHEME_NAME[m.scheme]} · used by {users} question
@@ -646,15 +643,17 @@ function Inspector({
 
 /**
  * The inspector's fixed box (four lines; app.css): what does not fit scrolls, and
- * Primer's ScrollableRegion makes it focusable and a named region only then.
+ * Primer's ScrollableRegion makes it focusable and a named region only then. A plain
+ * div around it: one name, not two, and no complementary landmark nested inside the
+ * source's region.
  */
 export function InspectorBox({ children }: { children?: ReactNode }) {
 	return (
-		<aside className="inspector" aria-label="At the cursor">
+		<div className="inspector">
 			<ScrollableRegion className="inspector-body" aria-label="At the cursor">
 				{children}
 			</ScrollableRegion>
-		</aside>
+		</div>
 	);
 }
 

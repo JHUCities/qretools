@@ -57,3 +57,84 @@ describe("a change from outside the editor (a quick fix)", () => {
 		editor.destroy();
 	});
 });
+
+describe("go to definition in the editor", () => {
+	const setup = () => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const followed: number[] = [];
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+			(id, o) => {
+				expect(id).toBe(1);
+				followed.push(o);
+			},
+		);
+		const text = "name: q\nresponses: agree4\n";
+		const from = text.indexOf("agree4");
+		editor.sync({
+			id: 1,
+			text,
+			diagnostics: [],
+			marks: [{ kind: "ref", range: [from, from + 6] }],
+			schema: {},
+		});
+		const view = EditorView.findFromDOM(
+			parent.querySelector(".cm-editor") as HTMLElement,
+		);
+		if (!view) throw new Error("no view");
+		return { editor, view, followed, from, parent };
+	};
+	const mod = /Mac|iPhone|iPad/.test(navigator.platform)
+		? { metaKey: true }
+		: { ctrlKey: true };
+
+	it("follows a Mod-click on a shared name, and leaves a Mod-click elsewhere to CodeMirror", () => {
+		const { editor, followed, from, parent } = setup();
+		const name = parent.querySelector(".cm-ref") as HTMLElement;
+		const on = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+			...mod,
+		});
+		name.dispatchEvent(on);
+		expect(followed).toEqual([from]);
+		expect(on.defaultPrevented).toBe(true);
+		const line = parent.querySelector(".cm-line") as HTMLElement;
+		const off = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+			...mod,
+		});
+		line.dispatchEvent(off);
+		expect(followed).toHaveLength(1);
+		editor.destroy();
+	});
+
+	it("follows F12 only with the caret on a name", () => {
+		const { editor, view, followed, from } = setup();
+		view.dispatch({ selection: { anchor: 2 } });
+		const away = new KeyboardEvent("keydown", {
+			key: "F12",
+			bubbles: true,
+			cancelable: true,
+		});
+		view.contentDOM.dispatchEvent(away);
+		expect(followed).toEqual([]);
+		expect(away.defaultPrevented).toBe(false);
+		view.dispatch({ selection: { anchor: from + 3 } });
+		view.contentDOM.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "F12",
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		expect(followed).toEqual([from + 3]);
+		editor.destroy();
+	});
+});

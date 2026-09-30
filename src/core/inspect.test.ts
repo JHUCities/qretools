@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "./evaluate.js";
 import { pathAt } from "./findings.js";
-import { inspect } from "./inspect.js";
+import { inspect, mentionAt } from "./inspect.js";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
 
@@ -100,5 +100,17 @@ describe("the inspector on a unit", () => {
 		expect(at?.description).toMatch(/unit/i);
 		expect(at?.names).toEqual(["days"]);
 		expect(at?.mention).toMatchObject({ scheme: "unit", name: "days" });
+	});
+});
+
+describe("the shared name at an offset", () => {
+	it("is found on the name and at its end, resolved or not, and nowhere else", () => {
+		const source = "name: q\nresponses: agree4\nuniverse: nobody\n";
+		const p = parseSurface(source, EMPTY_ENV);
+		const at = (o: number) => mentionAt(p.ranges, p.mentions, source, o)?.name;
+		expect(at(source.indexOf("agree4") + 2)).toBe("agree4");
+		expect(at(source.indexOf("agree4") + "agree4".length)).toBe("agree4");
+		expect(at(source.indexOf("nobody") + 1)).toBe("nobody");
+		expect(at(2)).toBeUndefined();
 	});
 });

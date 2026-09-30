@@ -10,6 +10,7 @@ import {
 import { compact } from "../core/compact.js";
 import { FOLDER_RULE_TEXT, NAME_RULE_TEXT, SCHEME_NAME } from "../core/copy.js";
 import { locate } from "../core/findings.js";
+import { mentionAt } from "../core/inspect.js";
 import {
 	labelledSource,
 	MISSING_NAME,
@@ -19,6 +20,7 @@ import {
 } from "../core/schemes.js";
 import { applyEdits, renameEdits } from "../core/surface/edit.js";
 import type { NamedScheme } from "../core/surface/env.js";
+import { EMPTY_ENV } from "../core/surface/env.js";
 import { parseSurface, rangesOf } from "../core/surface/parse.js";
 import { NAME_PATTERN } from "../core/surface/schema.js";
 import { formatLink, type Link, parseLink } from "./link.js";
@@ -45,6 +47,7 @@ import {
 	type Remote,
 	SCHEME_TEMPLATES,
 	type SchemeEntry,
+	schemeFileNamed,
 	signedOut,
 	toWork,
 } from "./model.js";
@@ -204,6 +207,23 @@ function step(model: Model, msg: Msg): Step {
 				}),
 				[],
 			];
+
+		case "definitionRequested": {
+			// Only the author's own open question: another author's names resolve against
+			// their environment, never this one's.
+			const q = current(model);
+			if (!q || q.id !== msg.id || q.kind !== "question") return [model, []];
+			// The names written, resolved or not; the file decides whether there is one.
+			const parsed = parseSurface(q.source, EMPTY_ENV);
+			const m = mentionAt(parsed.ranges, parsed.mentions, q.source, msg.offset);
+			const target =
+				m === undefined
+					? undefined
+					: schemeFileNamed(model.local.schemes, m.scheme, m.name);
+			return target === undefined
+				? [model, []]
+				: step(model, { kind: "fileOpened", id: target.id });
+		}
 
 		case "fileOpened":
 			return fileOf(model, msg.id)

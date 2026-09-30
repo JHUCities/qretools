@@ -51,6 +51,10 @@ body {
 [class*="prc-Link-Link"]:hover > .code {
 	border-color: var(--borderColor-accent-emphasis);
 }
+/* A shared name's chip, in the editor's colour for one (green), linked or not. */
+.code.code-ref {
+	color: var(--prettylights-syntax-stringRegexp);
+}
 
 /*
  * GitHub's typefaces, self-hosted (main.tsx imports them): Mona Sans for the interface,
@@ -648,6 +652,8 @@ button.hole {
 	padding: 0 var(--base-size-4);
 	border-radius: var(--borderRadius-small);
 	background: var(--bgColor-neutral-muted);
+	/* A shared name: the editor's colour for one, wherever it is shown. */
+	color: var(--prettylights-syntax-stringRegexp);
 	font-family: var(--fontStack-monospace);
 	font-size: var(--text-caption-size);
 	font-style: normal;

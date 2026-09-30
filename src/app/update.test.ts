@@ -2074,3 +2074,45 @@ describe("the theme", () => {
 		]);
 	});
 });
+
+describe("go to definition", () => {
+	const withScale = () => {
+		const [m] = run(
+			fresh(),
+			{ kind: "schemeCreateOpened", scheme: "scale" },
+			{ kind: "schemeNameChanged", name: "agree4" },
+			{ kind: "schemeNamingConfirmed" },
+			{ kind: "questionCreated", text: "name: q\nresponses: agree4\n" },
+		);
+		return m;
+	};
+
+	it("opens the shared file the name at the offset names, as opening it would", () => {
+		const m = withScale();
+		const q = Object.values(m.local.questions)[0];
+		const scale = Object.values(m.local.schemes)[0];
+		if (!q || !scale) throw new Error("setup");
+		const offset = q.source.indexOf("agree4") + 1;
+		const [next] = update(m, { kind: "definitionRequested", id: q.id, offset });
+		expect(next.screen).toEqual({ kind: "editing", id: scale.id });
+	});
+
+	it("does nothing off a name, for a name nothing has, or for a file not open", () => {
+		const m = withScale();
+		const q = Object.values(m.local.questions)[0];
+		if (!q) throw new Error("setup");
+		expect(
+			update(m, { kind: "definitionRequested", id: q.id, offset: 2 })[0],
+		).toBe(m);
+		expect(
+			update(m, { kind: "definitionRequested", id: q.id + 99, offset: 20 })[0],
+		).toBe(m);
+		const [edited] = update(m, {
+			kind: "edited",
+			text: "name: q\nresponses: nothing9\n",
+		});
+		expect(
+			update(edited, { kind: "definitionRequested", id: q.id, offset: 22 })[0],
+		).toBe(edited);
+	});
+});

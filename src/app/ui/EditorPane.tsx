@@ -18,6 +18,7 @@ export function EditorPane(inputs: EditorInputs) {
 			host.current,
 			(text) => dispatch({ kind: "edited", text }),
 			(offset) => dispatch({ kind: "cursorMoved", offset }),
+			(id, offset) => dispatch({ kind: "definitionRequested", id, offset }),
 		);
 		editor.current = e;
 		effects.registerEditor(e);
