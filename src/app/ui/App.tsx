@@ -31,7 +31,7 @@ import { plainText } from "../../core/codeSpans.js";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
 import { indexOf, usedBy } from "../../core/symbols.js";
-import { installUrl } from "../config.js";
+import { installUrl, SOURCE_URL } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
 import { bankFolders, schemeSections, treeOf } from "../tree.js";
@@ -338,15 +338,23 @@ export function App() {
 								loading={loading}
 								dispatch={dispatch}
 							/>
-							<div className="trees">
-								<Browser
-									folders={folders}
-									sections={sections}
-									loading={loading}
-									filter={model.browser.filter}
-									open={open}
-									dispatch={dispatch}
-								/>
+							{/* The tree scrolls; the foot stays put below it, whatever the tree holds. */}
+							<div className="sidebar-body">
+								<div className="trees">
+									<Browser
+										folders={folders}
+										sections={sections}
+										loading={loading}
+										filter={model.browser.filter}
+										open={open}
+										dispatch={dispatch}
+									/>
+								</div>
+								<div className="sidebar-foot">
+									<ExternalLink href={SOURCE_URL} muted>
+										qretools on GitHub
+									</ExternalLink>
+								</div>
 							</div>
 						</nav>
 						<main className="content">

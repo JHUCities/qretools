@@ -23,11 +23,12 @@ import {
 } from "@primer/react";
 import { useId, useRef, useState } from "react";
 import { plainText } from "../../core/codeSpans.js";
-import { installUrl } from "../config.js";
+import { installUrl, SOURCE_URL } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import { hasOwnWork, type Model } from "../model.js";
 import { parseRepo, repoText } from "../storage.js";
 import { useApp } from "./AppContext.js";
+import { ExternalLink } from "./ExternalLink.js";
 import { failureDescription } from "./Previews.js";
 
 export function SignIn({ model }: { model: Model }) {
@@ -233,6 +234,12 @@ export function SignIn({ model }: { model: Model }) {
 						Sign out of GitHub
 					</Button>
 				)}
+				{/* Last, as github.com's sign-in page ends with its own links. */}
+				<p className="quiet signin-note">
+					<ExternalLink href={SOURCE_URL} muted>
+						qretools on GitHub
+					</ExternalLink>
+				</p>
 			</Stack>
 		</main>
 	);

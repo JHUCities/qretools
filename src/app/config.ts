@@ -34,6 +34,12 @@ export function signInConfig(
 	};
 }
 
+/**
+ * Where qretools itself lives: a fact about the tool, not about any bank, so one literal
+ * (a team running its own copy still runs qretools).
+ */
+export const SOURCE_URL = "https://github.com/JHUCities/qretools";
+
 /** Where the app is installed on a repository: GitHub's own page, one literal. */
 export const installUrl = (appSlug: string): string =>
 	`https://github.com/apps/${appSlug}/installations/select_target`;
