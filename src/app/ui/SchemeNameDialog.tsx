@@ -7,15 +7,16 @@
  */
 import { Dialog, FormControl, Stack, Textarea, TextInput } from "@primer/react";
 import { useId } from "react";
-import { SCHEME_NAME } from "../../core/copy.js";
-import { schemePath } from "../../core/schemes.js";
-import type { NamedScheme } from "../../core/surface/env.js";
+import { SCHEME_NAME, SCHEME_SINGULAR } from "../../core/copy.js";
+import { SHAPE, schemePath } from "../../core/schemes.js";
+import { FIELD_OF, type NamedScheme } from "../../core/surface/env.js";
 import type { Dispatch, Naming } from "../model.js";
 import { inlineCode } from "./Previews.js";
 
 const EXAMPLES: Readonly<Record<NamedScheme, string>> = {
 	concept: "neighborhood_satisfaction",
 	scale: "satisfied5",
+	unit: "days",
 	universe: "owners",
 	instruction: "select_one",
 };
@@ -23,16 +24,14 @@ const EXAMPLES: Readonly<Record<NamedScheme, string>> = {
 const PLACEHOLDER: Readonly<Record<NamedScheme, string>> = {
 	concept: "Neighborhood satisfaction",
 	scale: "",
+	unit: "days",
 	universe: "Owners only",
 	instruction: "Select all that apply",
 };
 
-const FIELD: Readonly<Record<NamedScheme, string>> = {
-	concept: "concept",
-	scale: "responses",
-	universe: "universe",
-	instruction: "instruction",
-};
+/** The field a question writes it in (a unit's sits inside `number:`). */
+const field = (kind: NamedScheme): string =>
+	FIELD_OF[kind].split(".").at(-1) ?? FIELD_OF[kind];
 
 export function SchemeNameDialog({
 	naming,
@@ -49,7 +48,8 @@ export function SchemeNameDialog({
 	const close = () => dispatch({ kind: "schemeNamingCancelled" });
 	// An empty name is not yet wrong: say nothing until something is typed.
 	const shown = name === "" ? undefined : problem;
-	const withText = !renaming && kind !== "scale";
+	const shape = SHAPE[kind];
+	const withText = !renaming && shape !== "labels";
 	return (
 		<Dialog
 			title={`${renaming ? "Rename" : "New"} ${SCHEME_NAME[kind]}`}
@@ -94,7 +94,7 @@ export function SchemeNameDialog({
 						<FormControl.Caption>
 							Questions use it by writing{" "}
 							<code className="code">
-								{FIELD[kind]}: {name || EXAMPLES[kind]}
+								{field(kind)}: {name || EXAMPLES[kind]}
 							</code>
 							{problem === undefined && (
 								<>
@@ -118,7 +118,7 @@ export function SchemeNameDialog({
 					{withText && (
 						<FormControl>
 							<FormControl.Label>
-								{kind === "concept" ? "Label" : "Text"}
+								{shape === "labelled" ? "Label" : "Text"}
 							</FormControl.Label>
 							<Textarea
 								block
@@ -131,8 +131,8 @@ export function SchemeNameDialog({
 								}
 							/>
 							<FormControl.Caption>
-								{kind === "concept"
-									? "The concept as people say it. Add its definition in the file."
+								{shape === "labelled"
+									? `The ${SCHEME_SINGULAR[kind]} as people write it. Add its definition in the file.`
 									: "The wording, as respondents or interviewers read it. You can also write it later."}
 							</FormControl.Caption>
 						</FormControl>

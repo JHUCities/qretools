@@ -15,3 +15,14 @@ export const fold = (s: string): string =>
 export const labelsKey = (
 	codes: readonly { readonly label: string }[],
 ): string => codes.map((c) => fold(c.label)).join(" | ");
+
+/**
+ * A unit folded further, singular and plural as one: "Days", "day". A heuristic (a
+ * trailing "s" off words over three letters), applied to both sides alike; if it ever
+ * misfires, a short list of plurals is the fix.
+ */
+export const unitKey = (unit: string): string =>
+	fold(unit)
+		.split(" ")
+		.map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w))
+		.join(" ");

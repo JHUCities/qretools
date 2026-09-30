@@ -311,3 +311,40 @@ describe("a concept written as prose", () => {
 		]);
 	});
 });
+
+describe("a unit written in words", () => {
+	const env = { ...EMPTY_ENV, units: { days: { label: "days" } } };
+	const found = (unit: string) =>
+		lint(
+			parseSurface(`name: q\nnumber:\n  unit: ${unit}\n`, env).draft,
+			env,
+		).filter((f) => f.code.includes("unit"));
+
+	it("that a shared unit already says (singular, plural or case aside) is pointed at it", () => {
+		expect(found("Days")).toMatchObject([
+			{
+				code: "matches-unit",
+				path: "number.unit",
+				fix: { kind: "edit", edits: [{ path: "number.unit", value: "days" }] },
+			},
+		]);
+	});
+
+	it("otherwise is advice to share it, with a fix that creates it from the words", () => {
+		expect(found("times per week")).toMatchObject([
+			{
+				code: "unit-prose",
+				severity: "warning",
+				fix: {
+					kind: "create",
+					create: {
+						scheme: "unit",
+						name: "times_per_week",
+						text: "times per week",
+						path: "number.unit",
+					},
+				},
+			},
+		]);
+	});
+});

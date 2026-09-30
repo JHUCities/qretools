@@ -5,7 +5,10 @@ import { codebookView, respondentView } from "./render.js";
 import { EMPTY_ENV } from "./surface/env.js";
 import { parseSurface } from "./surface/parse.js";
 
-const draftOf = (source: string) => parseSurface(source, EMPTY_ENV).draft;
+// The examples name a shared unit, `years`.
+const WITH_UNITS = { ...EMPTY_ENV, units: { years: { label: "years" } } };
+
+const draftOf = (source: string) => parseSurface(source, WITH_UNITS).draft;
 
 describe("respondentView", () => {
 	it("renders a single-choice question", () => {
@@ -66,7 +69,7 @@ describe("codebookView", () => {
 	});
 
 	it("formats number and open domains, and notes select-all", () => {
-		expect(codebookView(draftOf(nhdNyrs), EMPTY_ENV).values).toEqual({
+		expect(codebookView(draftOf(nhdNyrs), WITH_UNITS).values).toEqual({
 			kind: "lines",
 			lines: ["Range: 0–100 years"],
 		});

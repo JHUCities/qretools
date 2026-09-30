@@ -387,6 +387,7 @@ export const TEMPLATES: ReadonlyArray<{
  */
 export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 	concept: "label:\n",
+	unit: "label:\n",
 	scale: "labels:\n  1:\n  2:\n",
 	universe: "text:\n",
 	instruction: "text:\n",

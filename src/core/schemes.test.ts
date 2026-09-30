@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-	conceptSource,
 	evaluateScheme,
 	kindAt,
+	labelledSource,
 	SCHEME_KINDS,
 	schemeEnv,
 	schemePath,
@@ -99,8 +99,8 @@ describe("a concept file", () => {
 				EMPTY_ENV,
 			).value,
 		).toEqual({
-			kind: "concept",
-			concept: {
+			kind: "labelled",
+			entry: {
 				label: "Neighborhood satisfaction",
 				definition: "How content residents are.",
 			},
@@ -129,7 +129,7 @@ describe("a concept file", () => {
 			schemeEnv([{ kind: "concept", name: "trust", text: "label: Trust\n" }])
 				.concepts,
 		).toEqual({ trust: { label: "Trust" } });
-		expect(conceptSource(" Trust: in government ")).toBe(
+		expect(labelledSource(" Trust: in government ")).toBe(
 			'label: "Trust: in government"\n',
 		);
 	});

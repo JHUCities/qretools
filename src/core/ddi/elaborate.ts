@@ -21,9 +21,10 @@ import {
 	type Domain,
 	type Draft,
 	definedVariables,
+	labelOf,
 	type Named,
 } from "../surface/draft.js";
-import type { ConceptEntry, TextEntry } from "../surface/env.js";
+import type { LabelledEntry, TextEntry } from "../surface/env.js";
 import {
 	codeValue,
 	type DdiDocument,
@@ -133,7 +134,7 @@ export function elaborate(
  * this question's own, as before.
  */
 function conceptItem(
-	c: Named<ConceptEntry>,
+	c: Named<LabelledEntry>,
 	agency: string,
 	own: Identity,
 ): Item {
@@ -234,7 +235,9 @@ function elaborateDomain(
 				// `decimals: 0` and no `decimals` both mean whole numbers, so falsy is the right test.
 				NumericTypeCode: codeValue(domain.decimals ? "Decimal" : "Integer"),
 				DecimalPositions: domain.decimals,
-				MeasurementUnit: maybe(domain.unit, codeValue),
+				// The term only (DDI's StringValue): a shared unit's label, or the words
+				// written. Which vocabulary it comes from waits for a bank-level export.
+				MeasurementUnit: maybe(domain.unit, (u) => codeValue(labelOf(u))),
 			});
 			return { items: [], responseDomain: numeric, value: numeric };
 		}

@@ -29,7 +29,7 @@ import {
 import { inScope } from "../../core/surface/env.js";
 import type { Mark } from "../../core/surface/marks.js";
 import {
-	conceptJsonSchema,
+	labelledJsonSchema,
 	labelsJsonSchema,
 	textEntryJsonSchema,
 } from "../../core/surface/schema.js";
@@ -78,7 +78,7 @@ const SETTLE_MS = 400;
 const SCHEME_SCHEMAS: Readonly<Record<Shape, Record<string, unknown>>> = {
 	labels: labelsJsonSchema(),
 	text: textEntryJsonSchema(),
-	concept: conceptJsonSchema(),
+	labelled: labelledJsonSchema(),
 };
 
 /**
@@ -383,14 +383,14 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 	if (value === undefined)
 		return <p className="quiet">Nothing readable yet.</p>;
 	if (value.kind === "text") return <p>{value.text}</p>;
-	if (value.kind === "concept")
+	if (value.kind === "labelled")
 		return (
 			<>
 				<p>
-					<b>{value.concept.label}</b>
+					<b>{value.entry.label}</b>
 				</p>
-				{value.concept.definition !== undefined && (
-					<p>{value.concept.definition}</p>
+				{value.entry.definition !== undefined && (
+					<p>{value.entry.definition}</p>
 				)}
 			</>
 		);

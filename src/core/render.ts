@@ -11,9 +11,9 @@ import { compact } from "./compact.js";
 import { UNNAMED } from "./copy.js";
 import {
 	type Code,
-	conceptLabel,
 	type Domain,
 	type Draft,
+	labelOf,
 	type Named,
 	optionVariable,
 	textOf,
@@ -114,7 +114,7 @@ function input(domain: Domain): Input {
 				max: domain.max,
 				// 0 and absent both mean whole numbers: the HTML default step is 1.
 				step: domain.decimals ? 10 ** -domain.decimals : undefined,
-				unit: domain.unit,
+				unit: domain.unit === undefined ? undefined : labelOf(domain.unit),
 			});
 		case "open":
 			return compact({ kind: "text", maxLength: domain.maxLength });
@@ -146,7 +146,7 @@ export function codebookView(draft: Draft, env: Env): CodebookView {
 function title(draft: Draft): Slot {
 	const source =
 		draft.title ??
-		(draft.concept === undefined ? undefined : conceptLabel(draft.concept)) ??
+		(draft.concept === undefined ? undefined : labelOf(draft.concept)) ??
 		draft.name;
 	return source === undefined
 		? { kind: "hole", path: "name", prompt: PROMPT.title }
@@ -168,7 +168,13 @@ function valueLines(
 					)
 				: domain.codes.map((c) => `${c.code} = ${c.label}`);
 		case "number":
-			return [numberLine(domain.min, domain.max, domain.unit)];
+			return [
+				numberLine(
+					domain.min,
+					domain.max,
+					domain.unit === undefined ? undefined : labelOf(domain.unit),
+				),
+			];
 		case "open":
 			return [
 				domain.maxLength === undefined

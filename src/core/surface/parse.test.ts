@@ -3,6 +3,8 @@ import type { Finding } from "../findings.js";
 import { EMPTY_ENV } from "./env.js";
 import { parseSurface } from "./parse.js";
 
+const WITH_UNITS = { ...EMPTY_ENV, units: { years: { label: "years" } } };
+
 const brief = (f: Finding) => `${f.severity}:${f.code}@${f.path}`;
 
 const complete = `name: nhd_sat
@@ -132,10 +134,13 @@ describe("parseSurface", () => {
 		).toEqual(["hole:hole@title"]);
 		const num = parseSurface(
 			`${full}number:\n  min:\n  unit: years\n`,
-			EMPTY_ENV,
+			WITH_UNITS,
 		);
 		expect(num.findings.map(brief)).toEqual(["hole:hole@number.min"]);
-		expect(num.draft.domain).toEqual({ kind: "number", unit: "years" });
+		expect(num.draft.domain).toEqual({
+			kind: "number",
+			unit: { kind: "ref", name: "years", value: { label: "years" } },
+		});
 		expect(
 			parseSurface(
 				`${full}select:\nresponses:\n  1: a\n  2: b\n`,
@@ -190,12 +195,12 @@ describe("parseSurface", () => {
 
 	it("reads number and open domains, and select many", () => {
 		expect(
-			parseSurface("number:\n  min: 0\n  unit: years\n", EMPTY_ENV).draft
+			parseSurface("number:\n  min: 0\n  unit: years\n", WITH_UNITS).draft
 				.domain,
 		).toEqual({
 			kind: "number",
 			min: 0,
-			unit: "years",
+			unit: { kind: "ref", name: "years", value: { label: "years" } },
 		});
 		expect(
 			parseSurface("open:\n  max_length: 200\n", EMPTY_ENV).draft.domain,
@@ -326,6 +331,54 @@ describe("an unknown scale name", () => {
 			kind: "create",
 			label: "New shared scale `agree9`",
 			create: { scheme: "scale", name: "agree9", text: "", path: "responses" },
+		});
+	});
+});
+
+describe("unit", () => {
+	const env = {
+		...EMPTY_ENV,
+		units: { days: { label: "days" }, dollars: { label: "US dollars" } },
+	};
+	const at = (unit: string) =>
+		parseSurface(`name: q\nnumber:\n  min: 0\n  unit: ${unit}\n`, env);
+
+	it("names a shared unit, recorded where it is written (inside number)", () => {
+		const p = at("days");
+		expect(p.draft.domain).toMatchObject({
+			unit: { kind: "ref", name: "days" },
+		});
+		expect(p.mentions).toContainEqual({
+			scheme: "unit",
+			name: "days",
+			path: "number.unit",
+		});
+		expect(p.marks).toContainEqual({ kind: "ref", range: expect.anything() });
+	});
+
+	it("offers the near one for a name that differs only in number, and to create any other", () => {
+		expect(
+			at("day").findings.find((f) => f.path === "number.unit"),
+		).toMatchObject({
+			severity: "hole",
+			fix: {
+				kind: "edit",
+				label: "Use `days`",
+				edits: [{ path: "number.unit", value: "days" }],
+			},
+		});
+		expect(
+			at("hours").findings.find((f) => f.path === "number.unit")?.fix,
+		).toEqual({
+			kind: "create",
+			label: "New shared unit `hours`",
+			create: { scheme: "unit", name: "hours", text: "", path: "number.unit" },
+		});
+	});
+
+	it("keeps words, which lint calls advice", () => {
+		expect(at("times per week").draft.domain).toMatchObject({
+			unit: { kind: "text", text: "times per week" },
 		});
 	});
 });

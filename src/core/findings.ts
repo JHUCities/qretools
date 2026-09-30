@@ -36,6 +36,8 @@ export type LintCode =
 	| "matches-instruction"
 	| "matches-concept"
 	| "concept-prose"
+	| "matches-unit"
+	| "unit-prose"
 	| "missing-code"
 	/** Bank-level: another question defines the same variable. */
 	| "duplicate-variable"
@@ -46,7 +48,7 @@ export type LintCode =
 	| "duplicate-universe"
 	| "duplicate-instruction"
 	| "duplicate-concept"
-	| "unit-spelling"
+	| "duplicate-unit"
 	| "similar-text"
 	| "unknown-variant";
 
