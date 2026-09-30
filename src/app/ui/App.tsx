@@ -352,7 +352,7 @@ export function App() {
 								</div>
 								<div className="sidebar-foot">
 									<ExternalLink href={SOURCE_URL} muted>
-										qretools on GitHub
+										About qretools
 									</ExternalLink>
 								</div>
 							</div>
