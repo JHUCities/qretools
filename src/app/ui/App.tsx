@@ -367,7 +367,8 @@ export function App() {
 								</div>
 								<div className="sidebar-foot">
 									<ExternalLink href={SOURCE_URL} muted icon={false}>
-										About qretools
+										{/* Named in full for a list of links heard out of context. */}
+										<VisuallyHidden>qretools on </VisuallyHidden>GitHub
 									</ExternalLink>
 								</div>
 							</div>

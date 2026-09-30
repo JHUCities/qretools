@@ -1307,7 +1307,7 @@ on a kind became branches on its shape (`SHAPE`), and the stored kinds are
 sites). The reference bank's two `unit: days` questions show a hole until it has
 `units/days.yaml`: the owner's edit, never ours.
 
-**A link to qretools itself (owner, 2026-09-30).** "About qretools" sits at the foot
+**A link to qretools itself (owner, 2026-09-30).** A link to its repository sits at the foot
 of the sidebar, below the tree, and last on the sign-in page, so it is there signed in or
 not; the account menu (hidden, and not about the account) and a header "?" (one more
 control for one link) were considered and declined. Primer has no footer component, so
@@ -1317,9 +1317,11 @@ config.ts, a constant: where the tool lives is a fact about the tool, not a bank
 sidebar's second row is now `.sidebar-body`** (rows since 2026-09-30: the branch and filter
 group, the scrolling `.trees`, then `.sidebar-foot`), so `.sidebar`'s direct children are `.band` and
 `.sidebar-body`; measured, the foot does not move whatever the tree holds. It read
-"qretools on GitHub" until the repository had a README to land on. No external-link icon at
-the foot (owner, 2026-09-30): the place says it already, and the new tab is still said
-to screen readers (`ExternalLink`'s `icon={false}`).
+"qretools on GitHub" until the repository had a README to land on. Since then (owner,
+2026-09-30) the foot's link reads "GitHub" (heard as "qretools on GitHub", for a list of
+links out of context), the sign-in page's "About qretools", and neither has the
+external-link icon: the link style says enough, and the new tab is still said to screen
+readers (`ExternalLink`'s `icon={false}`).
 
 **The header follows primer.style; GitHub's typefaces; a theme toggle (owner,
 2026-09-30).** The header is 64px from its padding (16px above and below 32px controls,

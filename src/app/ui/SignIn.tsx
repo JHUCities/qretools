@@ -236,7 +236,7 @@ export function SignIn({ model }: { model: Model }) {
 				)}
 				{/* Last, as github.com's sign-in page ends with its own links. */}
 				<p className="quiet signin-note">
-					<ExternalLink href={SOURCE_URL} muted>
+					<ExternalLink href={SOURCE_URL} muted icon={false}>
 						About qretools
 					</ExternalLink>
 				</p>
