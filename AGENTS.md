@@ -1397,11 +1397,11 @@ file, as an IDE does; with Cmd held the names underline (a class on the content,
 CodeMirror's `crosshairCursor` sets its cursor; mousemove clears it if the key-up went
 elsewhere). The editor only reports the offset (`onFollow`); `update` finds the name
 there (`mentionAt`, shared with the inspector) and the file (`schemeFileNamed`) and
-opens it as `fileOpened` does, so Back returns. Hovering a green name shows a tooltip drawn
-exactly as a finding's (the one on `legacy`): the keys as its text, "Go to definition"
-as its action button, as a quick fix's is (owner: like the legacy field's, not a styled
-widget of its own). A hover can't be reached from the keyboard; F12 and the inspector's
-linked chip are that route. None on another author's version. Only the author's own open question; a
+opens it as `fileOpened` does, so Back returns. Hovering a green name shows the browser's
+own tooltip, its `title` "Go to definition (⌘-click or F12)" (owner, after an audit: a
+tooltip copying the lint tooltip's markup was built first and removed, since it hung on
+CodeMirror's internal class names). None of this on another author's version (read
+only): no title, no underline with Cmd held, no follow. Only the author's own open question; a
 name nothing has does nothing (owner). Mod-click elsewhere still adds a cursor (only a
 click on a name is taken): Alt-click, VS Code's multi-cursor, was agreed then dropped,
 since Alt is CodeMirror's rectangular selection. F12 is taken only on a name (it is the
