@@ -1346,7 +1346,11 @@ tree, the foot. Narrow screens now show the branch and "behind" (the
 sidebar is its own view); the avatar menu's "Your branch on GitHub" is gone.
 
 **Links hover as github.com's do (owner, 2026-09-30).** Underlined on hover, in their
-own colour, at the font's own underline position (`text-underline-offset: auto`); a
+own colour, the line below the descenders (`text-underline-position: under`: at the
+font's own position Firefox broke Mona Sans' underline into dashes at every letter's
+foot; measured in Chrome and Firefox), 1px thick in both (Firefox thickens it for bold
+text; set on the hover rule, because Primer's `:where(…):hover { text-decoration }`
+shorthand, as specific as a plain rule and later, resets the thickness); a
 deliberate departure from Primer React's Link, which sets a 0.8px offset (it cut Mona
 Sans' descenders) and turns a muted link blue without an underline. One rule in app.css
 on `[class*="prc-Link-Link"]` (Primer's rules are zero-specificity `:where()`; inline

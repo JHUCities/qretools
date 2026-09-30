@@ -9,8 +9,8 @@ body {
 }
 
 /*
- * Links hover as github.com's and primer.style's do: underlined, in their own colour, at
- * the font's own underline position. Primer React's Link sets a 0.8px offset (it sits on
+ * Links hover as github.com's and primer.style's do: underlined, in their own colour, the
+ * line clear of the letters. Primer React's Link sets a 0.8px offset (it sits on
  * the descenders in Mona Sans) and turns a muted link blue without an underline; this
  * overrides both, for Primer's Link only (menu items and icon buttons are not it); its
  * rules are zero-specificity `:where()`, so an attribute selector is enough. Relies on
@@ -18,11 +18,22 @@ body {
  * to Primer's own, a cosmetic loss.
  */
 [class*="prc-Link-Link"] {
+	/*
+	 * Below the descenders: at the font's own position, Firefox breaks Mona Sans'
+	 * underline at the foot of every letter (skip-ink), which reads as dashes.
+	 */
+	text-underline-position: under;
 	text-underline-offset: auto;
 }
 /* Not inline links: Primer's link-underline preference inverts their hover. */
 [class*="prc-Link-Link"]:not([data-inline="true"]):hover {
 	text-decoration-line: underline;
+	/*
+	 * One weight everywhere (Firefox thickens it for bold text). Here, not above: Primer's
+	 * `:where(…):hover { text-decoration: underline }` is as specific as a plain rule and
+	 * later, and its shorthand resets the thickness.
+	 */
+	text-decoration-thickness: var(--borderWidth-thin);
 }
 [class*="prc-Link-Link"][data-muted="true"]:hover {
 	color: var(--fgColor-muted);
