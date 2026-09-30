@@ -15,6 +15,7 @@ import {
 	Banner,
 	Button,
 	ConfirmationDialog,
+	Heading,
 	IconButton,
 	Link,
 	LinkButton,
@@ -29,7 +30,7 @@ import {
 	SkeletonBox,
 } from "@primer/react/experimental";
 import { useTheme } from "@primer/react/next";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { plainText } from "../../core/codeSpans.js";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
@@ -63,6 +64,8 @@ import { SignOutDialog } from "./SignOutDialog.js";
 
 export function App() {
 	const { dispatch, evaluations, signIn: signInConfig } = useApp();
+	// The sidebar's title, which also names its navigation landmark.
+	const bankTitle = useId();
 	const model = useModel((m) => m);
 	const env = useEnv();
 	const { local, browser, screen, activity } = model;
@@ -329,18 +332,31 @@ export function App() {
 							open !== undefined || model.screen.kind === "foreign" || waiting
 						}
 					>
-						<nav className="sidebar" aria-label="Question bank">
-							{/* As github.com's code view: the branch, then the filter, then the tree. */}
+						<nav className="sidebar" aria-labelledby={bankTitle}>
+							{/*
+							 * As github.com's file view: the pane's title level with the open file's
+							 * header, then the branch and the filter together, then the tree.
+							 */}
 							<div className="band">
-								<BranchLine model={model} />
+								<Heading
+									as="h2"
+									variant="small"
+									id={bankTitle}
+									className="pane-title"
+								>
+									Question bank
+								</Heading>
 							</div>
-							{/* The filter and the foot stay put; the tree between them scrolls. */}
+							{/* The branch, the filter and the foot stay put; the tree between scrolls. */}
 							<div className="sidebar-body">
-								<BankFilter
-									filter={model.browser.filter}
-									loading={loading}
-									dispatch={dispatch}
-								/>
+								<div className="sidebar-tools">
+									<BranchLine model={model} />
+									<BankFilter
+										filter={model.browser.filter}
+										loading={loading}
+										dispatch={dispatch}
+									/>
+								</div>
 								<div className="trees">
 									<Browser
 										folders={folders}

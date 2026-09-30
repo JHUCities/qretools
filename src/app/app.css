@@ -107,14 +107,31 @@ code,
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr) auto;
 }
-/* The filter, fixed above the tree ("Go to file" under GitHub's branch picker). */
-.filter {
+/*
+ * The branch and the filter, one group as github.com's branch picker and "Go to file":
+ * 8px apart, no rule between; fixed above the tree.
+ */
+.sidebar-tools {
+	display: flex;
+	flex-direction: column;
+	gap: var(--base-size-8);
 	padding: var(--base-size-8) var(--base-size-16) 0;
+}
+/*
+ * The pane's title (Primer's small Heading, 16px semibold, as github.com's "Files"), one
+ * control high so the band keeps its height and its rule still meets the file header's.
+ */
+.pane-title {
+	margin: 0;
+	display: flex;
+	align-items: center;
+	min-block-size: var(--control-medium-size);
 }
 .trees {
 	overflow: auto;
 	min-height: 0;
-	padding: var(--base-size-16);
+	/* 8px under the filter, as under github.com's "Go to file"; 16px elsewhere. */
+	padding: var(--base-size-8) var(--base-size-16) var(--base-size-16);
 }
 .sidebar-foot {
 	padding: var(--base-size-8) var(--base-size-16);
@@ -211,7 +228,7 @@ code,
 		min-block-size: var(--control-small-size);
 	}
 }
-/* The sidebar's band: the branch, level with the open file's header and its rule. */
+/* The sidebar's band: its title, level with the open file's header and its rule. */
 .band {
 	padding: var(--base-size-8) var(--base-size-16);
 	display: flex;
