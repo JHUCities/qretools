@@ -1,10 +1,14 @@
+// GitHub's typefaces, served with the app: Mona Sans for the interface, Monaspace Neon
+// for code (app.css points Primer's font stacks at them).
+import "@fontsource-variable/mona-sans";
+import "@fontsource/monaspace-neon/400.css";
 import "@primer/primitives/dist/css/primitives.css";
 import "@primer/primitives/dist/css/functional/themes/light.css";
 import "@primer/primitives/dist/css/functional/themes/dark.css";
 import "./app.css";
 import { BaseStyles } from "@primer/react";
 import { ThemeProvider } from "@primer/react/next";
-import { StrictMode } from "react";
+import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ok, type Result } from "../core/result.js";
 import { type Callback, callbackOf, PendingSchema } from "./auth.js";
@@ -16,7 +20,7 @@ import { browserCredentialStore, readStartup } from "./persist.js";
 import type { Failure } from "./storage.js";
 import { createApp } from "./store.js";
 import { App } from "./ui/App.js";
-import { AppContext } from "./ui/AppContext.js";
+import { AppContext, useModel } from "./ui/AppContext.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 if (root) {
@@ -56,6 +60,7 @@ if (root) {
 		{
 			work: started.work,
 			...(started.settings !== undefined && { settings: started.settings }),
+			...(started.theme !== undefined && { theme: started.theme }),
 			...(bank !== undefined && { defaultBank: bank }),
 			notices: started.notices,
 			hasToken:
@@ -87,11 +92,11 @@ if (root) {
 	createRoot(root).render(
 		<StrictMode>
 			<AppContext.Provider value={app}>
-				<ThemeProvider colorMode="auto">
+				<Themed>
 					<BaseStyles>
 						<App />
 					</BaseStyles>
-				</ThemeProvider>
+				</Themed>
 			</AppContext.Provider>
 		</StrictMode>,
 	);
@@ -128,4 +133,17 @@ function cameBackFromGitHub(): Result<Callback, Failure> | undefined {
 		`${location.pathname}${pending?.hash ?? location.hash}`,
 	);
 	return returned;
+}
+
+/**
+ * Primer's theme, following the Model. ThemeProvider's wrapper carries its own colour
+ * mode, which would override the page's, so both come from the one choice.
+ */
+function Themed({ children }: { children: ReactNode }) {
+	const theme = useModel((m) => m.theme);
+	return (
+		<ThemeProvider colorMode={theme === "system" ? "auto" : theme}>
+			{children}
+		</ThemeProvider>
+	);
 }

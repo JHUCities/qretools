@@ -222,7 +222,11 @@ export interface Model {
 	readonly failures: readonly Failure[];
 	readonly agency: string;
 	readonly ddiSchema: DdiSchema;
+	/** Light or dark as chosen on this device, or the system's (until the toggle is used). */
+	readonly theme: ThemeChoice;
 }
+
+export type ThemeChoice = "system" | "light" | "dark";
 
 export interface Naming {
 	readonly kind: NamedScheme;
@@ -240,6 +244,8 @@ export interface Naming {
 
 export type Msg =
 	| { readonly kind: "edited"; readonly text: string }
+	/** The theme toggle: the theme to show, named by the view (which knows the system's). */
+	| { readonly kind: "themeChosen"; readonly theme: ThemeChoice }
 	/** A finding's quick fix, clicked: edits in the document's terms, applied to the text as it is now. */
 	| { readonly kind: "fixApplied"; readonly id: Id; readonly fix: Fix }
 	| { readonly kind: "locationClicked"; readonly target: Target }
@@ -334,6 +340,8 @@ export type Cmd =
 	| { readonly kind: "persist"; readonly work: Work }
 	/** The bank and "remember", a default for the next new tab. */
 	| { readonly kind: "saveSettings"; readonly settings: BankSettings }
+	/** Show the page in this theme, and remember it on this device ("system" forgets). */
+	| { readonly kind: "applyTheme"; readonly theme: ThemeChoice }
 	/** Work leaving this tab (someone else's, or another bank's): kept in the browser, never dropped. */
 	| { readonly kind: "setAside"; readonly work: Work }
 	| { readonly kind: "connect"; readonly repo: Repo }
@@ -413,6 +421,8 @@ const EXAMPLE_SCALES: Scales = Object.fromEntries(
 );
 
 export interface Flags {
+	/** The theme chosen on this device, as stored; absent means the system's. */
+	readonly theme?: ThemeChoice;
 	/** This tab's work, already validated by the shell; a failure is shown, never fatal. */
 	readonly work: Result<Work | undefined, Failure>;
 	/** The bank settings stored on this device; the work's own bank wins over them. */
@@ -463,6 +473,7 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		],
 		agency: AGENCY,
 		ddiSchema: { kind: "loading" },
+		theme: flags.theme ?? "system",
 	};
 	// Without a sign-in, nothing of the bank stays: only the author's own work.
 	const model = flags.hasToken ? opened : signedOut(opened);

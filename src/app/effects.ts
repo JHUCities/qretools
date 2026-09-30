@@ -29,6 +29,7 @@ import {
 	SETTINGS_KEY,
 	setAsideWork,
 	settingsValue,
+	THEME_KEY,
 	WORK_KEY,
 } from "./persist.js";
 import {
@@ -264,6 +265,18 @@ export function createEffects(deps: Deps): Effects {
 					return;
 				case "persist":
 					persist(JSON.stringify(cmd.work));
+					return;
+				case "applyTheme":
+					// The page shows it at once; the inline script in index.html shows it
+					// before the first paint on the next visit.
+					document.documentElement.dataset.colorMode =
+						cmd.theme === "system" ? "auto" : cmd.theme;
+					try {
+						if (cmd.theme === "system") localStorage.removeItem(THEME_KEY);
+						else localStorage.setItem(THEME_KEY, cmd.theme);
+					} catch {
+						// Storage unavailable: the choice lasts for this page only.
+					}
 					return;
 				case "saveSettings":
 					try {

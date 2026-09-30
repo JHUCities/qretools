@@ -3,8 +3,11 @@ import {
 	GitBranchIcon,
 	GitPullRequestIcon,
 	LinkExternalIcon,
+	MoonIcon,
 	PlusIcon,
 	SignOutIcon,
+	SunIcon,
+	TasklistIcon,
 } from "@primer/octicons-react";
 import {
 	ActionList,
@@ -26,6 +29,7 @@ import {
 	SkeletonAvatar,
 	SkeletonBox,
 } from "@primer/react/experimental";
+import { useTheme } from "@primer/react/next";
 import { useMemo } from "react";
 import { plainText } from "../../core/codeSpans.js";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
@@ -153,16 +157,19 @@ export function App() {
 					align="center"
 					wrap="wrap"
 					gap="condensed"
-					paddingBlock="condensed"
-					paddingInline="normal"
+					// As primer.style's header: 16px above and below 32px controls, 24px aside.
+					paddingBlock="normal"
+					paddingInline={{ narrow: "normal", regular: "spacious" }}
 				>
-					{/* The name and path, then what the branch holds, centred on one line. */}
+					{/* The mark, the name and path, then what the branch holds, on one line. */}
 					<Stack
 						direction="horizontal"
 						align="center"
 						gap="condensed"
 						className="brand"
 					>
+						{/* A placeholder mark until qretools has a logo. */}
+						<TasklistIcon size={24} />
 						{/* Text lines up with text: the name and the path share a baseline. */}
 						<Stack
 							direction="horizontal"
@@ -242,15 +249,12 @@ export function App() {
 					 * sizes, so the header neither grows nor narrows when they arrive.
 					 */}
 					{model.session.kind === "connecting" && (
-						<>
-							<span className="new-placeholder" aria-hidden>
-								<Button leadingVisual={PlusIcon} tabIndex={-1} inert>
-									New
-								</Button>
-								<SkeletonBox />
-							</span>
-							<SkeletonAvatar size={32} />
-						</>
+						<span className="new-placeholder" aria-hidden>
+							<Button leadingVisual={PlusIcon} tabIndex={-1} inert>
+								New
+							</Button>
+							<SkeletonBox />
+						</span>
 					)}
 					{model.session.kind === "connected" && (
 						<ActionMenu>
@@ -294,7 +298,12 @@ export function App() {
 							</ActionMenu.Overlay>
 						</ActionMenu>
 					)}
-					<Account model={model} />
+					<ThemeToggle />
+					{model.session.kind === "connecting" ? (
+						<SkeletonAvatar size={32} />
+					) : (
+						<Account model={model} />
+					)}
 				</Stack>
 				{/*
 				 * What the app has to say once, while signed in (signed out, the sign-in page
@@ -525,6 +534,25 @@ function Context({ model }: { model: Model }) {
 				)}
 			</span>
 		</span>
+	);
+}
+
+/**
+ * Light or dark, as primer.style offers it: one button naming the theme it switches to.
+ * It starts from the system's; a choice is remembered on this device (applyTheme).
+ */
+function ThemeToggle() {
+	const { dispatch } = useApp();
+	const { resolvedColorMode } = useTheme();
+	// Following the system, Primer resolves to "night" or "day", not "dark" or "light".
+	const dark = resolvedColorMode === "dark" || resolvedColorMode === "night";
+	const next = dark ? "light" : "dark";
+	return (
+		<IconButton
+			icon={next === "dark" ? MoonIcon : SunIcon}
+			aria-label={`Switch to ${next} theme`}
+			onClick={() => dispatch({ kind: "themeChosen", theme: next })}
+		/>
 	);
 }
 

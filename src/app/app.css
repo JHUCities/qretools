@@ -9,6 +9,39 @@ body {
 }
 
 /*
+ * GitHub's typefaces, self-hosted (main.tsx imports them): Mona Sans for the interface,
+ * Monaspace Neon for code. Primer's BaseStyles reads --fontStack-system. A custom
+ * property can't extend its old value, so Primer's fallbacks (primitives 11.10) are
+ * restated after the new first name, less "Noto Sans Backtick Fix" (a GitHub-hosted fix
+ * font this app does not load).
+ */
+:root {
+	--fontStack-system:
+		"Mona Sans Variable", -apple-system, BlinkMacSystemFont, "Segoe UI",
+		"Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji",
+		"Segoe UI Emoji";
+	--fontStack-sansSerif: var(--fontStack-system);
+	--fontStack-monospace:
+		"Monaspace Neon", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+		"Liberation Mono", monospace;
+}
+/*
+ * A theme chosen on the toggle: native parts (scrollbars, the canvas, form controls)
+ * follow it too. Primer sets color-scheme only for "auto".
+ */
+[data-color-mode="light"] {
+	color-scheme: light;
+}
+[data-color-mode="dark"] {
+	color-scheme: dark;
+}
+/* No faux bold: it would widen the monospace grid (only regular is loaded). */
+code,
+.cm-content {
+	font-synthesis-weight: none;
+}
+
+/*
  * The app shell (see App.tsx): the dynamic viewport height (dvh follows mobile
  * browsers' collapsing address bar, which 100vh does not), a header row sized by its
  * content, and a workspace that takes the rest. `minmax(0, 1fr)` lets the workspace
@@ -102,10 +135,13 @@ body {
 }
 .topbar {
 	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	/* As primer.style's: white in light, black in dark (Primer's darkest background). */
+	background: light-dark(var(--bgColor-default), var(--bgColor-black));
 }
 .topbar h1 {
 	margin: 0;
 	font-size: var(--text-title-size-small);
+	font-weight: var(--base-text-weight-semibold);
 }
 /*
  * While signing in, "New"'s place: the real button, hidden and inert, sizes it (no
