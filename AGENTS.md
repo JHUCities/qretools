@@ -1022,7 +1022,7 @@ the prefix is written. Upgrade: rename an old `qretools/<login>` branch on GitHu
 (which retargets its pull request); until then, and for old links naming it, it opens
 as someone else's read-only branch. No fallback code. The header's `owner / repo /
 ⑂ branch` is one inline element of plain text (the branch a muted link once it exists,
-with an inline octicon), so it shares one baseline and truncates as one; Primer's
+with an inline octicon), so it keeps one baseline within itself and truncates as one; Primer's
 `BranchName` chip is gone from it (a boxed token has no text baseline and never lined
 up). "N behind main" and the pull-request icon follow as centred items.
 
@@ -1302,8 +1302,11 @@ sidebar's second row is now `.sidebar-body`** (rows `minmax(0, 1fr) auto`: the s
 **The header follows primer.style; GitHub's typefaces; a theme toggle (owner,
 2026-09-30).** The header is 64px from its padding (16px above and below 32px controls,
 24px aside; 16px on narrow screens), white in light and `--bgColor-black` in dark (Primer
-has no pure black; `#010409` reads the same), with a 24px mark (a placeholder octicon,
-`TasklistIcon`, until qretools has a logo) and "qretools" at 16px/600. **Fonts:** Mona Sans
+has no pure black; `#010409` reads the same), with "qretools" at 16px/600 on a 24px line. A mark was tried and removed (owner): beside
+the all-lowercase name with its descender, a centred mark sat about 1.3px above the
+letters' visual centre in every browser (measured), which read as misaligned; primer.style
+gets away with it because "Primer" starts with a capital. The name and the `owner / repo`
+context are centred in the brand row, not baseline-aligned. **Fonts:** Mona Sans
 for the interface and Monaspace Neon for code, both GitHub's (OFL), self-hosted through
 `@fontsource` (no third-party request), by overriding `--fontStack-system` (what Primer's
 BaseStyles reads), `--fontStack-sansSerif` and `--fontStack-monospace` in app.css, with

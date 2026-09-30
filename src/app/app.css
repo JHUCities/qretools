@@ -138,9 +138,11 @@ code,
 	/* As primer.style's: white in light, black in dark (Primer's darkest background). */
 	background: light-dark(var(--bgColor-default), var(--bgColor-black));
 }
+/* The name, as primer.style's site title: 16px semibold on a 24px line. */
 .topbar h1 {
 	margin: 0;
 	font-size: var(--text-title-size-small);
+	line-height: var(--base-size-24);
 	font-weight: var(--base-text-weight-semibold);
 }
 /*
@@ -180,14 +182,7 @@ code,
 .topbar .brand > * {
 	flex-shrink: 0;
 }
-.topbar .brand > .path {
-	flex-shrink: 1;
-	min-width: 0;
-}
-.topbar .path > h1 {
-	flex-shrink: 0;
-}
-.topbar .path > .context {
+.topbar .brand > .context {
 	flex-shrink: 1;
 	font-size: var(--text-body-size-medium);
 	min-width: 0;
