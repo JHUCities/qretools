@@ -728,3 +728,15 @@ button.hole {
 .save-path {
 	margin: var(--base-size-12) 0 var(--base-size-4);
 }
+
+/*
+ * Forced colours override backgrounds, which would blank the editor's hole marker (a
+ * mask filled with its background, editor.ts); it takes the text colour instead.
+ */
+@media (forced-colors: active) {
+	/* Above the editor theme's own rule (a generated class and this one). */
+	.cm-editor .cm-content .cm-lintPoint-hint {
+		forced-color-adjust: none;
+		background-color: CanvasText;
+	}
+}

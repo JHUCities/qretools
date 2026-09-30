@@ -17,13 +17,8 @@ import {
 	parseTextEntry,
 	type TextEntry,
 } from "./surface/env.js";
-import {
-	holeChips,
-	labelMarksOf,
-	type Mark,
-	ordered,
-} from "./surface/marks.js";
-import { indexDocument } from "./surface/parse.js";
+import { labelMarksOf, type Mark } from "./surface/marks.js";
+import { indexDocument, pointAt } from "./surface/parse.js";
 import { parseScale, type Scale } from "./surface/scales.js";
 import { type Symbols, schemeSymbols } from "./symbols.js";
 
@@ -127,24 +122,27 @@ function readScheme(
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
 	if (SHAPE[kind] === "text") {
-		const { entry, findings } = parseTextEntry(source);
-		const marks = holeChips(findings, empties);
+		const { entry, findings: read } = parseTextEntry(source);
+		const findings = read.map(pointAt(empties));
+		const marks: readonly Mark[] = [];
 		return entry === undefined
 			? { findings, ranges, marks }
 			: { findings, ranges, marks, value: { kind: "text", text: entry.text } };
 	}
 	if (SHAPE[kind] === "labelled") {
-		const { entry, findings } = parseLabelled(source, SCHEME_SINGULAR[kind]);
-		const marks = holeChips(findings, empties);
+		const { entry, findings: read } = parseLabelled(
+			source,
+			SCHEME_SINGULAR[kind],
+		);
+		const findings = read.map(pointAt(empties));
+		const marks: readonly Mark[] = [];
 		return entry === undefined
 			? { findings, ranges, marks }
 			: { findings, ranges, marks, value: { kind: "labelled", entry } };
 	}
-	const { scale, findings } = parseScale(source);
-	const marks = ordered([
-		...labelMarksOf(doc, source.length),
-		...holeChips(findings, empties),
-	]);
+	const { scale, findings: read } = parseScale(source);
+	const findings = read.map(pointAt(empties));
+	const marks = labelMarksOf(doc, source.length);
 	if (scale === undefined) return { findings, ranges, marks };
 	return {
 		// The missing list is compared with itself only if it were a scale; it is not.

@@ -33,16 +33,26 @@ const ENV: Env = {
 	universes: { adults: { text: "All adults" } },
 };
 
-/** Each mark as the text it covers (a hole as its offset). */
+/** Each mark as the text it covers. */
 const shown = (text: string, marks: readonly Mark[]) =>
-	marks.map((m) =>
-		m.kind === "hole"
-			? `hole@${m.range[0]}`
-			: `${m.kind}:${text.slice(m.range[0], m.range[1])}`,
-	);
+	marks.map((m) => `${m.kind}:${text.slice(m.range[0], m.range[1])}`);
+
+/** Where the hole markers go: the distinct points of the hole findings, in order. */
+const points = (findings: readonly Finding[]): readonly number[] =>
+	[
+		...new Set(
+			findings.flatMap((f) =>
+				f.severity === "hole" &&
+				f.range !== undefined &&
+				f.range[0] === f.range[1]
+					? [f.range[0]]
+					: [],
+			),
+		),
+	].sort((a, b) => a - b);
 
 describe("marksOf", () => {
-	it("marks resolved names, codes, the legacy block and holes", () => {
+	it("marks resolved names, codes and the legacy block; a hole is a point finding", () => {
 		const text = [
 			"name: q",
 			"title:",
@@ -55,9 +65,11 @@ describe("marksOf", () => {
 			"  old:",
 			"  kept: x",
 		].join("\n");
-		const { marks } = parseSurface(text, ENV);
+		const { marks, findings } = parseSurface(text, ENV);
+		expect(points(findings)).toContain(
+			text.indexOf("title:") + "title:".length,
+		);
 		expect(shown(text, marks)).toEqual([
-			`hole@${text.indexOf("title:") + "title:".length}`,
 			"ref:adults",
 			"code:1",
 			"code:010",
@@ -74,21 +86,19 @@ describe("marksOf", () => {
 		expect(parseSurface(unknown, ENV).marks).toEqual([]);
 	});
 
-	it("marks empty option fields, domain fields and domains, not legacy", () => {
+	it("points at empty option fields, domain fields and domains, not legacy", () => {
 		const options =
 			"select: many\nresponses:\n  a:\n    label: A\n    title:\n";
-		expect(shown(options, parseSurface(options, ENV).marks)).toEqual([
-			"code:a",
-			`hole@${options.length - 1}`,
+		expect(points(parseSurface(options, ENV).findings)).toEqual([
+			options.length - 1,
 		]);
 		const number = "number:\n  min:\n";
-		expect(shown(number, parseSurface(number, ENV).marks)).toEqual([
-			`hole@${number.length - 1}`,
+		expect(points(parseSurface(number, ENV).findings)).toEqual([
+			number.length - 1,
 		]);
-		expect(parseSurface("number:\nlegacy:\n", ENV).marks).toEqual([
-			{ kind: "hole", range: [7, 7] },
-			{ kind: "legacy", range: [8, 15] },
-		]);
+		const legacy = parseSurface("number:\nlegacy:\n", ENV);
+		expect(points(legacy.findings)).toEqual([7]);
+		expect(legacy.marks).toEqual([{ kind: "legacy", range: [8, 15] }]);
 	});
 
 	it("marks nothing where the text is not a map", () => {
@@ -97,13 +107,11 @@ describe("marksOf", () => {
 });
 
 describe("scheme file marks", () => {
-	it("marks a scale's codes and its empty labels", () => {
+	it("marks a scale's codes, and points at its empty labels", () => {
 		const text = "labels:\n  1: Yes\n  2:\n";
-		expect(shown(text, evaluateScheme("scale", text, ENV).marks)).toEqual([
-			"code:1",
-			"code:2",
-			`hole@${text.length - 1}`,
-		]);
+		const ev = evaluateScheme("scale", text, ENV);
+		expect(shown(text, ev.marks)).toEqual(["code:1", "code:2"]);
+		expect(points(ev.findings)).toEqual([text.length - 1]);
 	});
 
 	it("marks the missing list's codes", () => {
@@ -114,39 +122,35 @@ describe("scheme file marks", () => {
 		]);
 	});
 
-	it("marks only the hole of an empty universe", () => {
-		expect(evaluateScheme("universe", "text:\n", ENV).marks).toEqual([
-			{ kind: "hole", range: [5, 5] },
-		]);
+	it("points at the hole of an empty universe, and marks nothing", () => {
+		const ev = evaluateScheme("universe", "text:\n", ENV);
+		expect(ev.marks).toEqual([]);
+		expect(points(ev.findings)).toEqual([5]);
 		expect(evaluateScheme("universe", "text: All\n", ENV).marks).toEqual([]);
 	});
 });
 
 /**
- * Chips and hole findings agree both ways: every chip is a hole finding at a value
- * written empty, and every such finding has exactly one chip, where the value starts.
+ * Every hole finding at a value written empty is a point where the value starts, and
+ * every point a hole finding has is such a place.
  */
 function agrees(
-	marks: readonly Mark[],
 	findings: readonly Finding[],
 	empties: Readonly<Record<string, number>>,
 ): void {
-	const chips = marks.filter((m) => m.kind === "hole").map((m) => m.range[0]);
-	const holes = findings.filter((f) => f.severity === "hole");
-	for (const at of chips)
-		expect(holes.some((f) => empties[f.path] === at)).toBe(true);
-	for (const f of holes) {
+	for (const f of findings.filter((f) => f.severity === "hole")) {
 		const at = empties[f.path];
-		if (at === undefined) continue;
-		expect(chips.filter((c) => c === at)).toHaveLength(1);
+		if (at !== undefined) expect(f.range).toEqual([at, at]);
 	}
+	const places = new Set(Object.values(empties));
+	for (const at of points(findings)) expect(places.has(at)).toBe(true);
 }
 
 const emptiesOf = (text: string) =>
 	indexDocument(parseDocument(text, { prettyErrors: false }), text.length)
 		.empties;
 
-describe("hole chips and hole findings agree", () => {
+describe("holes at empty values are points there", () => {
 	const envs: readonly [string, Env][] = [
 		["empty", EMPTY_ENV],
 		["with scales", ENV],
@@ -155,18 +159,17 @@ describe("hole chips and hole findings agree", () => {
 		for (const [label, env] of envs)
 			it(`${path}, ${label} environment`, () => {
 				const p = parseSurface(text, env);
-				agrees(p.marks, p.findings, p.empties);
+				agrees(p.findings, p.empties);
 			});
 
 	const kinds: readonly SchemeKind[] = ["scale", "missing"];
 	for (const [path, text] of Object.entries(SCALES))
 		for (const kind of kinds)
 			it(`${path} as ${kind}`, () => {
-				const ev = evaluateScheme(kind, text, ENV);
-				agrees(ev.marks, ev.findings, emptiesOf(text));
+				agrees(evaluateScheme(kind, text, ENV).findings, emptiesOf(text));
 			});
 
-	it("holds on hand-written questions, each with a chip", () => {
+	it("holds on hand-written questions, each with a point", () => {
 		for (const text of [
 			"name:\ntitle:\nselect:\nresponses:\n",
 			"number:\n",
@@ -178,15 +181,12 @@ describe("hole chips and hole findings agree", () => {
 			"universe:\ninstruction:\nlegacy:\n  a:\n",
 		]) {
 			const p = parseSurface(text, ENV);
-			agrees(p.marks, p.findings, p.empties);
-			expect(
-				p.marks.some((m) => m.kind === "hole"),
-				text,
-			).toBe(true);
+			agrees(p.findings, p.empties);
+			expect(points(p.findings).length, text).toBeGreaterThan(0);
 		}
 	});
 
-	it("holds on hand-written scheme files, each with a chip", () => {
+	it("holds on hand-written scheme files, each with a point", () => {
 		for (const [kind, text] of [
 			["scale", "labels:\n"],
 			["missing", "labels:\n"],
@@ -195,11 +195,8 @@ describe("hole chips and hole findings agree", () => {
 			["instruction", "text:\n"],
 		] as const) {
 			const ev = evaluateScheme(kind, text, ENV);
-			agrees(ev.marks, ev.findings, emptiesOf(text));
-			expect(
-				ev.marks.some((m) => m.kind === "hole"),
-				text,
-			).toBe(true);
+			agrees(ev.findings, emptiesOf(text));
+			expect(points(ev.findings).length, text).toBeGreaterThan(0);
 		}
 	});
 });

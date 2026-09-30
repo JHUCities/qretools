@@ -26,7 +26,6 @@ import {
 	type DecorationSet,
 	keymap,
 	ViewPlugin,
-	WidgetType,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import issueDraftSvg from "@primer/octicons/build/svg/issue-draft-16.svg?raw";
@@ -231,35 +230,6 @@ const REF_FOLLOW = Decoration.mark({
 	},
 });
 
-/** Primer's dashed circle, parsed once and cloned per chip. */
-let holeIcon: HTMLTemplateElement | undefined;
-
-/**
- * A hole, drawn after the colon as the Findings panel draws it: Primer's dashed
- * circle (`IssueDraftIcon`), so one shape means "to fill in" everywhere. Decorative
- * (the finding says it in words, to a screen reader too), so hidden from assistive
- * technology, and never text, so it cannot be selected or copied.
- */
-class HoleChip extends WidgetType {
-	override eq(other: WidgetType): boolean {
-		return other instanceof HoleChip;
-	}
-	toDOM(): HTMLElement {
-		if (holeIcon === undefined) {
-			holeIcon = document.createElement("template");
-			holeIcon.innerHTML = issueDraftSvg;
-			holeIcon.content.firstElementChild?.setAttribute("focusable", "false");
-		}
-		const chip = document.createElement("span");
-		chip.className = "cm-hole";
-		chip.setAttribute("aria-hidden", "true");
-		chip.append(holeIcon.content.cloneNode(true));
-		return chip;
-	}
-}
-
-const HOLE = Decoration.widget({ widget: new HoleChip(), side: 1 });
-
 /** Clamped to the document as it is now: a mark past its end is dropped, never thrown. */
 function decorationsOf(
 	marks: readonly Mark[],
@@ -270,8 +240,7 @@ function decorationsOf(
 	for (const { kind, range } of marks) {
 		const from = Math.min(Math.max(0, range[0]), length);
 		const to = Math.min(Math.max(from, range[1]), length);
-		if (kind === "hole") list.push(HOLE.range(from));
-		else if (to > from)
+		if (to > from)
 			list.push(
 				(kind === "ref" && !readOnly ? REF_FOLLOW : MARK_CLASS[kind]).range(
 					from,
@@ -514,27 +483,22 @@ const primerTheme = EditorView.theme({
 	".cm-legacy, .cm-legacy *": {
 		color: "var(--prettylights-syntax-comment)",
 	},
-	// A hole: the dashed circle, one em square so it matches the glyphs and never
-	// grows the line. The asset has no fill and a fixed 16px size; both set here.
-	".cm-hole": {
+	// A hole: CodeMirror's own point marker (one per place, however many holes it holds),
+	// drawn as Primer's dashed circle (`IssueDraftIcon`), as in the Findings panel, so one
+	// shape means "to fill in" everywhere. One em square so it matches the glyphs and
+	// never grows the line; the icon is a mask, coloured by `currentColor`. Forced
+	// colours (app.css) keep it visible.
+	".cm-lintPoint-hint": {
 		display: "inline-block",
 		inlineSize: "1em",
 		blockSize: "1em",
 		marginInlineStart: "var(--base-size-4)",
 		verticalAlign: "text-bottom",
 		color: "var(--fgColor-attention)",
+		backgroundColor: "currentColor",
+		mask: `url("data:image/svg+xml,${encodeURIComponent(issueDraftSvg)}") center / contain no-repeat`,
 	},
-	".cm-hole svg": {
-		display: "block",
-		inlineSize: "100%",
-		blockSize: "100%",
-		fill: "currentColor",
-	},
-	// Where a chip sits, CodeMirror's own point marker for the same hole would be a
-	// second one. The lint point is a widget at side 0, so it comes just before the chip.
-	".cm-lintPoint-hint:has(+ .cm-hole)": {
-		display: "none",
-	},
+	".cm-lintPoint-hint:after": { display: "none" },
 	// A dashed underline, not a dashed border: a border spaces its dashes to fit its
 	// width, so every keystroke in the hole moved them all (measured: this holds still).
 	".cm-lintRange-hint": {
@@ -544,7 +508,6 @@ const primerTheme = EditorView.theme({
 		textDecorationThickness: "var(--borderWidth-thick)",
 		textUnderlinePosition: "under",
 	},
-	".cm-lintPoint-hint:after": { borderBottomColor: "var(--fgColor-attention)" },
 	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },
 	".cm-finding-hint": { color: "var(--fgColor-muted)" },
 	".cm-finding-detail": {
