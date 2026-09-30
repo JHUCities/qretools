@@ -1091,6 +1091,50 @@ describe("change sets", () => {
 	});
 });
 
+describe("the open file's folder", () => {
+	const loadedBank = () =>
+		withBank(connected(fresh()), [
+			bankQuestion(1, "questions/q/q1.yaml", "name: q1\n"),
+			bankQuestion(2, "questions/q/q2.yaml", "name: q2\n"),
+			bankQuestion(3, "questions/r/r.yaml", "name: r\n"),
+		]);
+	const expanded = (m: Model) => m.browser.expanded;
+
+	it("opens when a file opens, and closes when the user closes it, the file still open", () => {
+		const [opened] = update(loadedBank(), { kind: "fileOpened", id: 1 });
+		expect(expanded(opened)).toEqual(["q"]);
+		const [closed] = update(opened, { kind: "folderToggled", folder: "q" });
+		expect(closed.screen).toEqual({ kind: "editing", id: 1 });
+		expect(expanded(closed)).toEqual([]);
+		// Typing in the open file leaves it closed.
+		const [typed] = update(closed, { kind: "edited", text: "name: q1x\n" });
+		expect(expanded(typed)).toEqual([]);
+	});
+
+	it("opens again when another file opens, in the same folder or another", () => {
+		const [closed] = run(
+			loadedBank(),
+			{ kind: "fileOpened", id: 1 },
+			{ kind: "folderToggled", folder: "q" },
+		);
+		expect(expanded(update(closed, { kind: "fileOpened", id: 2 })[0])).toEqual([
+			"q",
+		]);
+		expect(expanded(update(closed, { kind: "fileOpened", id: 3 })[0])).toEqual([
+			"r",
+		]);
+	});
+
+	it("is not added twice", () => {
+		const [m] = run(
+			loadedBank(),
+			{ kind: "fileOpened", id: 1 },
+			{ kind: "fileOpened", id: 2 },
+		);
+		expect(expanded(m)).toEqual(["q"]);
+	});
+});
+
 describe("links", () => {
 	const hashFor = (file?: string, branch = "qretools-iain") =>
 		formatLink({

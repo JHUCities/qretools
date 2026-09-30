@@ -2,7 +2,8 @@
  * The bank browser's tree, derived from the Model: pure and tested without React.
  * Bank files sit in the folder of their path; drafts, which have no path yet, under
  * "(unfiled)", last (named ones first). A folder is open when the user opened
- * it, when it holds the open question, or whenever a filter is active.
+ * it or whenever a filter is active. Opening a file opens its folder once, in
+ * `update` (`openFolder`), so the user can still close it.
  */
 import { SCHEME_LABELS } from "../core/copy.js";
 import type { Evaluation } from "../core/evaluate.js";
@@ -53,9 +54,7 @@ export function treeOf(
 	evaluate: (q: Question) => Evaluation,
 ): readonly Folder[] {
 	const filter = model.browser.filter.trim().toLowerCase();
-	const open = model.screen.kind === "editing" ? model.screen.id : undefined;
 	const byFolder = new Map<string, Leaf[]>();
-	const holds = new Set<string>();
 	for (const q of Object.values(model.local.questions)) {
 		const ev = evaluate(q);
 		const leaf: Leaf = {
@@ -69,7 +68,6 @@ export function treeOf(
 			status: status(ev.findings),
 		};
 		const folder = folderOfQuestion(q);
-		if (q.id === open) holds.add(folder);
 		if (
 			filter !== "" &&
 			!`${leaf.name ?? ""} ${leaf.title ?? ""}`.toLowerCase().includes(filter)
@@ -93,10 +91,7 @@ export function treeOf(
 						? -1
 						: a.name.localeCompare(b.name),
 			),
-			expanded:
-				filter !== "" ||
-				holds.has(name) ||
-				model.browser.expanded.includes(name),
+			expanded: filter !== "" || model.browser.expanded.includes(name),
 		}));
 }
 
@@ -129,15 +124,30 @@ export interface SchemeSection {
 /**
  * One section per kind of shared element, always shown (even empty) so the kinds are
  * discoverable; while filtering, only sections with a match. A section is open like a
- * folder: toggled by the user, holding the open file, or while filtering.
+ * folder: toggled by the user (or opened once with its file), or while filtering.
  */
+/** A section's key in `browser.expanded`. */
+const sectionKey = (kind: SchemeKind): string => `scheme:${kind}`;
+
+/**
+ * The key in `browser.expanded` of the folder or section holding the open file, if
+ * one is open: what `update` opens when the open file or its folder changes.
+ */
+export function openFolder(model: TreeInput): string | undefined {
+	if (model.screen.kind !== "editing") return undefined;
+	const { id } = model.screen;
+	const question = model.local.questions[id];
+	if (question !== undefined) return folderOfQuestion(question);
+	const scheme = model.local.schemes[id];
+	return scheme === undefined ? undefined : sectionKey(scheme.kind);
+}
+
 export function schemeSections(
 	model: TreeInput,
 	evaluate: (e: SchemeEntry) => SchemeEvaluation,
 	index: Index<Id>,
 ): readonly SchemeSection[] {
 	const filter = model.browser.filter.trim().toLowerCase();
-	const open = model.screen.kind === "editing" ? model.screen.id : undefined;
 	const entries = Object.values(model.local.schemes);
 	return SCHEME_KINDS.flatMap((kind) => {
 		const mine = entries.filter((e) => e.kind === kind);
@@ -155,17 +165,14 @@ export function schemeSections(
 			)
 			.sort((a, b) => a.name.localeCompare(b.name));
 		if (filter !== "" && leaves.length === 0) return [];
-		const key = `scheme:${kind}`;
+		const key = sectionKey(kind);
 		return [
 			{
 				kind,
 				label: SCHEME_LABELS[kind],
 				key,
 				leaves,
-				expanded:
-					filter !== "" ||
-					mine.some((e) => e.id === open) ||
-					model.browser.expanded.includes(key),
+				expanded: filter !== "" || model.browser.expanded.includes(key),
 			},
 		];
 	});

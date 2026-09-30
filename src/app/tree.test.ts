@@ -10,7 +10,7 @@ import {
 	type Question,
 	type SchemeEntry,
 } from "./model.js";
-import { schemeSections, treeOf, UNFILED } from "./tree.js";
+import { openFolder, schemeSections, treeOf, UNFILED } from "./tree.js";
 
 const bank = (
 	id: number,
@@ -71,7 +71,8 @@ describe("treeOf", () => {
 		expect(t[0]?.expanded).toBe(true);
 	});
 
-	it("opens the folder the user toggled and the folder holding the open question", () => {
+	it("opens only the folders the user toggled, even one holding the open question", () => {
+		// `update` opens a file's folder once (`openFolder`); after that it can be closed.
 		const t = tree({
 			...model,
 			screen: { kind: "editing", id: 2 },
@@ -79,9 +80,19 @@ describe("treeOf", () => {
 		});
 		expect(Object.fromEntries(t.map((f) => [f.name, f.expanded]))).toEqual({
 			nhd: false,
-			svy: true,
+			svy: false,
 			[UNFILED]: true,
 		});
+	});
+
+	it("names the folder of the open file, a question's or a shared file's section", () => {
+		expect(openFolder({ ...model, screen: { kind: "editing", id: 2 } })).toBe(
+			"svy",
+		);
+		expect(openFolder({ ...model, screen: { kind: "editing", id: 3 } })).toBe(
+			UNFILED,
+		);
+		expect(openFolder(model)).toBeUndefined();
 	});
 
 	it("marks drafts, unsaved bank files and the status verdict", () => {
@@ -193,7 +204,7 @@ describe("schemeSections", () => {
 		]);
 	});
 
-	it("filters by name, and opens the section holding the open file", () => {
+	it("filters by name, and opens only the sections the user toggled", () => {
 		expect(
 			sections({ ...m, browser: { ...m.browser, filter: "agree" } }).map(
 				(x) => x.kind,
@@ -203,6 +214,9 @@ describe("schemeSections", () => {
 			sections({ ...m, screen: { kind: "editing", id: 12 } }).find(
 				(x) => x.kind === "missing",
 			)?.expanded,
-		).toBe(true);
+		).toBe(false);
+		expect(openFolder({ ...m, screen: { kind: "editing", id: 12 } })).toBe(
+			"scheme:missing",
+		);
 	});
 });
