@@ -558,22 +558,13 @@ function Inspector({
 	return (
 		<InspectorBox>
 			{/*
-			 * Two rows: the field, what it is for in any question (muted: reference); and
-			 * the value written here, when it names a shared entry (what it is, who uses it).
+			 * Always two rows, so the label column never changes width: the field, what it
+			 * is for in any question (muted: reference; between fields, the question's own
+			 * description); and the value, when it names a shared entry (what it is, who
+			 * uses it), else "none".
 			 */}
 			<dl className="inspect">
-				<dt>
-					{at.key === undefined ? "Question" : "Field"}
-					{/*
-					 * Every label this column can hold, unseen and no height: the column keeps
-					 * one width, so the values never shift sideways as the caret moves.
-					 */}
-					<span className="inspect-size" aria-hidden>
-						{INSPECT_LABELS.map((l) => (
-							<span key={l}>{l}</span>
-						))}
-					</span>
-				</dt>
+				<dt>Field</dt>
 				<dd>
 					{at.key !== undefined && <code className="code">{at.path}</code>}{" "}
 					<span className="quiet">{at.description}</span>
@@ -629,11 +620,15 @@ function Inspector({
 						)}
 					</>
 				)}
-				{/* Nothing named yet, where a shared one can be: the names in scope. */}
-				{m === undefined && scheme !== undefined && names !== undefined && (
+				{/* Nothing named yet: where a shared one can be, the names in scope. */}
+				{m === undefined && (
 					<>
 						<dt>Value</dt>
-						<dd className="quiet">Name a shared one: {names}</dd>
+						<dd className="quiet">
+							{scheme !== undefined && names !== undefined
+								? `Name a shared one: ${names}`
+								: "none"}
+						</dd>
 					</>
 				)}
 			</dl>
@@ -821,6 +816,3 @@ function FileLink({
 		</Button>
 	);
 }
-
-/** The inspector's row labels, all of them, for the column's width. */
-const INSPECT_LABELS: readonly string[] = ["Question", "Field", "Value"];
