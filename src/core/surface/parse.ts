@@ -29,7 +29,7 @@ import {
 	type NamedScheme,
 	type SchemeEntries,
 } from "./env.js";
-import { holeChips, type Mark, marksOf, ordered } from "./marks.js";
+import { type Mark, marksOf, ordered } from "./marks.js";
 import {
 	clampRange,
 	EMPTY_HINT,
@@ -173,7 +173,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		...legacy.findings,
 		...variants.findings,
 		...domain.findings,
-	];
+	].map(pointAt(empties));
 	return {
 		draft,
 		findings,
@@ -181,10 +181,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		empties,
 		mentions,
 		variants: variants.value ?? [],
-		marks: ordered([
-			...marksOf(doc, mentions, env, text.length),
-			...holeChips(findings, empties),
-		]),
+		marks: ordered(marksOf(doc, mentions, env, text.length)),
 	};
 }
 
@@ -602,6 +599,21 @@ export interface DocumentIndex {
 }
 
 /** One walk over the YAML AST, by path. Any file kind can use it. */
+/**
+ * A hole at a key written with nothing after it is a point where its value starts, just
+ * after the colon: where the author types, and one marker in the editor (CodeMirror
+ * draws a zero-width finding as a point, and merges those at one place). Any other
+ * finding, and a hole with a range of its own, is unchanged.
+ */
+export const pointAt =
+	(empties: Readonly<Record<string, number>>) =>
+	(f: Finding): Finding => {
+		const at = empties[f.path];
+		return f.severity === "hole" && f.range === undefined && at !== undefined
+			? { ...f, range: [at, at] }
+			: f;
+	};
+
 export function indexDocument(doc: Document, length: number): DocumentIndex {
 	const ranges: Record<string, Range> = { "": [0, length] };
 	const empties: Record<string, number> = {};

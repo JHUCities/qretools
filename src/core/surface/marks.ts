@@ -1,21 +1,19 @@
 /**
  * What the editor colours by meaning rather than grammar: a name that resolves in a
- * scheme, a response code, the `legacy` block the tool never reads, and a key written
- * with nothing after it (a hole, drawn as Hazel draws one). YAML's grammar cannot tell
- * these apart: every key is a property name and every plain value is content. The core
- * decides; the shell only draws. Codes and names are read from the YAML AST the parser
- * already holds; holes come out of the parser itself, as findings at an empty value.
+ * scheme, a response code, and the `legacy` block the tool never reads. YAML's grammar
+ * cannot tell these apart: every key is a property name and every plain value is
+ * content. The core decides; the shell only draws. Read from the YAML AST the parser
+ * already holds. (Holes are findings, drawn by the editor's lint layer: `pointHoles`.)
  */
 import { type Document, isMap, isNode, isScalar } from "yaml";
-import type { Finding, Range } from "../findings.js";
+import type { Range } from "../findings.js";
 import { type Env, inScope, type Mention } from "./env.js";
 import { clampRange } from "./read.js";
 
-export type MarkKind = "ref" | "code" | "legacy" | "hole";
+export type MarkKind = "ref" | "code" | "legacy";
 
 export interface Mark {
 	readonly kind: MarkKind;
-	/** A hole is a point, `[at, at]`, just after its key's colon. */
 	readonly range: Range;
 }
 
@@ -71,26 +69,6 @@ export function labelMarksOf(doc: Document, length: number): readonly Mark[] {
 				]
 			: [],
 	);
-}
-
-/**
- * The holes to draw: a hole finding at a key written with nothing after it is a
- * chip just after the colon. The parser decides what a hole is (`opened()` and the
- * readers); the parse index says where the empty value starts. One chip per path.
- */
-export function holeChips(
-	findings: readonly Finding[],
-	empties: Readonly<Record<string, number>>,
-): readonly Mark[] {
-	const paths = new Set(
-		findings
-			.filter((f) => f.severity === "hole" && Object.hasOwn(empties, f.path))
-			.map((f) => f.path),
-	);
-	return [...paths].flatMap((path) => {
-		const at = empties[path];
-		return at === undefined ? [] : [{ kind: "hole" as const, range: [at, at] }];
-	});
 }
 
 /** Marks in document order. */

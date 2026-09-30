@@ -1086,14 +1086,20 @@ dotted info), holes a dashed underline (a dashed border re-spaced its dashes on 
 as base, meaning on top): the core decides what to mark (`marksOf` in
 src/core/surface/marks.ts, from the parser's YAML AST: `ref` for a name that resolves in
 the environment, `code` for response codes and scale/missing labels' codes, `legacy` for
-the whole block, `hole` from the parser's hole findings, below), and the shell only draws, in the same
+the whole block), and the shell only draws, in the same
 transaction as the diagnostics (`setSemantics`, mapped through changes). `Mention` stays
 name-only on purpose (the bank index is name-level). Colour wins through `.cm-x, .cm-x *`
-selectors, never `Prec`. An empty value gets a chip, `aria-hidden` (the finding carries the
-text): since 2026-09-29 (owner) Primer's dashed circle, `IssueDraftIcon`, as in the
-Findings panel, so one shape means "to fill in" everywhere (was Hazel's "?" box). It is
-`@primer/octicons`' SVG file imported `?raw` (editor.ts stays free of React), 1em square
-so the line never grows (measured: 0px). **Colour pass, same day:** every text colour is
+selectors, never `Prec`. An empty value shows Primer's dashed circle, `IssueDraftIcon`
+(since 2026-09-29, owner), as in the Findings panel, so one shape means "to fill in"
+everywhere (was Hazel's "?" box). **Since 2026-09-30 (audit) it is CodeMirror's own lint
+point**, the marker it draws for a zero-width finding, styled as the circle (the octicon's
+SVG, imported `?raw`, as a CSS mask filled with `currentColor`; `CanvasText` in forced
+colours), 1em square so the line never grows (measured: 0px, Chrome and Firefox). It had
+been a widget of ours beside the lint point, which CSS then hid. One circle per place:
+CodeMirror merges zero-width findings at one position, so the holes of required fields
+not written at all show one circle at the end of the text (they showed a small triangle).
+The key itself is no longer underlined and tinted for an empty value: one marker, not
+two. **Colour pass, same day:** every text colour is
 at least 4.5:1 and every underline and the icon at least 3:1, in light and dark; the one
 accepted shortfall (owner) is muted text on the selection (2.94:1 at worst), since
 `drawSelection` leaves only the background to change and a paler one would hide the
@@ -1101,8 +1107,9 @@ selection. Figures in the theme's comment in editor.ts. Themes the app does not 
 (dark dimmed) fail in places; not addressed. Numbers and `select: many` stay plain (the
 author's words). Another author's version is marked against their own environment.
 Holes are decided only by the parser: it also indexes where each value written empty
-sits (`empties`, from the same walk as the ranges), and a chip is a hole finding at one
-of those paths (`holeChips`); a property test checks both directions. Empty `number:`,
+sits (`empties`, from the same walk as the ranges), and a hole finding at one of those
+paths is given that point as its range (`pointAt` in parse.ts), so the Findings list
+also puts the caret there; a property test checks both directions. Empty `number:`,
 `open:` and `labels:` are holes (were not); an empty option `label:` reports at its own
 path. `inScope` in env.ts is the one "does this name resolve" helper.
 
@@ -1389,7 +1396,8 @@ entry's content is not repeated (the previews show it: a scale's options are in 
 respondent's pane). Always the same two rows (after the audit, 2026-09-30), so the label
 column keeps one width without a hidden sizer: between fields "Field" holds the
 question's own description (it was labelled "Question"), and "Value" reads "none" when
-nothing is named (a word, since a screen reader reads a dash as "dash"); no row gap, and chips at line height 1 inside it, so the rows fit the fixed four lines (measured:
+nothing is named (a word, since a screen reader reads a dash as "dash"); no row gap,
+and chips at line height 1 inside it, so the rows fit the fixed four lines (measured:
 no scroll).
 
 **Go to definition, and one colour for a shared name (owner, 2026-09-30).** Cmd-click
