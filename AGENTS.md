@@ -904,7 +904,7 @@ stored by an older version is read and dropped. Development and headless checks 
 checker's own branch. The token-paste fallback is off (absent from
 `.env`); `pnpm dev:verify` (`vite --mode verify`, port 5299, `.env.verify`)
 turns it on for scripted checks only. The branch and "Propose changes" now live
-at the top of the sidebar (see "The header follows github.com").
+at the top of the sidebar, above the tree (see "The branch sits above the tree").
 
 **No download or upload (owner, 2026-09-25).** The YAML and DDI download buttons and
 "Upload YAML" are gone (Msgs `downloadRequested`, `filesUploaded`, Cmd `download`). Files
@@ -934,8 +934,9 @@ ForeignView's loading line spanning over its header that way), and the
 editing views return fragments so `.qhead` and `.split` are the content's own items.
 Both
 have their own `minmax(0, 1fr)` column, or the header's unwrappable buttons size it
-(an overflow at 360px). The band holds the tree filter (`BankFilter`, split out of
-`Browser`), always there, fixed above both trees as github.com keeps "Go to file".
+(an overflow at 360px). The band holds the branch line (since 2026-09-30); the tree filter
+(`BankFilter`, split out of `Browser`) is the first row of `.sidebar-body`, always there,
+fixed above both trees as github.com keeps "Go to file".
 
 **Loading is shown as the thing's shape (owner, 2026-09-25).** A link waiting for the
 bank, and another author's file being fetched, show `FileSkeleton`: Primer's
@@ -945,7 +946,8 @@ announcement (skeletons are silent divs); "Opening the link once the bank has lo
 is gone. Going back to the bank stops waiting for a link (`listOpened` clears
 `pendingLink`). No flash delay: `SkeletonText` has no `delay`. Open for the owner: the
 Bank dialog's own "Loading the bank…" line. While the bank loads (`bankLoading`), the whole sidebar is
-its shape: a `SkeletonBox` the input's size (`--control-medium-size`) in the band, and
+its shape: a `SkeletonBox` the input's size (`--control-medium-size`) above the tree (the band's
+branch needs none: the login is known), and
 placeholder rows under the real "Questions" and "Shared" headings, never the stale
 files this browser last knew (owner, 2026-09-25; accepted: the author's own drafts are
 hidden for the seconds of the load). An open file stays: viewing never waits. A failed load shows the last-known tree again, by choice: the status says the
@@ -980,13 +982,14 @@ otherwise it would bring the bank back. Accepted: an old session's reply arrivin
 after a quick sign-out and sign-in lands in the new one; the next load corrects it. The status says
 nothing signed out. The example scales now show only during a load.
 
-**The header follows github.com (owner, 2026-09-25).** Left: `qretools`, then
+**The header follows github.com (owner, 2026-09-25; the branch moved above the tree on 2026-09-30, see "The branch sits above the tree").** Left: `qretools`, then
 `owner / repo` (the repository a link to GitHub; the owner hidden on narrow screens; the
 context truncates rather than wrap the row). Then the status live region
 (`sessionStatus`, pure, beside `writeBlocked`, tested so that a blocked write always has
 a reason there; empty in the steady state, always mounted so it announces). Right: "New"
 and the account: the Primer `Avatar` (GraphQL `viewer.avatarUrl`) opening a menu with
-"Signed in as", "Your branch on GitHub", "Change bank…" and "Sign out"; "Sign in" before
+"Signed in as", "Change bank…" and "Sign out" ("Your branch on GitHub" was dropped on
+2026-09-30, when the branch moved above the tree); "Sign in" before
 connecting, nothing while connecting. The Bank button is gone; its dialog is titled
 "Sign in" or "Change bank". The branch follows the repository in the header,
 `owner / repo / ⑂ qretools-<login>` (owner, 2026-09-25: it is never a choice, so it is
@@ -999,9 +1002,9 @@ link with Primer's notification dot (VS Code's badge for pending changes), named
 "Propose changes (opens in a new tab)" (the name is not shown, since `description` is
 the tooltip), its tooltip "Your saved work is not in the bank yet. Open pull request."; it opens GitHub's compare page, which is the pull request form. It
 replaced a compact `Banner` the owner found too large. Accepted loss: on touch screens
-there is no hover, so the icon and dot carry the meaning alone. On narrow screens the owner,
-the branch name and "N behind main" hide (the branch is in the avatar menu; "behind"
-is then not shown at all, accepted). Medium size, because the
+there is no hover, so the icon and dot carry the meaning alone. On narrow screens the owner
+hides (superseded 2026-09-30: the branch and "N behind main" now sit above the tree and
+show at every width). Medium size, because the
 dot is positioned for it (at small it covers the icon). The repository link in the
 header has no external-link icon (it sat below the baseline); the new tab is still
 said to screen readers. A bank that fails to load is
@@ -1013,7 +1016,8 @@ the tests assert every commit targets `qretools-<login>`. Before-pass review (20
 the failed-load state, the invariant test and the anchor choice (Primer `Button`, not a
 native one).
 
-**The author's branch is `qretools-<login>`, and the header's path is one line (owner,
+**The author's branch is `qretools-<login>`, and the header's path is one line (the path
+half superseded 2026-09-30: the branch is above the tree; owner,
 2026-09-25).** A hyphen, not a slash: the branch reads as one segment of `owner / repo
 / branch`, and git could not hold a `qretools` ref beside `qretools/…` ones. Logins are
 letters, digits and single hyphens, so everything after the prefix is the login;
@@ -1294,7 +1298,7 @@ control for one link) were considered and declined. Primer has no footer compone
 it is a plain `div` inside the nav (a `<footer>` there would read as the navigation's own
 footer, not the page's) with the shared `ExternalLink`. The address is `SOURCE_URL` in
 config.ts, a constant: where the tool lives is a fact about the tool, not a bank. **The
-sidebar's second row is now `.sidebar-body`** (rows `minmax(0, 1fr) auto`: the scrolling
+sidebar's second row is now `.sidebar-body`** (rows since 2026-09-30: the filter, the scrolling
 `.trees`, then `.sidebar-foot`), so `.sidebar`'s direct children are `.band` and
 `.sidebar-body`; measured, the foot does not move whatever the tree holds. It read
 "qretools on GitHub" until the repository had a README to land on.
@@ -1321,6 +1325,20 @@ applies a stored theme before the first paint (a test holds its key to `THEME_KE
 Forced modes set `color-scheme`, so scrollbars and controls follow. Two states, as
 primer.style's: once chosen, the system's is no longer followed (a way back would sit
 beside the toggle, never in the account menu, which the sign-in page lacks).
+
+**The branch sits above the tree (owner, 2026-09-30).** Reverses the header's
+`owner / repo / ⑂ branch` (below). github.com's code view puts its branch picker at the
+top of the file tree, then "Go to file", then the tree, because the tree shows that
+branch's files; so does qretools, and the header keeps `owner / repo`. The sidebar's band
+holds `BranchLine`: `⑂ qretools-<login>` as a link to the branch (named, not linked,
+before the first save), never a picker or a button-look (it is never a choice), then
+"N behind main" and the pull-request icon at the line's end once the bank has loaded,
+where arriving moves nothing before them (measured: the name's x is the same; the name,
+not its icon, truncates: `min-width: 0` belongs on the item that should give way, not
+only on its parent). The band stays one control high, so its rule still meets the
+open file's header. The filter moved to the first row of `.sidebar-body` (rows: filter,
+tree, foot), fixed above the tree. Narrow screens now show the branch and "behind" (the
+sidebar is its own view); the avatar menu's "Your branch on GitHub" is gone.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)

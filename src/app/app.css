@@ -105,7 +105,11 @@ code,
 /* The sidebar's second row: the tree, which scrolls, then its foot, which does not. */
 .sidebar-body {
 	display: grid;
-	grid-template-rows: minmax(0, 1fr) auto;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+}
+/* The filter, fixed above the tree ("Go to file" under GitHub's branch picker). */
+.filter {
+	padding: var(--base-size-8) var(--base-size-16) 0;
 }
 .trees {
 	overflow: auto;
@@ -174,9 +178,7 @@ code,
 	min-width: 0;
 }
 /*
- * The brand row: the name, the path, "behind" and the pull-request icon never shrink
- * except the path, which truncates from the end (the branch first, then the
- * repository; the branch's full name is its tooltip).
+ * The brand row: the name never shrinks; `owner / repo` truncates from the end.
  */
 /* Primer's Stack renders its children as direct DOM children, which these rely on. */
 .topbar .brand > * {
@@ -197,14 +199,8 @@ code,
 	min-width: 0;
 	max-inline-size: 50%;
 }
-/* An octicon in running text sits on the text, as Primer sets them inline. */
-.inline-icon {
-	vertical-align: text-bottom;
-}
 @media (--viewportRange-narrow) {
-	.topbar .owner,
-	.topbar .branch-path,
-	.topbar .behind {
+	.topbar .owner {
 		display: none;
 	}
 	/* The status's row is always there, so a status coming or going moves nothing. */
@@ -215,13 +211,49 @@ code,
 		min-block-size: var(--control-small-size);
 	}
 }
-/* The sidebar's band: the filter, level with the open file's header and its rule. */
+/* The sidebar's band: the branch, level with the open file's header and its rule. */
 .band {
 	padding: var(--base-size-8) var(--base-size-16);
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
 	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+}
+/*
+ * The branch as github.com's code view shows it above the tree, but a link, not a picker
+ * (it is never a choice): one control high, the name truncating, "behind" and the
+ * pull-request icon at the end, where arriving moves nothing before them.
+ */
+.branch-line {
+	display: flex;
+	align-items: center;
+	gap: var(--base-size-8);
+	min-block-size: var(--control-medium-size);
+}
+.branch-line .branch {
+	display: flex;
+	align-items: center;
+	gap: var(--base-size-4);
+	flex: 0 1 auto;
+	min-width: 0;
+}
+.branch-line .branch svg {
+	flex-shrink: 0;
+}
+/* The name gives way, not the icon: a flex item otherwise keeps its content's width. */
+.branch-line .branch-name {
+	min-width: 0;
+	overflow: clip;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.branch-line .branch-extras {
+	display: flex;
+	align-items: center;
+	gap: var(--base-size-8);
+	margin-inline-start: auto;
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 /* The avatar is the button: its hover and focus take the avatar's round shape. */
 .topbar .account {
