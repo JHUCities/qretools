@@ -1067,7 +1067,7 @@ option-variable lint and default, the agency `edu.jhu.21cc`, the binary scale na
 **The editor colours roles and meaning (owner, 2026-09-29).** Step 1: colour marks roles,
 not grammar (Primer's prettylights tokens): field names entity, comments and punctuation
 muted, the author's words plain; problems underlined by severity (wavy error and warning,
-dotted info), holes keep their dashed border. Step 2, as Zed's "combined" mode (grammar
+dotted info), holes a dashed underline (a dashed border re-spaced its dashes on every keystroke, 2026-09-30). Step 2, as Zed's "combined" mode (grammar
 as base, meaning on top): the core decides what to mark (`marksOf` in
 src/core/surface/marks.ts, from the parser's YAML AST: `ref` for a name that resolves in
 the environment, `code` for response codes and scale/missing labels' codes, `legacy` for

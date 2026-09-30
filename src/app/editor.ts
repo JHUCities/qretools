@@ -490,8 +490,9 @@ const primerTheme = EditorView.theme({
 	},
 	// Problems by severity, told apart by line style as well as colour (so colour-
 	// vision deficiency never hides one): wavy for errors and warnings, dotted for
-	// info. Primer tokens replace CodeMirror's fixed-colour squiggle images. Holes
-	// (hint) keep a border, so one inside an error range draws both lines.
+	// info, dashed for holes (hint). Primer tokens replace CodeMirror's fixed-colour
+	// squiggle images. Where findings overlap, CodeMirror draws only the most severe, so
+	// a hole inside an error shows as the error; an empty hole keeps its chip (a widget).
 	".cm-lintRange-error": {
 		backgroundImage: "none",
 		textDecoration: "underline wavy var(--fgColor-danger)",
@@ -559,10 +560,14 @@ const primerTheme = EditorView.theme({
 	".cm-lintPoint-hint:has(+ .cm-hole)": {
 		display: "none",
 	},
+	// A dashed underline, not a dashed border: a border spaces its dashes to fit its
+	// width, so every keystroke in the hole moved them all (measured: this holds still).
 	".cm-lintRange-hint": {
 		backgroundImage: "none",
 		backgroundColor: "var(--bgColor-attention-muted)",
-		borderBottom: "var(--borderWidth-thick) dashed var(--fgColor-attention)",
+		textDecoration: "underline dashed var(--fgColor-attention)",
+		textDecorationThickness: "var(--borderWidth-thick)",
+		textUnderlinePosition: "under",
 	},
 	".cm-lintPoint-hint:after": { borderBottomColor: "var(--fgColor-attention)" },
 	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },
