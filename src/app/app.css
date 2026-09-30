@@ -64,14 +64,25 @@ body {
 .qhead {
 	grid-row: 1;
 }
-.trees,
+.sidebar-body,
 .split {
 	grid-row: 2;
 	min-height: 0;
 }
+/* The sidebar's second row: the tree, which scrolls, then its foot, which does not. */
+.sidebar-body {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) auto;
+}
 .trees {
 	overflow: auto;
+	min-height: 0;
 	padding: var(--base-size-16);
+}
+.sidebar-foot {
+	padding: var(--base-size-8) var(--base-size-16);
+	border-top: var(--borderWidth-thin) solid var(--borderColor-default);
+	font-size: var(--text-body-size-small);
 }
 /*
  * Narrow screens: the tree and the open file are separate views, as Primer's layout
