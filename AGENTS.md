@@ -1371,6 +1371,22 @@ unseen and of no height, inside the first label), so values never shift sideways
 gap, and chips at line height 1 inside it, so the rows fit the fixed four lines (measured:
 no scroll).
 
+**Go to definition, and one colour for a shared name (owner, 2026-09-30).** Cmd-click
+(Ctrl elsewhere) on a green name in the editor, or F12 with the caret on one, opens its
+file, as an IDE does; with Cmd held the names underline (a class on the content, set as
+CodeMirror's `crosshairCursor` sets its cursor; mousemove clears it if the key-up went
+elsewhere). The editor only reports the offset (`onFollow`); `update` finds the name
+there (`mentionAt`, shared with the inspector) and the file (`schemeFileNamed`) and
+opens it as `fileOpened` does, so Back returns. Only the author's own open question; a
+name nothing has does nothing (owner). Mod-click elsewhere still adds a cursor (only a
+click on a name is taken): Alt-click, VS Code's multi-cursor, was agreed then dropped,
+since Alt is CodeMirror's rectangular selection. F12 is taken only on a name (it is the
+browser's elsewhere; on a Mac it usually needs Fn). Green (`--prettylights-syntax-
+stringRegexp`) means a shared name wherever it is shown: the editor's mark, the
+inspector's chip (`.code-ref`, a link, hover an accent border) and the previews' `.ref`.
+The inspector's box is a plain `div` around Primer's ScrollableRegion: one accessible
+name, and no complementary landmark inside the source's region.
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; off unless a mode's env file turns one on

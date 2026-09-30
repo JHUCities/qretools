@@ -25,6 +25,7 @@ import {
 	Decoration,
 	type DecorationSet,
 	keymap,
+	ViewPlugin,
 	WidgetType,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
@@ -64,6 +65,8 @@ export function createEditor(
 	parent: HTMLElement,
 	onEdit: (text: string) => void,
 	onCursor: (offset: number) => void,
+	/** Go to definition: the open file's id, and the offset of the name to follow. */
+	onFollow: (id: number, offset: number) => void = () => {},
 ): Editor {
 	let schema: object | undefined;
 	let current: number | undefined;
@@ -82,6 +85,10 @@ export function createEditor(
 		// finding's tooltip shows the finding; a third tooltip repeated both.
 		stateExtensions(),
 		macCompletionKeys,
+		// The id `sync` last opened: a follow names the file it was reported against.
+		followDefinition((offset) => {
+			if (current !== undefined) onFollow(current, offset);
+		}),
 		EditorView.lineWrapping,
 		primerTheme,
 		primerHighlight,
@@ -252,6 +259,82 @@ function decorationsOf(marks: readonly Mark[], length: number): DecorationSet {
 	return Decoration.set(list, true);
 }
 
+/** Cmd on a Mac, Ctrl elsewhere (Ctrl-click on a Mac is the context menu). */
+const isMod = (e: MouseEvent | KeyboardEvent): boolean =>
+	/Mac|iPhone|iPad/.test(navigator.platform) ? e.metaKey : e.ctrlKey;
+
+/**
+ * Go to definition, as an IDE has it. Mod-click on a shared name (the core marked it
+ * `ref`) reports its offset; anywhere else Mod-click still adds a cursor, as CodeMirror
+ * does. F12 does the same at the caret, and only there (elsewhere F12 is the
+ * browser's). While Mod is held the names underline, as VS Code's do: the state is a
+ * class on the content, set as CodeMirror's own crosshairCursor sets its cursor.
+ * `update` decides what the name opens; this only says where the author pointed.
+ */
+function followDefinition(onFollow: (offset: number) => void) {
+	const held = ViewPlugin.fromClass(
+		class {
+			on = false;
+			constructor(readonly view: EditorView) {}
+			set(on: boolean) {
+				if (on === this.on) return;
+				this.on = on;
+				this.view.update([]);
+			}
+		},
+		{
+			eventObservers: {
+				keydown(e) {
+					this.set(isMod(e));
+				},
+				keyup(e) {
+					this.set(isMod(e));
+				},
+				// Also on movement: a keyup lost to Cmd-Tab would leave it stuck on.
+				mousemove(e) {
+					this.set(isMod(e));
+				},
+			},
+			provide: (plugin) =>
+				EditorView.contentAttributes.of((view) =>
+					view.plugin(plugin)?.on ? { class: "cm-follow" } : null,
+				),
+		},
+	);
+	const refAt = (view: EditorView, pos: number): boolean => {
+		let found = false;
+		view.state.field(semantics).between(pos, pos, (_from, _to, value) => {
+			if (value.spec.class === "cm-ref") found = true;
+		});
+		return found;
+	};
+	return [
+		held,
+		EditorView.domEventHandlers({
+			mousedown(e, view) {
+				if (!isMod(e) || e.button !== 0) return false;
+				const target = e.target instanceof Element ? e.target : null;
+				const name = target?.closest(".cm-ref");
+				if (!name) return false;
+				e.preventDefault();
+				onFollow(view.posAtDOM(name));
+				return true;
+			},
+		}),
+		keymap.of([
+			{
+				key: "F12",
+				run: (view) => {
+					const head = view.state.selection.main.head;
+					if (!refAt(view, head)) return false;
+					onFollow(head);
+					return true;
+				},
+			},
+		]),
+	];
+}
+
 /**
  * Opening completion on a Mac. Ctrl-Space is often taken by macOS for switching
  * input sources, and CodeMirror's own `Alt-i` cannot fire where Option-I is a dead
@@ -387,6 +470,14 @@ const primerTheme = EditorView.theme({
 	".cm-ref, .cm-ref *": {
 		color: "var(--prettylights-syntax-stringRegexp)",
 	},
+	// With Cmd (Ctrl) held, a shared name is a link, underlined as the app's links are.
+	".cm-content.cm-follow .cm-ref:hover, .cm-content.cm-follow .cm-ref:hover *":
+		{
+			cursor: "pointer",
+			textDecorationLine: "underline",
+			textUnderlinePosition: "under",
+			textDecorationThickness: "var(--borderWidth-thin)",
+		},
 	".cm-code, .cm-code *": {
 		color: "var(--prettylights-syntax-constant)",
 	},

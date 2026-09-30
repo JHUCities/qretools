@@ -250,6 +250,12 @@ export type Msg =
 	| { readonly kind: "fixApplied"; readonly id: Id; readonly fix: Fix }
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "cursorMoved"; readonly offset: number }
+	/** Go to definition (Mod-click or F12 on a shared name): open the file it names. */
+	| {
+			readonly kind: "definitionRequested";
+			readonly id: Id;
+			readonly offset: number;
+	  }
 	/** The browser's address changed (a pasted link, Back, Forward); read when handled. */
 	| { readonly kind: "hashChanged"; readonly hash: string }
 	| {
@@ -563,6 +569,14 @@ export const isScheme = (e: Entry): e is SchemeEntry => e.kind !== "question";
 /** A working file by id, whichever slice holds it. */
 export const fileOf = (model: Model, id: Id): Entry | undefined =>
 	model.local.questions[id] ?? model.local.schemes[id];
+
+/** The shared file of this kind and name among the working copies, if any. */
+export const schemeFileNamed = (
+	schemes: Readonly<Record<Id, SchemeEntry>>,
+	kind: SchemeKind,
+	name: string,
+): SchemeEntry | undefined =>
+	Object.values(schemes).find((e) => e.kind === kind && e.name === name);
 
 export const allFiles = (local: Local): readonly Entry[] => [
 	...Object.values(local.questions),

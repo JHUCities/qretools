@@ -6,12 +6,13 @@
  * which file to open) around it.
  */
 import type { Evaluation } from "./evaluate.js";
-import { pathAt } from "./findings.js";
+import { pathAt, type Range } from "./findings.js";
 import {
 	type Env,
 	FIELD_OF,
 	inScope,
 	type LabelledEntry,
+	type Mention,
 	type NamedScheme,
 	type TextEntry,
 } from "./surface/env.js";
@@ -59,9 +60,7 @@ export function inspect(
 	source: string,
 	offset: number,
 ): Inspection | undefined {
-	const [, end] = ev.ranges[""] ?? [0, 0];
-	const at = settled(source, Math.min(Math.max(0, offset), end));
-	const path = pathAt(ev.ranges, at);
+	const path = pathNear(ev.ranges, source, offset);
 	const top = path.split(".")[0] ?? "";
 	if (path === "")
 		return {
@@ -71,7 +70,7 @@ export function inspect(
 	if (!(KNOWN_KEYS as readonly string[]).includes(top)) return undefined;
 	const key = top as SurfaceKey;
 	const scheme = SCHEME_AT.get(path);
-	const written = ev.symbols.mentions.find((m) => m.path === path);
+	const written = mentionAt(ev.ranges, ev.symbols.mentions, source, offset);
 	const value =
 		written === undefined
 			? undefined
@@ -92,6 +91,30 @@ export function inspect(
 			},
 		}),
 	};
+}
+
+/** The path at the caret, clamped, the caret settled back over trailing spaces. */
+function pathNear(
+	ranges: Readonly<Record<string, Range>>,
+	source: string,
+	offset: number,
+): string {
+	const [, end] = ranges[""] ?? [0, 0];
+	return pathAt(ranges, settled(source, Math.min(Math.max(0, offset), end)));
+}
+
+/**
+ * The shared name written at `offset`, resolved or not: what the inspector describes
+ * and what "go to definition" follows. One lookup for both.
+ */
+export function mentionAt(
+	ranges: Readonly<Record<string, Range>>,
+	mentions: readonly Mention[],
+	source: string,
+	offset: number,
+): Mention | undefined {
+	const path = pathNear(ranges, source, offset);
+	return mentions.find((m) => m.path === path);
 }
 
 /**
