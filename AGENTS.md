@@ -1380,15 +1380,16 @@ chip (the inspector's shared name) shows hover as an accent border on the chip i
 an underline fell on the chip's own bottom border.
 
 **The inspector tells the field from its value (owner, 2026-09-30).** A definition list
-of two labelled rows. "Field" (or "Question" between fields): the path and what the
+of two labelled rows. "Field": the path and what the
 field is for, muted, as reference. "Value", when the field can name a shared entry: the
 name as a linked chip that opens its file, then "shared scale · used by N questions"; a
 name nothing has, "New shared …" and the names in scope; nothing named yet, "Name a shared
 one: …". "Field", not "key": the authors' word, and the app's; "key" is YAML's. The
 entry's content is not repeated (the previews show it: a scale's options are in the
-respondent's pane). The label column keeps one width whatever it holds (every label,
-unseen and of no height, inside the first label), so values never shift sideways; no row
-gap, and chips at line height 1 inside it, so the rows fit the fixed four lines (measured:
+respondent's pane). Always the same two rows (after the audit, 2026-09-30), so the label
+column keeps one width without a hidden sizer: between fields "Field" holds the
+question's own description (it was labelled "Question"), and "Value" reads "none" when
+nothing is named (a word, since a screen reader reads a dash as "dash"); no row gap, and chips at line height 1 inside it, so the rows fit the fixed four lines (measured:
 no scroll).
 
 **Go to definition, and one colour for a shared name (owner, 2026-09-30).** Cmd-click
