@@ -24,7 +24,6 @@ import {
 import {
 	Decoration,
 	type DecorationSet,
-	hoverTooltip,
 	keymap,
 	ViewPlugin,
 	WidgetType,
@@ -207,17 +206,30 @@ const semantics = StateField.define<DecorationSet>({
 		let next = decorations.map(tr.changes);
 		for (const e of tr.effects)
 			if (e.is(setSemantics))
-				next = decorationsOf(e.value, tr.state.doc.length);
+				next = decorationsOf(e.value, tr.state.doc.length, tr.state.readOnly);
 		return next;
 	},
 	provide: (field) => EditorView.decorations.from(field),
 });
+
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const MARK_CLASS = {
 	ref: Decoration.mark({ class: "cm-ref" }),
 	code: Decoration.mark({ class: "cm-code" }),
 	legacy: Decoration.mark({ class: "cm-legacy" }),
 } as const;
+
+/**
+ * A shared name the author can follow says how, in the browser's own tooltip; never on
+ * another author's version (read only), where it would not follow.
+ */
+const REF_FOLLOW = Decoration.mark({
+	class: "cm-ref",
+	attributes: {
+		title: `Go to definition (${IS_MAC ? "⌘" : "Ctrl"}-click or F12)`,
+	},
+});
 
 /** Primer's dashed circle, parsed once and cloned per chip. */
 let holeIcon: HTMLTemplateElement | undefined;
@@ -249,37 +261,36 @@ class HoleChip extends WidgetType {
 const HOLE = Decoration.widget({ widget: new HoleChip(), side: 1 });
 
 /** Clamped to the document as it is now: a mark past its end is dropped, never thrown. */
-function decorationsOf(marks: readonly Mark[], length: number): DecorationSet {
+function decorationsOf(
+	marks: readonly Mark[],
+	length: number,
+	readOnly: boolean,
+): DecorationSet {
 	const list: Ranged<Decoration>[] = [];
 	for (const { kind, range } of marks) {
 		const from = Math.min(Math.max(0, range[0]), length);
 		const to = Math.min(Math.max(from, range[1]), length);
 		if (kind === "hole") list.push(HOLE.range(from));
-		else if (to > from) list.push(MARK_CLASS[kind].range(from, to));
+		else if (to > from)
+			list.push(
+				(kind === "ref" && !readOnly ? REF_FOLLOW : MARK_CLASS[kind]).range(
+					from,
+					to,
+				),
+			);
 	}
 	return Decoration.set(list, true);
 }
-
-const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** Cmd on a Mac, Ctrl elsewhere (Ctrl-click on a Mac is the context menu). */
 const isMod = (e: MouseEvent | KeyboardEvent): boolean =>
 	IS_MAC ? e.metaKey : e.ctrlKey;
 
-/**
- * The shared name (a `ref` mark) at `pos`, if any. With a side, as a hover reports it,
- * a name that only ends (or starts) at `pos` on the other side is not under the pointer.
- */
-export function refRangeAt(
-	state: EditorState,
-	pos: number,
-	side = 0,
-): { from: number; to: number } | undefined {
-	let found: { from: number; to: number } | undefined;
-	state.field(semantics).between(pos, pos, (from, to, value) => {
-		if (value.spec.class !== "cm-ref") return;
-		if ((from === pos && side < 0) || (to === pos && side > 0)) return;
-		found = { from, to };
+/** Whether a shared name (a `ref` mark) touches `pos`. */
+function refAt(state: EditorState, pos: number): boolean {
+	let found = false;
+	state.field(semantics).between(pos, pos, (_from, _to, value) => {
+		if (value.spec.class === "cm-ref") found = true;
 	});
 	return found;
 }
@@ -290,9 +301,8 @@ export function refRangeAt(
  * does. F12 does the same at the caret, and only there (elsewhere F12 is the
  * browser's). While Mod is held the names underline, as VS Code's do: the state is a
  * class on the content, set as CodeMirror's own crosshairCursor sets its cursor.
- * Hovering a name offers the same as a button in a tooltip, with the keys that do it;
- * a hover can't be reached from the keyboard, so F12 and the inspector's linked chip
- * are that route. Not on another author's version (read only), which never follows.
+ * Hovering a name says so in its `title`. None of it on another author's version (read
+ * only), which never follows.
  * `update` decides what the name opens; this only says where the author pointed.
  */
 function followDefinition(onFollow: (offset: number) => void) {
@@ -321,52 +331,17 @@ function followDefinition(onFollow: (offset: number) => void) {
 			},
 			provide: (plugin) =>
 				EditorView.contentAttributes.of((view) =>
-					view.plugin(plugin)?.on ? { class: "cm-follow" } : null,
+					view.plugin(plugin)?.on && !view.state.readOnly
+						? { class: "cm-follow" }
+						: null,
 				),
 		},
 	);
 	return [
 		held,
-		hoverTooltip(
-			(view, pos, side) => {
-				if (view.state.readOnly) return null;
-				const ref = refRangeAt(view.state, pos, side);
-				if (ref === undefined) return null;
-				return {
-					pos: ref.from,
-					end: ref.to,
-					above: false,
-					// Drawn as a finding's tooltip is (the one on `legacy`, say), in the lint
-					// tooltip's own markup, so it looks the same: the keys as its text, the action
-					// as its button, as a quick fix's is. Lint's styles are loaded (sync always
-					// sets diagnostics); a CodeMirror upgrade renaming its classes would leave
-					// this unstyled, which only a look at it would catch.
-					create: () => {
-						const dom = document.createElement("ul");
-						dom.className = "cm-tooltip-lint";
-						const item = document.createElement("li");
-						item.className = "cm-diagnostic cm-diagnostic-info";
-						const keys = document.createElement("span");
-						keys.className = "cm-diagnosticText";
-						keys.textContent = `${IS_MAC ? "⌘" : "Ctrl"}-click or F12`;
-						const go = document.createElement("button");
-						go.type = "button";
-						go.className = "cm-diagnosticAction";
-						go.textContent = "Go to definition";
-						go.addEventListener("click", () => onFollow(ref.from));
-						item.append(keys, go);
-						dom.append(item);
-						return { dom };
-					},
-				};
-			},
-			// Closed by any edit: the button's offset was taken when it was drawn, and a
-			// click must never follow a place that has since moved.
-			{ hideOnChange: true },
-		),
 		EditorView.domEventHandlers({
 			mousedown(e, view) {
-				if (!isMod(e) || e.button !== 0) return false;
+				if (!isMod(e) || e.button !== 0 || view.state.readOnly) return false;
 				const target = e.target instanceof Element ? e.target : null;
 				const name = target?.closest(".cm-ref");
 				if (!name) return false;
@@ -380,7 +355,7 @@ function followDefinition(onFollow: (offset: number) => void) {
 				key: "F12",
 				run: (view) => {
 					const head = view.state.selection.main.head;
-					if (refRangeAt(view.state, head) === undefined) return false;
+					if (view.state.readOnly || !refAt(view.state, head)) return false;
 					onFollow(head);
 					return true;
 				},
