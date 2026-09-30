@@ -7,6 +7,7 @@ import {
 	Label,
 	PageHeader,
 	Stack,
+	Truncate,
 	VisuallyHidden,
 } from "@primer/react";
 import { useId } from "react";
@@ -117,9 +118,17 @@ export function FileHeader({
 					 */}
 					{also.length > 0 && (
 						<>
-							<span className="also-saves quiet" aria-hidden title={alsoText}>
+							{/* The width is a design decision (a scale's name and a count). */}
+							<Truncate
+								as="span"
+								inline
+								className="also-saves quiet"
+								aria-hidden
+								title={alsoText}
+								maxWidth="16rem"
+							>
 								with {also.join(", ")}
-							</span>
+							</Truncate>
 							<VisuallyHidden id={statusId}>{alsoText}</VisuallyHidden>
 						</>
 					)}

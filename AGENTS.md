@@ -1098,9 +1098,9 @@ reserved in the file skeleton; anything that changes while typing stays out of t
 (the "Also saves" note is "with scale x" beside Save, one line, truncated, the full
 sentence on Save's `aria-describedby`); on narrow screens the status row is always
 there; on wide screens the status truncates (Primer `Truncate`) rather than wrapping the
-header; the header holds placeholders for New and the avatar while connecting; the
-previews reset their scroll per file (`key`); the editor syncs in `useLayoutEffect`;
-the three file views draw their panes from one list (`panesOf`). The Findings list stays
+header; while connecting the header holds places for New (Primer's loading `Button`,
+its own size, measured: 0px) and the avatar (`SkeletonAvatar`); the previews reset
+their scroll per file (`key`); the editor syncs in `useLayoutEffect`; the three file views draw their panes from one list (`panesOf`). The Findings list stays
 first and dynamic, but settles: it updates 400 ms after typing stops (`useSettled`),
 flushing at once on a file change, editor blur, save, and the pointer entering the list
 or keyboard focus reaching it (never on the press itself: an item moving mid-click would
@@ -1302,7 +1302,9 @@ config.ts, a constant: where the tool lives is a fact about the tool, not a bank
 sidebar's second row is now `.sidebar-body`** (rows since 2026-09-30: the branch and filter
 group, the scrolling `.trees`, then `.sidebar-foot`), so `.sidebar`'s direct children are `.band` and
 `.sidebar-body`; measured, the foot does not move whatever the tree holds. It read
-"qretools on GitHub" until the repository had a README to land on.
+"qretools on GitHub" until the repository had a README to land on. No external-link icon at
+the foot (owner, 2026-09-30): the place says it already, and the new tab is still said
+to screen readers (`ExternalLink`'s `icon={false}`).
 
 **The header follows primer.style; GitHub's typefaces; a theme toggle (owner,
 2026-09-30).** The header is 64px from its padding (16px above and below 32px controls,
@@ -1339,8 +1341,8 @@ and "Go to file": `BranchLine`, `⑂ qretools-<login>` as a link to the branch (
 before the first save), never a picker or a button-look (it is never a choice), then
 "N behind main" and the pull-request icon at the line's end once the bank has loaded,
 where arriving moves nothing before them (measured: the name's x is the same; the name,
-not its icon, truncates: `min-width: 0` belongs on the item that should give way, not
-only on its parent). then the filter; 8px on to the tree. The band stays one control high (measured: its rule
+not its icon, truncates: the name is Primer's `Truncate`, whose `overflow: hidden` lets
+it shrink, and the icon keeps `flex-shrink: 0`). Then the filter; 8px on to the tree. The band stays one control high (measured: its rule
 meets the file header's). `.sidebar-body`'s rows: that group (`.sidebar-tools`), the
 tree, the foot. Narrow screens now show the branch and "behind" (the
 sidebar is its own view); the avatar menu's "Your branch on GitHub" is gone.
@@ -1390,6 +1392,12 @@ stringRegexp`) means a shared name wherever it is shown: the editor's mark, the
 inspector's chip (`.code-ref`, a link, hover an accent border) and the previews' `.ref`.
 The inspector's box is a plain `div` around Primer's ScrollableRegion: one accessible
 name, and no complementary landmark inside the source's region.
+
+**Truncation is Primer's `Truncate` (owner, 2026-09-30),** `inline` inside a flex parent
+(otherwise it inherits `display: flex` and shows no ellipsis): the status, the branch
+name and the "with …" note beside Save. The one exception is the header's `owner /
+repo`, whose hand-written `overflow: clip` with a clip margin keeps the repository
+link's focus ring, which `Truncate`'s `overflow: hidden` would cut.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
