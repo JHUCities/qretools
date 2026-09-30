@@ -313,7 +313,8 @@ emit a Universe item and resolve the link in role 2.
   gained `browser: { filter, expanded, confirmDelete?, settingsOpen }`: the tree is always
   visible so its state outlives the open question, and dialog visibility is Model state,
   not component state. Effective folder expansion is derived (opened by the user, or
-  holding the open question, or any folder while filtering). Unnamed drafts show under
+  holding the open question, or any folder while filtering; "holding the open question"
+  superseded 2026-09-30, see "A file opens its folder once"). Unnamed drafts show under
   "(unfiled)", last: an assumption. Bank files keep the folder of their path. The
   CodeMirror wrapper (`EditorPane.tsx`) owns only the editor's lifecycle and registers
   its handle with the effects for `revealRange`; `editor.ts` gained `destroy()` and
@@ -1398,6 +1399,15 @@ name, and no complementary landmark inside the source's region.
 name and the "with …" note beside Save. The one exception is the header's `owner /
 repo`, whose hand-written `overflow: clip` with a clip margin keeps the repository
 link's focus ring, which `Truncate`'s `overflow: hidden` would cut.
+
+**A file opens its folder once (2026-09-30).** Replaces "holding the open question" in
+the tree's derived expansion (see "The Primer shell"): a folder or Shared section that
+held the open file was always shown open, so the author could not close it until
+another file was opened. Now `update` adds the open file's folder to
+`browser.expanded` whenever the open file changes, or moves to another folder (a draft
+saved, a question moved), and only then (`revealOpen`, with `openFolder` in tree.ts);
+the tree shows a folder open only when it is in `browser.expanded` or a filter is
+active. Clicking it closes it like any other, and the file stays open.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
