@@ -277,7 +277,7 @@ export function BankFilter({
 	dispatch: Dispatch;
 }) {
 	return (
-		<div className="band">
+		<div className="filter">
 			{loading ? (
 				<SkeletonBox height="var(--control-medium-size)" />
 			) : (

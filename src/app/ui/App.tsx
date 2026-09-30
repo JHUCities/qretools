@@ -169,7 +169,6 @@ export function App() {
 					>
 						<h1>qretools</h1>
 						<Context model={model} />
-						<Branch model={model} />
 					</Stack>
 					{/*
 					 * A live region, always mounted so that what it says is announced: what
@@ -331,13 +330,17 @@ export function App() {
 						}
 					>
 						<nav className="sidebar" aria-label="Question bank">
-							<BankFilter
-								filter={model.browser.filter}
-								loading={loading}
-								dispatch={dispatch}
-							/>
-							{/* The tree scrolls; the foot stays put below it, whatever the tree holds. */}
+							{/* As github.com's code view: the branch, then the filter, then the tree. */}
+							<div className="band">
+								<BranchLine model={model} />
+							</div>
+							{/* The filter and the foot stay put; the tree between them scrolls. */}
 							<div className="sidebar-body">
+								<BankFilter
+									filter={model.browser.filter}
+									loading={loading}
+									dispatch={dispatch}
+								/>
 								<div className="trees">
 									<Browser
 										folders={folders}
@@ -475,19 +478,12 @@ const repoUrl = (model: Model): string =>
 	`https://github.com/${model.settings.owner}/${model.settings.repo}`;
 
 /**
- * Where the author is and where saves go, as one line of text, as github.com's header
- * says `owner / repo`: `owner / repo / ⑂ qretools-<login>`. The branch is never a
- * choice (always the author's own), so it is context, not a picker. The repository
- * and the branch are links to GitHub (the branch once it exists). One inline element,
- * so it all shares a baseline and truncates as one, from the end; on narrow screens
- * only the repository shows.
+ * The bank, as github.com's header says it: `owner / repo`, the repository a link,
+ * truncating from the end; the owner hidden on narrow screens. The branch is above the
+ * tree (BranchLine).
  */
 function Context({ model }: { model: Model }) {
-	const { session, loading } = model;
-	if (session.kind !== "connected") return null;
-	const branch = ownBranch(session.login);
-	const exists = loading.kind === "loaded" && loading.from === "branch";
-	const icon = <GitBranchIcon size={12} aria-hidden className="inline-icon" />;
+	if (model.session.kind !== "connected") return null;
 	return (
 		<span className="context">
 			<span className="quiet owner">
@@ -498,30 +494,6 @@ function Context({ model }: { model: Model }) {
 				<strong>{model.settings.repo}</strong>
 				<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
 			</Link>
-			<span className="branch-path" title={branch}>
-				{" "}
-				<span className="quiet" aria-hidden>
-					/
-				</span>{" "}
-				{/* Before the first save the branch does not exist yet: named, not linked. */}
-				{exists ? (
-					<Link
-						href={`${repoUrl(model)}/tree/${encodeURI(branch)}`}
-						target="_blank"
-						rel="noreferrer"
-						muted
-					>
-						{icon} <VisuallyHidden>branch </VisuallyHidden>
-						{branch}
-						<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-					</Link>
-				) : (
-					<span className="quiet">
-						{icon} <VisuallyHidden>branch </VisuallyHidden>
-						{branch}
-					</span>
-				)}
-			</span>
 		</span>
 	);
 }
@@ -551,7 +523,7 @@ function ThemeToggle() {
  */
 function Account({ model }: { model: Model }) {
 	const { dispatch } = useApp();
-	const { session, loading } = model;
+	const { session } = model;
 	// Signed out, the page itself is the way in; while connecting, nothing yet.
 	if (session.kind !== "connected") return null;
 	return (
@@ -571,22 +543,6 @@ function Account({ model }: { model: Model }) {
 						<ActionList.GroupHeading>
 							Signed in as {session.login}
 						</ActionList.GroupHeading>
-						{loading.kind === "loaded" && loading.from === "branch" && (
-							<ActionList.LinkItem
-								href={`${repoUrl(model)}/tree/${encodeURI(ownBranch(session.login))}`}
-								target="_blank"
-								rel="noreferrer"
-							>
-								<ActionList.LeadingVisual>
-									<GitBranchIcon />
-								</ActionList.LeadingVisual>
-								Your branch on GitHub
-								<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-								<ActionList.TrailingVisual>
-									<LinkExternalIcon />
-								</ActionList.TrailingVisual>
-							</ActionList.LinkItem>
-						)}
 					</ActionList.Group>
 					<ActionList.Divider />
 					<ActionList.Item
@@ -604,44 +560,73 @@ function Account({ model }: { model: Model }) {
 }
 
 /**
- * What the author's branch holds that the bank does not, after the path, as links to
- * GitHub, which does the rest: the pull request, review, updating the branch, merging.
+ * The author's branch above the tree, then what it holds that the bank does not, as
+ * links to GitHub, which does the rest: the pull request, review, updating the branch,
+ * merging.
  * The app states facts and links; it never recreates GitHub's interface.
  */
-function Branch({ model }: { model: Model }) {
+function BranchLine({ model }: { model: Model }) {
 	const { session, loading } = model;
 	if (session.kind !== "connected") return null;
 	const branch = ownBranch(session.login);
+	const exists = loading.kind === "loaded" && loading.from === "branch";
 	const compare = `${repoUrl(model)}/compare/${session.defaultBranch}...${encodeURI(branch)}?expand=1`;
 	const loaded = loading.kind === "loaded" ? loading : undefined;
-	return (
+	// The same icon, gap and text either way, so the first save changes nothing but the link.
+	const name = (
 		<>
-			{loaded !== undefined && loaded.behindBy > 0 && (
-				<span className="behind">
+			<GitBranchIcon aria-hidden />
+			<VisuallyHidden>branch </VisuallyHidden>
+			<span className="branch-name">{branch}</span>
+		</>
+	);
+	return (
+		<div className="branch-line">
+			{/* Before the first save the branch does not exist yet: named, not linked. */}
+			{exists ? (
+				<Link
+					className="branch"
+					href={`${repoUrl(model)}/tree/${encodeURI(branch)}`}
+					target="_blank"
+					rel="noreferrer"
+					muted
+					title={branch}
+				>
+					{name}
+					<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+				</Link>
+			) : (
+				<span className="branch quiet" title={branch}>
+					{name}
+				</span>
+			)}
+			{/* At the line's end once the bank has loaded: the name never moves for them. */}
+			<span className="branch-extras">
+				{loaded !== undefined && loaded.behindBy > 0 && (
 					<ExternalLink href={compare} muted>
 						{loaded.behindBy} behind {session.defaultBranch}
 					</ExternalLink>
-				</span>
-			)}
-			{/*
-			 * Something to propose: the pull-request icon with a dot, as VS Code badges
-			 * pending changes; the tooltip (Primer's, from `description`) says what the
-			 * dot means and what the link does. Absent when there is nothing.
-			 */}
-			{loaded?.proposable && (
-				<IconButton
-					as="a"
-					href={compare}
-					target="_blank"
-					rel="noreferrer"
-					icon={GitPullRequestIcon}
-					variant="invisible"
-					aria-label="Open pull request (opens in a new tab)"
-					description="Your saved work isn't in the bank yet. Open a pull request to propose it."
-					notificationIndicator="icon"
-				/>
-			)}
-		</>
+				)}
+				{/*
+				 * Something to propose: the pull-request icon with a dot, as VS Code badges
+				 * pending changes; the tooltip (Primer's, from `description`) says what the
+				 * dot means and what the link does. Absent when there is nothing.
+				 */}
+				{loaded?.proposable && (
+					<IconButton
+						as="a"
+						href={compare}
+						target="_blank"
+						rel="noreferrer"
+						icon={GitPullRequestIcon}
+						variant="invisible"
+						aria-label="Open pull request (opens in a new tab)"
+						description="Your saved work isn't in the bank yet. Open a pull request to propose it."
+						notificationIndicator="icon"
+					/>
+				)}
+			</span>
+		</div>
 	);
 }
 
