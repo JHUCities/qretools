@@ -1426,6 +1426,13 @@ saved, a question moved), and only then (`revealOpen`, with `openFolder` in tree
 the tree shows a folder open only when it is in `browser.expanded` or a filter is
 active. Clicking it closes it like any other, and the file stays open.
 
+**Findings are drawn two ways, not three (2026-09-30).** Editable: Primer's `ActionList`,
+each item going to its place. Read only: a plain `ul`, because an `ActionList.Item`
+with no `onSelect` still renders a button (Primer 38, unless the list is a menu or
+listbox or the item inactive), and a button that does nothing is worse than a list.
+The DDI pane's schema problems are Primer's `InlineMessage variant="critical"` (was a
+hand-styled `p.finding`).
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; off unless a mode's env file turns one on
