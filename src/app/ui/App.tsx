@@ -24,11 +24,7 @@ import {
 	Truncate,
 	VisuallyHidden,
 } from "@primer/react";
-import {
-	AriaStatus,
-	SkeletonAvatar,
-	SkeletonBox,
-} from "@primer/react/experimental";
+import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import { useTheme } from "@primer/react/next";
 import { useId, useMemo } from "react";
 import { plainText } from "../../core/codeSpans.js";
@@ -236,16 +232,18 @@ export function App() {
 							)}
 					</Stack>
 					{/*
-					 * While signing in, the places "New" and the avatar will take, at their
-					 * sizes, so the header neither grows nor narrows when they arrive.
+					 * While signing in, "New" as Primer's loading button: its own size, so the
+					 * header neither grows nor narrows when the real one arrives (the avatar's
+					 * place is its SkeletonAvatar, below). Its announcement is the status's.
 					 */}
 					{model.session.kind === "connecting" && (
-						<span className="new-placeholder" aria-hidden>
-							<Button leadingVisual={PlusIcon} tabIndex={-1} inert>
-								New
-							</Button>
-							<SkeletonBox />
-						</span>
+						<Button
+							leadingVisual={PlusIcon}
+							loading
+							loadingAnnouncement="Signing in"
+						>
+							New
+						</Button>
 					)}
 					{model.session.kind === "connected" && (
 						<ActionMenu>
@@ -368,7 +366,7 @@ export function App() {
 									/>
 								</div>
 								<div className="sidebar-foot">
-									<ExternalLink href={SOURCE_URL} muted>
+									<ExternalLink href={SOURCE_URL} muted icon={false}>
 										About qretools
 									</ExternalLink>
 								</div>
@@ -593,7 +591,10 @@ function BranchLine({ model }: { model: Model }) {
 		<>
 			<GitBranchIcon aria-hidden />
 			<VisuallyHidden>branch </VisuallyHidden>
-			<span className="branch-name">{branch}</span>
+			{/* Inline: its flex parent would otherwise make it a flex box, which has no ellipsis. */}
+			<Truncate as="span" inline title={branch} maxWidth="100%">
+				{branch}
+			</Truncate>
 		</>
 	);
 	return (

@@ -215,24 +215,6 @@ code,
 	font-weight: var(--base-text-weight-semibold);
 }
 /*
- * While signing in, "New"'s place: the real button, hidden and inert, sizes it (no
- * measured numbers), and a skeleton fills the same cell.
- */
-.new-placeholder {
-	display: grid;
-}
-.new-placeholder > * {
-	grid-area: 1 / 1;
-}
-.new-placeholder > button {
-	visibility: hidden;
-}
-.new-placeholder > :last-child {
-	block-size: 100%;
-	inline-size: 100%;
-	border-radius: var(--borderRadius-medium);
-}
-/*
  * The context takes the row's spare room and truncates before anything wraps; the
  * status follows it. On narrow screens only the repository names the context, as on
  * github.com, and the status takes a row of its own, kept even when empty.
@@ -304,13 +286,6 @@ code,
 }
 .branch-line .branch svg {
 	flex-shrink: 0;
-}
-/* The name gives way, not the icon: a flex item otherwise keeps its content's width. */
-.branch-line .branch-name {
-	min-width: 0;
-	overflow: clip;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .branch-line .branch-extras {
 	display: flex;
@@ -422,15 +397,10 @@ code,
 	gap: var(--base-size-8);
 }
 /*
- * "with scale agree4" beside Save: one line, cut short with an ellipsis rather than
- * wrap; its title and Save's description hold the whole sentence. The width is a
- * design decision (about a scale's name and a count), named once.
+ * "with scale agree4" beside Save: one line, cut short (Primer's Truncate) rather than
+ * wrap; its title and Save's description hold the whole sentence.
  */
 .also-saves {
-	max-inline-size: 16rem;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 	font-size: var(--text-body-size-small);
 	align-self: center;
 }
