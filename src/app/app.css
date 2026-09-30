@@ -723,9 +723,6 @@ button.hole {
 .finding[data-severity="info"] {
 	--edge: var(--fgColor-accent);
 }
-p.finding {
-	display: block;
-}
 /* The DDI JSON scrolls with the previews; no scroll region of its own. */
 .json {
 	margin: 0;

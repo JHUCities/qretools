@@ -10,6 +10,7 @@ import {
 	XCircleIcon,
 } from "@primer/octicons-react";
 import { ActionList, Details, Label } from "@primer/react";
+import { InlineMessage } from "@primer/react/experimental";
 import { Fragment, memo, type ReactNode, useId } from "react";
 import { codeSpans, plainText } from "../../core/codeSpans.js";
 import { toFillIn } from "../../core/copy.js";
@@ -264,7 +265,9 @@ const SEVERITY_LABEL: Readonly<Record<Finding["severity"], string>> = {
 /**
  * The findings: in an editable view, Primer's ActionList, each item taking the author
  * to its place in the source; severity is an icon with its name, never colour alone.
- * In a read-only view, a plain list: nothing there is an action.
+ * In a read-only view, a plain list: nothing there is an action, and Primer's ActionList
+ * cannot say so (an item with no `onSelect` still renders a button, unless the list is a
+ * menu or listbox or the item is inactive; Primer 38's Item.js), so it stays a `ul`.
  */
 /**
  * A key per finding that survives edits elsewhere in the text: what it says and where,
@@ -401,12 +404,14 @@ export const Ddi = memo(function Ddi({
 			<div className="pane-body">
 				{problems.map((f, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: schema problems are positional and can repeat
-					<p className="finding" data-severity="error" key={i}>
-						<span>{inlineCode(f.message)}</span>
-						{f.detail !== undefined && (
-							<span className="hint detail">{f.detail}</span>
-						)}
-					</p>
+					<InlineMessage variant="critical" key={i}>
+						<span>
+							{inlineCode(f.message)}
+							{f.detail !== undefined && (
+								<span className="detail">{f.detail}</span>
+							)}
+						</span>
+					</InlineMessage>
 				))}
 				<pre className="json">{JSON.stringify(document, null, 2)}</pre>
 			</div>
