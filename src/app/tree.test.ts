@@ -186,6 +186,7 @@ describe("schemeSections", () => {
 					["unused", 0],
 				],
 			],
+			["unit", []],
 			["universe", []],
 			["instruction", []],
 			["missing", [["missing", undefined]]],

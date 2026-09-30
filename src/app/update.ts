@@ -11,8 +11,9 @@ import { compact } from "../core/compact.js";
 import { FOLDER_RULE_TEXT, NAME_RULE_TEXT, SCHEME_NAME } from "../core/copy.js";
 import { locate } from "../core/findings.js";
 import {
-	conceptSource,
+	labelledSource,
 	MISSING_NAME,
+	SHAPE,
 	schemePath,
 	textEntrySource,
 } from "../core/schemes.js";
@@ -307,10 +308,12 @@ function step(model: Model, msg: Msg): Step {
 				]);
 			}
 			const written = naming.text.trim() !== "";
-			const source =
-				written && naming.kind === "concept"
-					? conceptSource(naming.text)
-					: written && naming.kind !== "scale"
+			const shape = SHAPE[naming.kind];
+			const source = !written
+				? SCHEME_TEMPLATES[naming.kind]
+				: shape === "labelled"
+					? labelledSource(naming.text)
+					: shape === "text"
 						? textEntrySource(naming.text)
 						: SCHEME_TEMPLATES[naming.kind];
 			const [added, id] = add(closed, {

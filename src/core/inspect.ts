@@ -8,15 +8,16 @@
 import type { Evaluation } from "./evaluate.js";
 import { pathAt } from "./findings.js";
 import {
-	type ConceptEntry,
 	type Env,
+	FIELD_OF,
 	inScope,
+	type LabelledEntry,
 	type NamedScheme,
 	type TextEntry,
 } from "./surface/env.js";
 import type { Scale } from "./surface/scales.js";
 import {
-	describe,
+	describePath,
 	KNOWN_KEYS,
 	QuestionSchema,
 	type SurfaceKey,
@@ -34,16 +35,14 @@ export interface Inspection {
 	readonly mention?: {
 		readonly scheme: NamedScheme;
 		readonly name: string;
-		readonly value?: Scale | TextEntry | ConceptEntry;
+		readonly value?: Scale | TextEntry | LabelledEntry;
 	};
 }
 
-const SCHEME_OF: Partial<Record<SurfaceKey, NamedScheme>> = {
-	concept: "concept",
-	responses: "scale",
-	universe: "universe",
-	instruction: "instruction",
-};
+/** Which kind a path names: `FIELD_OF` read backwards. */
+const SCHEME_AT: ReadonlyMap<string, NamedScheme> = new Map(
+	(Object.entries(FIELD_OF) as [NamedScheme, string][]).map(([k, p]) => [p, k]),
+);
 
 /**
  * What is at `offset` in the evaluated text; undefined only inside a key the surface
@@ -70,7 +69,7 @@ export function inspect(
 		};
 	if (!(KNOWN_KEYS as readonly string[]).includes(top)) return undefined;
 	const key = top as SurfaceKey;
-	const scheme = SCHEME_OF[key];
+	const scheme = SCHEME_AT.get(path);
 	const written = ev.symbols.mentions.find((m) => m.path === path);
 	const value =
 		written === undefined
@@ -79,7 +78,7 @@ export function inspect(
 	return {
 		path,
 		key,
-		description: describe(key),
+		description: describePath(path, key),
 		...(scheme !== undefined && {
 			names: Object.keys(inScope(env, scheme)).sort(),
 		}),

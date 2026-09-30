@@ -1185,9 +1185,9 @@ wording is **info** (owner chose it after measuring: at 0.8, 39 pairs on the ref
 bank, nearly all deliberate parallel items such as black/white or walk/bike). Measured
 on the reference bank (472 files): 9 pairs of identical shared scales, 6 pairs of
 identical question text, 2 repeated inline lists; units barely occur (2 of 16 number
-questions have one), so a unit is compared only for spelling (`days` beside `Days`), and
-shared number formats (DDI's `ManagedNumericRepresentation`) wait until a bank has formats
-worth sharing. **Where each check lives:** a literal equal to a shared entry is the
+questions have one); units became a shared kind on 2026-09-30 (below), which replaced
+the spelling check, and shared number formats (DDI's `ManagedNumericRepresentation`) wait
+until a bank has formats worth sharing. **Where each check lives:** a literal equal to a shared entry is the
 parse's (lint against the Env: `matches-scale`, now a warning, and `matches-universe`,
 `matches-instruction`); anything between files is the bank index's
 (`symbols.ts`: `symbolsOf`/`schemeSymbols` give each file's fingerprints, `indexOf` one
@@ -1266,6 +1266,26 @@ work needed no version bump (the kind list only widened). Not yet: `broader` con
 (DDI's `BroaderReference`, not `SubclassOfReference`; needs shared files to mention each
 other, a cycle check, and exporting the chain), and links to an external vocabulary such
 as ELSST.
+
+**Units are shared (owner, 2026-09-30).** DDI's `MeasurementUnit` is a term from a
+controlled vocabulary (`CodeValueType`), so units are the bank's vocabulary:
+`units/<name>.yaml` in the concept's shape (`label:`, optional `definition:`; the shape
+is `labelled`, one parser, `parseLabelled`), named from `number: { unit: days }`. The policy is the concept's (option b, recommended and built; **the owner has not confirmed it yet**): a bare word must name a shared unit
+(else a hole whose fix is "Use `days`" when the name differs only by case or singular
+and plural, `unitKey`, else "New shared unit"), words (`times per week`) are kept and
+exported but are a warning (`unit-prose`) whose fix creates the unit, and words a shared
+unit's label already says are `matches-unit`. `unit-spelling` and its majority fix are
+gone; two unit files with the same label are `duplicate-unit`. DDI gets the term only,
+`MeasurementUnit {StringValue: label}`: a `ControlledVocabularyCodeListReference` to a bank
+units CodeList, and UCUM or QUDT codes, wait for a bank-level export (and a decision on
+which a UCUM-backed StringValue shows). **Where a question names each kind is one table,
+`FIELD_OF`** (`number.unit` for units), read by the parser's mentions, the inspector
+(path-aware now, with the unit field's own description), completion (names under
+`number.unit`) and the name dialog; marks find nested references with `getIn`. Branches
+on a kind became branches on its shape (`SHAPE`), and the stored kinds are
+`z.enum(SCHEME_KINDS)`. Deferred: the Env as one record per kind (about sixteen call
+sites). The reference bank's two `unit: days` questions show a hole until it has
+`units/days.yaml`: the owner's edit, never ours.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)

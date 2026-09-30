@@ -10,15 +10,23 @@
 import { type Document, isMap, isNode, isScalar, parseDocument } from "yaml";
 import type { ZodError } from "zod";
 import { compact } from "../compact.js";
-import { NAME_RULE_TEXT, SCHEME_NAME } from "../copy.js";
-import type { Finding, Range } from "../findings.js";
+import {
+	fixLabel,
+	NAME_RULE_TEXT,
+	SCHEME_NAME,
+	SCHEME_SINGULAR,
+} from "../copy.js";
+import type { Finding, Fix, Range } from "../findings.js";
+import { unitKey } from "../fold.js";
 import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
 import type { Domain, Draft, Named } from "./draft.js";
 import {
 	type Env,
+	FIELD_OF,
 	inScope,
 	listNames,
 	type Mention,
+	type NamedScheme,
 	type SchemeEntries,
 } from "./env.js";
 import { holeChips, type Mark, marksOf, ordered } from "./marks.js";
@@ -133,10 +141,14 @@ export function parseSurface(text: string, env: Env): Parsed {
 		...(scale === undefined
 			? []
 			: [{ scheme: "scale", name: scale, path: "responses" } as const]),
-		...(["concept", "universe", "instruction"] as const).flatMap((key) => {
-			const name = nameIn(fields[key]);
-			return name === undefined ? [] : [{ scheme: key, name, path: key }];
-		}),
+		// Every other kind, at its place in the table: a name written there, resolved or not.
+		...(Object.entries(FIELD_OF) as [NamedScheme, string][]).flatMap(
+			([scheme, path]) => {
+				if (scheme === "scale") return [];
+				const name = nameIn(textAt(data, path));
+				return name === undefined ? [] : [{ scheme, name, path }];
+			},
+		),
 	];
 	const legacy = readLegacy(data.legacy);
 	const variants = readVariants(data.variant_of);
@@ -283,7 +295,7 @@ function readLegacy(value: unknown): Read<readonly string[]> {
  * which must resolve (else a hole, offering to create it); anything else is prose. A
  * concept is always meant to be shared, so its prose is lint's advice, not the parse's.
  */
-function refOrProse<K extends "universe" | "instruction" | "concept">(
+function refOrProse<K extends "universe" | "instruction" | "concept" | "unit">(
 	key: K,
 	text: string | undefined,
 	env: Env,
@@ -293,20 +305,45 @@ function refOrProse<K extends "universe" | "instruction" | "concept">(
 	if (name === undefined) return ok({ kind: "text", text });
 	const scheme = inScope(env, key);
 	const value = scheme[name];
+	const path = FIELD_OF[key];
 	if (value === undefined)
 		return fail({
 			...hole(
-				key,
-				`No ${key} named \`${name}\`.`,
-				listNames(key, Object.keys(scheme), key !== "concept"),
+				path,
+				`No ${SCHEME_SINGULAR[key]} named \`${name}\`.`,
+				listNames(
+					SCHEME_SINGULAR[key],
+					Object.keys(scheme),
+					key === "universe" || key === "instruction",
+				),
 			),
-			fix: {
+			fix: nearUnit(key, name, env) ?? {
 				kind: "create",
 				label: `New ${SCHEME_NAME[key]} \`${name}\``,
-				create: { scheme: key, name, text: "", path: key },
+				create: { scheme: key, name, text: "", path },
 			},
 		});
 	return ok({ kind: "ref", name, value });
+}
+
+/**
+ * A unit name that differs from one shared unit only by case or singular and plural
+ * (`day` for `days`): use that one, rather than create a near-twin.
+ */
+function nearUnit(key: string, name: string, env: Env): Fix | undefined {
+	if (key !== "unit") return undefined;
+	const wanted = unitKey(name);
+	const near = Object.entries(env.units)
+		.filter(([n, u]) => unitKey(n) === wanted || unitKey(u.label) === wanted)
+		.map(([n]) => n);
+	const [only] = near;
+	return near.length === 1 && only !== undefined
+		? {
+				kind: "edit",
+				label: fixLabel(only),
+				edits: [{ path: FIELD_OF.unit, value: only }],
+			}
+		: undefined;
 }
 
 /** The one rule for concept, universe and instruction: a bare identifier is a name. */
@@ -373,7 +410,7 @@ function readDomain(
 			: first === "responses"
 				? readResponses(doc, select.value ?? "one", env)
 				: first === "number"
-					? readNumber(value)
+					? readNumber(value, env)
 					: readOpen(value);
 	return {
 		...read,
@@ -470,12 +507,27 @@ function readSelect(value: unknown): Read<"one" | "many"> {
 	return result.data === undefined ? fail() : ok(result.data);
 }
 
-function readNumber(value: unknown): Read<Domain> {
+/** The text written at a dotted path (a field, or a field inside one), if it is text. */
+function textAt(
+	data: Record<string, unknown>,
+	path: string,
+): string | undefined {
+	let node: unknown = data;
+	for (const part of path.split(".")) {
+		if (!isPlainObject(node)) return undefined;
+		node = node[part];
+	}
+	return typeof node === "string" ? node : undefined;
+}
+
+function readNumber(value: unknown, env: Env): Read<Domain> {
 	const { rest, holes } = opened(value, "number");
 	const result = NumberDomainSchema.safeParse(rest);
 	if (!result.success)
 		return fail(...issueFindings("number", result.error), ...holes);
-	const { min, max } = result.data;
+	const { unit: unitText, ...plain } = result.data;
+	const unit = refOrProse("unit", unitText, env);
+	const { min, max } = plain;
 	if (min !== undefined && max !== undefined && min > max) {
 		return fail(
 			error(
@@ -485,9 +537,14 @@ function readNumber(value: unknown): Read<Domain> {
 				"Swap them, or remove one.",
 			),
 			...holes,
+			...unit.findings,
 		);
 	}
-	return ok(compact({ kind: "number", ...result.data }), ...holes);
+	return ok(
+		compact({ kind: "number", ...plain, unit: unit.value }),
+		...holes,
+		...unit.findings,
+	);
 }
 
 function readOpen(value: unknown): Read<Domain> {

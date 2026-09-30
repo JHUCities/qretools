@@ -8,7 +8,13 @@
  */
 import { z } from "zod";
 import { NAME_RULE_TEXT } from "../copy.js";
-import { EMPTY_ENV, type Env } from "./env.js";
+import {
+	EMPTY_ENV,
+	type Env,
+	FIELD_OF,
+	inScope,
+	type NamedScheme,
+} from "./env.js";
 import type { Scale } from "./scales.js";
 
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
@@ -39,7 +45,7 @@ export const NumberDomainSchema = z
 			.string()
 			.optional()
 			.describe(
-				"Unit of measure shown to the respondent, e.g. years, dollars.",
+				"The unit of measure: the name of a shared unit, e.g. days, or words if it isn't shared yet.",
 			),
 		decimals: z
 			.int()
@@ -240,24 +246,29 @@ export function questionJsonSchema(
 				: b,
 		);
 	}
-	if (props.concept)
-		props.concept = withNames(
-			props.concept,
-			Object.keys(env.concepts),
-			(n) => env.concepts[n]?.label ?? n,
-		);
-	if (props.universe)
-		props.universe = withNames(
-			props.universe,
-			Object.keys(env.universes),
-			(n) => env.universes[n]?.text ?? n,
-		);
-	if (props.instruction)
-		props.instruction = withNames(
-			props.instruction,
-			Object.keys(env.instructions),
-			(n) => env.instructions[n]?.text ?? n,
-		);
+	// Every other kind at its place (`FIELD_OF`): a unit's is inside `number:`.
+	for (const [kind, path] of Object.entries(FIELD_OF) as [
+		NamedScheme,
+		string,
+	][]) {
+		if (kind === "scale") continue;
+		const [first, ...rest] = path.split(".");
+		let parent: Record<string, Record<string, unknown>> | undefined = props;
+		let key = first ?? "";
+		for (const part of rest) {
+			parent = (parent?.[key] as JsonNode | undefined)?.properties;
+			key = part;
+		}
+		const node = parent?.[key];
+		if (parent === undefined || node === undefined) continue;
+		const entries = inScope(env, kind) as Readonly<
+			Record<string, { readonly text?: string; readonly label?: string }>
+		>;
+		parent[key] = withNames(node, Object.keys(entries), (n) => {
+			const e = entries[n];
+			return e?.label ?? e?.text ?? n;
+		});
+	}
 	return schema;
 }
 
@@ -272,20 +283,22 @@ export const LabelsFileSchema = z.strictObject({
 export const labelsJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(LabelsFileSchema) as Record<string, unknown>;
 
-/** The schema of a concept file: its label, and what it means. */
-export const ConceptFileSchema = z.strictObject({
+/** The schema of a labelled file (a concept, a unit): its label, and what it means. */
+export const LabelledFileSchema = z.strictObject({
 	label: z
 		.string()
-		.describe("The concept as people say it, e.g. Neighborhood satisfaction."),
+		.describe(
+			"The term as people say or write it, e.g. Neighborhood satisfaction, or days.",
+		),
 	definition: z
 		.string()
 		.optional()
 		.describe(
-			"What the concept means, so every question naming it measures the same thing.",
+			"What it means, so every question naming it means the same thing.",
 		),
 });
-export const conceptJsonSchema = (): Record<string, unknown> =>
-	z.toJSONSchema(ConceptFileSchema) as Record<string, unknown>;
+export const labelledJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(LabelledFileSchema) as Record<string, unknown>;
 
 /** The schema of a universe or instruction file: one `text:` line. */
 export const TextEntryFileSchema = z.strictObject({
@@ -298,3 +311,17 @@ export const textEntryJsonSchema = (): Record<string, unknown> =>
 
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";
+
+/** The description of the field at a path: a number's or open answer's own part, else its top field. */
+export function describePath(path: string, key: SurfaceKey): string {
+	const sub = path.split(".")[1];
+	const part =
+		sub === undefined
+			? undefined
+			: key === "number"
+				? (NumberDomainSchema.shape as Record<string, z.ZodType>)[sub]
+				: key === "open"
+					? (OpenDomainSchema.shape as Record<string, z.ZodType>)[sub]
+					: undefined;
+	return part?.description ?? describe(key);
+}

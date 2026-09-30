@@ -47,7 +47,7 @@ describe("a finding with a fix", () => {
 		edits: [{ path: "number.unit", value: "days" }],
 	};
 	const spelled: Finding = {
-		code: "unit-spelling",
+		code: "matches-unit",
 		severity: "warning",
 		path: "number.unit",
 		message: "`Days` is written `days` in `b`.",

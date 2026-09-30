@@ -88,3 +88,13 @@ describe("renaming a shared file in a question", () => {
 		expect(renameEdits("name: q\n", "scale", "agree", "agree4")).toEqual([]);
 	});
 });
+
+describe("a unit inside a flow map", () => {
+	it("is rewritten in place", () => {
+		expect(
+			applyEdits("number: { min: 0, unit: day }\n", [
+				{ path: "number.unit", value: "days" },
+			]),
+		).toBe("number: { min: 0, unit: days }\n");
+	});
+});

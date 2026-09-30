@@ -11,7 +11,6 @@
  * lists, codes ignored); and, for question text only, similar wording (word overlap),
  * computed for one file at a time against the index, never for every pair.
  */
-import { fixLabel } from "./copy.js";
 import type { Finding, Fix } from "./findings.js";
 import { fold, labelsKey } from "./fold.js";
 import type { SchemeKind, SchemeValue } from "./schemes.js";
@@ -33,11 +32,11 @@ export type PrintKind =
 	| "list"
 	| "universe"
 	| "instruction"
-	| "unit"
 	| "scale"
 	| "universe-file"
 	| "instruction-file"
-	| "concept-file";
+	| "concept-file"
+	| "unit-file";
 
 /** Content a file writes, as written (`raw`) and folded (`key`), at a path in it. */
 export interface Fingerprint {
@@ -55,17 +54,6 @@ export interface Symbols {
 	readonly variants: readonly Variant[];
 	readonly fingerprints: readonly Fingerprint[];
 }
-
-/**
- * A unit folded further, singular and plural as one: "Days", "day". A heuristic (a
- * trailing "s" off words over three letters), applied to both sides alike; if it ever
- * misfires, a short list of plurals is the fix.
- */
-const unitKey = (unit: string): string =>
-	fold(unit)
-		.split(" ")
-		.map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w))
-		.join(" ");
 
 /** A response list: labels folded in order, codes ignored; as written, codes and all. */
 const listPrint = (
@@ -102,10 +90,6 @@ export function symbolsOf(parsed: Parsed): Symbols {
 		const value = draft[key];
 		if (value?.kind === "text") fingerprints.push(print(key, key, value.text));
 	}
-	if (domain?.kind === "number" && domain.unit !== undefined)
-		fingerprints.push(
-			print("unit", "number.unit", domain.unit, unitKey(domain.unit)),
-		);
 	return {
 		...(draft.name !== undefined && { name: draft.name }),
 		defines: definedVariables(draft),
@@ -128,8 +112,14 @@ export function schemeSymbols(
 			? value.codes.length > 0
 				? [listPrint("scale", "labels", value.codes)]
 				: []
-			: value.kind === "concept"
-				? [print("concept-file", "label", value.concept.label)]
+			: value.kind === "labelled"
+				? [
+						print(
+							kind === "unit" ? "unit-file" : "concept-file",
+							"label",
+							value.entry.label,
+						),
+					]
 				: [
 						print(
 							kind === "universe" ? "universe-file" : "instruction-file",
@@ -255,7 +245,7 @@ const quote = (raw: string): string => {
 /** What each kind of duplicate says, and what to do about it. */
 const SAID: Readonly<
 	Record<
-		Exclude<PrintKind, "unit">,
+		PrintKind,
 		{
 			readonly code: BankFinding<unknown>["code"];
 			readonly what: string;
@@ -312,31 +302,13 @@ const SAID: Readonly<
 		where: "is the shared concept",
 		hint: "One concept, one label: keep one and have questions name it.",
 	},
+	"unit-file": {
+		code: "duplicate-unit",
+		what: "The same label",
+		where: "is the shared unit",
+		hint: "One unit, one label: keep one and have questions name it.",
+	},
 };
-
-/**
- * The spelling most of the bank uses, offered to a file that spells it otherwise; none
- * when this file already has the most common one (the others should change). A tie
- * goes to lowercase, then to sort order, so every file offers the same one.
- */
-function towardMajority<K>(
-	mine: Fingerprint,
-	others: readonly Printed<K>[],
-): Fix | undefined {
-	const count = new Map<string, number>([[mine.raw, 1]]);
-	for (const s of others) count.set(s.raw, (count.get(s.raw) ?? 0) + 1);
-	const lower = (x: string) => (x === x.toLowerCase() ? 0 : 1);
-	const [best] = [...count].sort(
-		([a, m], [b, n]) =>
-			n - m || lower(a) - lower(b) || (a < b ? -1 : a > b ? 1 : 0),
-	);
-	if (best === undefined || best[0] === mine.raw) return undefined;
-	return {
-		kind: "edit",
-		label: fixLabel(best[0]),
-		edits: [{ path: mine.path, value: best[0] }],
-	};
-}
 
 const listed = (names: readonly string[]): string =>
 	names.map((n) => `\`${n}\``).join(", ");
@@ -400,24 +372,6 @@ export function bankFindings<K>(
 		const sites = others(index.prints.get(printKey(f))).filter(
 			(s) => !deliberate(s.key),
 		);
-		if (f.kind === "unit") {
-			const spelled = sites.filter((s) => s.raw !== f.raw);
-			if (spelled.length === 0) return [];
-			const keys = spelled.map((s) => s.key);
-			const ways = [...new Set(spelled.map((s) => `\`${s.raw}\``))];
-			const fix = towardMajority(f, sites);
-			return [
-				{
-					code: "unit-spelling",
-					severity: "warning",
-					path: f.path,
-					message: `\`${f.raw}\` is written ${ways.join(" or ")} in ${listed(names(keys))}.`,
-					hint: "Spell a unit the same way everywhere, so the codebook shows one unit.",
-					others: keys,
-					...(fix !== undefined && { fix }),
-				},
-			];
-		}
 		if (sites.length === 0) return [];
 		const said = SAID[f.kind];
 		const keys = sites.map((s) => s.key);
