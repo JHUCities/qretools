@@ -33,7 +33,8 @@ export function marksOf(
 		marks.push({ kind, range: clampRange(from, to, length) });
 
 	for (const m of mentions) {
-		const node = top.get(m.path, true);
+		// A mention's path is a field, or a field inside one (`number.unit`): never a code.
+		const node = top.getIn(m.path.split("."), true);
 		if (!isScalar(node) || !node.range || !resolves(m, env)) continue;
 		span("ref", node.range[0], node.range[1]);
 	}

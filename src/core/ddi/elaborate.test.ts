@@ -13,6 +13,9 @@ import { elaborate } from "./elaborate.js";
 import { makeValidator } from "./validate.js";
 
 const AGENCY = "org.example";
+// The examples name a shared unit, `years`.
+const WITH_UNITS = { ...EMPTY_ENV, units: { years: { label: "years" } } };
+
 const EXAMPLES: Readonly<Record<string, string>> = {
 	nhd_sat: nhdSat,
 	nhd_nyrs: nhdNyrs,
@@ -36,7 +39,7 @@ describe("elaborate", () => {
 	it.each(["nhd_sat", "nhd_nyrs"])(
 		"elaborates %s to a schema-valid document",
 		(name) => {
-			const { draft, findings } = parseSurface(example(name), EMPTY_ENV);
+			const { draft, findings } = parseSurface(example(name), WITH_UNITS);
 			expect(findings).toEqual([]);
 			expect(validate(elaborate(draft, AGENCY, []))).toEqual([]);
 		},
@@ -125,7 +128,11 @@ describe("elaborate", () => {
 
 	it("maps number and open domains", () => {
 		const n = question(
-			elaborate(parseSurface(example("nhd_nyrs"), EMPTY_ENV).draft, AGENCY, []),
+			elaborate(
+				parseSurface(example("nhd_nyrs"), WITH_UNITS).draft,
+				AGENCY,
+				[],
+			),
 			"nhd_nyrs",
 		);
 		expect(n.ResponseDomain).toEqual({
@@ -434,5 +441,21 @@ describe("a shared concept", () => {
 		const doc = elaborate(draft, AGENCY, env.missing);
 		expect(validate(doc)).toEqual([]);
 		expect(Object.keys(doc.Concept ?? {})).toEqual([`${AGENCY}:q.concept:1`]);
+	});
+});
+
+describe("a shared unit", () => {
+	it("is the measurement unit's term: its label", () => {
+		const env = { ...EMPTY_ENV, units: { usd: { label: "US dollars" } } };
+		const doc = elaborate(
+			parseSurface("name: q\ntext: Q?\nintent: i\nnumber:\n  unit: usd\n", env)
+				.draft,
+			AGENCY,
+			[],
+		);
+		expect(validate(doc)).toEqual([]);
+		expect(JSON.stringify(doc)).toMatch(
+			/"MeasurementUnit":\{"StringValue":"US dollars"\}/,
+		);
 	});
 });

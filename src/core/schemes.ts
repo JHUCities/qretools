@@ -4,15 +4,16 @@
  * Pure; the shell decides which text of a file counts (the saved bank version).
  */
 import { parseDocument, stringify } from "yaml";
+import { SCHEME_SINGULAR } from "./copy.js";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { missingCollisions } from "./lint.js";
 import type { Code } from "./surface/draft.js";
 import {
-	type ConceptEntry,
 	EMPTY_ENV,
 	type Env,
+	type LabelledEntry,
 	type NamedScheme,
-	parseConcept,
+	parseLabelled,
 	parseTextEntry,
 	type TextEntry,
 } from "./surface/env.js";
@@ -34,6 +35,7 @@ export type Kind = "question" | SchemeKind;
 export const SCHEME_KINDS: readonly SchemeKind[] = [
 	"concept",
 	"scale",
+	"unit",
 	"universe",
 	"instruction",
 	"missing",
@@ -43,6 +45,7 @@ export const SCHEME_KINDS: readonly SchemeKind[] = [
 export const FOLDERS: Readonly<Record<NamedScheme, string>> = {
 	concept: "concepts",
 	scale: "scales",
+	unit: "units",
 	universe: "universes",
 	instruction: "instructions",
 };
@@ -53,11 +56,12 @@ export const MISSING_NAME = "missing";
  * What a kind's file holds, which decides how it is read, previewed and started: a
  * `labels:` map, one `text:` line, or a concept's `label:` and `definition:`.
  */
-export type Shape = "labels" | "text" | "concept";
+export type Shape = "labels" | "text" | "labelled";
 
 export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
-	concept: "concept",
+	concept: "labelled",
 	scale: "labels",
+	unit: "labelled",
 	universe: "text",
 	instruction: "text",
 	missing: "labels",
@@ -92,7 +96,7 @@ export function kindAt(
 export type SchemeValue =
 	| { readonly kind: "labels"; readonly codes: readonly Code[] }
 	| { readonly kind: "text"; readonly text: string }
-	| { readonly kind: "concept"; readonly concept: ConceptEntry };
+	| { readonly kind: "labelled"; readonly entry: LabelledEntry };
 
 export interface SchemeEvaluation {
 	readonly findings: readonly Finding[];
@@ -129,12 +133,12 @@ function readScheme(
 			? { findings, ranges, marks }
 			: { findings, ranges, marks, value: { kind: "text", text: entry.text } };
 	}
-	if (SHAPE[kind] === "concept") {
-		const { entry, findings } = parseConcept(source);
+	if (SHAPE[kind] === "labelled") {
+		const { entry, findings } = parseLabelled(source, SCHEME_SINGULAR[kind]);
 		const marks = holeChips(findings, empties);
 		return entry === undefined
 			? { findings, ranges, marks }
-			: { findings, ranges, marks, value: { kind: "concept", concept: entry } };
+			: { findings, ranges, marks, value: { kind: "labelled", entry } };
 	}
 	const { scale, findings } = parseScale(source);
 	const marks = ordered([
@@ -172,15 +176,17 @@ export interface SchemeFile {
  * why. A second missing list cannot exist (one path), so the last one read wins.
  */
 export function schemeEnv(files: readonly SchemeFile[]): Env {
-	const concepts: Record<string, ConceptEntry> = {};
+	const concepts: Record<string, LabelledEntry> = {};
+	const units: Record<string, LabelledEntry> = {};
 	const scales: Record<string, Scale> = {};
 	const universes: Record<string, TextEntry> = {};
 	const instructions: Record<string, TextEntry> = {};
 	let missing: readonly Code[] = EMPTY_ENV.missing;
 	for (const f of files) {
-		if (f.kind === "concept") {
-			const { entry } = parseConcept(f.text);
-			if (entry !== undefined) concepts[f.name] = entry;
+		if (f.kind === "concept" || f.kind === "unit") {
+			const { entry } = parseLabelled(f.text, SCHEME_SINGULAR[f.kind]);
+			if (entry !== undefined)
+				(f.kind === "concept" ? concepts : units)[f.name] = entry;
 			continue;
 		}
 		if (f.kind === "universe" || f.kind === "instruction") {
@@ -195,11 +201,11 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		if (f.kind === "scale") scales[f.name] = scale;
 		else missing = scale.codes;
 	}
-	return { concepts, scales, universes, instructions, missing };
+	return { concepts, units, scales, universes, instructions, missing };
 }
 
-/** A concept file with its label; the definition is written in the file afterwards. */
-export const conceptSource = (label: string): string =>
+/** A concept or unit file with its label; the definition is written in the file afterwards. */
+export const labelledSource = (label: string): string =>
 	stringify({ label: label.trim() }, { lineWidth: 0 });
 
 /** A universe or instruction file saying `text`, quoted only where YAML needs it. */

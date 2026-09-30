@@ -29,13 +29,15 @@ export interface TextEntry {
  * A shared concept, as DDI's Concept (after ISO/IEC 11179): a short label people say,
  * and what it means. Its name is its filename.
  */
-export interface ConceptEntry {
+export interface LabelledEntry {
 	readonly label: string;
 	readonly definition?: string;
 }
 
 export interface Env {
-	readonly concepts: Scheme<ConceptEntry>;
+	readonly concepts: Scheme<LabelledEntry>;
+	/** A vocabulary of measurement units: DDI's MeasurementUnit is a term from one. */
+	readonly units: Scheme<LabelledEntry>;
 	readonly scales: Scheme<Scale>;
 	readonly universes: Scheme<TextEntry>;
 	readonly instructions: Scheme<TextEntry>;
@@ -44,7 +46,24 @@ export interface Env {
 }
 
 /** A scheme a question can name. `missing` is not one: it is a list, never named. */
-export type NamedScheme = "concept" | "scale" | "universe" | "instruction";
+export type NamedScheme =
+	| "concept"
+	| "scale"
+	| "unit"
+	| "universe"
+	| "instruction";
+
+/**
+ * Where a question names each kind: the one table of reference positions. The parser's
+ * mentions, the inspector, completion and the name dialog all read it.
+ */
+export const FIELD_OF: Readonly<Record<NamedScheme, string>> = {
+	concept: "concept",
+	scale: "responses",
+	unit: "number.unit",
+	universe: "universe",
+	instruction: "instruction",
+};
 
 /**
  * A name a question writes in a reference position, whether or not it resolves.
@@ -59,7 +78,8 @@ export interface Mention {
 
 /** What each named scheme holds. */
 export interface SchemeEntries {
-	readonly concept: ConceptEntry;
+	readonly concept: LabelledEntry;
+	readonly unit: LabelledEntry;
 	readonly scale: Scale;
 	readonly universe: TextEntry;
 	readonly instruction: TextEntry;
@@ -72,6 +92,7 @@ export const inScope = <S extends NamedScheme>(
 ): Scheme<SchemeEntries[S]> => {
 	const byScheme: { readonly [K in NamedScheme]: Scheme<SchemeEntries[K]> } = {
 		concept: env.concepts,
+		unit: env.units,
 		scale: env.scales,
 		universe: env.universes,
 		instruction: env.instructions,
@@ -81,6 +102,7 @@ export const inScope = <S extends NamedScheme>(
 
 export const EMPTY_ENV: Env = {
 	concepts: {},
+	units: {},
 	scales: {},
 	universes: {},
 	instructions: {},
@@ -145,13 +167,16 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 	return { entry: { text }, findings: [...syntax, ...unknown] };
 }
 
-export interface ParsedConcept {
-	readonly entry?: ConceptEntry;
+export interface ParsedLabelled {
+	readonly entry?: LabelledEntry;
 	readonly findings: readonly Finding[];
 }
 
-/** A concept file: `label:` (required) and `definition:` (optional). */
-export function parseConcept(source: string): ParsedConcept {
+/**
+ * A labelled file (a concept, a unit): `label:` (required) and `definition:`
+ * (optional). `what` names the kind in messages.
+ */
+export function parseLabelled(source: string, what: string): ParsedLabelled {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const syntax: Finding[] = yamlErrors(doc.errors, source.length);
 	let js: unknown;
@@ -172,7 +197,7 @@ export function parseConcept(source: string): ParsedConcept {
 				error(
 					"not-a-map",
 					"",
-					"A concept is a `label:` line, and a `definition:` if you like.",
+					`A ${what} is a \`label:\` line, and a \`definition:\` if you like.`,
 				),
 			],
 		};
@@ -191,7 +216,10 @@ export function parseConcept(source: string): ParsedConcept {
 		if (v === undefined)
 			return key === "label"
 				? fail(
-						hole("label", "Add a `label:` line: the concept as people say it."),
+						hole(
+							"label",
+							`Add a \`label:\` line: the ${what} as people write it.`,
+						),
 					)
 				: fail();
 		if (v === null || (typeof v === "string" && v.trim() === ""))

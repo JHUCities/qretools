@@ -85,3 +85,20 @@ describe("inspect", () => {
 		expect(doc?.description).toMatch(/survey question/i);
 	});
 });
+
+describe("the inspector on a unit", () => {
+	it("describes the unit field itself, lists the units, and names the one written", () => {
+		const env = { ...EMPTY_ENV, units: { days: { label: "days" } } };
+		const source = "name: q\nnumber:\n  unit: days\n";
+		const at = inspect(
+			evaluate(source, "org.example", env),
+			env,
+			source,
+			source.indexOf("days") + 2,
+		);
+		expect(at?.path).toBe("number.unit");
+		expect(at?.description).toMatch(/unit/i);
+		expect(at?.names).toEqual(["days"]);
+		expect(at?.mention).toMatchObject({ scheme: "unit", name: "days" });
+	});
+});

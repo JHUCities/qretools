@@ -8,11 +8,21 @@
  * "single-select needs a residual option" (bipolar scales are exhaustive
  * without one), "text must end in ?" (stems like "Please indicate..." are fine).
  */
-import { fixLabel } from "./copy.js";
+import { fixLabel, SCHEME_LABELS, SCHEME_NAME } from "./copy.js";
 import type { Finding, Fix, LintCode } from "./findings.js";
-import { fold, labelsKey } from "./fold.js";
-import { type Code, type Draft, optionVariable } from "./surface/draft.js";
-import type { Env } from "./surface/env.js";
+import { fold, labelsKey, unitKey } from "./fold.js";
+import {
+	type Code,
+	type Draft,
+	type Named,
+	optionVariable,
+} from "./surface/draft.js";
+import {
+	type Env,
+	FIELD_OF,
+	inScope,
+	type LabelledEntry,
+} from "./surface/env.js";
 import { nameFrom } from "./surface/schema.js";
 
 type Rule = (draft: Draft, env: Env) => readonly Finding[];
@@ -280,50 +290,55 @@ const matchesShared =
 	};
 
 /**
- * A concept is shared by nature (DDI, ISO/IEC 11179, a concept library): one written
- * as prose is advice. When a shared concept already has that label, name it; else make
- * it one, the dialog prefilled with a name made from the words and the words as label.
+ * A concept or a unit is shared by nature (DDI: a Concept in a ConceptScheme; a
+ * MeasurementUnit is a term from a vocabulary): one written in words is advice. When a
+ * shared one already has that label, name it; else make it one, the dialog prefilled
+ * with a name made from the words and the words as its label.
  */
-const conceptProse: Rule = ({ concept }, env) => {
-	if (concept?.kind !== "text") return [];
-	const folded = fold(concept.text);
-	const matches = Object.entries(env.concepts)
-		.filter(([, c]) => fold(c.label) === folded)
-		.map(([n]) => n);
-	if (matches.length > 0)
+const writtenOut =
+	(
+		scheme: "concept" | "unit",
+		read: (draft: Draft) => Named<LabelledEntry> | undefined,
+		same: (s: string) => string,
+	): Rule =>
+	(draft, env) => {
+		const value = read(draft);
+		if (value?.kind !== "text") return [];
+		const path = FIELD_OF[scheme];
+		const wanted = same(value.text);
+		const matches = Object.entries(inScope(env, scheme))
+			.filter(([, e]) => same(e.label) === wanted)
+			.map(([n]) => n);
+		const what = SCHEME_NAME[scheme];
+		if (matches.length > 0)
+			return [
+				advise(
+					scheme === "concept" ? "matches-concept" : "matches-unit",
+					"warning",
+					path,
+					`This is the ${what} ${matches.map((m) => `\`${m}\``).join(", ")}.`,
+					`Write \`${path.split(".").at(-1)}: ${matches[0]}\`, so questions using it are found together.`,
+					matches.length === 1 && matches[0] !== undefined
+						? nameFix(path, matches[0])
+						: undefined,
+				),
+			];
+		const name = nameFrom(value.text, scheme);
 		return [
 			advise(
-				"matches-concept",
+				scheme === "concept" ? "concept-prose" : "unit-prose",
 				"warning",
-				"concept",
-				`This is the shared concept ${matches.map((m) => `\`${m}\``).join(", ")}.`,
-				`Write \`concept: ${matches[0]}\`, so questions measuring it are found together.`,
-				matches.length === 1 && matches[0] !== undefined
-					? nameFix("concept", matches[0])
-					: undefined,
+				path,
+				`${SCHEME_LABELS[scheme]} are shared: this one is written only here.`,
+				`Make it a ${what}, so every question using it names the same one.`,
+				{
+					kind: "create",
+					label: `Make it a ${what} \`${name}\``,
+					create: { scheme, name, text: value.text.trim(), path },
+				},
 			),
 		];
-	const name = nameFrom(concept.text, "concept");
-	return [
-		advise(
-			"concept-prose",
-			"warning",
-			"concept",
-			"Concepts are shared: this one is written only here.",
-			"Make it a shared concept, so every question measuring it names the same one.",
-			{
-				kind: "create",
-				label: `Make it a shared concept \`${name}\``,
-				create: {
-					scheme: "concept",
-					name,
-					text: concept.text.trim(),
-					path: "concept",
-				},
-			},
-		),
-	];
-};
+	};
 
 /** A response code that the bank reserves for missing data would be unreadable in the dataset. */
 const missingCode: Rule = ({ domain }, env) =>
@@ -366,7 +381,12 @@ const RULES: readonly Rule[] = [
 	matchesScale,
 	matchesShared("universe"),
 	matchesShared("instruction"),
-	conceptProse,
+	writtenOut("concept", (d) => d.concept, fold),
+	writtenOut(
+		"unit",
+		(d) => (d.domain?.kind === "number" ? d.domain.unit : undefined),
+		unitKey,
+	),
 	missingCode,
 ];
 

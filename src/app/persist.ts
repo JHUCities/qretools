@@ -8,9 +8,11 @@
  * Versions 1 to 4 lived in local storage under `qretools.v1`, shared by every tab; they
  * are read once, by `migrate`, and retired.
  */
+
 import { z } from "zod";
 import { compact } from "../core/compact.js";
 import { err, ok, type Result } from "../core/result.js";
+import { SCHEME_KINDS, type SchemeKind } from "../core/schemes.js";
 import type { Credentials } from "./auth.js";
 import {
 	type BankSettings,
@@ -48,14 +50,8 @@ const BaseSchema = z.strictObject({
 	text: z.string(),
 });
 
-// Widening this list reads older work unchanged: no version bump for a new kind.
-const SCHEME_KIND = z.enum([
-	"concept",
-	"scale",
-	"universe",
-	"instruction",
-	"missing",
-]);
+// Every kind the core knows. Widening it reads older work unchanged: no version bump.
+const SCHEME_KIND = z.enum(SCHEME_KINDS as [SchemeKind, ...SchemeKind[]]);
 
 /**
  * Version 3: working copies split by kind, each with the base it started from. The

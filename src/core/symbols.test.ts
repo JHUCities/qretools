@@ -142,18 +142,6 @@ describe("duplication across the bank", () => {
 		).toBe("The same labels are in the shared scale `yes_no_01`.");
 	});
 
-	it("flags a unit spelled differently, never the same unit written twice", () => {
-		const files = {
-			a: symbols("name: a\nnumber:\n  unit: days\n"),
-			b: symbols("name: b\nnumber:\n  unit: Days\n"),
-			c: symbols("name: c\nnumber:\n  unit: days\n"),
-		};
-		expect(codes(files, "a")).toEqual(["warning:unit-spelling@number.unit"]);
-		expect(bankFindings("b", files.b, indexed(files), label)[0]?.message).toBe(
-			"`Days` is written `days` in `a`, `c`.",
-		);
-	});
-
 	it("notes similar wording as info, quoting the other", () => {
 		const files = {
 			a: symbols(
@@ -191,50 +179,16 @@ describe("the other files a finding names", () => {
 	});
 });
 
-describe("the unit-spelling fix", () => {
-	const label = (k: string) => k;
-	const run = (files: Record<string, ReturnType<typeof symbols>>, k: string) =>
-		bankFindings(
-			k,
-			files[k] as ReturnType<typeof symbols>,
-			indexOf(Object.entries(files).map(([key, s]) => ({ key, symbols: s }))),
-			label,
-		)[0]?.fix;
-
-	it("moves toward the spelling most of the bank uses, and offers nothing to a file that has it", () => {
-		const files = {
-			a: symbols("name: a\nnumber:\n  unit: days\n"),
-			b: symbols("name: b\nnumber:\n  unit: days\n"),
-			c: symbols("name: c\nnumber:\n  unit: Days\n"),
-		};
-		expect(run(files, "c")).toEqual({
-			kind: "edit",
-			label: "Use `days`",
-			edits: [{ path: "number.unit", value: "days" }],
-		});
-		expect(run(files, "a")).toBeUndefined();
-	});
-
-	it("breaks a one-to-one tie toward lowercase, so exactly one side offers it", () => {
-		const files = {
-			a: symbols("name: a\nnumber:\n  unit: Days\n"),
-			b: symbols("name: b\nnumber:\n  unit: days\n"),
-		};
-		expect(run(files, "a")?.label).toBe("Use `days`");
-		expect(run(files, "b")).toBeUndefined();
-	});
-});
-
 describe("two concept files with the same label", () => {
 	it("report on each other", () => {
 		const files = {
 			trust: schemeSymbols("concept", {
-				kind: "concept",
-				concept: { label: "Trust in government" },
+				kind: "labelled",
+				entry: { label: "Trust in government" },
 			}),
 			gov_trust: schemeSymbols("concept", {
-				kind: "concept",
-				concept: { label: "trust in government." },
+				kind: "labelled",
+				entry: { label: "trust in government." },
 			}),
 		};
 		const index = indexOf(

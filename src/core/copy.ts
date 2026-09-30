@@ -21,6 +21,7 @@ export const FOLDER_RULE_TEXT =
 export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 	concept: "concept",
 	scale: "scale",
+	unit: "unit",
 	universe: "universe",
 	instruction: "instruction",
 	missing: "missing values",
@@ -30,6 +31,7 @@ export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 	concept: "Concepts",
 	scale: "Scales",
+	unit: "Units",
 	universe: "Universes",
 	instruction: "Instructions",
 	missing: "Missing values",
@@ -39,6 +41,7 @@ export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 	concept: "shared concept",
 	scale: "shared scale",
+	unit: "shared unit",
 	universe: "shared universe",
 	instruction: "shared instruction",
 	missing: "missing values",
