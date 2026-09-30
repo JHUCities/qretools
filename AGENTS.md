@@ -1440,7 +1440,8 @@ each item going to its place. Read only: a plain `ul`, because an `ActionList.It
 with no `onSelect` still renders a button (Primer 38, unless the list is a menu or
 listbox or the item inactive), and a button that does nothing is worse than a list.
 The DDI pane's schema problems are Primer's `InlineMessage variant="critical"` (was a
-hand-styled `p.finding`).
+hand-styled `p.finding`), from `@primer/react/experimental`: its API may change in a
+minor release.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
