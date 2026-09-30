@@ -7,7 +7,7 @@
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, CounterLabel, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
-import { memo, type ReactNode, useCallback, useMemo } from "react";
+import { Fragment, memo, type ReactNode, useCallback, useMemo } from "react";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { type Evaluation, evaluate } from "../../core/evaluate.js";
 import {
@@ -551,65 +551,109 @@ function Inspector({
 		m === undefined
 			? 0
 			: new Set(usedBy(index, m.scheme, m.name).map((s) => s.key)).size;
+	const scheme = m?.scheme ?? at.scheme;
+	const kind =
+		scheme === undefined ? undefined : capitalise(SCHEME_NAME[scheme]);
+	const names =
+		at.names === undefined
+			? undefined
+			: at.names.length === 0
+				? "None shared yet."
+				: `${at.names.slice(0, 12).join(", ")}${at.names.length > 12 ? ", …" : ""}.`;
 	return (
 		<InspectorBox>
-			<p>
-				{at.key === undefined ? (
-					<b>Question. </b>
-				) : (
-					<code className="code">{at.path}</code>
-				)}{" "}
-				{at.description}
-			</p>
-			{m !== undefined &&
-				(m.value !== undefined ? (
-					<p>
-						<code className="code">{m.name}</code> is the{" "}
-						{SCHEME_NAME[m.scheme]}{" "}
-						{"codes" in m.value
-							? m.value.codes.map((c) => `${c.code} ${c.label}`).join(" · ")
-							: "label" in m.value
-								? `“${m.value.label}”`
-								: `“${m.value.text}”`}
-						, used by {users} question{users === 1 ? "" : "s"}.{" "}
-						{file && (
-							<FileLink
-								id={file.id}
-								onOpen={() => dispatch({ kind: "fileOpened", id: file.id })}
-							>
-								Open {m.name}
-							</FileLink>
+			{/*
+			 * Two rows: the field, what it is for in any question (muted: reference); and
+			 * the value written here, when it names a shared entry (what it is, who uses it).
+			 */}
+			<dl className="inspect">
+				<dt>
+					{at.key === undefined ? "Question" : "Field"}
+					{/*
+					 * Every label this column can hold, unseen and no height: the column keeps
+					 * one width, so the values never shift sideways as the caret moves.
+					 */}
+					<span className="inspect-size" aria-hidden>
+						{INSPECT_LABELS.map((l) => (
+							<span key={l}>{l}</span>
+						))}
+					</span>
+				</dt>
+				<dd>
+					{at.key !== undefined && <code className="code">{at.path}</code>}{" "}
+					<span className="quiet">{at.description}</span>
+				</dd>
+				{m !== undefined && (
+					<>
+						<dt>{kind}</dt>
+						{m.value !== undefined ? (
+							<dd>
+								<div>
+									<code className="code">{m.name}</code>{" "}
+									<span className="quiet">
+										used by {users} question{users === 1 ? "" : "s"}
+									</span>{" "}
+									{file && (
+										<FileLink
+											id={file.id}
+											onOpen={() =>
+												dispatch({ kind: "fileOpened", id: file.id })
+											}
+										>
+											Open {m.name}
+										</FileLink>
+									)}
+								</div>
+								<div>
+									{"codes" in m.value
+										? m.value.codes.map((c, i) => (
+												// Codes may repeat while being edited, so the position is the key.
+												// biome-ignore lint/suspicious/noArrayIndexKey: see above
+												<Fragment key={i}>
+													{i > 0 && <span className="quiet"> · </span>}
+													<span className="quiet">{c.code}</span> {c.label}
+												</Fragment>
+											))
+										: `“${"label" in m.value ? m.value.label : m.value.text}”`}
+								</div>
+							</dd>
+						) : (
+							// A name nothing has, and the way to create it.
+							<dd>
+								<div>
+									No {SCHEME_NAME[m.scheme]} is named{" "}
+									<code className="code">{m.name}</code>.{" "}
+									<Button
+										variant="link"
+										onClick={() =>
+											dispatch({
+												kind: "schemeCreateOpened",
+												scheme: m.scheme,
+												name: m.name,
+												// Exactly where it is named: the path at the caret.
+												use: { id: q.id, path: at.path },
+											})
+										}
+									>
+										New {SCHEME_NAME[m.scheme]}{" "}
+										<code className="code">{m.name}</code>
+									</Button>
+								</div>
+								{names !== undefined && (
+									<div className="quiet">Or name a shared one: {names}</div>
+								)}
+							</dd>
 						)}
-					</p>
-				) : (
-					// What is under the cursor: a name nothing has, and the way to create it.
-					<p>
-						No {SCHEME_NAME[m.scheme]} is named{" "}
-						<code className="code">{m.name}</code>.{" "}
-						<Button
-							variant="link"
-							onClick={() =>
-								dispatch({
-									kind: "schemeCreateOpened",
-									scheme: m.scheme,
-									name: m.name,
-									// This question names it here: it will name whatever is chosen.
-									// Exactly where it is named: the path at the caret.
-									use: { id: q.id, path: at.path },
-								})
-							}
-						>
-							New {SCHEME_NAME[m.scheme]} <code className="code">{m.name}</code>
-						</Button>
-					</p>
-				))}
-			{at.names !== undefined && (m === undefined || m.value === undefined) && (
-				<p className="quiet">
-					{at.names.length === 0
-						? "No shared names of this kind yet."
-						: `Or name a shared one: ${at.names.slice(0, 12).join(", ")}${at.names.length > 12 ? ", …" : ""}.`}
-				</p>
-			)}
+					</>
+				)}
+				{/* Nothing named yet, where a shared one can be: the names in scope. */}
+				{m === undefined && kind !== undefined && names !== undefined && (
+					<>
+						<dt>{kind}</dt>
+						<dd className="quiet">Name a shared one: {names}</dd>
+					</>
+				)}
+			</dl>
 		</InspectorBox>
 	);
 }
@@ -792,3 +836,13 @@ function FileLink({
 		</Button>
 	);
 }
+
+const capitalise = (s: string): string =>
+	s.charAt(0).toUpperCase() + s.slice(1);
+
+/** The inspector's row labels, all of them, for the column's width. */
+const INSPECT_LABELS: readonly string[] = [
+	"Question",
+	"Field",
+	...Object.values(SCHEME_NAME).map(capitalise),
+];

@@ -29,7 +29,8 @@ export interface Inspection {
 	/** Its field, e.g. `responses`; absent at the document level (a blank line, the end). */
 	readonly key?: SurfaceKey;
 	readonly description: string;
-	/** For a field that may name a shared element: every name in scope. */
+	/** For a field that may name a shared element: which kind, and every name in scope. */
+	readonly scheme?: NamedScheme;
 	readonly names?: readonly string[];
 	/** The name written at the caret; `value` absent means nothing has that name. */
 	readonly mention?: {
@@ -80,6 +81,7 @@ export function inspect(
 		key,
 		description: describePath(path, key),
 		...(scheme !== undefined && {
+			scheme,
 			names: Object.keys(inScope(env, scheme)).sort(),
 		}),
 		...(written !== undefined && {

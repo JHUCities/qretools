@@ -487,6 +487,35 @@ code,
 .inspector p {
 	margin: 0;
 }
+/*
+ * The inspector's rows: the field (what it is for, muted as reference) and the value
+ * written there (what it names, who uses it), each under a small label.
+ */
+.inspect {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	column-gap: var(--base-size-12);
+	/* No gap between rows: the labels separate them, and four lines is the whole box. */
+	margin: 0;
+}
+/* A chip sits within the text's line (the code face's own line height is taller). */
+.inspect .code {
+	line-height: 1;
+}
+.inspect dt {
+	color: var(--fgColor-muted);
+}
+/* Unseen and no height, inside the first label: it only widens the column to its widest. */
+.inspect-size {
+	display: flex;
+	flex-direction: column;
+	visibility: hidden;
+	block-size: 0;
+	overflow: hidden;
+}
+.inspect dd {
+	margin: 0;
+}
 
 /* Preview panels. */
 .pane {
