@@ -15,6 +15,7 @@ import type {
 	CompletionResult,
 } from "@codemirror/autocomplete";
 import { getJSONSchema } from "codemirror-json-schema";
+import { placeAt } from "../core/surface/place.js";
 
 interface SchemaNode {
 	readonly description?: string;
@@ -25,9 +26,33 @@ interface SchemaNode {
 		readonly description?: string;
 	}[];
 	readonly properties?: Readonly<Record<string, SchemaNode>>;
+	/** A record's values (Zod's `z.record`): what any key under it holds. */
+	readonly additionalProperties?: SchemaNode | boolean;
 }
 
-const KEY_LINE = /^(\s*)([A-Za-z_][\w-]*):(.*)$/;
+/**
+ * The schema of what is written under `segments`, through a union's object branch (the
+ * first branch that has the segment, should two ever share one).
+ */
+function nodeAt(
+	schema: SchemaNode,
+	segments: readonly string[],
+): SchemaNode | undefined {
+	let node: SchemaNode | undefined = schema;
+	for (const segment of segments) {
+		node = (node.anyOf ?? [node])
+			.map((branch) => {
+				const record = branch.additionalProperties;
+				return (
+					branch.properties?.[segment] ??
+					(typeof record === "object" ? record : undefined)
+				);
+			})
+			.find((child) => child !== undefined);
+		if (node === undefined) return undefined;
+	}
+	return node;
+}
 
 /** Values a field may take: a plain enum, or the constants of a branch (shared scale names). */
 function valuesOf(node: SchemaNode | undefined): readonly Completion[] {
@@ -54,26 +79,29 @@ export function schemaCompletion(
 ): CompletionResult | null {
 	const schema = getJSONSchema(context.state) as SchemaNode | undefined;
 	if (!schema) return null;
-	const line = context.state.doc.lineAt(context.pos);
-	const before = line.text.slice(0, context.pos - line.from);
+	const place = placeAt(context.state.doc.toString(), context.pos);
+	if (place === undefined) return null;
+	const node = nodeAt(schema, place.segments);
 
-	const value = /^\s*([A-Za-z_][\w-]*):\s+(\w*)$/.exec(before);
-	if (value) {
-		const [, key = "", typed = ""] = value;
-		const options = valuesOf(schema.properties?.[key]);
-		if (typed !== "" || options.length === 0) return null;
-		return { from: context.pos, options: [...options] };
+	if (place.kind === "value") {
+		// Once a value is typed, the package completes it.
+		const options = place.typed === "" ? valuesOf(node) : [];
+		return options.length === 0
+			? null
+			: { from: context.pos, options: [...options] };
 	}
 
-	const key = /^(\s*)(\w*)$/.exec(before);
-	if (!key) return null;
-	const [, indent = "", typed = ""] = key;
-	const lines = context.state.doc.toString().split("\n");
-	const here = line.number - 1;
-	const { node, siblings } = scope(schema, lines, here, indent.length);
-	if (!node?.properties || packageHandles(typed, indent.length, siblings))
+	const { typed, siblings } = place;
+	// A union's object branch holds the keys (an option: a label, or a map with a label).
+	const properties = (node?.anyOf ?? [node]).find(
+		(b) => b?.properties,
+	)?.properties;
+	if (
+		!properties ||
+		packageHandles(typed, place.segments.length === 0, siblings)
+	)
 		return null;
-	const options: Completion[] = Object.entries(node.properties)
+	const options: Completion[] = Object.entries(properties)
 		.filter(([name]) => !siblings.includes(name))
 		.map(([name], i) => ({
 			label: name,
@@ -95,38 +123,9 @@ export function schemaCompletion(
  */
 const packageHandles = (
 	typed: string,
-	indent: number,
+	topLevel: boolean,
 	siblings: readonly string[],
-): boolean => typed !== "" && (indent === 0 || siblings.length > 0);
-
-/** The schema node whose keys belong at this indent, and the keys already written there. */
-function scope(
-	schema: SchemaNode,
-	lines: readonly string[],
-	here: number,
-	indent: number,
-): { node: SchemaNode | undefined; siblings: readonly string[] } {
-	const keysAt = (from: number, to: number, at: number) =>
-		lines.slice(from, to).flatMap((l, i) => {
-			const m = KEY_LINE.exec(l);
-			return m && (m[1] ?? "").length === at && from + i !== here
-				? [m[2] ?? ""]
-				: [];
-		});
-	if (indent === 0)
-		return { node: schema, siblings: keysAt(0, lines.length, 0) };
-	for (let i = here - 1; i >= 0; i--) {
-		const m = KEY_LINE.exec(lines[i] ?? "");
-		if (!m || (m[1] ?? "").length >= indent) continue;
-		if ((m[1] ?? "").length !== 0) return { node: undefined, siblings: [] };
-		const end = lines.findIndex((l, j) => j > i && /^\S/.test(l));
-		return {
-			node: schema.properties?.[m[2] ?? ""],
-			siblings: keysAt(i + 1, end === -1 ? lines.length : end, indent),
-		};
-	}
-	return { node: undefined, siblings: [] };
-}
+): boolean => typed !== "" && (topLevel || siblings.length > 0);
 
 /**
  * The package's options under the same rule: a value's description (a string `info`)
