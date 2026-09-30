@@ -61,19 +61,22 @@ import {
 	sliceOf,
 	syncOf,
 } from "./sync.js";
+import { openFolder } from "./tree.js";
 
 type Step = readonly [Model, readonly Cmd[]];
 
 /**
  * Pure. Every state change in the app is one case of `step`; this wrapper keeps the
- * address bar naming what is open. A different file open adds a history entry (so
- * Back works); anything else (a draft gets its path, a file moves) replaces it.
+ * address bar naming what is open, and the open file's folder in view. A different
+ * file open adds a history entry (so Back works); anything else (a draft gets its
+ * path, a file moves) replaces it.
  */
 export function update(model: Model, msg: Msg): Step {
 	if (stale(model, msg)) return [model, []];
 	const lapsed = authFailure(msg);
-	const [next, cmds] =
+	const [stepped, cmds] =
 		lapsed === undefined ? step(model, msg) : sessionLapsed(model, lapsed);
+	const next = revealOpen(model, stepped);
 	const before = linkOf(model);
 	const after = linkOf(next);
 	if (after === undefined || after === before) return [next, cmds];
@@ -81,6 +84,30 @@ export function update(model: Model, msg: Msg): Step {
 		next,
 		[...cmds, { kind: "setLink", hash: after, push: openChanged(model, next) }],
 	];
+}
+
+/**
+ * When the open file changes, or moves to another folder (a draft saved, a question
+ * moved), its folder opens, once: it is added to `browser.expanded`, so the user can
+ * close it again while the file stays open.
+ */
+function revealOpen(before: Model, after: Model): Model {
+	const folder = openFolder(after);
+	if (folder === undefined || after.browser.expanded.includes(folder))
+		return after;
+	const unchanged =
+		before.screen.kind === "editing" &&
+		after.screen.kind === "editing" &&
+		before.screen.id === after.screen.id &&
+		openFolder(before) === folder;
+	if (unchanged) return after;
+	return {
+		...after,
+		browser: {
+			...after.browser,
+			expanded: [...after.browser.expanded, folder],
+		},
+	};
 }
 
 function step(model: Model, msg: Msg): Step {
