@@ -265,6 +265,16 @@ const StoredSettingsSchema = z.strictObject({
 
 export const SETTINGS_KEY = "qretools.settings";
 
+/**
+ * The theme chosen on this device. index.html's inline script reads the same key before
+ * the first paint (a test holds the two to one spelling).
+ */
+export const THEME_KEY = "qretools.theme";
+
+/** The stored theme, or undefined (the system's) for anything else. */
+export const readTheme = (raw: string | null): "light" | "dark" | undefined =>
+	raw === "light" || raw === "dark" ? raw : undefined;
+
 /** The stored settings, or undefined when there are none or they can't be read: only a default. */
 export function readSettings(raw: string | null): BankSettings | undefined {
 	if (raw === null) return undefined;
@@ -396,6 +406,7 @@ export function readStartup(
 ): {
 	readonly work: Result<Work | undefined, Failure>;
 	readonly settings?: BankSettings;
+	readonly theme?: "light" | "dark";
 	readonly notices: readonly Failure[];
 } {
 	const notices = migrate(local, session);
@@ -403,7 +414,13 @@ export function readStartup(
 	const work = readWork(raw);
 	if (!work.ok && raw !== null) local.setItem(WORK_UNREADABLE_KEY, raw);
 	const settings = readSettings(local.getItem(SETTINGS_KEY));
-	return { work, ...(settings !== undefined && { settings }), notices };
+	const theme = readTheme(local.getItem(THEME_KEY));
+	return {
+		work,
+		...(settings !== undefined && { settings }),
+		...(theme !== undefined && { theme }),
+		notices,
+	};
 }
 
 /**

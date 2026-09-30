@@ -87,6 +87,14 @@ function step(model: Model, msg: Msg): Step {
 				? persist([withSource(model, model.screen.id, msg.text), []])
 				: [model, []];
 
+		case "themeChosen":
+			return model.theme === msg.theme
+				? [model, []]
+				: [
+						{ ...model, theme: msg.theme },
+						[{ kind: "applyTheme", theme: msg.theme }],
+					];
+
 		case "fixApplied": {
 			// Like typing: only the open file, which the author can edit. A path the text
 			// no longer has (it changed since the fix was offered) changes nothing.

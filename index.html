@@ -17,6 +17,14 @@
       content="Write survey questions and their documentation, elaborated to DDI-Lifecycle 4.0."
     />
     <title>qretools</title>
+    <!-- A theme chosen on this device, shown before the first paint (key: persist.ts THEME_KEY). -->
+    <script>
+      try {
+        var t = localStorage.getItem("qretools.theme");
+        if (t === "light" || t === "dark")
+          document.documentElement.setAttribute("data-color-mode", t);
+      } catch (e) {}
+    </script>
     <link rel="icon" href="data:," />
   </head>
   <body>

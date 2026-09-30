@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import indexHtml from "../../index.html?raw";
 import {
 	LEGACY_KEY,
 	migrate,
@@ -6,11 +7,13 @@ import {
 	readPersisted,
 	readSettings,
 	readStartup,
+	readTheme,
 	readWork,
 	SETTINGS_KEY,
 	setAsideWork,
 	settingsValue,
 	startingSettings,
+	THEME_KEY,
 	WORK_ASIDE_KEY,
 	WORK_KEY,
 	WORK_UNREADABLE_KEY,
@@ -364,5 +367,18 @@ describe("migrating an older version's work", () => {
 		expect(started.work.ok && started.work.value?.repo).toBe("a/bank");
 		expect(started.settings).toEqual(settings);
 		expect(started.notices).toEqual([]);
+	});
+});
+
+describe("the stored theme", () => {
+	it("is light or dark; anything else is the system's", () => {
+		expect(readTheme("dark")).toBe("dark");
+		expect(readTheme("light")).toBe("light");
+		expect(readTheme(null)).toBeUndefined();
+		expect(readTheme("auto")).toBeUndefined();
+	});
+
+	it("is read by index.html's early script under the same key", () => {
+		expect(indexHtml).toContain(`localStorage.getItem("${THEME_KEY}")`);
 	});
 });

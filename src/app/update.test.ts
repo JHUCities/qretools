@@ -2053,3 +2053,24 @@ describe("making a concept shared from a question", () => {
 		expect(done.screen).toEqual({ kind: "editing", id: 1 });
 	});
 });
+
+describe("the theme", () => {
+	it("starts from the device's stored choice, else the system's", () => {
+		expect(fresh().theme).toBe("system");
+		expect(
+			init({ work: ok(undefined), hasToken: false, theme: "dark" })[0].theme,
+		).toBe("dark");
+	});
+
+	it("is shown and remembered when chosen, and only then", () => {
+		const m = fresh();
+		const [dark, cmds] = update(m, { kind: "themeChosen", theme: "dark" });
+		expect(dark.theme).toBe("dark");
+		expect(cmds).toEqual([{ kind: "applyTheme", theme: "dark" }]);
+		expect(dark.local).toBe(m.local);
+		expect(update(dark, { kind: "themeChosen", theme: "dark" })).toEqual([
+			dark,
+			[],
+		]);
+	});
+});

@@ -1299,6 +1299,26 @@ sidebar's second row is now `.sidebar-body`** (rows `minmax(0, 1fr) auto`: the s
 `.sidebar-body`; measured, the foot does not move whatever the tree holds. It read
 "qretools on GitHub" until the repository had a README to land on.
 
+**The header follows primer.style; GitHub's typefaces; a theme toggle (owner,
+2026-09-30).** The header is 64px from its padding (16px above and below 32px controls,
+24px aside; 16px on narrow screens), white in light and `--bgColor-black` in dark (Primer
+has no pure black; `#010409` reads the same), with a 24px mark (a placeholder octicon,
+`TasklistIcon`, until qretools has a logo) and "qretools" at 16px/600. **Fonts:** Mona Sans
+for the interface and Monaspace Neon for code, both GitHub's (OFL), self-hosted through
+`@fontsource` (no third-party request), by overriding `--fontStack-system` (what Primer's
+BaseStyles reads), `--fontStack-sansSerif` and `--fontStack-monospace` in app.css, with
+Primer's fallbacks restated. Monaspace's ligatures are off by default; its texture healing
+(`calt`) is on. B612 and Fira Code were considered; GitHub's own faces won. **Theme:**
+`Model.theme` (`system | light | dark`), one Msg `themeChosen` naming the theme to show
+(the view knows the system's through Primer's `useTheme().resolvedColorMode`), one Cmd
+`applyTheme` that sets `data-color-mode` on `<html>` and remembers it in localStorage
+(`qretools.theme`); `ThemeProvider` takes its colour mode from the Model too, since its
+wrapper would otherwise override the page's. A classic inline script in index.html
+applies a stored theme before the first paint (a test holds its key to `THEME_KEY`).
+Forced modes set `color-scheme`, so scrollbars and controls follow. Two states, as
+primer.style's: once chosen, the system's is no longer followed (a way back would sit
+beside the toggle, never in the account menu, which the sign-in page lacks).
+
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
 `VITE_FLAG_*`, read directly as `import.meta.env.VITE_FLAG_…` in one module (`flags.ts`)
 so the minifier drops disabled code; off unless a mode's env file turns one on
