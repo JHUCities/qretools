@@ -50,17 +50,17 @@ export function Browser({
 	if (loading)
 		return (
 			<Stack gap="condensed">
-				<h2 className="browser-heading">Questions</h2>
+				<h3 className="browser-heading">Questions</h3>
 				<SkeletonText lines={6} size="bodyMedium" />
-				<h2 className="browser-heading">Shared</h2>
+				<h3 className="browser-heading">Shared</h3>
 				<SkeletonText lines={3} size="bodyMedium" />
 			</Stack>
 		);
 	return (
 		<Stack gap="condensed">
-			<h2 id={questionsId} className="browser-heading">
+			<h3 id={questionsId} className="browser-heading">
 				Questions
-			</h2>
+			</h3>
 			{folders.length > 0 ? (
 				<TreeView aria-labelledby={questionsId}>
 					{folders.map((f) => (
@@ -74,7 +74,7 @@ export function Browser({
 				</TreeView>
 			) : (
 				<Blankslate narrow>
-					<Blankslate.Heading as="h3">
+					<Blankslate.Heading as="h4">
 						{filter === "" ? "No questions yet" : "No questions match"}
 					</Blankslate.Heading>
 					<Blankslate.Description>
@@ -86,9 +86,9 @@ export function Browser({
 			)}
 			{sections.length > 0 && (
 				<>
-					<h2 id={sharedId} className="browser-heading">
+					<h3 id={sharedId} className="browser-heading">
 						Shared
-					</h2>
+					</h3>
 					<TreeView aria-labelledby={sharedId}>
 						{sections.map((s) => (
 							<SectionItem

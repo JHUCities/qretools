@@ -934,9 +934,10 @@ ForeignView's loading line spanning over its header that way), and the
 editing views return fragments so `.qhead` and `.split` are the content's own items.
 Both
 have their own `minmax(0, 1fr)` column, or the header's unwrappable buttons size it
-(an overflow at 360px). The band holds the branch line (since 2026-09-30); the tree filter
-(`BankFilter`, split out of `Browser`) is the first row of `.sidebar-body`, always there,
-fixed above both trees as github.com keeps "Go to file".
+(an overflow at 360px). The band holds the pane's title "Question bank" (since 2026-09-30);
+the branch line and the tree filter (`BankFilter`, split out of `Browser`) are a fixed
+group at the top of `.sidebar-body`, always there, above both trees as github.com keeps
+its branch picker and "Go to file".
 
 **Loading is shown as the thing's shape (owner, 2026-09-25).** A link waiting for the
 bank, and another author's file being fetched, show `FileSkeleton`: Primer's
@@ -1298,8 +1299,8 @@ control for one link) were considered and declined. Primer has no footer compone
 it is a plain `div` inside the nav (a `<footer>` there would read as the navigation's own
 footer, not the page's) with the shared `ExternalLink`. The address is `SOURCE_URL` in
 config.ts, a constant: where the tool lives is a fact about the tool, not a bank. **The
-sidebar's second row is now `.sidebar-body`** (rows since 2026-09-30: the filter, the scrolling
-`.trees`, then `.sidebar-foot`), so `.sidebar`'s direct children are `.band` and
+sidebar's second row is now `.sidebar-body`** (rows since 2026-09-30: the branch and filter
+group, the scrolling `.trees`, then `.sidebar-foot`), so `.sidebar`'s direct children are `.band` and
 `.sidebar-body`; measured, the foot does not move whatever the tree holds. It read
 "qretools on GitHub" until the repository had a README to land on.
 
@@ -1329,15 +1330,19 @@ beside the toggle, never in the account menu, which the sign-in page lacks).
 **The branch sits above the tree (owner, 2026-09-30).** Reverses the header's
 `owner / repo / ⑂ branch` (below). github.com's code view puts its branch picker at the
 top of the file tree, then "Go to file", then the tree, because the tree shows that
-branch's files; so does qretools, and the header keeps `owner / repo`. The sidebar's band
-holds `BranchLine`: `⑂ qretools-<login>` as a link to the branch (named, not linked,
+branch's files; so does qretools, and the header keeps `owner / repo`. Row 1 of each pane is a
+title, as github.com's "Files" faces the file's breadcrumb: the sidebar's band holds the
+title "Question bank" (Primer's small `Heading`, 16px semibold, one control high; the nav
+is named by it through `aria-labelledby`), so the tree's "Questions" and "Shared" became
+`h3`. Below it, one fixed group 8px apart with no rule between, as GitHub's branch picker
+and "Go to file": `BranchLine`, `⑂ qretools-<login>` as a link to the branch (named, not linked,
 before the first save), never a picker or a button-look (it is never a choice), then
 "N behind main" and the pull-request icon at the line's end once the bank has loaded,
 where arriving moves nothing before them (measured: the name's x is the same; the name,
 not its icon, truncates: `min-width: 0` belongs on the item that should give way, not
-only on its parent). The band stays one control high, so its rule still meets the
-open file's header. The filter moved to the first row of `.sidebar-body` (rows: filter,
-tree, foot), fixed above the tree. Narrow screens now show the branch and "behind" (the
+only on its parent). then the filter; 8px on to the tree. The band stays one control high (measured: its rule
+meets the file header's). `.sidebar-body`'s rows: that group (`.sidebar-tools`), the
+tree, the foot. Narrow screens now show the branch and "behind" (the
 sidebar is its own view); the avatar menu's "Your branch on GitHub" is gone.
 
 **Feature flags are Vite build-time environment variables (owner, 2026-09-25).**
