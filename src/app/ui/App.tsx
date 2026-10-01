@@ -232,16 +232,15 @@ export function App() {
 							)}
 					</Stack>
 					{/*
-					 * While signing in, "New" as Primer's loading button: its own size, so the
-					 * header neither grows nor narrows when the real one arrives (the avatar's
-					 * place is its SkeletonAvatar, below). Its announcement is the status's.
+					 * While signing in, "New" disabled: its own size, so the header neither grows
+					 * nor narrows when the real one arrives (the avatar's place is its
+					 * SkeletonAvatar, below). No spinner: the status beside it has the one, and
+					 * says why. Natively disabled, not `inactive` as the file header's buttons
+					 * are: a placeholder for seconds is no tab stop, and focus on it would drop
+					 * to the page when it goes.
 					 */}
 					{model.session.kind === "connecting" && (
-						<Button
-							leadingVisual={PlusIcon}
-							loading
-							loadingAnnouncement="Signing in"
-						>
+						<Button leadingVisual={PlusIcon} disabled>
 							New
 						</Button>
 					)}
