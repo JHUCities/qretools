@@ -232,7 +232,7 @@ export function createEffects(deps: Deps): Effects {
 		exec(cmd, dispatch) {
 			switch (cmd.kind) {
 				case "revealRange":
-					editor?.reveal(cmd.range);
+					editor?.reveal(cmd.range, cmd.complete);
 					return;
 				case "loadDdiSchema":
 					import("../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw")

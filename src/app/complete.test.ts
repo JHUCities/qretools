@@ -101,6 +101,18 @@ describe("completion at any depth, read from the parsed question", () => {
 		);
 	});
 
+	it("writes its own space straight after the colon, and offers {} for a field of keys", () => {
+		const after = at("instruction:");
+		expect(after?.options).toMatchObject([
+			{ label: "select_one", apply: " select_one" },
+		]);
+		expect(at("number:")?.options).toMatchObject([
+			{ label: "{}", apply: " {}" },
+		]);
+		expect(at("number: ")?.options).toMatchObject([{ label: "{}" }]);
+		expect(at("number: ")?.options[0]?.apply).toBeUndefined();
+	});
+
 	it("offers the keys under a parent that are not written yet, blank lines aside", () => {
 		expect(labels("number:\n  ")).toEqual(["min", "max", "unit"]);
 		expect(labels("number:\n  min: 1\n\n  ")).toEqual(["max", "unit"]);

@@ -11,23 +11,34 @@ describe("where the caret is, for completion", () => {
 			kind: "value",
 			segments: ["select"],
 			typed: "",
+			spaced: true,
 		});
 		expect(at("select: ▮\ntext: x\n")).toEqual({
 			kind: "value",
 			segments: ["select"],
 			typed: "",
+			spaced: true,
 		});
 		expect(at("number:\n  unit: ▮")).toEqual({
 			kind: "value",
 			segments: ["number", "unit"],
 			typed: "",
+			spaced: true,
 		});
 		expect(at("name: q\nselect: ma▮")).toEqual({
 			kind: "value",
 			segments: ["select"],
 			typed: "ma",
+			spaced: true,
 		});
-		expect(at("name: q\nselect:▮")).toBeUndefined();
+		// Straight after the colon: completion brings its own space.
+		expect(at("name: q\nselect:▮")).toEqual({
+			kind: "value",
+			segments: ["select"],
+			typed: "",
+			spaced: false,
+		});
+		expect(at("name: q\nselect:ma▮")).toBeUndefined();
 	});
 
 	it("puts a key at the top level beside the keys written there", () => {

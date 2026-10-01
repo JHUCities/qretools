@@ -178,14 +178,13 @@ function step(model: Model, msg: Msg): Step {
 			// against the text as it is now.
 			const q = current(model);
 			if (!q) return [model, []];
+			const range = locate(msg.target, rangesOf(q.source));
+			// A hole at an empty value is a point where the value goes: offer what can go
+			// there (completion writes the space after the colon, never the click).
+			const hole = msg.target.severity === "hole" && range[0] === range[1];
 			return [
 				model,
-				[
-					{
-						kind: "revealRange",
-						range: locate(msg.target, rangesOf(q.source)),
-					},
-				],
+				[{ kind: "revealRange", range, ...(hole && { complete: true }) }],
 			];
 		}
 

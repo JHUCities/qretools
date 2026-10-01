@@ -184,6 +184,22 @@ describe("editing", () => {
 					cmd.range[1],
 				),
 		).toBe("text:");
+		expect(cmd?.kind === "revealRange" && cmd.complete).toBeFalsy();
+	});
+
+	it("a hole at an empty value is a point: the caret goes there and completion opens", () => {
+		const text = "name: q\ntext: Hi\nintent: i\nopen:\n";
+		const [m] = update(fresh(), { kind: "questionCreated", text });
+		const at = text.indexOf("open:") + "open:".length;
+		const [, cmds] = update(m, {
+			kind: "locationClicked",
+			target: { path: "open", severity: "hole", range: [at, at] },
+		});
+		expect(cmds[0]).toEqual({
+			kind: "revealRange",
+			range: [at, at],
+			complete: true,
+		});
 	});
 });
 

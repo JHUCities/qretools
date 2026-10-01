@@ -60,7 +60,8 @@ export interface EditorInputs {
 
 export interface Editor {
 	sync(inputs: EditorInputs): void;
-	reveal(range: Range): void;
+	/** Select a range and focus it; `complete` then opens completion there. */
+	reveal(range: Range, complete?: boolean): void;
 	/** Tear the editor down; React mounts and unmounts the host, so this must exist. */
 	destroy(): void;
 }
@@ -167,13 +168,14 @@ export function createEditor(
 				],
 			});
 		},
-		reveal([from, to]) {
+		reveal([from, to], complete = false) {
 			// Never throw from a click: clamp to the document as it is now.
 			const end = view.state.doc.length;
 			const anchor = Math.min(Math.max(0, from), end);
 			const head = Math.min(Math.max(anchor, to), end);
 			view.dispatch({ selection: { anchor, head }, scrollIntoView: true });
 			view.focus();
+			if (complete && !locked) startCompletion(view);
 		},
 		destroy() {
 			view.destroy();
