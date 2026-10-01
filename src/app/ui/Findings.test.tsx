@@ -56,7 +56,7 @@ describe("a finding with a fix", () => {
 		fix,
 	};
 
-	it("offers it under the message beside another file's link, applies it, and goes to its place", () => {
+	it("offers it under the message beside another file's link, and applies it", () => {
 		const onFix = vi.fn();
 		const onTarget = vi.fn();
 		render(
@@ -70,8 +70,7 @@ describe("a finding with a fix", () => {
 		expect(screen.getByRole("link", { name: "Open b" })).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Use days" }));
 		expect(onFix).toHaveBeenCalledWith(fix);
-		// Focus follows the change into the source, never to the page.
-		expect(onTarget).toHaveBeenCalledWith(spelled);
+		expect(onTarget).not.toHaveBeenCalled();
 	});
 
 	it("offers nothing where nothing can be edited", () => {

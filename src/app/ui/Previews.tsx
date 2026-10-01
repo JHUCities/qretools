@@ -350,12 +350,9 @@ export function Findings({
 									as="button"
 									type="button"
 									className="finding-action"
-									onClick={() => {
-										onFix?.(fix);
-										// The finding goes with the fix: focus follows the change into the
-										// source, as clicking the message would, never to the page.
-										onTarget?.(f);
-									}}
+									// Where focus goes next is `update`'s: into the source for an edit,
+									// the name dialog for a new shared entry.
+									onClick={() => onFix?.(fix)}
 								>
 									{inlineCode(fix.label)}
 								</Link>
