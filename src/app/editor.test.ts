@@ -2,7 +2,7 @@
 import { undo } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it, vi } from "vitest";
-import { changeBetween, createEditor } from "./editor.js";
+import { changeBetween, createEditor, refRangeAt } from "./editor.js";
 
 describe("the change an outside edit makes", () => {
 	it("turns one text into the other, touching nothing outside the common start and end", () => {
@@ -138,20 +138,16 @@ describe("go to definition in the editor", () => {
 		editor.destroy();
 	});
 
-	it("says how to follow a name in its title, except on another author's version", () => {
-		const { editor, parent, from } = setup();
-		const name = parent.querySelector(".cm-ref") as HTMLElement;
-		expect(name.title).toMatch(/^Go to definition \((⌘|Ctrl)-click or F12\)$/);
-		const text = "name: q\nresponses: agree4\n";
-		editor.sync({
-			id: 1,
-			text,
-			diagnostics: [],
-			marks: [{ kind: "ref", range: [from, from + 6] }],
-			schema: {},
-			readOnly: true,
-		});
-		expect((parent.querySelector(".cm-ref") as HTMLElement).title).toBe("");
+	it("finds the name under the pointer, and not one that only touches it on the other side", () => {
+		const { editor, view, from } = setup();
+		const to = from + 6;
+		const name = { from, to };
+		expect(refRangeAt(view.state, from + 3)).toEqual(name);
+		expect(refRangeAt(view.state, from, 1)).toEqual(name);
+		expect(refRangeAt(view.state, from, -1)).toBeUndefined();
+		expect(refRangeAt(view.state, to, -1)).toEqual(name);
+		expect(refRangeAt(view.state, to, 1)).toBeUndefined();
+		expect(refRangeAt(view.state, 2)).toBeUndefined();
 		editor.destroy();
 	});
 });
