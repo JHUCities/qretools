@@ -1083,6 +1083,31 @@ Pages source "GitHub Actions", the GitHub App's callback URL for the site, and
 `wrangler deploy` for the Worker (its allowlist gains the site's origin). Serve the
 app from an origin of its own: browser storage is per origin, and the sign-in lives there.
 
+**Served at bank.qretools.com (owner, 2026-10-01).** A subdomain of the owner's domain
+(registered and DNS-hosted at Squarespace; one CNAME to `jhucities.github.io`), still on
+GitHub Pages. One subdomain per tool: the survey composer, a separate tool, will be
+`composer.qretools.com`; the apex is left alone. Each subdomain is its own origin, so the
+tools share no browser storage; intended, not settled: the composer signs in through the
+same App and Worker, its origin added to the allowlist and the callbacks then. That is the origin of its own asked for
+above: `jhucities.github.io` is shared with every other JHUCities project page, which could read its localStorage,
+remembered credentials included. No code changed: `configure-pages` gives an empty base
+path under a custom domain, so the build's base is "/", and the sign-in's redirect is
+`location.origin` plus the base. No CNAME file (a workflow-built Pages site ignores one;
+the domain is a repository setting). The Worker's allowlist and the GitHub App's
+callbacks gain `https://bank.qretools.com`. The Worker keeps the github.io origin for a
+week after the move (a tab opened there before it still renews its token), then drops it;
+the App's github.io callback is dead once the domain is set (a sign-in begun there returns
+to a redirect and finds no pending state) and goes at once. By hand, in order:
+`qretools.com` verified for the organization (a TXT record that stays; it is what stops
+another account claiming a subdomain), the callback, `wrangler deploy`, the CNAME, then
+the Pages custom domain and a rebuild at once (the artifact built for `/qretools/` has
+that path in its asset URLs). DNS goes before the Pages setting: the other way round,
+the working github.io site redirects to a name that does not resolve yet. Lost at the
+move: stored sign-in, settings and theme (per origin), and unsaved work in a tab still
+open on github.io once it reloads. Not yet verified live: `base=[/]` in the build log,
+the sign-in round trip at the new origin, and an old `jhucities.github.io/qretools/#repo=…`
+link landing on the same file.
+
 **No folder is read into a question's name (owner, 2026-09-28).** The `<topic>_<name>`
 naming (`nhd_sat` → folder `nhd`) is BAS's convention, not qretools'. `folderOf` is
 gone: the Save dialog opens with no folder chosen ("Choose a folder"), `bankLocation`

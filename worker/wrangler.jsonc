@@ -9,7 +9,8 @@
 	"vars": {
 		// The GitHub App's client id (public): fill in after creating the App.
 		"CLIENT_ID": "Iv23liuH12sNU6DhRz15",
-		// Exact origins the app is served from, comma separated.
-		"ALLOWED_ORIGINS": "http://localhost:5199,https://jhucities.github.io"
+		// Exact origins the app is served from, comma separated. github.io stays until
+		// tabs opened there before the move to bank.qretools.com have gone (they renew tokens).
+		"ALLOWED_ORIGINS": "http://localhost:5199,https://bank.qretools.com,https://jhucities.github.io"
 	}
 }

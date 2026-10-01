@@ -17,7 +17,7 @@
 Write survey questions and their documentation in the browser, and get
 [DDI-Lifecycle 4.0](https://ddialliance.org/Specification/DDI-Lifecycle) out of them.
 
-**Use it:** <https://jhucities.github.io/qretools/>
+**Use it:** <https://bank.qretools.com/>
 
 qretools is a question editor for survey teams that keep a question bank. Each question
 is a short YAML file; qretools checks it as you type, shows it as a respondent and a
