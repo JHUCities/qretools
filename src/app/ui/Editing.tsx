@@ -401,7 +401,7 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 				// Codes may repeat while being edited, so the position is the key.
 				// biome-ignore lint/suspicious/noArrayIndexKey: see above
 				<li key={i}>
-					<code className="code">{c.code}</code> {c.label}
+					<code className="code code-response">{c.code}</code> {c.label}
 				</li>
 			))}
 		</ul>

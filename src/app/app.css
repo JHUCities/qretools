@@ -52,6 +52,19 @@ body {
 	border-color: var(--borderColor-accent-emphasis);
 }
 /* A shared name's chip, in the editor's colour for one (green), linked or not. */
+/*
+ * A response code's chip ("1", "-99"): its box trimmed to the cap height and baseline,
+ * padded evenly, so the digits sit centred (in Chrome they sat 1.5px high: the box
+ * holds the font's descender, which digits never use). Only codes: a name's descenders
+ * (`agree4`, `select_one`) would hang out of a trimmed box. Where `text-box` is not
+ * supported (Firefox) the chip is as before, and measured centred there already.
+ */
+@supports (text-box: trim-both cap alphabetic) {
+	.code.code-response {
+		text-box: trim-both cap alphabetic;
+		padding-block: var(--base-size-2);
+	}
+}
 .code.code-ref {
 	color: var(--prettylights-syntax-stringRegexp);
 }
