@@ -1113,10 +1113,11 @@ reserved in the file skeleton; anything that changes while typing stays out of t
 (the "Also saves" note is "with scale x" beside Save, one line, truncated, the full
 sentence on Save's `aria-describedby`); on narrow screens the status row is always
 there; on wide screens the status truncates (Primer `Truncate`) rather than wrapping the
-header; while connecting the header holds places for New (Primer's loading `Button`,
-its own size, measured: 0px) and the avatar (`SkeletonAvatar`); the previews reset
-their scroll per file (`key`); the editor syncs in `useLayoutEffect`; the three file views draw their panes from one list (`panesOf`). The Findings list stays
-first and dynamic, but settles: it updates 400 ms after typing stops (`useSettled`),
+header; while connecting the header holds places for New (a disabled `Button`, its own
+size; not Primer's loading button, whose spinner doubled the status's, owner
+2026-10-01) and the avatar (`SkeletonAvatar`); the previews reset their scroll per file
+(`key`); the editor syncs in `useLayoutEffect`; the three file views draw their panes
+from one list (`panesOf`). The Findings list stays first and dynamic, but settles: it updates 400 ms after typing stops (`useSettled`),
 flushing at once on a file change, editor blur, save, and the pointer entering the list
 or keyboard focus reaching it (never on the press itself: an item moving mid-click would
 send the click elsewhere). Findings are keyed by code, path and message and sorted in
