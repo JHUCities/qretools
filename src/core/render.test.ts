@@ -46,6 +46,39 @@ describe("respondentView", () => {
 });
 
 describe("codebookView", () => {
+	it("says what the question measures: a shared concept's label and name, or the words written", () => {
+		const env = {
+			...WITH_UNITS,
+			concepts: {
+				nhd_satisfaction: {
+					label: "Neighborhood satisfaction",
+					definition: "How content…",
+				},
+			},
+		};
+		const shared = parseSurface(
+			"name: q\nconcept: nhd_satisfaction\n",
+			env,
+		).draft;
+		expect(codebookView(shared, env).concept).toEqual({
+			text: "Neighborhood satisfaction",
+			ref: "nhd_satisfaction",
+		});
+		const prose = parseSurface(
+			"name: q\nconcept: neighborhood satisfaction\n",
+			env,
+		).draft;
+		expect(codebookView(prose, env).concept).toEqual({
+			text: "neighborhood satisfaction",
+		});
+		// A name nothing has is a hole, not a concept: no line.
+		const unknown = parseSurface(
+			"name: q\nconcept: nobody_has_this\n",
+			env,
+		).draft;
+		expect(codebookView(unknown, env).concept).toBeUndefined();
+	});
+
 	it("formats a code list the way the codebook does", () => {
 		const v = codebookView(draftOf(nhdSat), EMPTY_ENV);
 		expect(v.title).toEqual({
