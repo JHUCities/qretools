@@ -90,3 +90,31 @@ export function addSpace(
 	const colon = from + at.index + at[0].length;
 	return `${source.slice(0, colon)} ${source.slice(colon)}`;
 }
+
+/**
+ * Whether text typed at `pos` belongs after a space: the caret is straight after a key's
+ * colon (a field, or a response code), with nothing after it on the line, and the text
+ * starts with something other than a space. A key, not words in a block scalar
+ * ("Time:"): the parse must have a key starting there.
+ */
+export function spaceBefore(
+	source: string,
+	pos: number,
+	inserted: string,
+): boolean {
+	if (!/^\S/.test(inserted)) return false;
+	const lineStart = source.lastIndexOf("\n", pos - 1) + 1;
+	const lineEnd = source.indexOf("\n", pos);
+	const before = /^( *)[\w-]+:$/.exec(source.slice(lineStart, pos));
+	if (before === null) return false;
+	if (source.slice(pos, lineEnd === -1 ? undefined : lineEnd).trim() !== "")
+		return false;
+	const keyStart = lineStart + (before[1]?.length ?? 0);
+	const { ranges } = indexDocument(
+		parseDocument(source, { prettyErrors: false }),
+		source.length,
+	);
+	return Object.entries(ranges).some(
+		([path, [from]]) => path !== "" && from === keyStart,
+	);
+}
