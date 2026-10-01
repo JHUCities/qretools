@@ -95,7 +95,9 @@ export function addSpace(
  * Whether text typed at `pos` belongs after a space: the caret is straight after a key's
  * colon (a field, or a response code), with nothing after it on the line, and the text
  * starts with something other than a space. A key, not words in a block scalar
- * ("Time:"): the parse must have a key starting there.
+ * ("Time:"): the parse must have a key starting there. Not covered (neither occurs in
+ * the surface; the `missing-space` finding catches them): a key on a list item's line
+ * (`- a:`) and a dotted code (`1.5:`).
  */
 export function spaceBefore(
 	source: string,
