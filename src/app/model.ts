@@ -340,7 +340,12 @@ export type Msg =
 	| { readonly kind: "failureDismissed"; readonly index: number };
 
 export type Cmd =
-	| { readonly kind: "revealRange"; readonly range: Range }
+	| {
+			readonly kind: "revealRange";
+			readonly range: Range;
+			/** Open completion there: the place is a value still to fill in. */
+			readonly complete?: boolean;
+	  }
 	| { readonly kind: "loadDdiSchema" }
 	/** This tab's work, kept for a reload of this tab only. */
 	| { readonly kind: "persist"; readonly work: Work }

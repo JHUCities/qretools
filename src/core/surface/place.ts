@@ -17,6 +17,8 @@ export type Place =
 			readonly kind: "value";
 			readonly segments: readonly string[];
 			readonly typed: string;
+			/** The caret is straight after the colon: what is inserted brings its own space. */
+			readonly spaced: boolean;
 	  }
 	| {
 			readonly kind: "key";
@@ -27,7 +29,8 @@ export type Place =
 	  };
 
 // A value's key is a field name: a response code's value is the author's prose, never a choice.
-const VALUE_LINE = /^( *)([A-Za-z_][\w-]*): +(\w*)$/;
+// After the colon: spaces then a word, or nothing at all (`open:`, the caret at the colon).
+const VALUE_LINE = /^( *)([A-Za-z_][\w-]*):(?:( +)(\w*))?$/;
 const KEY_LINE = /^( *)(\w*)$/;
 
 export function placeAt(source: string, offset: number): Place | undefined {
@@ -48,7 +51,8 @@ export function placeAt(source: string, offset: number): Place | undefined {
 		return {
 			kind: "value",
 			segments: [...scope.segments, value[2] ?? ""],
-			typed: value[3] ?? "",
+			typed: value[4] ?? "",
+			spaced: value[3] !== undefined,
 		};
 	return {
 		kind: "key",

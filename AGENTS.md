@@ -254,6 +254,16 @@ emit a Universe item and resolve the link in role 2.
   lang-yaml's node names, and highlighting, folding and indentation would be rebuilt.
   Lezer draws the text, our parse says what it means, as with colour. No StateField:
   completion parses when asked (about a millisecond), since nothing else needs it.
+  **A space after the colon (owner, 2026-10-01).** Following an empty value's hole puts
+  the caret straight after the colon (its point) and opens completion there; an option
+  taken there writes its own space (`open:` becomes `open: {}`), as completion does in
+  VS Code's YAML language server and IntelliJ (checked in their source), and a field of
+  keys (`open`, `number`) offers `{}`. The click itself never edits (go-to-problem never
+  does, in any editor checked); typing on regardless gives `open:{}`, which YAML reads as
+  one word, so that slip is its own finding, `missing-space`, read from the AST (keys,
+  and a first entry under a block key such as `responses:\n  1:Yes`), with a fix that
+  adds the space inside the place it names (`addSpace`, so a stale offset can't
+  misplace it); the unreadable line and unknown key it caused are not reported too.
 
 - **On a Mac, completion opens with Cmd-I or Option-Esc (VS Code's bindings), set in
   `editor.ts`.** macOS often takes Ctrl-Space for input-source switching, and

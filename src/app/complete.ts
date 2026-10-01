@@ -54,9 +54,17 @@ function nodeAt(
 	return node;
 }
 
-/** Values a field may take: a plain enum, or the constants of a branch (shared scale names). */
+/**
+ * Values a field may take: a plain enum, the constants of a branch (shared scale
+ * names), or, for a field that holds keys of its own (`open`, `number`), `{}`: none of
+ * them written.
+ */
 function valuesOf(node: SchemaNode | undefined): readonly Completion[] {
 	if (!node) return [];
+	if (node.properties)
+		return [
+			{ label: "{}", type: "constant", detail: "No settings of its own" },
+		];
 	if (node.enum)
 		return node.enum.map((v) => ({ label: String(v), type: "enum" }));
 	return (node.anyOf ?? [node]).flatMap((branch) =>
@@ -86,9 +94,16 @@ export function schemaCompletion(
 	if (place.kind === "value") {
 		// Once a value is typed, the package completes it.
 		const options = place.typed === "" ? valuesOf(node) : [];
+		// Straight after the colon, an option writes its own space, as completion in
+		// VS Code's and IntelliJ's YAML does: `open:` becomes `open: {}`, never `open:{}`.
 		return options.length === 0
 			? null
-			: { from: context.pos, options: [...options] };
+			: {
+					from: context.pos,
+					options: place.spaced
+						? [...options]
+						: options.map((o) => ({ ...o, apply: ` ${o.label}` })),
+				};
 	}
 
 	const { typed, siblings } = place;
