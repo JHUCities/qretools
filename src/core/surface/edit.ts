@@ -82,6 +82,7 @@ export function addSpace(
 	const range = ranges[path];
 	if (range === undefined || path === "") return undefined;
 	const [from, to] = range;
+	// `word` is letters, digits, `_` and `-` (the slip's own pattern): only `-` needs escaping.
 	const at = new RegExp(
 		`(^|[\\s{,])${word.replace(/[-]/g, "\\-")}:(?=\\S)`,
 	).exec(source.slice(from, to));

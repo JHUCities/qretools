@@ -113,6 +113,12 @@ describe("completion at any depth, read from the parsed question", () => {
 		expect(at("number: ")?.options[0]?.apply).toBeUndefined();
 	});
 
+	it("offers nothing straight after a colon while typing, so Enter starts the block", () => {
+		const doc = "number:";
+		const typing = new CompletionContext(stateOf(doc), doc.length, false);
+		expect(schemaCompletion(typing)).toBeNull();
+	});
+
 	it("offers the keys under a parent that are not written yet, blank lines aside", () => {
 		expect(labels("number:\n  ")).toEqual(["min", "max", "unit"]);
 		expect(labels("number:\n  min: 1\n\n  ")).toEqual(["max", "unit"]);
