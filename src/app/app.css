@@ -53,11 +53,11 @@ body {
 }
 /* A shared name's chip, in the editor's colour for one (green), linked or not. */
 /*
- * A response code's chip ("1", "-99"): its box trimmed to the cap height and baseline,
- * padded evenly, so the digits sit centred (in Chrome they sat 1.5px high: the box
- * holds the font's descender, which digits never use). Only codes: a name's descenders
- * (`agree4`, `select_one`) would hang out of a trimmed box. Where `text-box` is not
- * supported (Firefox) the chip is as before, and measured centred there already.
+ * A response code's chip ("1", "-99"): its box trimmed to the cap height and baseline
+ * (`text-box`), padded evenly, so the digits sit centred; an untrimmed box holds the
+ * font's descender, which digits never use. Only codes, which are mostly digits: a
+ * name's descenders (`agree4`, `select_one`) would hang out of a trimmed box, and so
+ * does a code's rare `g` or `y` (accepted). Without `text-box` the chip is as before.
  */
 @supports (text-box: trim-both cap alphabetic) {
 	.code.code-response {
@@ -734,16 +734,4 @@ button.finding-message {
 
 .save-path {
 	margin: var(--base-size-12) 0 var(--base-size-4);
-}
-
-/*
- * Forced colours override backgrounds, which would blank the editor's hole marker (a
- * mask filled with its background, editor.ts); it takes the text colour instead.
- */
-@media (forced-colors: active) {
-	/* Above the editor theme's own rule (a generated class and this one). */
-	.cm-editor .cm-content .cm-lintPoint-hint {
-		forced-color-adjust: none;
-		background-color: CanvasText;
-	}
 }
