@@ -1410,10 +1410,12 @@ name as a linked chip that opens its file, then "shared scale · used by N quest
 name nothing has, "New shared …" and the names in scope; nothing named yet, "Name a shared
 one: …". "Field", not "key": the authors' word, and the app's; "key" is YAML's. The
 entry's content is not repeated (the previews show it: a scale's options are in the
-respondent's pane). Always the same two rows (after the audit, 2026-09-30), so the label
-column keeps one width without a hidden sizer: between fields "Field" holds the
-question's own description (it was labelled "Question"), and "Value" reads "none" when
-nothing is named (a word, since a screen reader reads a dash as "dash"); no row gap,
+respondent's pane). Two rows (after the audit, 2026-09-30): between fields "Field" holds
+the question's own description (it was labelled "Question"); with nothing to say about
+the value the Value row is invisible but kept (`visibility: hidden`, so unheard too;
+owner, 2026-10-01: "Value none" read as if the field had no value), because "Value" is
+the wider label (31.7px against "Field"'s 26.6px, Mona Sans, measured) and the column
+must not shift; no row gap,
 and chips at line height 1 inside it, so the rows fit the fixed four lines (measured:
 no scroll).
 

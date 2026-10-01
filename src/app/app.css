@@ -505,6 +505,10 @@ code,
 .inspect dd {
 	margin: 0;
 }
+/* A row with nothing to say: not seen or heard, but it keeps the label column's width. */
+.inspect-unset {
+	visibility: hidden;
+}
 
 /* Preview panels. */
 .pane {
