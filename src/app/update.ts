@@ -153,12 +153,13 @@ function step(model: Model, msg: Msg): Step {
 			const text = applyEdits(q.source, fix.edits);
 			if (text === undefined || text === q.source) return [model, []];
 			// Focus follows the change into the source (the fix's button goes with its
-			// finding): the caret at the start of the first edit, which is the same offset
-			// before and after it, whichever text the editor holds when this runs.
-			const first = fix.edits[0];
-			const [at] = locate(
-				{ path: first?.path ?? "", severity: "info" },
-				rangesOf(text),
+			// finding): the caret where the earliest edit starts, the same offset before and
+			// after the fix, whichever text the editor holds when this runs.
+			const ranges = rangesOf(text);
+			const at = Math.min(
+				...fix.edits.map(
+					(e) => locate({ path: e.path, severity: "info" }, ranges)[0],
+				),
 			);
 			return persist([
 				withSource(model, q.id, text),

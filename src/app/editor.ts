@@ -540,7 +540,7 @@ const primerTheme = EditorView.theme({
 	// drawn as Primer's dashed circle (`IssueDraftIcon`), as in the Findings panel, so one
 	// shape means "to fill in" everywhere. One em square so it matches the glyphs and
 	// never grows the line; the icon is a mask, coloured by `currentColor`. Forced
-	// colours (app.css) keep it visible.
+	// colours keep it visible (below).
 	".cm-lintPoint-hint": {
 		display: "inline-block",
 		inlineSize: "1em",
@@ -552,6 +552,13 @@ const primerTheme = EditorView.theme({
 		mask: `url("data:image/svg+xml,${encodeURIComponent(issueDraftSvg)}") center / contain no-repeat`,
 	},
 	".cm-lintPoint-hint:after": { display: "none" },
+	// Forced colours override backgrounds, which would blank the mask: the text colour.
+	"@media (forced-colors: active)": {
+		".cm-lintPoint-hint": {
+			forcedColorAdjust: "none",
+			backgroundColor: "CanvasText",
+		},
+	},
 	// A dashed underline, not a dashed border: a border spaces its dashes to fit its
 	// width, so every keystroke in the hole moved them all (measured: this holds still).
 	".cm-lintRange-hint": {
