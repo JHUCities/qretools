@@ -18,7 +18,7 @@ import {
 	schemePath,
 	textEntrySource,
 } from "../core/schemes.js";
-import { applyEdits, renameEdits } from "../core/surface/edit.js";
+import { addSpace, applyEdits, renameEdits } from "../core/surface/edit.js";
 import type { NamedScheme } from "../core/surface/env.js";
 import { EMPTY_ENV } from "../core/surface/env.js";
 import { parseSurface, rangesOf } from "../core/surface/parse.js";
@@ -149,6 +149,12 @@ function step(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
+			}
+			if (fix.kind === "space") {
+				const spaced = addSpace(q.source, fix.path, fix.word);
+				return spaced === undefined
+					? [model, []]
+					: persist([withSource(model, q.id, spaced), []]);
 			}
 			const text = applyEdits(q.source, fix.edits);
 			if (text === undefined || text === q.source) return [model, []];

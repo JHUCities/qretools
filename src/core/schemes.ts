@@ -20,6 +20,7 @@ import {
 import { labelMarksOf, type Mark } from "./surface/marks.js";
 import { indexDocument, pointAt } from "./surface/parse.js";
 import { parseScale, type Scale } from "./surface/scales.js";
+import { withSpacing } from "./surface/spacing.js";
 import { type Symbols, schemeSymbols } from "./symbols.js";
 
 /** `missing` is a scheme file too, but one list for the bank, never named by a question. */
@@ -123,7 +124,7 @@ function readScheme(
 	const { ranges, empties } = indexDocument(doc, source.length);
 	if (SHAPE[kind] === "text") {
 		const { entry, findings: read } = parseTextEntry(source);
-		const findings = read.map(pointAt(empties));
+		const findings = withSpacing(doc, source, read.map(pointAt(empties)));
 		const marks: readonly Mark[] = [];
 		return entry === undefined
 			? { findings, ranges, marks }
@@ -134,14 +135,14 @@ function readScheme(
 			source,
 			SCHEME_SINGULAR[kind],
 		);
-		const findings = read.map(pointAt(empties));
+		const findings = withSpacing(doc, source, read.map(pointAt(empties)));
 		const marks: readonly Mark[] = [];
 		return entry === undefined
 			? { findings, ranges, marks }
 			: { findings, ranges, marks, value: { kind: "labelled", entry } };
 	}
 	const { scale, findings: read } = parseScale(source);
-	const findings = read.map(pointAt(empties));
+	const findings = withSpacing(doc, source, read.map(pointAt(empties)));
 	const marks = labelMarksOf(doc, source.length);
 	if (scale === undefined) return { findings, ranges, marks };
 	return {

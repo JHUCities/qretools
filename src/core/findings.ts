@@ -19,7 +19,8 @@ export type ParseCode =
 	| "bad-range"
 	| "ignored-key"
 	| "hole"
-	| "too-many-domains";
+	| "too-many-domains"
+	| "missing-space";
 
 /** Survey-craft advice. Always `warning` or `info`, never a blocker. */
 export type LintCode =
@@ -100,6 +101,13 @@ export type Fix =
 				/** Where the question names it, to be pointed at the name chosen. */
 				readonly path: string;
 			};
+	  }
+	| {
+			/** A space after `word:` within what `path` names (a key written `open:{}`). */
+			readonly kind: "space";
+			readonly label: string;
+			readonly path: string;
+			readonly word: string;
 	  };
 
 export const holes = (findings: readonly Finding[]): readonly Finding[] =>
