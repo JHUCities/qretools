@@ -4,16 +4,14 @@ import {
 	AlertIcon,
 	CheckCircleIcon,
 	ChevronRightIcon,
-	FileIcon,
 	InfoIcon,
 	IssueDraftIcon,
-	LightBulbIcon,
 	XCircleIcon,
 } from "@primer/octicons-react";
-import { ActionList, Details, Label } from "@primer/react";
+import { Details, Label, Link } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
 import { Fragment, memo, type ReactNode, useId } from "react";
-import { codeSpans, plainText } from "../../core/codeSpans.js";
+import { codeSpans } from "../../core/codeSpans.js";
 import { toFillIn } from "../../core/copy.js";
 import type { DdiDocument } from "../../core/ddi/document.js";
 import type { Finding, Fix, Status, Target } from "../../core/findings.js";
@@ -264,11 +262,11 @@ const SEVERITY_LABEL: Readonly<Record<Finding["severity"], string>> = {
 };
 
 /**
- * The findings: in an editable view, Primer's ActionList, each item taking the author
- * to its place in the source; severity is an icon with its name, never colour alone.
- * In a read-only view, a plain list: nothing there is an action, and Primer's ActionList
- * cannot say so (an item with no `onSelect` still renders a button, unless the list is a
- * menu or listbox or the item is inactive; Primer 38's Item.js), so it stays a `ul`.
+ * The findings: one list, editable or not; severity is an icon with its name, never
+ * colour alone. Editable, the message takes the author to its place in the source, and
+ * a fix or another file's link follows it as a text link. Not Primer's ActionList: an
+ * item is one button, so nothing interactive can sit inside it, and read only it would
+ * render buttons that do nothing (Primer 38's Item.js).
  */
 /**
  * A key per finding that survives edits elsewhere in the text: what it says and where,
@@ -309,64 +307,69 @@ export function Findings({
 	if (findings.length === 0)
 		return <p className="quiet">Nothing to fill in, fix, or reconsider.</p>;
 	const keys = findingKeys(findings);
-	if (onTarget === undefined)
-		return (
-			<ul className="findings">
-				{findings.map((f, i) => (
-					<li key={keys[i]} className="finding" data-severity={f.severity}>
-						<FindingBody f={f} />
-					</li>
-				))}
-			</ul>
-		);
 	return (
-		<ActionList aria-label="Findings" variant="full" className="findings-list">
+		// A plain list, editable or not: a fix and a link sit under the message, as
+		// GitHub offers "Create a new release" under "No releases published", which an
+		// ActionList item (one button) cannot hold. `role="list"`: Safari's VoiceOver
+		// drops list semantics from a list without bullets.
+		// biome-ignore lint/a11y/noRedundantRoles: VoiceOver, above
+		<ul className="findings" role="list" aria-label="Findings">
 			{findings.map((f, i) => {
 				const { Icon, className } = SEVERITY[f.severity];
 				const other = related?.(f);
-				// One slot beside the item: a fix, when there is one, wins over the link
-				// (the message still names the other files).
 				const fix = onFix === undefined ? undefined : f.fix;
+				const message = inlineCode(f.message);
 				return (
-					<ActionList.Item key={keys[i]} onSelect={() => onTarget(f)}>
-						<ActionList.LeadingVisual>
-							<Icon
-								className={className}
-								aria-label={SEVERITY_LABEL[f.severity]}
-							/>
-						</ActionList.LeadingVisual>
-						{inlineCode(f.message)}
-						{(f.hint !== undefined || f.detail !== undefined) && (
-							<ActionList.Description variant="block">
-								{f.hint !== undefined && inlineCode(f.hint)}
-								{f.detail !== undefined && (
-									<span className="detail">{f.detail}</span>
-								)}
-							</ActionList.Description>
-						)}
-						{/* Beside the item, never inside it: the item itself goes to this file's place. */}
-						{fix !== undefined ? (
-							// A lightbulb, as an IDE offers a fix: its words are its name and tooltip, so a
-							// long one never squeezes the message beside it.
-							<ActionList.TrailingAction
-								label={plainText(fix.label)}
-								icon={LightBulbIcon}
-								onClick={() => onFix?.(fix)}
-							/>
-						) : (
-							other !== undefined && (
-								<ActionList.TrailingAction
-									as="a"
-									href={other.href}
-									label={other.label}
-									icon={FileIcon}
-								/>
-							)
-						)}
-					</ActionList.Item>
+					<li key={keys[i]} className="finding">
+						<Icon
+							className={`${className} finding-icon`}
+							aria-label={SEVERITY_LABEL[f.severity]}
+						/>
+						<div className="finding-body">
+							{onTarget === undefined ? (
+								<span className="finding-message">{message}</span>
+							) : (
+								// The message goes to its place in the source.
+								<Link
+									as="button"
+									type="button"
+									className="finding-message"
+									onClick={() => onTarget(f)}
+								>
+									{message}
+								</Link>
+							)}
+							{f.hint !== undefined && (
+								<span className="finding-hint">{inlineCode(f.hint)}</span>
+							)}
+							{f.detail !== undefined && (
+								<span className="detail">{f.detail}</span>
+							)}
+							{fix !== undefined && (
+								<Link
+									as="button"
+									type="button"
+									className="finding-action"
+									onClick={() => {
+										onFix?.(fix);
+										// The finding goes with the fix: focus follows the change into the
+										// source, as clicking the message would, never to the page.
+										onTarget?.(f);
+									}}
+								>
+									{inlineCode(fix.label)}
+								</Link>
+							)}
+							{other !== undefined && (
+								<Link className="finding-action" href={other.href}>
+									{other.label}
+								</Link>
+							)}
+						</div>
+					</li>
 				);
 			})}
-		</ActionList>
+		</ul>
 	);
 }
 
@@ -429,21 +432,6 @@ function ResolvedText({ value }: { value: Resolved }) {
 		<>
 			{value.text}
 			{value.ref !== undefined && <span className="ref">{value.ref}</span>}
-		</>
-	);
-}
-
-function FindingBody({ f }: { f: Finding }) {
-	return (
-		<>
-			<span className="sev">{SEVERITY_LABEL[f.severity]}</span>
-			<span className="msg">{inlineCode(f.message)}</span>
-			{f.hint !== undefined && (
-				<span className="hint">{inlineCode(f.hint)}</span>
-			)}
-			{f.detail !== undefined && (
-				<span className="hint detail">{f.detail}</span>
-			)}
 		</>
 	);
 }

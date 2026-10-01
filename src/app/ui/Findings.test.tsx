@@ -19,7 +19,7 @@ const own: Finding = {
 };
 
 describe("findings that name another file", () => {
-	it("link to it beside the item, an ordinary link; the item still goes to this file's place", () => {
+	it("link to it under the message, an ordinary link; the message still goes to this file's place", () => {
 		const onTarget = vi.fn();
 		render(
 			<Findings
@@ -35,7 +35,9 @@ describe("findings that name another file", () => {
 		const link = screen.getByRole("link", { name: "Open b" });
 		expect(link.getAttribute("href")).toBe("#repo=o/r&branch=b&file=q.yaml");
 		expect(screen.getAllByRole("link")).toHaveLength(1);
-		fireEvent.click(screen.getByText(/The same question text/));
+		fireEvent.click(
+			screen.getByRole("button", { name: /The same question text/ }),
+		);
 		expect(onTarget).toHaveBeenCalledWith(dup);
 	});
 });
@@ -54,23 +56,37 @@ describe("a finding with a fix", () => {
 		fix,
 	};
 
-	it("offers it beside the item, winning over the link, and applies it on a click", () => {
+	it("offers it under the message beside another file's link, applies it, and goes to its place", () => {
 		const onFix = vi.fn();
+		const onTarget = vi.fn();
 		render(
 			<Findings
 				findings={[spelled]}
-				onTarget={vi.fn()}
+				onTarget={onTarget}
 				onFix={onFix}
 				related={() => ({ href: "#x", label: "Open b" })}
 			/>,
 		);
-		expect(screen.queryByRole("link")).toBeNull();
+		expect(screen.getByRole("link", { name: "Open b" })).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Use days" }));
 		expect(onFix).toHaveBeenCalledWith(fix);
+		// Focus follows the change into the source, never to the page.
+		expect(onTarget).toHaveBeenCalledWith(spelled);
 	});
 
 	it("offers nothing where nothing can be edited", () => {
 		render(<Findings findings={[spelled]} onTarget={vi.fn()} />);
 		expect(screen.queryByRole("button", { name: "Use days" })).toBeNull();
+	});
+});
+
+describe("a read-only list", () => {
+	it("is the same list, its words and severity, with nothing to press", () => {
+		render(<Findings findings={[dup, own]} />);
+		const list = screen.getByRole("list", { name: "Findings" });
+		expect(list.querySelectorAll("li")).toHaveLength(2);
+		expect(screen.getByRole("img", { name: "warning" })).toBeTruthy();
+		expect(screen.getByText(/The same question text/)).toBeTruthy();
+		expect(screen.queryByRole("button")).toBeNull();
 	});
 });

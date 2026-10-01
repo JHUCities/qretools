@@ -564,7 +564,7 @@ const primerTheme = EditorView.theme({
 		outlineOffset: "var(--base-size-2)",
 	},
 	".cm-quickFix::after": {
-		content: `" (${IS_MAC ? "⌘." : "Ctrl+."})"`,
+		content: `" (${IS_MAC ? "⌘." : "Ctrl-."})"`,
 		color: "var(--fgColor-muted)",
 		display: "inline-block",
 		textDecoration: "none",

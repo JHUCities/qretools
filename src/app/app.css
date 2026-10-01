@@ -641,8 +641,7 @@ button.hole {
  * nothing moves for someone who has asked for less motion.
  */
 @media (prefers-reduced-motion: no-preference) {
-	.findings > li,
-	.findings-list > li {
+	.findings > li {
 		transition:
 			opacity var(--motion-duration-micro) var(--motion-easing-enter),
 			translate var(--motion-duration-micro) var(--motion-easing-enter);
@@ -653,43 +652,54 @@ button.hole {
 	}
 }
 
-/* Findings: severity is data, carried by the label and the edge, never by colour alone. */
+/*
+ * Findings: severity is an icon with its name, never colour alone. Each is a message
+ * (going to its place), a muted hint, then a fix or another file as text links, as
+ * GitHub's sidebar offers "Create a new release".
+ */
 .findings {
 	list-style: none;
 	margin: 0;
 	padding: 0;
 	display: flex;
 	flex-direction: column;
-	gap: var(--base-size-6);
+	gap: var(--base-size-12);
 }
 .finding {
-	--edge: var(--borderColor-default);
-	width: 100%;
-	text-align: left;
 	display: grid;
-	grid-template-columns: auto 1fr;
+	grid-template-columns: auto minmax(0, 1fr);
 	column-gap: var(--base-size-8);
-	border: var(--borderWidth-thin) solid var(--borderColor-default);
-	border-left: var(--borderWidth-thicker) solid var(--edge);
-	border-radius: var(--borderRadius-medium);
-	background: var(--bgColor-default);
-	color: var(--fgColor-default);
-	padding: var(--base-size-6) var(--base-size-8);
-	margin: 0;
+	align-items: baseline;
+}
+/* The icon sits on the message's first line. */
+.finding-icon {
+	align-self: start;
+	margin-block-start: var(--base-size-2);
+}
+.finding-body {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--base-size-2);
+}
+.finding-message {
 	font: inherit;
+	font-weight: var(--base-text-weight-semibold);
+	text-align: start;
 }
-.finding .sev {
-	min-width: 4em;
-	color: var(--edge);
-	font-size: var(--text-caption-size);
-	text-transform: uppercase;
-	padding-top: var(--base-size-2);
+/* A link that goes to a place in this file reads as the message, in the text's colour. */
+button.finding-message {
+	color: var(--fgColor-default);
 }
-.finding .hint {
-	grid-column: 2;
+.finding-hint {
 	color: var(--fgColor-muted);
 	font-size: var(--text-body-size-small);
 	white-space: pre-wrap;
+}
+.finding-action {
+	font: inherit;
+	font-size: var(--text-body-size-small);
+	text-align: start;
 }
 /* A library's own words under the plain message: kept, quieter. */
 .detail {
@@ -698,22 +708,6 @@ button.hole {
 	font-family: var(--fontStack-monospace);
 	font-size: var(--text-caption-size);
 	white-space: pre-wrap;
-}
-.finding .detail {
-	grid-column: 2;
-}
-.finding[data-severity="hole"] {
-	--edge: var(--fgColor-attention);
-	border-left-style: dashed;
-}
-.finding[data-severity="error"] {
-	--edge: var(--fgColor-danger);
-}
-.finding[data-severity="warning"] {
-	--edge: var(--fgColor-attention);
-}
-.finding[data-severity="info"] {
-	--edge: var(--fgColor-accent);
 }
 /* The DDI JSON scrolls with the previews; no scroll region of its own. */
 .json {
