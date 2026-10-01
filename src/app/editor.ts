@@ -28,6 +28,7 @@ import {
 import {
 	Decoration,
 	type DecorationSet,
+	hoverTooltip,
 	keymap,
 	ViewPlugin,
 } from "@codemirror/view";
@@ -210,7 +211,7 @@ const semantics = StateField.define<DecorationSet>({
 		let next = decorations.map(tr.changes);
 		for (const e of tr.effects)
 			if (e.is(setSemantics))
-				next = decorationsOf(e.value, tr.state.doc.length, tr.state.readOnly);
+				next = decorationsOf(e.value, tr.state.doc.length);
 		return next;
 	},
 	provide: (field) => EditorView.decorations.from(field),
@@ -224,34 +225,13 @@ const MARK_CLASS = {
 	legacy: Decoration.mark({ class: "cm-legacy" }),
 } as const;
 
-/**
- * A shared name the author can follow says how, in the browser's own tooltip; never on
- * another author's version (read only), where it would not follow.
- */
-const REF_FOLLOW = Decoration.mark({
-	class: "cm-ref",
-	attributes: {
-		title: `Go to definition (${IS_MAC ? "⌘" : "Ctrl"}-click or F12)`,
-	},
-});
-
 /** Clamped to the document as it is now: a mark past its end is dropped, never thrown. */
-function decorationsOf(
-	marks: readonly Mark[],
-	length: number,
-	readOnly: boolean,
-): DecorationSet {
+function decorationsOf(marks: readonly Mark[], length: number): DecorationSet {
 	const list: Ranged<Decoration>[] = [];
 	for (const { kind, range } of marks) {
 		const from = Math.min(Math.max(0, range[0]), length);
 		const to = Math.min(Math.max(from, range[1]), length);
-		if (to > from)
-			list.push(
-				(kind === "ref" && !readOnly ? REF_FOLLOW : MARK_CLASS[kind]).range(
-					from,
-					to,
-				),
-			);
+		if (to > from) list.push(MARK_CLASS[kind].range(from, to));
 	}
 	return Decoration.set(list, true);
 }
@@ -260,14 +240,26 @@ function decorationsOf(
 const isMod = (e: MouseEvent | KeyboardEvent): boolean =>
 	IS_MAC ? e.metaKey : e.ctrlKey;
 
-/** Whether a shared name (a `ref` mark) touches `pos`. */
-function refAt(state: EditorState, pos: number): boolean {
-	let found = false;
-	state.field(semantics).between(pos, pos, (_from, _to, value) => {
-		if (value.spec.class === "cm-ref") found = true;
+/**
+ * The shared name (a `ref` mark) at `pos`, if any. With a side, as a hover reports it,
+ * a name that only ends (or starts) at `pos` on the other side is not under the pointer.
+ */
+export function refRangeAt(
+	state: EditorState,
+	pos: number,
+	side = 0,
+): { from: number; to: number } | undefined {
+	let found: { from: number; to: number } | undefined;
+	state.field(semantics).between(pos, pos, (from, to, value) => {
+		if (value.spec.class !== "cm-ref") return;
+		if ((from === pos && side < 0) || (to === pos && side > 0)) return;
+		found = { from, to };
 	});
 	return found;
 }
+
+/** The keys that follow a name, as the hover says them. */
+const FOLLOW_KEYS = ` (${IS_MAC ? "⌘" : "Ctrl"}-click or F12)`;
 
 /**
  * Go to definition, as an IDE has it. Mod-click on a shared name (the core marked it
@@ -275,8 +267,9 @@ function refAt(state: EditorState, pos: number): boolean {
  * does. F12 does the same at the caret, and only there (elsewhere F12 is the
  * browser's). While Mod is held the names underline, as VS Code's do: the state is a
  * class on the content, set as CodeMirror's own crosshairCursor sets its cursor.
- * Hovering a name says so in its `title`. None of it on another author's version (read
- * only), which never follows.
+ * Hovering a name offers it as a fix's tooltip offers a fix: a link, its keys muted after
+ * it (our own markup, styled with lint's action, never lint's classes). None of it on
+ * another author's version (read only), which never follows.
  * `update` decides what the name opens; this only says where the author pointed.
  */
 function followDefinition(onFollow: (offset: number) => void) {
@@ -313,6 +306,35 @@ function followDefinition(onFollow: (offset: number) => void) {
 	);
 	return [
 		held,
+		hoverTooltip(
+			(view, pos, side) => {
+				if (view.state.readOnly) return null;
+				const ref = refRangeAt(view.state, pos, side);
+				if (ref === undefined) return null;
+				return {
+					pos: ref.from,
+					end: ref.to,
+					above: false,
+					create: () => {
+						const dom = document.createElement("div");
+						dom.className = "cm-follow-tip";
+						const go = document.createElement("button");
+						go.type = "button";
+						go.className = "cm-action";
+						go.textContent = "Go to definition";
+						go.addEventListener("click", () => onFollow(ref.from));
+						const keys = document.createElement("span");
+						keys.className = "cm-action-keys";
+						keys.textContent = FOLLOW_KEYS;
+						dom.append(go, keys);
+						return { dom };
+					},
+				};
+			},
+			// Closed by any edit: the button's offset was taken when it was drawn, and a
+			// click must never follow a place that has since moved.
+			{ hideOnChange: true },
+		),
 		EditorView.domEventHandlers({
 			mousedown(e, view) {
 				if (!isMod(e) || e.button !== 0 || view.state.readOnly) return false;
@@ -329,7 +351,8 @@ function followDefinition(onFollow: (offset: number) => void) {
 				key: "F12",
 				run: (view) => {
 					const head = view.state.selection.main.head;
-					if (view.state.readOnly || !refAt(view.state, head)) return false;
+					if (view.state.readOnly || !refRangeAt(view.state, head))
+						return false;
 					onFollow(head);
 					return true;
 				},
@@ -542,7 +565,7 @@ const primerTheme = EditorView.theme({
 	// A finding's fix, as an IDE offers one: a link on its own line under the message,
 	// level with it, not CodeMirror's grey pill; its key muted after it (Mod-., above),
 	// on the first fix a tooltip shows only, since that is the one the key applies.
-	".cm-diagnosticAction": {
+	".cm-diagnosticAction, .cm-action": {
 		display: "block",
 		margin: "var(--base-size-4) 0 0",
 		padding: 0,
@@ -554,15 +577,25 @@ const primerTheme = EditorView.theme({
 		textAlign: "start",
 		cursor: "pointer",
 	},
-	".cm-diagnosticAction:hover": {
+	".cm-diagnosticAction:hover, .cm-action:hover": {
 		textDecorationLine: "underline",
 		textUnderlinePosition: "under",
 		textDecorationThickness: "var(--borderWidth-thin)",
 	},
-	".cm-diagnosticAction:focus-visible": {
+	".cm-diagnosticAction:focus-visible, .cm-action:focus-visible": {
 		outline: "var(--focus-outline)",
 		outlineOffset: "var(--base-size-2)",
 	},
+	// Go to definition's tooltip: padded as a finding's, so the two read as one family;
+	// its link inline, its keys after it.
+	".cm-follow-tip": {
+		padding: "var(--base-size-4) var(--base-size-8)",
+	},
+	".cm-follow-tip .cm-action": {
+		display: "inline",
+		margin: 0,
+	},
+	".cm-action-keys": { color: "var(--fgColor-muted)" },
 	".cm-quickFix::after": {
 		content: `" (${IS_MAC ? "⌘." : "Ctrl-."})"`,
 		color: "var(--fgColor-muted)",

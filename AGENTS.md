@@ -1423,10 +1423,12 @@ file, as an IDE does; with Cmd held the names underline (a class on the content,
 CodeMirror's `crosshairCursor` sets its cursor; mousemove clears it if the key-up went
 elsewhere). The editor only reports the offset (`onFollow`); `update` finds the name
 there (`mentionAt`, shared with the inspector) and the file (`schemeFileNamed`) and
-opens it as `fileOpened` does, so Back returns. Hovering a green name shows the browser's
-own tooltip, its `title` "Go to definition (⌘-click or F12)" (owner, after an audit: a
-tooltip copying the lint tooltip's markup was built first and removed, since it hung on
-CodeMirror's internal class names). None of this on another author's version (read
+opens it as `fileOpened` does, so Back returns. Hovering a green name shows a tooltip as a fix's
+is offered (owner, 2026-10-01): "Go to definition" as a link, "(⌘-click or F12)" muted
+after it, in our own markup (`.cm-follow-tip`, `.cm-action`) sharing the fix link's
+style, so a CodeMirror upgrade can't unstyle it; closed by any edit, since its offset
+was taken when it was drawn. (A first version copied the lint tooltip's markup and was
+removed in an audit; a native `title` replaced it for a day.) None of this on another author's version (read
 only): no title, no underline with Cmd held, no follow. Only the author's own open question; a
 name nothing has does nothing (owner). Mod-click elsewhere still adds a cursor (only a
 click on a name is taken): Alt-click, VS Code's multi-cursor, was agreed then dropped,
