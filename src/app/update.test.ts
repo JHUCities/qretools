@@ -200,6 +200,30 @@ describe("editing", () => {
 			range: [at, at],
 			complete: true,
 		});
+		// A field not written at all has no place of its own: the end of the text, no completion.
+		const [, absent] = update(m, {
+			kind: "locationClicked",
+			target: { path: "", severity: "hole" },
+		});
+		expect(absent[0]).toEqual({
+			kind: "revealRange",
+			range: [text.length, text.length],
+		});
+	});
+
+	it("a missing space's fix adds it and puts the caret after it", () => {
+		const text = "name: q\ntext: Hi\nintent: i\nopen:{}\n";
+		const [m] = update(fresh(), { kind: "questionCreated", text });
+		const [next, cmds] = update(m, {
+			kind: "fixApplied",
+			id: 1,
+			fix: { kind: "space", label: "x", path: "open:{}", word: "open" },
+		});
+		expect(next.local.questions[1]?.source).toBe(
+			"name: q\ntext: Hi\nintent: i\nopen: {}\n",
+		);
+		const after = text.indexOf("open:") + "open: ".length;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [after, after] });
 	});
 });
 

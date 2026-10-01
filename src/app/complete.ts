@@ -92,8 +92,13 @@ export function schemaCompletion(
 	const node = nodeAt(schema, place.segments);
 
 	if (place.kind === "value") {
-		// Once a value is typed, the package completes it.
-		const options = place.typed === "" ? valuesOf(node) : [];
+		// Once a value is typed, the package completes it. Straight after the colon only
+		// when asked (a click on the hole, or the key): typing `number:` then Enter starts a
+		// block, and must never take an option instead.
+		const options =
+			place.typed === "" && (place.spaced || context.explicit)
+				? valuesOf(node)
+				: [];
 		// Straight after the colon, an option writes its own space, as completion in
 		// VS Code's and IntelliJ's YAML does: `open:` becomes `open: {}`, never `open:{}`.
 		return options.length === 0

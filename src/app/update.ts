@@ -152,9 +152,14 @@ function step(model: Model, msg: Msg): Step {
 			}
 			if (fix.kind === "space") {
 				const spaced = addSpace(q.source, fix.path, fix.word);
-				return spaced === undefined
-					? [model, []]
-					: persist([withSource(model, q.id, spaced), []]);
+				if (spaced === undefined) return [model, []];
+				// Focus follows the fix, as an edit's does: the caret after the new space.
+				let at = 0;
+				while (spaced[at] === q.source[at]) at++;
+				return persist([
+					withSource(model, q.id, spaced),
+					[{ kind: "revealRange", range: [at + 1, at + 1] }],
+				]);
 			}
 			const text = applyEdits(q.source, fix.edits);
 			if (text === undefined || text === q.source) return [model, []];
@@ -179,9 +184,14 @@ function step(model: Model, msg: Msg): Step {
 			const q = current(model);
 			if (!q) return [model, []];
 			const range = locate(msg.target, rangesOf(q.source));
-			// A hole at an empty value is a point where the value goes: offer what can go
-			// there (completion writes the space after the colon, never the click).
-			const hole = msg.target.severity === "hole" && range[0] === range[1];
+			// A hole at an empty value is a point where the value goes (its own zero-width
+			// range, from the parser): offer what can go there (completion writes the space
+			// after the colon, never the click). A field not written at all has no range.
+			const own = msg.target.range;
+			const hole =
+				msg.target.severity === "hole" &&
+				own !== undefined &&
+				own[0] === own[1];
 			return [
 				model,
 				[{ kind: "revealRange", range, ...(hole && { complete: true }) }],
