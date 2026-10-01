@@ -11,7 +11,11 @@ import { startCompletion } from "@codemirror/autocomplete";
 import { isolateHistory } from "@codemirror/commands";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
+import {
+	type Diagnostic,
+	forEachDiagnostic,
+	setDiagnostics,
+} from "@codemirror/lint";
 import {
 	Annotation,
 	Compartment,
@@ -84,6 +88,7 @@ export function createEditor(
 		// finding's tooltip shows the finding; a third tooltip repeated both.
 		stateExtensions(),
 		macCompletionKeys,
+		quickFixKey,
 		// The id `sync` last opened: a follow names the file it was reported against.
 		followDefinition((offset) => {
 			if (current !== undefined) onFollow(current, offset);
@@ -334,6 +339,31 @@ function followDefinition(onFollow: (offset: number) => void) {
 }
 
 /**
+ * Quick fix, with VS Code's key: Cmd-. (Ctrl-. elsewhere) applies the fix of the first
+ * finding at the caret that has one, the one its tooltip shows first. Nothing to fix
+ * there, and the key is left alone. The tooltip opens on hover, the key acts at the
+ * caret: VS Code has the same gap, accepted.
+ */
+const quickFixKey = Prec.high(
+	keymap.of([
+		{
+			key: "Mod-.",
+			run: (view) => {
+				const head = view.state.selection.main.head;
+				let fix: (() => void) | undefined;
+				forEachDiagnostic(view.state, (d, from, to) => {
+					const action = d.actions?.[0];
+					if (fix === undefined && action && from <= head && head <= to)
+						fix = () => action.apply(view, from, to);
+				});
+				fix?.();
+				return fix !== undefined;
+			},
+		},
+	]),
+);
+
+/**
  * Opening completion on a Mac. Ctrl-Space is often taken by macOS for switching
  * input sources, and CodeMirror's own `Alt-i` cannot fire where Option-I is a dead
  * key (US layout: the circumflex). We do not force Option-I to work, because that
@@ -509,6 +539,40 @@ const primerTheme = EditorView.theme({
 		textUnderlinePosition: "under",
 	},
 	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },
+	// A finding's fix, as an IDE offers one: a link on its own line under the message,
+	// level with it, not CodeMirror's grey pill; its key muted after it (Mod-., above),
+	// on the first fix a tooltip shows only, since that is the one the key applies.
+	".cm-diagnosticAction": {
+		display: "block",
+		margin: "var(--base-size-4) 0 0",
+		padding: 0,
+		border: "none",
+		borderRadius: 0,
+		background: "none",
+		color: "var(--fgColor-accent)",
+		font: "inherit",
+		textAlign: "start",
+		cursor: "pointer",
+	},
+	".cm-diagnosticAction:hover": {
+		textDecorationLine: "underline",
+		textUnderlinePosition: "under",
+		textDecorationThickness: "var(--borderWidth-thin)",
+	},
+	".cm-diagnosticAction:focus-visible": {
+		outline: "var(--focus-outline)",
+		outlineOffset: "var(--base-size-2)",
+	},
+	".cm-quickFix::after": {
+		content: `" (${IS_MAC ? "⌘." : "Ctrl+."})"`,
+		color: "var(--fgColor-muted)",
+		display: "inline-block",
+		textDecoration: "none",
+		whiteSpace: "pre",
+	},
+	".cm-diagnostic:has(.cm-quickFix) ~ .cm-diagnostic .cm-quickFix::after": {
+		content: "none",
+	},
 	".cm-finding-hint": { color: "var(--fgColor-muted)" },
 	".cm-finding-detail": {
 		color: "var(--fgColor-muted)",

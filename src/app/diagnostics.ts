@@ -37,7 +37,14 @@ export const toDiagnostics = (
 			renderMessage: () => messageNode(f),
 			...(fix !== undefined &&
 				onFix !== undefined && {
-					actions: [{ name: plainText(fix.label), apply: () => onFix(fix) }],
+					actions: [
+						{
+							name: plainText(fix.label),
+							apply: () => onFix(fix),
+							// The editor's quick-fix key applies it (editor.ts), and its hint says so.
+							markClass: "cm-quickFix",
+						},
+					],
 				}),
 		};
 	});
