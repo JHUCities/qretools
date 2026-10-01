@@ -208,6 +208,28 @@ describe("a quick fix", () => {
 		expect(next.local.schemes).toBe(m.local.schemes);
 		expect(next.remote).toBe(m.remote);
 		expect(cmds.at(-1)?.kind).toBe("persist");
+		// Focus follows the change: the caret where the edit starts.
+		const at = "name: q\nnumber:\n  ".length;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [at, at] });
+	});
+
+	it("leaves focus to the name dialog when the fix creates a shared entry", () => {
+		const m = update(fresh(), {
+			kind: "questionCreated",
+			text: "name: q\nconcept: Racial identification\n",
+		})[0];
+		const create = {
+			kind: "create" as const,
+			label: "Make it a shared concept `racial_identification`",
+			create: {
+				scheme: "concept" as const,
+				name: "racial_identification",
+				text: "Racial identification",
+				path: "concept",
+			},
+		};
+		const [, cmds] = update(m, { kind: "fixApplied", id: 1, fix: create });
+		expect(cmds.some((c) => c.kind === "revealRange")).toBe(false);
 	});
 
 	it("does nothing when its place is gone, or no file is open", () => {

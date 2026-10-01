@@ -1280,8 +1280,9 @@ Linux. **In the Findings list the fix is a text link under the message** (owner,
 GitHub offers "Create a new release" under "No releases published"), beside another
 file's "Open …" link (both show now, no longer one slot): as a text button beside the
 item it squeezed the message to a column of letters, and a lightbulb hid the words.
-Applying it also goes to the finding's place, so focus follows the change into the
-source, never to the page. **A file's status reads its most severe finding:** `advice` carries
+Applying an edit also puts the caret where it starts (`update` emits the reveal), so
+focus follows the change into the source, never to the page; a fix that creates a
+shared entry leaves focus to its name dialog. **A file's status reads its most severe finding:** `advice` carries
 `worst` (`warning` or `info`), so the tree's icon, the panel's badge (orange for a
 warning) and the Findings list draw one severity one way, from one table (`SEVERITY`
 in Previews.tsx); a warning had shown as blue info in the tree, and an error as a
