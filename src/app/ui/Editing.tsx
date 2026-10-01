@@ -558,10 +558,11 @@ function Inspector({
 	return (
 		<InspectorBox>
 			{/*
-			 * Always two rows, so the label column never changes width: the field, what it
-			 * is for in any question (muted: reference; between fields, the question's own
-			 * description); and the value, when it names a shared entry (what it is, who
-			 * uses it), else "none".
+			 * Two rows: the field, what it is for in any question (muted: reference; between
+			 * fields, the question's own description); and the value, when it names a shared
+			 * entry (what it is, who uses it) or could. With nothing to say the Value row is
+			 * invisible but kept (`visibility: hidden`, unheard too): "Value" is the wider
+			 * label, so the column, and the field's text, never shift sideways.
 			 */}
 			<dl className="inspect">
 				<dt>Field</dt>
@@ -621,16 +622,18 @@ function Inspector({
 					</>
 				)}
 				{/* Nothing named yet: where a shared one can be, the names in scope. */}
-				{m === undefined && (
-					<>
-						<dt>Value</dt>
-						<dd className="quiet">
-							{scheme !== undefined && names !== undefined
-								? `Name a shared one: ${names}`
-								: "none"}
-						</dd>
-					</>
-				)}
+				{m === undefined &&
+					(scheme !== undefined && names !== undefined ? (
+						<>
+							<dt>Value</dt>
+							<dd className="quiet">Name a shared one: {names}</dd>
+						</>
+					) : (
+						<>
+							<dt className="inspect-unset">Value</dt>
+							<dd className="inspect-unset" />
+						</>
+					))}
 			</dl>
 		</InspectorBox>
 	);
