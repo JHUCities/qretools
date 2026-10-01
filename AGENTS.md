@@ -1270,6 +1270,13 @@ reverts the reference but leaves the draft file. **Renaming** is offered only fo
 shared file never saved (nothing on GitHub depends on its name); it rewrites every
 question in this tab that names it (`renameEdits`, from the parser's mentions), which
 become unsaved changes. Renaming a saved file is a path move across branches: backlog.
+**A fix is offered as an IDE offers one (owner, 2026-10-01):** in the lint tooltip a link
+on its own line under the message (CodeMirror's grey pill was indented from the text),
+with its key muted after it: Cmd-. (Ctrl+. elsewhere), VS Code's Quick Fix, which applies
+the fix of the first finding at the caret that has one, the one its tooltip shows first
+(only that one carries the hint; `markClass: "cm-quickFix"`). Not verified with a real
+keyboard yet: Cmd-. is "cancel" in macOS dialogs and Ctrl-. may be an input method's on
+Linux.
 
 **Concepts are shared (owner, 2026-09-29).** Reverses step 8's "concepts stay free
 text". In DDI a Concept (after ISO/IEC 11179) lives in a ConceptScheme and questions and
