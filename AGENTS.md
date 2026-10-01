@@ -1276,7 +1276,13 @@ with its key muted after it: Cmd-. (Ctrl+. elsewhere), VS Code's Quick Fix, whic
 the fix of the first finding at the caret that has one, the one its tooltip shows first
 (only that one carries the hint; `markClass: "cm-quickFix"`). Not verified with a real
 keyboard yet: Cmd-. is "cancel" in macOS dialogs and Ctrl-. may be an input method's on
-Linux.
+Linux. In the Findings list the fix is a lightbulb (`LightBulbIcon`, VS
+Code's), its words its name and tooltip: as a text button it squeezed the message to a
+column of letters. **A file's status reads its most severe finding:** `advice` carries
+`worst` (`warning` or `info`), so the tree's icon, the panel's badge (orange for a
+warning) and the Findings list draw one severity one way, from one table (`SEVERITY`
+in Previews.tsx); a warning had shown as blue info in the tree, and an error as a
+triangle there but a crossed circle in the list.
 
 **Concepts are shared (owner, 2026-09-29).** Reverses step 8's "concepts stay free
 text". In DDI a Concept (after ISO/IEC 11179) lives in a ConceptScheme and questions and
