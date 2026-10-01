@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateScheme } from "../schemes.js";
-import { addSpace } from "./edit.js";
+import { addSpace, spaceBefore } from "./edit.js";
 import { EMPTY_ENV } from "./env.js";
 import { parseSurface } from "./parse.js";
 
@@ -56,5 +56,24 @@ describe("a key's colon with no space after it", () => {
 
 	it("fixes nothing once the place has gone", () => {
 		expect(addSpace(`${HEAD}open: {}\n`, "open:{}", "open")).toBeUndefined();
+	});
+});
+
+describe("typing straight after a key's colon", () => {
+	const at = (marked: string, typed: string) =>
+		spaceBefore(marked.replace("▮", ""), marked.indexOf("▮"), typed);
+
+	it("puts a space first, after a field or a response code", () => {
+		expect(at("name:▮", "f")).toBe(true);
+		expect(at("name: q\nopen:▮\n", "{")).toBe(true);
+		expect(at("responses:\n  1:▮", "Y")).toBe(true);
+	});
+
+	it("leaves everything else as typed", () => {
+		expect(at("name:▮", " ")).toBe(false); // a space already
+		expect(at("name: ▮", "f")).toBe(false); // after one
+		expect(at("name:▮x", "f")).toBe(false); // text after the caret
+		expect(at("note: |\n  Time:▮", "1")).toBe(false); // words in a block scalar
+		expect(at("source: http:▮", "/")).toBe(false); // a colon inside a value
 	});
 });

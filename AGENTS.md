@@ -259,8 +259,14 @@ emit a Universe item and resolve the link in role 2.
   taken there writes its own space (`open:` becomes `open: {}`), as completion does in
   VS Code's YAML language server and IntelliJ (checked in their source), and a field of
   keys (`open`, `number`) offers `{}`. The click itself never edits (go-to-problem never
-  does, in any editor checked); typing on regardless gives `open:{}`, which YAML reads as
-  one word, so that slip is its own finding, `missing-space`, read from the AST (keys,
+  does, in any editor checked). **Typing there writes the space first** (owner: a free-text
+  field has nothing to complete): a transaction filter on typed input (`spaceAfterColon`
+  in editor.ts; the core's `spaceBefore` decides) puts a space before text typed straight
+  after a key's colon (a field or a response code) at an empty value, so `name:` then `f`
+  is `name: f` and `open:` then `{` is `open: {}`; not an input handler, which would lose to
+  closing brackets. One undo step; words in a block scalar ("Time:") are left alone, as
+  are paste, completion, fixes and input-method composition. Pasted `open:{}` reads as
+  one word to YAML, so that slip is its own finding, `missing-space`, read from the AST (keys,
   and a first entry under a block key such as `responses:\n  1:Yes`), with a fix that
   adds the space inside the place it names (`addSpace`, so a stale offset can't
   misplace it); the unreadable line and unknown key it caused are not reported too.

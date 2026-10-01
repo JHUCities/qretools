@@ -38,6 +38,7 @@ import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import type { Range } from "../core/findings.js";
+import { spaceBefore } from "../core/surface/edit.js";
 import type { Mark } from "../core/surface/marks.js";
 import { schemaCompletion, withoutInfo } from "./complete.js";
 
@@ -91,6 +92,7 @@ export function createEditor(
 		stateExtensions(),
 		macCompletionKeys,
 		quickFixKey,
+		spaceAfterColon,
 		// The id `sync` last opened: a follow names the file it was reported against.
 		followDefinition((offset) => {
 			if (current !== undefined) onFollow(current, offset);
@@ -362,6 +364,36 @@ function followDefinition(onFollow: (offset: number) => void) {
 		]),
 	];
 }
+
+/**
+ * Typing straight after a key's colon writes the space YAML needs first: `name:` then
+ * `f` is `name: f`, never `name:f` (one word to YAML). A filter on what was typed, so it
+ * holds whatever else handles the key (closing brackets: `open:` then `{` is `open: {}`),
+ * and leaves pasting, completion (which writes its own space), fixes and input-method
+ * composition alone; the `missing-space` finding catches those. The core decides
+ * (`spaceBefore`); this only wires it.
+ */
+const spaceAfterColon = EditorState.transactionFilter.of((tr) => {
+	if (
+		!tr.docChanged ||
+		!tr.isUserEvent("input.type") ||
+		tr.isUserEvent("input.type.compose") ||
+		tr.startState.readOnly ||
+		tr.startState.selection.ranges.length !== 1
+	)
+		return tr;
+	let insert: { at: number; text: string } | undefined;
+	let count = 0;
+	tr.changes.iterChanges((fromA, toA, _fromB, _toB, text) => {
+		count++;
+		if (fromA === toA) insert = { at: fromA, text: text.toString() };
+	});
+	if (count !== 1 || insert === undefined) return tr;
+	if (!spaceBefore(tr.startState.doc.toString(), insert.at, insert.text))
+		return tr;
+	// After the typed text is in, a space at the same place goes before it.
+	return [tr, { changes: { from: insert.at, insert: " " }, sequential: true }];
+});
 
 /**
  * Quick fix, with VS Code's key: Cmd-. (Ctrl-. elsewhere) applies the fix of the first
