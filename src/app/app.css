@@ -179,7 +179,7 @@ code,
 	padding: var(--base-size-8) var(--base-size-16) 0;
 }
 /*
- * The pane's title (Primer's small Heading, 16px semibold, as github.com's "Files"), one
+ * The pane's title (Primer's small Heading, 16px semibold), one
  * control high so the band keeps its height and its rule still meets the file header's.
  */
 .pane-title {
@@ -187,6 +187,22 @@ code,
 	display: flex;
 	align-items: center;
 	min-block-size: var(--control-medium-size);
+}
+/*
+ * The bank's `owner / repo` in the title: one line, truncating from the end. The title is
+ * a flex row, so the text is one item that may shrink. Clipped, not Primer's Truncate:
+ * the clip margin keeps the link's focus ring.
+ */
+.pane-title .bank {
+	min-width: 0;
+	overflow: clip;
+	overflow-clip-margin: var(--base-size-4);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pane-title .owner {
+	color: var(--fgColor-muted);
+	font-weight: var(--base-text-weight-normal);
 }
 .trees {
 	overflow: auto;
@@ -220,39 +236,41 @@ code,
 	/* As primer.style's: white in light, black in dark (Primer's darkest background). */
 	background: light-dark(var(--bgColor-default), var(--bgColor-black));
 }
-/* The name, as primer.style's site title: 16px semibold on a 24px line. */
+/*
+ * The wordmark: "QRE" in Monaspace Radon, "tools" in Monaspace Krypton, set tight, on the
+ * 24px line primer.style's site title has, so the header keeps its height. 22px is the
+ * mark's own size (chosen by eye; Primer's title sizes go 20px, then 32px).
+ */
 .topbar h1 {
 	margin: 0;
-	font-size: var(--text-title-size-small);
+	font-family: "Monaspace Krypton", var(--fontStack-monospace);
+	font-size: 1.375rem;
+	font-weight: 500;
 	line-height: var(--base-size-24);
-	font-weight: var(--base-text-weight-semibold);
+	letter-spacing: -0.1em;
+	/* A face that has not loaded shows the fallback as it is, never a faked bold. */
+	font-synthesis: none;
 }
 /*
- * The context takes the row's spare room and truncates before anything wraps; the
- * status follows it. On narrow screens only the repository names the context, as on
- * github.com, and the status takes a row of its own, kept even when empty.
+ * The glow is the Monaspace site's: the text again, blurred, at 30%. As a shadow it is
+ * not a second copy for a screen reader, and forced colours drop it. A shadow's blur
+ * radius is twice the standard deviation `filter: blur()` takes: 0.8em here is their 0.4em.
+ * The heading itself is Krypton, so the line is one family's (Monaspace's five share
+ * their metrics) and stays 24px; in another family's line the span made it 26px.
+ */
+.wordmark-qre {
+	font-family: "Monaspace Radon", var(--fontStack-monospace);
+	font-weight: 700;
+	text-shadow: 0 0 0.8em color-mix(in srgb, currentColor 30%, transparent);
+}
+/*
+ * The name takes the row's spare room and the status follows it. On narrow screens the
+ * status takes a row of its own, kept even when empty.
  */
 /* A zero basis: a wrapping row breaks at natural widths, so the brand never asks for any. */
 .topbar .brand {
 	flex: 1 1 0;
 	min-width: 0;
-}
-/*
- * The brand row: the name never shrinks; `owner / repo` truncates from the end.
- */
-/* Primer's Stack renders its children as direct DOM children, which these rely on. */
-.topbar .brand > * {
-	flex-shrink: 0;
-}
-.topbar .brand > .context {
-	flex-shrink: 1;
-	font-size: var(--text-body-size-medium);
-	min-width: 0;
-	/* Clipped for the ellipsis, with room for the links' focus rings. */
-	overflow: clip;
-	overflow-clip-margin: var(--base-size-4);
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 /* A long status truncates at half the row, never taking the path's room. */
 .topbar .status {
@@ -260,16 +278,28 @@ code,
 	max-inline-size: 50%;
 }
 @media (--viewportRange-narrow) {
-	.topbar .owner {
-		display: none;
-	}
-	/* The status's row is always there, so a status coming or going moves nothing. */
+	/*
+	 * The status takes a row of its own, and only while it says something: at rest the
+	 * header is one row (owner, 2026-10-01; the row used to be kept when empty). Empty,
+	 * the live region stays mounted but out of the flow, so it makes no row and no gap.
+	 */
 	.topbar .status {
 		order: 1;
 		flex-basis: 100%;
 		max-inline-size: none;
 		min-block-size: var(--control-small-size);
 	}
+	/* Empty: nothing in it but the text's own empty element (no spinner, no button). */
+	.topbar .status:not(:has(> :not(.session:empty))) {
+		position: absolute;
+	}
+}
+/*
+ * "Back to the bank" is an invisible button: its text, not its padding, lines up with the
+ * title below it.
+ */
+.back {
+	margin-inline-start: calc(-1 * var(--control-small-paddingInline-condensed));
 }
 /* The sidebar's band: its title, level with the open file's header and its rule. */
 .band {

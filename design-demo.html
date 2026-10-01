@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QREtools wordmark playground</title>
+<!--
+  A local design exercise, not part of the app. Fonts are fetched from jsDelivr's copy
+  of the @fontsource/monaspace-* packages, one file per family, weight and style, only
+  when a setting or a grid cell first needs it. Colours and the glow are the Monaspace
+  site's own (monaspace.githubnext.com): a "primary" and a "dark" colour per family, and
+  a blurred copy of the text behind it (.glowtext::after, 60% opacity, 6px blur).
+-->
+<style>
+:root {
+	--g-neon: rgb(245 184 165);
+	--g-argon: rgb(241 225 112);
+	--g-xenon: rgb(182 209 98);
+	--g-radon: rgb(130 210 207);
+	--g-krypton: rgb(188 154 250);
+	color-scheme: dark;
+	font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #0d1117; color: #f0f6fc; }
+main { display: grid; gap: 24px; padding: 24px; max-width: 1200px; margin: 0 auto; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #9198a1; margin: 0 0 8px; }
+p { margin: 0; color: #9198a1; }
+
+/* Text colours differ by background; the glow is always the family's primary colour. */
+.dark {
+	--bg: #010409; --fg: #f0f6fc; --muted: #9198a1; --border: #3d444d;
+	--c-neon: var(--g-neon); --c-argon: var(--g-argon); --c-xenon: var(--g-xenon);
+	--c-radon: var(--g-radon); --c-krypton: var(--g-krypton);
+}
+.light {
+	--bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+	--c-neon: rgb(134 65 46); --c-argon: rgb(125 110 47); --c-xenon: rgb(77 92 42);
+	--c-radon: rgb(59 94 96); --c-krypton: rgb(59 39 114);
+}
+.dark, .light { background: var(--bg); color: var(--fg); }
+
+/* The wordmark. */
+.wm { display: inline-flex; align-items: baseline; white-space: nowrap; line-height: 1; }
+.part { position: relative; }
+.part.glow::after {
+	content: attr(data-text);
+	position: absolute; inset: 0;
+	color: var(--glow);
+	opacity: var(--glow-opacity);
+	filter: blur(var(--glow-blur));
+	pointer-events: none;
+}
+
+/* The app's header, as it is today: 64px, 24px aside, the name then owner / repo. */
+.header {
+	display: flex; align-items: center; gap: 16px;
+	height: 64px; padding: 0 24px;
+	border: 1px solid var(--border); border-radius: 6px;
+}
+.header .context { color: var(--muted); font-size: 14px; }
+.header .context b { color: var(--fg); font-weight: 600; }
+.header .spacer { flex: 1; }
+.header .btn { border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: 14px; }
+.header .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--border); }
+.stages { display: grid; gap: 12px; }
+.specimens { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.specimen { display: grid; place-items: center; padding: 48px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+
+/* The short mark: colours follow the stage it sits on. */
+.marks { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 24px; border: 1px solid var(--border); border-radius: 6px; }
+.marks .fg { fill: var(--fg); }
+.marks .st { stroke: var(--fg); }
+.marks .bg { fill: var(--bg); }
+.marks .tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px 8px 0 0; font-size: 12px; }
+
+/* Controls. */
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+fieldset { border: 1px solid #3d444d; border-radius: 6px; padding: 12px 16px 16px; margin: 0; display: grid; gap: 8px; align-content: start; }
+legend { font-weight: 600; padding: 0 4px; }
+label { display: grid; grid-template-columns: 96px 1fr 48px; align-items: center; gap: 8px; }
+label output { color: #9198a1; font-variant-numeric: tabular-nums; text-align: right; }
+input, select, button { font: inherit; color: inherit; }
+input[type="text"], select { background: #151b23; border: 1px solid #3d444d; border-radius: 6px; padding: 4px 8px; min-width: 0; grid-column: 2 / 4; }
+input[type="range"] { min-width: 0; }
+input[type="checkbox"] { justify-self: start; }
+button { background: #212830; border: 1px solid #3d444d; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+button:hover { background: #262c36; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* The permutation grid. */
+.grid-wrap { overflow-x: auto; }
+table { border-collapse: collapse; }
+th { font-weight: 400; color: #9198a1; font-size: 12px; padding: 4px 8px; text-align: left; white-space: nowrap; }
+td { padding: 2px; }
+td button { display: block; width: 100%; padding: 14px 16px; border-color: transparent; background: var(--bg); text-align: left; }
+td button:hover { background: var(--bg); border-color: #9198a1; }
+td button[aria-pressed="true"] { border-color: #4493f8; }
+pre { margin: 0; padding: 12px 16px; background: #151b23; border: 1px solid #3d444d; border-radius: 6px; overflow-x: auto; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body>
+<main>
+	<div>
+		<h1>QREtools wordmark playground</h1>
+		<p>Every setting is in the address, so a variant you like is a link you can keep.</p>
+	</div>
+
+	<section class="stages" aria-label="Header previews">
+		<h2>In the header</h2>
+		<div class="header dark"><span data-wm></span><span class="context">JHUCities / <b>question-bank</b></span><span class="spacer"></span><span class="btn">New</span><span class="avatar"></span></div>
+		<div class="header light"><span data-wm></span><span class="context">JHUCities / <b>question-bank</b></span><span class="spacer"></span><span class="btn">New</span><span class="avatar"></span></div>
+	</section>
+
+	<section aria-label="Enlarged previews">
+		<h2>Enlarged ×4</h2>
+		<div class="specimens">
+			<div class="specimen dark"><span data-wm data-scale="4"></span></div>
+			<div class="specimen light"><span data-wm data-scale="4"></span></div>
+		</div>
+	</section>
+
+	<section aria-label="Short mark">
+		<h2>Short mark and favicon (a browser tab, then 16, 32, 64 and 128px)</h2>
+		<div class="specimens">
+			<div class="marks dark" data-marks></div>
+			<div class="marks light" data-marks></div>
+		</div>
+	</section>
+
+	<section class="controls" id="controls" aria-label="Settings"></section>
+
+	<section aria-label="Permutations">
+		<h2>Permutations</h2>
+		<div class="row" style="margin-bottom: 8px">
+			<span>Rows</span><select id="rows"></select>
+			<span>Columns</span><select id="cols"></select>
+			<select id="gridTheme"><option value="dark">on dark</option><option value="light">on light</option></select>
+			<p>Click a cell to adopt it.</p>
+		</div>
+		<div class="grid-wrap"><table id="grid"></table></div>
+	</section>
+
+	<section aria-label="CSS">
+		<h2>CSS for this variant</h2>
+		<pre id="css"></pre>
+		<h2 style="margin-top: 16px">favicon.svg for this short mark</h2>
+		<pre id="marksvg" style="white-space: pre-wrap; word-break: break-all"></pre>
+		<div class="row" style="margin-top: 8px">
+			<button id="copy">Copy link</button>
+			<button id="reset">Reset to the brief</button>
+		</div>
+	</section>
+</main>
+
+<script type="module">
+const FAMILIES = ["neon", "argon", "xenon", "radon", "krypton"];
+const WEIGHTS = [200, 300, 400, 500, 600, 700, 800];
+const CASES = { typed: "as typed", upper: "UPPERCASE", lower: "lowercase" };
+const COLORS = ["fg", "family", ...FAMILIES, "custom"];
+const VERSION = "5.3.0";
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const fontName = (fam) => `Monaspace ${cap(fam)}`;
+
+/* The brief: QRE in Krypton, heavy; tools in Radon, lowercase. */
+const BRIEF = {
+	a: { text: "QRE", fam: "krypton", wt: 800, italic: false, case: "typed", color: "family", custom: "#bc9afa", glow: true },
+	b: { text: "tools", fam: "radon", wt: 400, italic: false, case: "lower", color: "family", custom: "#82d2cf", glow: true },
+	size: 20, track: 0, gap: 0, blur: 0.3, opacity: 60,
+	rows: "a.fam", cols: "b.fam", gridTheme: "dark",
+	/* The short mark: Radon's Q in a square whose corners are cut at 45°, as Krypton cuts its own. */
+	f: { wt: 700, scale: 0.6, cut: 12, border: 5, mode: "outline", dx: 0, dy: 0 },
+};
+
+/* Radon's Q at each weight, outlined (an SVG favicon can't load a font): font units, y down, baseline 0. */
+const Q = {"200":{"d":"M943 199C986 199 1021 170 1021 117C1021 71 994 30 938 30C929 30 920 31 911 33C878-5 846-50 818-96C1021-278 1111-635 1111-890C1111-1110 1042-1281 923-1364C949-1431 887-1484 760-1484C336-1484 111-934 111-530C111-207 261 21 522 21C589 21 649 7 704-19C770 89 858 199 943 199ZM244-546C244-875 432-1357 737-1357C750-1357 761-1356 773-1354C766-1324 786-1294 834-1265C933-1206 986-1058 986-871C986-668 911-362 756-205C737-242 721-276 709-302C688-349 662-366 618-349C569-330 571-284 605-208C613-189 627-160 644-126C610-112 574-104 535-104C338-104 244-307 244-546Z","box":[111,-1484,1111,199]},"300":{"d":"M945 211C995 211 1036 175 1036 115C1036 62 1002 15 940 15C931 15 923 16 915 17C885-19 857-59 831-101C1032-283 1119-634 1119-884C1119-1094 1055-1252 952-1331C987-1408 917-1484 764-1484C328-1484 105-929 105-526C105-202 258 21 523 21C585 21 642 9 694-13C763 98 855 211 945 211ZM265-544C265-855 446-1332 740-1332C755-1332 770-1330 783-1328C771-1295 787-1259 832-1224C919-1166 968-1032 968-860C968-668 898-383 755-232C741-259 728-285 718-307C693-359 659-374 612-353C558-329 559-277 595-198C601-184 611-165 622-142C596-133 568-128 539-128C354-128 265-316 265-544Z","box":[105,-1484,1119,211]},"400":{"d":"M946 224C1004 224 1050 180 1050 114C1050 53 1010 0 943 0C935 0 927 1 920 2C893-32 867-68 843-105C1044-288 1128-631 1128-877C1128-1077 1068-1222 980-1299C1025-1384 947-1484 767-1484C320-1484 99-924 99-521C99-197 255 21 524 21C582 21 634 11 683-6C754 107 851 224 946 224ZM287-541C287-835 460-1307 742-1307C760-1307 777-1305 793-1301C775-1266 787-1223 830-1183C905-1126 950-1006 950-849C950-669 884-404 754-258C744-277 735-294 727-311C698-368 655-381 605-356C547-327 546-269 584-188L598-159C580-154 561-152 542-152C370-152 287-325 287-541Z","box":[99,-1484,1128,224]},"500":{"d":"M948 236C1014 236 1065 185 1065 112C1065 44 1018-15 945-15C938-15 931-15 925-14C901-45 878-77 856-110C1054-293 1136-630 1136-871C1136-1060 1081-1193 1008-1265C1064-1360 978-1484 771-1484C312-1484 94-920 94-517C94-193 253 21 525 21C578 21 627 13 672-1C746 114 847 236 948 236ZM308-539C308-815 474-1282 745-1282C765-1282 784-1279 802-1274C779-1236 788-1188 828-1142C892-1086 932-980 932-838C932-670 871-425 752-285C747-296 741-306 736-316C703-378 652-389 599-360C536-326 534-262 574-179C565-178 556-177 546-177C387-177 308-335 308-539Z","box":[94,-1484,1136,236]},"600":{"d":"M949 248C1023 248 1079 191 1079 110C1079 36 1026-30 947-30C941-30 935-30 929-29C908-57 888-85 868-114C1065-297 1144-628 1144-864C1144-1041 1094-1161 1034-1231C1104-1334 1009-1484 775-1484C304-1484 88-915 88-513C88-188 250 22 525 22C574 22 619 16 661 4C737 121 843 248 949 248ZM329-537C329-795 487-1257 748-1257C770-1257 791-1253 812-1247C782-1206 789-1152 826-1101C878-1046 913-954 913-826C913-670 857-444 749-311L744-320C708-388 649-396 592-363C534-329 523-272 550-201L549-201C403-201 329-344 329-537Z","box":[88,-1484,1144,248]},"700":{"d":"M951 261C1032 261 1094 196 1094 109C1094 27 1034-45 950-45C945-45 940-45 935-44C916-69 898-93 881-118C1076-301 1153-625 1153-858C1153-1022 1109-1130 1060-1195C1144-1307 1042-1484 778-1484C296-1484 82-910 82-508C82-183 247 22 526 22C569 22 610 17 648 8C726 128 838 261 951 261ZM351-534C351-775 501-1232 750-1232C774-1232 798-1227 820-1220C786-1177 789-1117 824-1060C864-1006 895-928 895-815C895-670 843-463 746-336C705-398 642-402 586-367C533-335 516-285 529-226C411-241 351-364 351-534Z","box":[82,-1484,1153,261]},"800":{"d":"M952 273C1041 273 1108 201 1108 107C1108 18 1042-60 952-60L940-60C924-80 909-101 893-122C1087-305 1161-623 1161-851C1161-1000 1123-1097 1084-1159L1087-1162C1183-1282 1072-1484 782-1484C288-1484 76-905 76-504C76-178 244 22 527 22C565 22 602 18 636 12C716 134 833 273 952 273ZM372-532C372-755 515-1207 753-1207C779-1207 804-1201 828-1193C789-1147 789-1081 822-1019C850-966 877-902 877-804C877-669 829-478 740-359C696-407 633-405 579-370C534-341 513-301 513-254C420-278 372-383 372-532Z","box":[76,-1484,1161,273]}};
+
+const fromHash = () => {
+	try {
+		const stored = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+		return { ...BRIEF, ...stored, a: { ...BRIEF.a, ...stored.a }, b: { ...BRIEF.b, ...stored.b }, f: { ...BRIEF.f, ...stored.f } };
+	} catch {
+		return structuredClone(BRIEF);
+	}
+};
+let state = fromHash();
+
+/* Fonts: one file per family, weight and style, fetched the first time it is needed. */
+const requested = new Set();
+const need = (part) => {
+	const style = part.italic ? "italic" : "normal";
+	const key = `${part.fam}-${part.wt}-${style}`;
+	if (requested.has(key)) return;
+	requested.add(key);
+	const url = `https://cdn.jsdelivr.net/npm/@fontsource/monaspace-${part.fam}@${VERSION}/files/monaspace-${part.fam}-latin-${part.wt}-${style}.woff2`;
+	const face = new FontFace(fontName(part.fam), `url(${url}) format("woff2")`, { weight: String(part.wt), style });
+	document.fonts.add(face);
+	face.load().catch(() => console.warn(`Could not load ${key}`));
+};
+
+const cased = (part) =>
+	part.case === "upper" ? part.text.toUpperCase() : part.case === "lower" ? part.text.toLowerCase() : part.text;
+const colorOf = (part) =>
+	part.color === "fg" ? "var(--fg)" : part.color === "custom" ? part.custom : `var(--c-${part.color === "family" ? part.fam : part.color})`;
+const glowOf = (part) =>
+	part.color === "fg" ? "var(--fg)" : part.color === "custom" ? part.custom : `var(--g-${part.color === "family" ? part.fam : part.color})`;
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+const partHtml = (part, s) => {
+	need(part);
+	const text = esc(cased(part));
+	const style = [
+		`font-family:'${fontName(part.fam)}',ui-monospace,monospace`,
+		`font-weight:${part.wt}`,
+		`font-style:${part.italic ? "italic" : "normal"}`,
+		`letter-spacing:${s.track}em`,
+		`color:${colorOf(part)}`,
+		`--glow:${glowOf(part)}`,
+	].join(";");
+	return `<span class="part${part.glow ? " glow" : ""}" data-text="${text}" style="${style}">${text}</span>`;
+};
+const wordmark = (s, scale = 1) =>
+	`<span class="wm" style="font-size:${s.size * scale}px;gap:${s.gap}em;--glow-blur:${s.blur}em;--glow-opacity:${s.opacity / 100}">${partHtml(s.a, s)}${partHtml(s.b, s)}</span>`;
+
+/* Paths into the state, as "a.fam" or "size". */
+const get = (s, path) => path.split(".").reduce((o, k) => o[k], s);
+const set = (s, path, value) => {
+	const next = structuredClone(s);
+	const keys = path.split(".");
+	keys.slice(0, -1).reduce((o, k) => o[k], next)[keys.at(-1)] = value;
+	return next;
+};
+
+/* Controls, described as data. */
+const options = (values, labels = {}) => values.map((v) => [v, labels[v] ?? v]);
+const partFields = (p) => [
+	["text", `${p}.text`, "Text"],
+	["select", `${p}.fam`, "Family", options(FAMILIES, Object.fromEntries(FAMILIES.map((f) => [f, cap(f)])))],
+	["range", `${p}.wt`, "Weight", 200, 800, 100],
+	["check", `${p}.italic`, "Italic"],
+	["select", `${p}.case`, "Case", Object.entries(CASES)],
+	["select", `${p}.color`, "Colour", options(COLORS, { fg: "plain text", family: "its family's" })],
+	["color", `${p}.custom`, "Custom"],
+	["check", `${p}.glow`, "Glow"],
+];
+const GROUPS = [
+	["First part", partFields("a")],
+	["Second part", partFields("b")],
+	["Both", [
+		["range", "size", "Size (px)", 12, 40, 1],
+		["range", "track", "Tracking (em)", -0.1, 0.3, 0.01],
+		/* From 0: CSS has no negative gap, so a negative value drew as none. */
+		["range", "gap", "Gap (em)", 0, 0.6, 0.02],
+		["range", "blur", "Glow blur (em)", 0, 1, 0.05],
+		["range", "opacity", "Glow opacity (%)", 0, 100, 5],
+	]],
+	["Short mark", [
+		["select", "f.mode", "Style", [["outline", "border and Q"], ["filled", "filled, Q cut out"]]],
+		["range", "f.wt", "Q weight", 200, 800, 100],
+		["range", "f.scale", "Q size", 0.3, 0.9, 0.02],
+		["range", "f.cut", "Corner cut", 0, 24, 1],
+		["range", "f.border", "Border", 1, 12, 0.5],
+		["range", "f.dx", "Nudge →", -8, 8, 0.5],
+		["range", "f.dy", "Nudge ↓", -8, 8, 0.5],
+	]],
+];
+const controlHtml = ([type, path, label, ...rest]) => {
+	const id = `c-${path}`;
+	const field =
+		type === "select" ? `<select id="${id}" data-path="${path}">${rest[0].map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`
+		: type === "range" ? `<input id="${id}" data-path="${path}" type="range" min="${rest[0]}" max="${rest[1]}" step="${rest[2]}"><output></output>`
+		: type === "check" ? `<input id="${id}" data-path="${path}" type="checkbox">`
+		: type === "color" ? `<input id="${id}" data-path="${path}" type="color">`
+		: `<input id="${id}" data-path="${path}" type="text">`;
+	return `<label for="${id}"><span>${label}</span>${field}</label>`;
+};
+const controls = document.getElementById("controls");
+controls.innerHTML = GROUPS.map(([legend, fields]) => `<fieldset><legend>${legend}</legend>${fields.map(controlHtml).join("")}</fieldset>`).join("");
+
+/* The grid's axes: any two of the four things worth permuting. */
+const AXES = {
+	"a.fam": ["First part's family", FAMILIES],
+	"b.fam": ["Second part's family", FAMILIES],
+	"a.wt": ["First part's weight", WEIGHTS],
+	"b.wt": ["Second part's weight", WEIGHTS],
+};
+for (const id of ["rows", "cols"])
+	document.getElementById(id).innerHTML = Object.entries(AXES).map(([v, [l]]) => `<option value="${v}">${l}</option>`).join("");
+
+const gridHtml = (s) => {
+	const [, rows] = AXES[s.rows];
+	const [, cols] = AXES[s.cols];
+	const head = `<tr><th></th>${cols.map((c) => `<th scope="col">${c}</th>`).join("")}</tr>`;
+	const body = rows.map((r) => {
+		const cells = cols.map((c) => {
+			const cell = set(set(s, s.rows, r), s.cols, c);
+			const current = get(s, s.rows) === get(cell, s.rows) && get(s, s.cols) === get(cell, s.cols);
+			return `<td class="${s.gridTheme}"><button data-row="${r}" data-col="${c}" aria-pressed="${current}">${wordmark(cell)}</button></td>`;
+		});
+		return `<tr><th scope="row">${r}</th>${cells.join("")}</tr>`;
+	});
+	return head + body.join("");
+};
+
+/* The short mark on a 64-unit square. Standalone, it carries its own colours for light and dark. */
+const markSvg = (f, size, standalone = false) => {
+	const { d, box: [x1, y1, x2, y2] } = Q[f.wt];
+	const n = (v) => Math.round(v * 100) / 100;
+	const i = f.mode === "outline" ? f.border / 2 : 0;
+	const [lo, hi, c] = [i, 64 - i, f.cut];
+	const octagon = `M${n(lo + c)} ${n(lo)}H${n(hi - c)}L${n(hi)} ${n(lo + c)}V${n(hi - c)}L${n(hi - c)} ${n(hi)}H${n(lo + c)}L${n(lo)} ${n(hi - c)}V${n(lo + c)}Z`;
+	const k = (64 * f.scale) / (y2 - y1);
+	const place = `translate(${n(32 + f.dx - (k * (x1 + x2)) / 2)} ${n(32 + f.dy - (k * (y1 + y2)) / 2)}) scale(${n(k * 1000) / 1000})`;
+	const shapes = f.mode === "outline"
+		? `<path class="st" fill="none" stroke-width="${f.border}" d="${octagon}"/><path class="fg" transform="${place}" d="${d}"/>`
+		: `<path class="fg" d="${octagon}"/><path class="bg" transform="${place}" d="${d}"/>`;
+	const style = standalone
+		? "<style>.fg{fill:#1f2328}.st{stroke:#1f2328}.bg{fill:#fff}@media(prefers-color-scheme:dark){.fg{fill:#f0f6fc}.st{stroke:#f0f6fc}.bg{fill:#010409}}</style>"
+		: "";
+	const dims = standalone ? "" : ` width="${size}" height="${size}" role="img" aria-label="Q"`;
+	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"${dims}>${style}${shapes}</svg>`;
+};
+const marksHtml = (f) =>
+	`<span class="tab">${markSvg(f, 16)}<span>QREtools</span></span>` + [16, 32, 64, 128].map((size) => markSvg(f, size)).join("");
+
+const cssOf = (s) => {
+	const rule = (name, part) => [
+		`.${name} {`,
+		`  font-family: "${fontName(part.fam)}", ui-monospace, monospace;`,
+		`  font-weight: ${part.wt};`,
+		...(part.italic ? ["  font-style: italic;"] : []),
+		...(part.case === "typed" ? [] : [`  text-transform: ${part.case}case;`]),
+		`  color: ${colorOf(part)};`,
+		...(part.glow ? [`  /* glow: ::after { content: attr(data-text); color: ${glowOf(part)}; opacity: ${s.opacity / 100}; filter: blur(${s.blur}em) } */`] : []),
+		"}",
+	].join("\n");
+	return [`.wordmark { font-size: ${s.size}px; letter-spacing: ${s.track}em; gap: ${s.gap}em; }`, rule("wordmark-a", s.a), rule("wordmark-b", s.b)].join("\n");
+};
+
+const render = () => {
+	for (const el of document.querySelectorAll("[data-wm]")) el.innerHTML = wordmark(state, Number(el.dataset.scale ?? 1));
+	for (const el of controls.querySelectorAll("[data-path]")) {
+		const value = get(state, el.dataset.path);
+		if (el.type === "checkbox") el.checked = value;
+		else if (document.activeElement !== el || el.type !== "text") el.value = value;
+		if (el.type === "range") el.nextElementSibling.value = value;
+	}
+	for (const id of ["rows", "cols", "gridTheme"]) document.getElementById(id).value = state[id];
+	document.getElementById("grid").innerHTML = gridHtml(state);
+	document.getElementById("css").textContent = cssOf(state);
+	for (const el of document.querySelectorAll("[data-marks]")) el.innerHTML = marksHtml(state.f);
+	document.getElementById("marksvg").textContent = markSvg(state.f, 64, true);
+	history.replaceState(null, "", `#${encodeURIComponent(JSON.stringify(state))}`);
+};
+
+controls.addEventListener("input", (e) => {
+	const el = e.target;
+	const value = el.type === "checkbox" ? el.checked : el.type === "range" ? Number(el.value) : el.value;
+	state = set(state, el.dataset.path, value);
+	render();
+});
+for (const id of ["rows", "cols", "gridTheme"])
+	document.getElementById(id).addEventListener("change", (e) => {
+		state = { ...state, [id]: e.target.value };
+		render();
+	});
+document.getElementById("grid").addEventListener("click", (e) => {
+	const cell = e.target.closest("button");
+	if (!cell) return;
+	const typed = (path, raw) => (path.endsWith(".wt") ? Number(raw) : raw);
+	state = set(set(state, state.rows, typed(state.rows, cell.dataset.row)), state.cols, typed(state.cols, cell.dataset.col));
+	render();
+});
+document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(location.href));
+document.getElementById("reset").addEventListener("click", () => {
+	state = structuredClone(BRIEF);
+	render();
+});
+window.addEventListener("hashchange", () => {
+	state = fromHash();
+	render();
+});
+render();
+</script>
+</body>
+</html>

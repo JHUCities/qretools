@@ -26,7 +26,7 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import { useTheme } from "@primer/react/next";
-import { useId, useMemo } from "react";
+import { useMemo } from "react";
 import { plainText } from "../../core/codeSpans.js";
 import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "../../core/copy.js";
 import { kindAt, SCHEME_KINDS } from "../../core/schemes.js";
@@ -60,8 +60,6 @@ import { SignOutDialog } from "./SignOutDialog.js";
 
 export function App() {
 	const { dispatch, evaluations, signIn: signInConfig } = useApp();
-	// The sidebar's title, which also names its navigation landmark.
-	const bankTitle = useId();
 	const model = useModel((m) => m);
 	const env = useEnv();
 	const { local, browser, screen, activity } = model;
@@ -159,16 +157,13 @@ export function App() {
 					paddingBlock="normal"
 					paddingInline={{ narrow: "normal", regular: "spacious" }}
 				>
-					{/* The mark, the name and path, then what the branch holds, on one line. */}
-					<Stack
-						direction="horizontal"
-						align="center"
-						gap="condensed"
-						className="brand"
-					>
-						<h1>qretools</h1>
-						<Context model={model} />
-					</Stack>
+					{/*
+					 * The wordmark: real text in two typefaces (app.css), read as one word.
+					 * Which bank is open is the sidebar's title, not the header's.
+					 */}
+					<h1 className="brand">
+						<span className="wordmark-qre">QRE</span>tools
+					</h1>
 					{/*
 					 * A live region, always mounted so that what it says is announced: what
 					 * the session is doing, or why nothing can be written. A file's inactive
@@ -329,19 +324,16 @@ export function App() {
 							open !== undefined || model.screen.kind === "foreign" || waiting
 						}
 					>
-						<nav className="sidebar" aria-labelledby={bankTitle}>
+						<nav className="sidebar" aria-label="Question bank">
 							{/*
-							 * As github.com's file view: the pane's title level with the open file's
-							 * header, then the branch and the filter together, then the tree.
+							 * The pane's title is the bank itself, `owner / repo`, level with the open
+							 * file's header; then its branch and the filter together, then the tree.
+							 * The landmark keeps a name of its own: the title holds a link.
 							 */}
 							<div className="band">
-								<Heading
-									as="h2"
-									variant="small"
-									id={bankTitle}
-									className="pane-title"
-								>
-									Question bank
+								<Heading as="h2" variant="small" className="pane-title">
+									<VisuallyHidden>Question bank: </VisuallyHidden>
+									<Bank model={model} />
 								</Heading>
 							</div>
 							{/* The branch, the filter and the foot stay put; the tree between scrolls. */}
@@ -367,7 +359,7 @@ export function App() {
 								<div className="sidebar-foot">
 									<ExternalLink href={SOURCE_URL} muted icon={false}>
 										{/* Named in full for a list of links heard out of context. */}
-										<VisuallyHidden>qretools on </VisuallyHidden>GitHub
+										<VisuallyHidden>QREtools on </VisuallyHidden>GitHub
 									</ExternalLink>
 								</div>
 							</div>
@@ -492,18 +484,16 @@ const repoUrl = (model: Model): string =>
 	`https://github.com/${model.settings.owner}/${model.settings.repo}`;
 
 /**
- * The bank, as github.com's header says it: `owner / repo`, the repository a link,
- * truncating from the end; the owner hidden on narrow screens. The branch is above the
- * tree (BranchLine).
+ * The bank, as github.com names a repository: `owner / repo`, the repository a link,
+ * on one line that truncates from the end. Its branch is the next line (BranchLine).
  */
-function Context({ model }: { model: Model }) {
-	if (model.session.kind !== "connected") return null;
+function Bank({ model }: { model: Model }) {
 	return (
-		<span className="context">
-			<span className="quiet owner">
+		<span className="bank">
+			<span className="owner">
 				{model.settings.owner} <span aria-hidden>/</span>{" "}
 			</span>
-			{/* No external-link icon here, as in github.com's header; still said to screen readers. */}
+			{/* No external-link icon, as in github.com's header; still said to screen readers. */}
 			<Link href={repoUrl(model)} target="_blank" rel="noreferrer">
 				<strong>{model.settings.repo}</strong>
 				<VisuallyHidden> (opens in a new tab)</VisuallyHidden>

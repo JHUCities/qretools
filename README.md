@@ -1,4 +1,4 @@
-# qretools
+# QREtools
 
 [![Deploy](https://github.com/JHUCities/qretools/actions/workflows/pages.yml/badge.svg)](https://github.com/JHUCities/qretools/actions/workflows/pages.yml)
 [![DDI-Lifecycle 4.0](https://img.shields.io/badge/DDI--Lifecycle-4.0-0B6E99)](https://ddialliance.org/Specification/DDI-Lifecycle)
@@ -19,8 +19,8 @@ Write survey questions and their documentation in the browser, and get
 
 **Use it:** <https://bank.qretools.com/>
 
-qretools is a question editor for survey teams that keep a question bank. Each question
-is a short YAML file; qretools checks it as you type, shows it as a respondent and a
+QREtools is a question editor for survey teams that keep a question bank. Each question
+is a short YAML file; QREtools checks it as you type, shows it as a respondent and a
 codebook would, and elaborates it to DDI. The bank lives in a GitHub repository, so
 every change is a commit on your own branch and joins the bank through a pull request.
 
@@ -70,7 +70,7 @@ written by hand: identifiers, versions and references are the tool's.
 ## Start a bank
 
 Create one from the [bank template](https://github.com/JHUCities/qretools-bank-template)
-("Use this template"), install the qretools GitHub App on it, and sign in at the site
+("Use this template"), install the QREtools GitHub App on it, and sign in at the site
 above with the repository's `owner/name`. The template's README walks through it,
 including protecting `main`.
 

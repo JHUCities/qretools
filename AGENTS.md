@@ -1484,9 +1484,60 @@ inspector's chip (`.code-ref`, a link, hover an accent border) and the previews'
 The inspector's box is a plain `div` around Primer's ScrollableRegion: one accessible
 name, and no complementary landmark inside the source's region.
 
+**The wordmark and the short mark (owner, 2026-10-01).** The header's name is "QREtools"
+as a wordmark, chosen in a playground (`design-demo.html`, a local design page outside the
+app): "QRE" in Monaspace Radon 700 with the Monaspace site's glow, "tools" in Monaspace
+Krypton 500, 22px, tracking -0.1em, plain text colour. This replaces "qretools at 16px/600"
+in the section above; the name is still centred in the brand row, the header still 64px
+plus its rule (measured). Real text, not an image: `<h1><span class="wordmark-qre">QRE</span>
+tools</h1>`, the heading itself Krypton so its line is one family's and stays 24px (a
+Radon span in a Mona Sans line made it 26px, measured). The glow is a `text-shadow` in
+`currentColor` at 30%, not the site's blurred `::after` copy: the same picture (a shadow's
+blur radius is twice `filter: blur()`'s standard deviation), no second copy of the text for
+a screen reader, and dropped in forced colours. Two more font files (`latin-700` of Radon,
+`latin-500` of Krypton), not preloaded: until they arrive the name shows in the code
+fallback, 3.15px narrower (measured, Chrome); nothing follows the name in its row (it
+takes the row's spare room), so nothing moves. **The short mark** is Radon's Q in a square
+whose corners are cut at 45° as Krypton cuts its own: `public/favicon.svg`, the Q as an
+outline (an SVG favicon can't load a font; extracted from the 700 weight with opentype.js),
+its colours following the system's theme, not the app's toggle (the tab strip is the
+browser's, never the page's). Its proportions are the playground's defaults, not yet
+tuned by the owner at tab size (at 16px the border is 1.25px and may blur), and there is
+no `.ico` or PNG fallback yet. Outlining the whole
+wordmark the same way would drop both font files; not done. The name is written "QREtools"
+wherever a user reads it (the document title, the sign-in page, messages, the README);
+identifiers keep the lowercase (the `qretools-<login>` branch, storage keys, the
+repository, the GitHub App's slug). Not checked: Firefox and Safari.
+
+**The bank's name is the sidebar's title (owner, 2026-10-01).** `owner / repo` left the
+header for the sidebar's band, replacing the title "Question bank": the bank, then its
+branch on the next line, then its files. This supersedes "the header keeps `owner / repo`"
+("The branch sits above the tree") and the header's context in "The header follows
+github.com"; the header is now the wordmark, the status, New and the account. Replaced,
+not prefixed ("Question bank: owner / repo", the owner's other option): the band has
+224px, and the prefix would truncate most names. The `h2` holds a visually hidden
+"Question bank: " and the name (owner muted, the repository a bold link to GitHub); the
+`nav` is named by `aria-label="Question bank"`, not by the heading, which holds a link.
+The heading is a flex row, so the name is one item (`.bank`) that may shrink and
+truncates from the end. The owner shows at every width (the narrow-screen rule that hid
+it is gone). Measured in a harness with the app's stylesheet: the band is 49px (one
+control, its padding and rule) with a short or a long name. Not checked in the signed-in
+app.
+
+**On narrow screens the header is one row at rest (owner, 2026-10-01).** Reverses "on
+narrow screens the status row is always there" ("Nothing moves when state changes"): the
+empty row read as padding under the wordmark. The status still takes a row of its own
+there, but only while it says something, so the header grows (65px to 101px, measured at
+390px) while the bank loads, a save runs, or writing is blocked; the owner chose that
+movement over the empty row. Empty, the live region stays mounted (so it still
+announces) but out of the flow: a status holding nothing but its empty text element is `position: absolute`,
+which makes no flex line and no gap. "Back to the bank" (an invisible button) has a
+negative margin the size of its padding (`.back`), so its text lines up with the title
+below it; not checked in the signed-in app.
+
 **Truncation is Primer's `Truncate` (owner, 2026-09-30),** `inline` inside a flex parent
 (otherwise it inherits `display: flex` and shows no ellipsis): the status, the branch
-name and the "with …" note beside Save. The one exception is the header's `owner /
+name and the "with …" note beside Save. The one exception is the sidebar title's `owner /
 repo`, whose hand-written `overflow: clip` with a clip margin keeps the repository
 link's focus ring, which `Truncate`'s `overflow: hidden` would cut.
 

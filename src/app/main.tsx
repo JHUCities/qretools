@@ -1,7 +1,10 @@
 // GitHub's typefaces, served with the app: Mona Sans for the interface, Monaspace Neon
-// for code (app.css points Primer's font stacks at them).
+// for code (app.css points Primer's font stacks at them), and the header's wordmark:
+// Radon for "QRE", Krypton for "tools", one weight each.
 import "@fontsource-variable/mona-sans";
 import "@fontsource/monaspace-neon/400.css";
+import "@fontsource/monaspace-radon/latin-700.css";
+import "@fontsource/monaspace-krypton/latin-500.css";
 import "@primer/primitives/dist/css/primitives.css";
 import "@primer/primitives/dist/css/functional/themes/light.css";
 import "@primer/primitives/dist/css/functional/themes/dark.css";

@@ -32,7 +32,13 @@ importers:
       '@fontsource-variable/mona-sans':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/monaspace-krypton':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/monaspace-neon':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/monaspace-radon':
         specifier: ^5.3.0
         version: 5.3.0
       '@lezer/highlight':
@@ -276,8 +282,14 @@ packages:
   '@fontsource-variable/mona-sans@5.3.0':
     resolution: {integrity: sha512-PkxRB3KI4z9Gjpk7vVqgO3GMSyQuOIIj4TaRDbvbcDj8SzWwI38jvLTQxJM/cTRorhcT7h8qjcllR+qjRtM/Fg==}
 
+  '@fontsource/monaspace-krypton@5.3.0':
+    resolution: {integrity: sha512-dAvofm5VNugRpprnOYMOEnlcnlAJWrQXcoy0PEnmdc9NU+fyDeSDYOTFoJPmJBADwcnVqXA6fLgTlz7TUQQx6g==}
+
   '@fontsource/monaspace-neon@5.3.0':
     resolution: {integrity: sha512-a4B4L4nmW+mW42gDb6JUugy2fA3DC0QKi2yRMXKzuNsN+wHhUvrqgYndIBMds+Evq/cWaMJgd06x14dHuBNxwA==}
+
+  '@fontsource/monaspace-radon@5.3.0':
+    resolution: {integrity: sha512-aadcdk9Gg4yOwk4Zei93k3pzL1jufhrPQIxpLluqO+RoVv5MoSqNlsvFuYEEthE5N1ORaS3RleohBdP0yBzDGQ==}
 
   '@github/mini-throttle@2.1.1':
     resolution: {integrity: sha512-KtOPaB+FiKJ6jcKm9UKyaM5fPURHGf+xcp+b4Mzoi81hOc6M1sIGpMZMAVbNzfa2lW5+RPGKq888Px0j76OZ/A==}
@@ -1608,7 +1620,11 @@ snapshots:
 
   '@fontsource-variable/mona-sans@5.3.0': {}
 
+  '@fontsource/monaspace-krypton@5.3.0': {}
+
   '@fontsource/monaspace-neon@5.3.0': {}
+
+  '@fontsource/monaspace-radon@5.3.0': {}
 
   '@github/mini-throttle@2.1.1': {}
 

@@ -114,7 +114,7 @@ export const makeGitHubStore = (
 					return err({
 						kind: "unreadable",
 						message: `GitHub has no repository ${owner}/${repo} that you can open.`,
-						hint: "Check the name, and that the qretools app is installed on it.",
+						hint: "Check the name, and that the QREtools app is installed on it.",
 					});
 				return err({
 					kind: "unreadable",

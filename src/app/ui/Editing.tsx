@@ -716,6 +716,7 @@ export function ForeignView({
 				<PageHeader>
 					<PageHeader.ContextArea>
 						<Button
+							className="back"
 							variant="invisible"
 							size="small"
 							leadingVisual={ArrowLeftIcon}
