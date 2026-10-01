@@ -85,6 +85,7 @@ export function FileHeader({
 					// PageHeader shows its context area on narrow screens only.
 					<PageHeader.ContextArea>
 						<Button
+							className="back"
 							variant="invisible"
 							size="small"
 							leadingVisual={ArrowLeftIcon}

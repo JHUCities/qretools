@@ -90,6 +90,7 @@ export function FileSkeleton({
 					<PageHeader>
 						<PageHeader.ContextArea>
 							<Button
+								className="back"
 								variant="invisible"
 								size="small"
 								leadingVisual={ArrowLeftIcon}
