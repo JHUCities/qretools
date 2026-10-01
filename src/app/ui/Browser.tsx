@@ -215,7 +215,9 @@ const STATUS_TEXT = (s: Status): string =>
 	s.kind === "complete"
 		? "complete"
 		: s.kind === "advice"
-			? "has advice"
+			? s.worst === "warning"
+				? "has warnings"
+				: "has advice"
 			: s.errors > 0
 				? "has errors"
 				: "has fields to fill in";

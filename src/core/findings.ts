@@ -176,7 +176,12 @@ export type Target = Pick<Finding, "path" | "severity"> & {
 /** The verdict on a draft. Policy lives here; the shell only styles it. */
 export type Status =
 	| { readonly kind: "complete" }
-	| { readonly kind: "advice"; readonly count: number }
+	| {
+			readonly kind: "advice";
+			readonly count: number;
+			/** The most severe advice, so a warning never reads as info. */
+			readonly worst: "warning" | "info";
+	  }
 	| {
 			readonly kind: "incomplete";
 			readonly holes: number;
@@ -190,5 +195,11 @@ export function status(findings: readonly Finding[]): Status {
 		return { kind: "incomplete", holes: holeCount, errors: errorCount };
 	return findings.length === 0
 		? { kind: "complete" }
-		: { kind: "advice", count: findings.length };
+		: {
+				kind: "advice",
+				count: findings.length,
+				worst: findings.some((f) => f.severity === "warning")
+					? "warning"
+					: "info",
+			};
 }

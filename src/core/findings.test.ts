@@ -7,6 +7,25 @@ const statusOf = (source: string) =>
 	status(evaluate(source, "org.example", EMPTY_ENV).findings);
 
 describe("status", () => {
+	it("names the most severe advice, so a warning never reads as info", () => {
+		const f = (severity: Finding["severity"]): Finding => ({
+			code: "ddi-invalid",
+			path: "",
+			message: "m",
+			severity,
+		});
+		expect(status([f("info"), f("info")])).toEqual({
+			kind: "advice",
+			count: 2,
+			worst: "info",
+		});
+		expect(status([f("info"), f("warning")])).toEqual({
+			kind: "advice",
+			count: 2,
+			worst: "warning",
+		});
+	});
+
 	it("is the core's verdict on a draft", () => {
 		expect(statusOf("")).toEqual({ kind: "incomplete", holes: 4, errors: 0 });
 		expect(
@@ -18,7 +37,7 @@ describe("status", () => {
 		});
 		expect(
 			statusOf("name: q\ntext: Do you rent?\nintent: Housing\nopen: {}\n"),
-		).toEqual({ kind: "advice", count: 1 });
+		).toMatchObject({ kind: "advice", count: 1 });
 		expect(
 			statusOf("name: q\ntext: Do you rent?\nintent: Housing\nwording: x\n"),
 		).toEqual({

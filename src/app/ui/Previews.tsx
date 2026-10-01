@@ -7,6 +7,7 @@ import {
 	FileIcon,
 	InfoIcon,
 	IssueDraftIcon,
+	LightBulbIcon,
 	XCircleIcon,
 } from "@primer/octicons-react";
 import { ActionList, Details, Label } from "@primer/react";
@@ -78,7 +79,7 @@ export function StatusBadge({ status }: { status: Status }) {
 			return <Label variant="success">complete</Label>;
 		case "advice":
 			return (
-				<Label variant="accent">
+				<Label variant={status.worst === "warning" ? "attention" : "accent"}>
 					{status.count === 1
 						? "1 piece of advice"
 						: `${status.count} pieces of advice`}
@@ -100,21 +101,21 @@ export function StatusBadge({ status }: { status: Status }) {
 	}
 }
 
+/** A file's verdict as one icon: its most severe finding's, as the Findings list draws it. */
 export function StatusIcon({ status }: { status: Status }) {
 	if (status.kind === "complete")
 		return (
 			<CheckCircleIcon size={14} className="fg-success" aria-label="complete" />
 		);
-	if (status.kind === "advice")
-		return <InfoIcon size={14} className="fg-accent" aria-label="advice" />;
-	return status.errors > 0 ? (
-		<AlertIcon size={14} className="fg-danger" aria-label="errors" />
-	) : (
-		<IssueDraftIcon
-			size={14}
-			className="fg-attention"
-			aria-label="to fill in"
-		/>
+	const worst =
+		status.kind === "advice"
+			? status.worst
+			: status.errors > 0
+				? "error"
+				: "hole";
+	const { Icon, className } = SEVERITY[worst];
+	return (
+		<Icon size={14} className={className} aria-label={SEVERITY_LABEL[worst]} />
 	);
 }
 
@@ -345,8 +346,11 @@ export function Findings({
 						)}
 						{/* Beside the item, never inside it: the item itself goes to this file's place. */}
 						{fix !== undefined ? (
+							// A lightbulb, as an IDE offers a fix: its words are its name and tooltip, so a
+							// long one never squeezes the message beside it.
 							<ActionList.TrailingAction
 								label={plainText(fix.label)}
+								icon={LightBulbIcon}
 								onClick={() => onFix?.(fix)}
 							/>
 						) : (
