@@ -56,6 +56,7 @@ import {
 	type SurfaceKey,
 	TEXT_KEYS,
 } from "./schema.js";
+import { withSpacing } from "./spacing.js";
 
 export interface Parsed {
 	readonly draft: Draft;
@@ -162,18 +163,22 @@ export function parseSurface(text: string, env: Env): Parsed {
 		domain: domain.value,
 	});
 
-	const findings = [
-		...syntax,
-		...js.findings,
-		...unknown,
-		...fieldFindings,
-		...concept.findings,
-		...universe.findings,
-		...instruction.findings,
-		...legacy.findings,
-		...variants.findings,
-		...domain.findings,
-	].map(pointAt(empties));
+	const findings = withSpacing(
+		doc,
+		text,
+		[
+			...syntax,
+			...js.findings,
+			...unknown,
+			...fieldFindings,
+			...concept.findings,
+			...universe.findings,
+			...instruction.findings,
+			...legacy.findings,
+			...variants.findings,
+			...domain.findings,
+		].map(pointAt(empties)),
+	);
 	return {
 		draft,
 		findings,

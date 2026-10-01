@@ -65,3 +65,27 @@ export function renameEdits(
 		.mentions.filter((m) => m.scheme === scheme && m.name === from)
 		.map((m) => ({ path: m.path, value: to }));
 }
+
+/**
+ * The text with a space after `word:` inside what `path` names now, or undefined when
+ * the place is gone (it was fixed, or the text changed): a no-op, never a guess.
+ */
+export function addSpace(
+	source: string,
+	path: string,
+	word: string,
+): string | undefined {
+	const { ranges } = indexDocument(
+		parseDocument(source, { prettyErrors: false }),
+		source.length,
+	);
+	const range = ranges[path];
+	if (range === undefined || path === "") return undefined;
+	const [from, to] = range;
+	const at = new RegExp(
+		`(^|[\\s{,])${word.replace(/[-]/g, "\\-")}:(?=\\S)`,
+	).exec(source.slice(from, to));
+	if (at === null) return undefined;
+	const colon = from + at.index + at[0].length;
+	return `${source.slice(0, colon)} ${source.slice(colon)}`;
+}
