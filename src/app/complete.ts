@@ -93,7 +93,7 @@ export function schemaCompletion(
 
 	if (place.kind === "value") {
 		// Once a value is typed, the package completes it. Straight after the colon only
-		// when asked (a click on the hole, or the key): typing `number:` then Enter starts a
+		// when asked (a click on the hole, or Cmd-I): typing `number:` then Enter starts a
 		// block, and must never take an option instead.
 		const options =
 			place.typed === "" && (place.spaced || context.explicit)
