@@ -1318,7 +1318,9 @@ to a shared concept's label is `matches-concept` with "Use the name". A concept 
 `Concept` (`concept-<name>`: ConceptName, Label, Description), referenced by question and
 variable; codebook and tree titles use the label. Two concept files with the same label
 are `duplicate-concept`. Concepts come first in the tree (what is measured, then how it
-is asked). A fix can now also create (`Fix` is `edits` or `create {scheme, name, text,
+is asked). The codebook preview lists a Concept line first among its
+particulars (owner, 2026-10-01; the BAS codebook has none): the shared concept's label,
+its name in green, or the words written; its definition stays in its own file. A fix can now also create (`Fix` is `edits` or `create {scheme, name, text,
 path}`), so every unknown shared name's hole offers "New shared …" in the Findings list.
 Kinds became data where a new kind would otherwise add branches: `SHAPE` (labels, text,
 concept) drives reading, previews and editor schemas; the GitHub loader's queries are

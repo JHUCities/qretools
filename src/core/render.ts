@@ -18,7 +18,7 @@ import {
 	optionVariable,
 	textOf,
 } from "./surface/draft.js";
-import type { Env, TextEntry } from "./surface/env.js";
+import type { Env } from "./surface/env.js";
 
 export interface Hole {
 	readonly kind: "hole";
@@ -58,7 +58,10 @@ export interface RespondentView {
 	readonly input: Input;
 }
 
-/** The codebook entry, in the style of the Baltimore Area Survey codebook. */
+/**
+ * The codebook entry, in the style of the Baltimore Area Survey codebook; the Concept
+ * line is ours (BAS's codebook has none), shown since concepts became shared.
+ */
 export interface CodebookView {
 	readonly title: Slot;
 	readonly variable: Slot;
@@ -68,6 +71,8 @@ export interface CodebookView {
 		| Hole;
 	/** The bank's missing-value codes, as the codebook prints them, when the bank declares any. */
 	readonly missing?: string;
+	/** What the question measures: the shared concept's label (its definition is its own file's). */
+	readonly concept?: Resolved;
 	readonly universe?: Resolved;
 	readonly source?: string;
 	readonly notes: readonly string[];
@@ -90,15 +95,19 @@ const slot = (value: string | undefined, path: "name" | "text"): Slot =>
 
 const domainHole: Hole = { kind: "hole", path: "", prompt: DOMAIN_PROMPT };
 
-const resolved = (n: Named<TextEntry> | undefined): Resolved | undefined =>
+/** A field that may name a shared entry: its words (by `wordsOf`), and its name when shared. */
+const resolved = <T>(
+	n: Named<T> | undefined,
+	wordsOf: (n: Named<T>) => string,
+): Resolved | undefined =>
 	n === undefined
 		? undefined
-		: compact({ text: textOf(n), ref: n.kind === "ref" ? n.name : undefined });
+		: compact({ text: wordsOf(n), ref: n.kind === "ref" ? n.name : undefined });
 
 export function respondentView(draft: Draft): RespondentView {
 	return compact({
 		text: slot(draft.text, "text"),
-		instruction: resolved(draft.instruction),
+		instruction: resolved(draft.instruction, textOf),
 		input: draft.domain ? input(draft.domain) : domainHole,
 	});
 }
@@ -136,7 +145,8 @@ export function codebookView(draft: Draft, env: Env): CodebookView {
 			env.missing.length === 0
 				? undefined
 				: env.missing.map((c) => `${c.code} (${c.label})`).join(", "),
-		universe: resolved(draft.universe),
+		concept: resolved(draft.concept, labelOf),
+		universe: resolved(draft.universe, textOf),
 		source: draft.source,
 		notes: notes(draft),
 	});

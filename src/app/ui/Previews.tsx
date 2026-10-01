@@ -212,8 +212,19 @@ export function Codebook({
 					))}
 				</ul>
 			)}
-			{/* The entry's particulars, as the BAS codebook lists them: terms and their values. */}
+			{/*
+			 * The entry's particulars, as the BAS codebook lists them: terms and their values.
+			 * Concept is ours (BAS lists none): what is measured, before who is asked.
+			 */}
 			<dl className="cb-meta">
+				{view.concept !== undefined && (
+					<>
+						<dt>Concept</dt>
+						<dd>
+							<ResolvedText value={view.concept} />
+						</dd>
+					</>
+				)}
 				{view.universe !== undefined && (
 					<>
 						<dt>Universe</dt>
