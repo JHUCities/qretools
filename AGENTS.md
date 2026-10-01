@@ -1260,8 +1260,8 @@ a file that already has it. Msg `fixApplied` applies to the open file only, in `
 fix is one Cmd-Z and the caret outside it stays put; a GitHub fast-forward no longer sends
 the caret to the top (accepted: every outside change is its own undo step, so Cmd-Z
 after "Reload from GitHub" brings the local text back as an unsaved change; the history
-resets when another file opens). In the Findings list the fix is the item's one trailing action and
-wins over the link; in the editor it is the lint tooltip's own action button
+resets when another file opens). In the Findings list the fix is a text link under
+the message (since 2026-10-01, below); in the editor it is the lint tooltip's own action button
 (`Diagnostic.actions`). **Create and use:** the name dialog (`browser.naming`, create or
 rename) asks a new universe or instruction for its text too; confirming adds the draft
 and rewrites the reference in the question it came from (`use: {id, path}`), staying
@@ -1272,13 +1272,16 @@ question in this tab that names it (`renameEdits`, from the parser's mentions), 
 become unsaved changes. Renaming a saved file is a path move across branches: backlog.
 **A fix is offered as an IDE offers one (owner, 2026-10-01):** in the lint tooltip a link
 on its own line under the message (CodeMirror's grey pill was indented from the text),
-with its key muted after it: Cmd-. (Ctrl+. elsewhere), VS Code's Quick Fix, which applies
+with its key muted after it: Cmd-. (Ctrl-. elsewhere), VS Code's Quick Fix, which applies
 the fix of the first finding at the caret that has one, the one its tooltip shows first
 (only that one carries the hint; `markClass: "cm-quickFix"`). Not verified with a real
 keyboard yet: Cmd-. is "cancel" in macOS dialogs and Ctrl-. may be an input method's on
-Linux. In the Findings list the fix is a lightbulb (`LightBulbIcon`, VS
-Code's), its words its name and tooltip: as a text button it squeezed the message to a
-column of letters. **A file's status reads its most severe finding:** `advice` carries
+Linux. **In the Findings list the fix is a text link under the message** (owner, as
+GitHub offers "Create a new release" under "No releases published"), beside another
+file's "Open …" link (both show now, no longer one slot): as a text button beside the
+item it squeezed the message to a column of letters, and a lightbulb hid the words.
+Applying it also goes to the finding's place, so focus follows the change into the
+source, never to the page. **A file's status reads its most severe finding:** `advice` carries
 `worst` (`warning` or `info`), so the tree's icon, the panel's badge (orange for a
 warning) and the Findings list draw one severity one way, from one table (`SEVERITY`
 in Previews.tsx); a warning had shown as blue info in the tree, and an error as a
@@ -1448,10 +1451,12 @@ saved, a question moved), and only then (`revealOpen`, with `openFolder` in tree
 the tree shows a folder open only when it is in `browser.expanded` or a filter is
 active. Clicking it closes it like any other, and the file stays open.
 
-**Findings are drawn two ways, not three (2026-09-30).** Editable: Primer's `ActionList`,
-each item going to its place. Read only: a plain `ul`, because an `ActionList.Item`
-with no `onSelect` still renders a button (Primer 38, unless the list is a menu or
-listbox or the item inactive), and a button that does nothing is worse than a list.
+**Findings are drawn one way (2026-10-01; two since 2026-09-30, three before).** One
+plain list, editable or read only (`role="list"`, as VoiceOver drops a bulletless
+list's semantics): severity icon and name, the message (a link-styled button to its
+place when editable), the hint, then the fix and another file as text links. Not
+Primer's `ActionList`: an item is one button, so a link inside it is invalid, and read
+only it renders buttons that do nothing (Primer 38).
 The DDI pane's schema problems are Primer's `InlineMessage variant="critical"` (was a
 hand-styled `p.finding`), from `@primer/react/experimental`: its API may change in a
 minor release.
