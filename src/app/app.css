@@ -734,9 +734,13 @@ button.hole {
 	font-weight: var(--base-text-weight-semibold);
 	text-align: start;
 }
-/* A link that goes to a place in this file reads as the message, in the text's colour. */
+/*
+ * A link that goes to a place in this file reads as the message, in the text's colour.
+ * Primer's Link as a button doesn't wrap (`white-space: nowrap`); a message or fix must.
+ */
 button.finding-message {
 	color: var(--fgColor-default);
+	white-space: normal;
 }
 .finding-hint {
 	color: var(--fgColor-muted);
@@ -747,6 +751,7 @@ button.finding-message {
 	font: inherit;
 	font-size: var(--text-body-size-small);
 	text-align: start;
+	white-space: normal;
 }
 /* A library's own words under the plain message: kept, quieter. */
 .detail {
