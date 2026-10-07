@@ -149,6 +149,26 @@ export type Node =
 			readonly value?: Cond;
 	  }
 	| {
+			/**
+			 * The respondent lists things, one row each: as many as `count` says (asked
+			 * first), or while `more` is true (asked as each row's last question).
+			 */
+			readonly kind: "roster";
+			readonly path: string;
+			readonly name?: string;
+			readonly end?:
+				| { readonly kind: "count"; readonly value?: Cond }
+				| { readonly kind: "more"; readonly cond?: Cond };
+			readonly flow: readonly Node[];
+	  }
+	| {
+			/** Over an earlier roster's rows, again: its questions mean this row's answers. */
+			readonly kind: "each";
+			readonly path: string;
+			readonly roster?: string;
+			readonly flow: readonly Node[];
+	  }
+	| {
 			/** Written, but nothing here is a step yet: a hole in the flow. */
 			readonly kind: "hole";
 			readonly path: string;
@@ -164,8 +184,18 @@ export interface InstrumentDraft {
 	readonly flow: readonly Node[];
 }
 
-/** What a name in a condition or fill means: a bank variable, an input, a compute, or an `as`. */
+/**
+ * What a name in a condition or fill means: a bank variable, an input, a compute, an
+ * `as`, or a roster's row number (`members.index`; plain `index` is the innermost
+ * roster's, and is read as that).
+ */
 export type Named =
+	| {
+			readonly kind: "index";
+			readonly roster: string;
+			readonly name: string;
+			readonly type: Type;
+	  }
 	| {
 			readonly kind: "bank";
 			readonly alias: string;

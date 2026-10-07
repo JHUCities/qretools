@@ -206,6 +206,8 @@ export function parseInstrument(
 		pending: [],
 		computes: [],
 		names: new Map(),
+		rosters: new Map(),
+		rows: [],
 	};
 	const universe = readUniverse(top.get("universe", true), "universe", ctx);
 	const flowNode = top.get("flow", true);
@@ -248,6 +250,9 @@ interface Context {
 	readonly declare: (name: string, named: Named, path: string) => void;
 	/** Typing to do once every name is known. */
 	readonly pending: (() => void)[];
+	/** The rosters by name, and the rows a step is read within (innermost last). */
+	readonly rosters: Map<string, string>;
+	readonly rows: string[];
 	/** What each name read resolved to, for the checks. */
 	readonly names: Map<string, Named>;
 	/** Computes' typing, run first, in the order they read each other. */
@@ -816,6 +821,10 @@ function readStep(
 				...(value !== undefined && { value }),
 			};
 		}
+		case "roster":
+			return readRoster(item, own, path, ctx);
+		case "each":
+			return readEach(item, own, path, ctx);
 		default:
 			ctx.say(
 				problem(
@@ -828,6 +837,163 @@ function readStep(
 			return hole;
 	}
 }
+
+/** A roster: its name, how its rows end, and the flow asked for each row. */
+function readRoster(
+	item: YAMLMap,
+	own: unknown,
+	path: string,
+	ctx: Context,
+): Node {
+	const at = `${path}.roster`;
+	// A roster within another's rows is a third record linked to the second: that waits
+	// for the long-record design, as its row numbers would need resetting per outer row.
+	if (ctx.rows.length > 0)
+		ctx.say(
+			problem(
+				"not-yet",
+				"error",
+				at,
+				"A roster inside another roster's rows isn't in this version yet.",
+				"Rosters inside rosters wait for how their rows are recorded under each outer row.",
+			),
+		);
+	const name = readText(own, at, true, ctx.say);
+	if (name !== undefined) {
+		if (!NAME_PATTERN.test(name))
+			ctx.say(
+				problem(
+					"wrong-type",
+					"error",
+					at,
+					`\`${name}\` isn't a valid name.`,
+					"Lowercase letters, digits and underscores, starting with a letter.",
+				),
+			);
+		else if (ctx.rosters.has(name) || ctx.scope.has(name) || KEYWORDS.has(name))
+			ctx.say(
+				problem(
+					"name-clash",
+					"error",
+					at,
+					`\`${name}\` already names something in this instrument.`,
+				),
+			);
+		else ctx.rosters.set(name, path);
+	}
+	const count = item.get("count", true);
+	const more = item.get("more", true);
+	if (count !== undefined && more !== undefined)
+		ctx.say(
+			problem(
+				"unknown-key",
+				"error",
+				`${path}.more`,
+				"A roster ends one way: `count` (how many, asked first) or `more` (anyone else?, asked last in each row).",
+			),
+		);
+	const flowNode = item.get("flow", true);
+	const flow = within(name, ctx, () =>
+		flowNode === undefined
+			? nothing<Node>(
+					ctx.say,
+					problem(
+						"hole",
+						"hole",
+						`${path}.flow`,
+						"A roster needs its `flow`: what's asked for each row.",
+					),
+				)
+			: readFlow(flowNode, `${path}.flow`, ctx),
+	);
+	// `more` is read at the end of a row, inside it; `count` before the rows, outside.
+	const end: Extract<Node, { kind: "roster" }>["end"] =
+		count !== undefined
+			? {
+					kind: "count",
+					...optional(
+						"value",
+						readCond(count, `${path}.count`, ctx, "value", undefined, "number"),
+					),
+				}
+			: more !== undefined
+				? {
+						kind: "more",
+						...optional(
+							"cond",
+							within(name, ctx, () =>
+								readCond(more, `${path}.more`, ctx, "condition"),
+							),
+						),
+					}
+				: undefined;
+	if (end === undefined)
+		ctx.say(
+			problem(
+				"hole",
+				"hole",
+				at,
+				"How many rows? Give `count` (a number asked first) or `more` (a condition asked last in each row).",
+			),
+		);
+	return {
+		kind: "roster",
+		path,
+		...(name !== undefined && { name }),
+		...(end !== undefined && { end }),
+		flow,
+	};
+}
+
+/** Over an earlier roster's rows: the roster must be one this instrument has. */
+function readEach(
+	item: YAMLMap,
+	own: unknown,
+	path: string,
+	ctx: Context,
+): Node {
+	const at = `${path}.each`;
+	const roster = readText(own, at, true, ctx.say);
+	if (roster !== undefined)
+		ctx.pending.push(() => {
+			if (!ctx.rosters.has(roster))
+				ctx.say(
+					problem(
+						"unknown-name",
+						"hole",
+						at,
+						`No roster is named \`${roster}\`.`,
+						ctx.rosters.size > 0
+							? `Rosters: ${[...ctx.rosters.keys()].join(", ")}.`
+							: "Declare it with `- roster:` first.",
+					),
+				);
+		});
+	const flowNode = item.get("flow", true);
+	const flow = within(roster, ctx, () =>
+		flowNode === undefined
+			? nothing<Node>(
+					ctx.say,
+					problem("hole", "hole", `${path}.flow`, "`each` needs its `flow`."),
+				)
+			: readFlow(flowNode, `${path}.flow`, ctx),
+	);
+	return { kind: "each", path, ...(roster !== undefined && { roster }), flow };
+}
+
+/** What `read` gives, inside the rows of `roster` (for `index`, and for row-scoped answers). */
+function within<T>(roster: string | undefined, ctx: Context, read: () => T): T {
+	if (roster === undefined) return read();
+	ctx.rows.push(roster);
+	try {
+		return read();
+	} finally {
+		ctx.rows.pop();
+	}
+}
+
+const optional = <K extends string, V>(key: K, value: V | undefined) =>
+	(value === undefined ? {} : { [key]: value }) as Partial<Record<K, V>>;
 
 function readOrder(
 	node: unknown,
@@ -1092,6 +1258,9 @@ function lookup(name: string, ctx: Context): Named | undefined {
 function resolve(name: string, ctx: Context): Named | undefined {
 	const bare = ctx.scope.get(name);
 	if (bare !== undefined) return bare;
+	const row = /^([a-z][a-z0-9_]*)\.index$/.exec(name);
+	if (row?.[1] !== undefined && ctx.rosters.has(row[1]))
+		return { kind: "index", roster: row[1], name, type: { kind: "number" } };
 	const dot = name.indexOf(".");
 	if (dot === -1) return undefined;
 	const alias = name.slice(0, dot);
@@ -1130,6 +1299,8 @@ function readCond(
 	ctx: Context,
 	as: "condition" | "value",
 	compute?: { readonly name: string; readonly path: string },
+	/** A value that must be a number (a roster's `count`). */
+	want?: "number",
 ): Cond | undefined {
 	if (
 		node === undefined ||
@@ -1167,7 +1338,9 @@ function readCond(
 	const text = String(node.value);
 	const parsed = parseCondition(text);
 	const at = scalarMap(ctx.source, node as Scalar, text);
-	const expr = moveRanges(parsed.expr, at);
+	// `index` is the innermost roster's row number: read as `<roster>.index` from here on.
+	const rows = [...ctx.rows];
+	const expr = innermostIndex(moveRanges(parsed.expr, at), rows);
 	const problems = parsed.problems.map((p) => ({ ...p, range: at(p.range) }));
 	for (const p of problems) report(ctx, path, p, "error");
 	// A hole inside a problem already said is not said again.
@@ -1190,7 +1363,25 @@ function readCond(
 		// A name nothing has is still to be written: a hole, listing what is in scope.
 		for (const p of result.problems)
 			report(ctx, path, p, p.kind === "unknown-name" ? "hole" : "error", expr);
-		for (const n of namesOf(expr)) ambiguous(n.name, n.range, path, ctx);
+		for (const n of namesOf(expr)) {
+			ambiguous(n.name, n.range, path, ctx);
+			outsideRows(n.name, n.range, path, rows, ctx);
+		}
+		if (
+			want === "number" &&
+			result.type.kind !== "number" &&
+			result.type.kind !== "unknown"
+		)
+			ctx.say(
+				problem(
+					"type",
+					"error",
+					path,
+					"A roster's `count` is a number: how many rows.",
+					undefined,
+					expr.range,
+				),
+			);
 		if (compute !== undefined) {
 			const named = ctx.scope.get(compute.name);
 			// Only the compute that holds the name: a clash left the earlier meaning.
@@ -1516,8 +1707,9 @@ function placeholdersIn(
 ): readonly Placeholder[] {
 	if (text === undefined) return [];
 	const at = isScalar(node) ? scalarMap(ctx.source, node, text) : undefined;
+	const inner = ctx.rows.at(-1);
 	const found = placeholderSpans(text).map((p) => ({
-		name: p.name,
+		name: p.name === "index" && inner !== undefined ? `${inner}.index` : p.name,
 		range: at?.(p.range) ?? p.range,
 	}));
 	ctx.pending.push(() => {
@@ -1562,4 +1754,57 @@ function indexInstrument(doc: Document, length: number): Record<string, Range> {
 	};
 	walk(doc.contents, "");
 	return ranges;
+}
+
+/** `index` in an expression, read as the innermost enclosing roster's row number. */
+function innermostIndex(
+	e: Cond["expr"],
+	rows: readonly string[],
+): Cond["expr"] {
+	const inner = rows.at(-1);
+	if (inner === undefined) return e;
+	const go = (x: Cond["expr"]): Cond["expr"] => {
+		switch (x.kind) {
+			case "name":
+				return x.name === "index" ? { ...x, name: `${inner}.index` } : x;
+			case "unary":
+				return { ...x, operand: go(x.operand) };
+			case "binary":
+				return { ...x, left: go(x.left), right: go(x.right) };
+			case "member":
+				return { ...x, operand: go(x.operand), set: x.set.map(go) };
+			case "call":
+				return { ...x, args: x.args.map(go) };
+			default:
+				return x;
+		}
+	};
+	return go(e);
+}
+
+/** A roster's row number read outside its rows has no row to be the number of. */
+function outsideRows(
+	name: string,
+	range: Range,
+	path: string,
+	rows: readonly string[],
+	ctx: Context,
+): void {
+	const row = /^([a-z][a-z0-9_]*)\.index$/.exec(name);
+	if (
+		row?.[1] === undefined ||
+		!ctx.rosters.has(row[1]) ||
+		rows.includes(row[1])
+	)
+		return;
+	ctx.say(
+		problem(
+			"misplaced",
+			"error",
+			path,
+			`\`${name}\` is a row's number, so it's read inside \`${row[1]}\` or an \`each\` over it.`,
+			undefined,
+			range,
+		),
+	);
 }

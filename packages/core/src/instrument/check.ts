@@ -59,6 +59,19 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 	const { draft, names } = parsed;
 	const findings: Finding[] = [];
 	const say = (f: Finding) => findings.push(f);
+	/** The rosters a step is within, innermost last, and the roster each row's answer belongs to. */
+	const rows: string[] = [];
+	const rowOf = new Map<string, string>();
+	/** What every row of each roster answers for certain. */
+	const perRow = new Map<string, ReadonlySet<string>>();
+	const inRows = <T>(roster: string | undefined, go: () => T): T => {
+		if (roster !== undefined) rows.push(roster);
+		try {
+			return go();
+		} finally {
+			if (roster !== undefined) rows.pop();
+		}
+	};
 
 	/** A value read here: what it means must be asked or computed by now. */
 	const read = (cond: Cond | undefined, path: string, seen: Seen) => {
@@ -75,8 +88,20 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 		guarded: boolean,
 	) => {
 		const named = names.get(name);
-		if (named === undefined || named.kind === "input") return;
+		if (named === undefined || named.kind === "input" || named.kind === "index")
+			return;
 		const key = keyOf(named, name);
+		const row = rowOf.get(key);
+		if (row !== undefined && !rows.includes(row)) {
+			say({
+				code: "misplaced",
+				severity: "error",
+				path,
+				message: `\`${name}\` is answered once for each row of \`${row}\`, so it's read inside \`${row}\` or an \`each\` over it.`,
+				...(range !== undefined && { range }),
+			});
+			return;
+		}
 		const what = named.kind === "compute" ? "computed" : "asked";
 		if (!seen.possible.has(key))
 			say({
@@ -158,10 +183,11 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 					});
 				universe(node, conditional);
 				fillTypes(node);
-				const after = add(
-					seen,
-					node.as === undefined ? [key, ...recorded(q)] : [node.as],
-				);
+				const keys = node.as === undefined ? [key, ...recorded(q)] : [node.as];
+				// Asked within a roster, the answer is one per row of the innermost.
+				const inner = rows.at(-1);
+				if (inner !== undefined) for (const k of keys) rowOf.set(k, inner);
+				const after = add(seen, keys);
 				// A check reads the answer just given, and what came before.
 				for (const check of node.checks) {
 					read(check.ensure, `${check.path}.ensure`, after);
@@ -220,6 +246,30 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 			case "compute":
 				read(node.value, `${node.path}.value`, seen);
 				return node.name === undefined ? seen : add(seen, [node.name]);
+			case "roster": {
+				// `count` is read before the rows; `more` at the end of each.
+				if (node.end?.kind === "count")
+					read(node.end.value, `${node.path}.count`, seen);
+				const end = inRows(node.name, () => {
+					const body = flow(node.flow, seen, true);
+					if (node.end?.kind === "more")
+						read(node.end.cond, `${node.path}.more`, body);
+					return body;
+				});
+				if (node.name !== undefined) perRow.set(node.name, end.definite);
+				// There may be no rows at all. (A `more` roster always has one, since it asks
+				// after each; kept cautious on purpose: a row's own answers are read only
+				// within it anyway.)
+				return merge([seen, end]);
+			}
+			case "each": {
+				// Within a row, what every row answers is answered.
+				const answered =
+					node.roster === undefined ? undefined : perRow.get(node.roster);
+				const start = answered === undefined ? seen : add(seen, [...answered]);
+				const end = inRows(node.roster, () => flow(node.flow, start, true));
+				return merge([seen, end]);
+			}
 			case "hole":
 				return seen;
 			default:
@@ -371,6 +421,8 @@ function variableNames(
 					break;
 				}
 				case "section":
+				case "roster":
+				case "each":
 					walk(node.flow);
 					break;
 				case "if":

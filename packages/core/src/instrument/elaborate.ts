@@ -109,10 +109,61 @@ export function elaborateInstrument(
 				? named.variable
 				: named.kind === "input"
 					? named.input.name
-					: named.name;
+					: named.kind === "index"
+						? `${named.roster}_index`
+						: named.name;
 		return defined.has(v) ? v : undefined;
 	};
-	const outOf = (variable: string): Identity => id(`out-${variable}`);
+	/** Where a row number is read from: the Loop or count over the rows a step is within. */
+	const rowParams = new Map<string, Identity>();
+	const outOf = (variable: string): Identity =>
+		rowParams.get(variable) ?? id(`out-${variable}`);
+	const withRow = <T>(variable: string, source: Identity, go: () => T): T => {
+		const before = rowParams.get(variable);
+		rowParams.set(variable, source);
+		try {
+			return go();
+		} finally {
+			if (before === undefined) rowParams.delete(variable);
+			else rowParams.set(variable, before);
+		}
+	};
+
+	/** A VTL command: its text, and each name it reads passed in, bound from its source. */
+	const vtl = (
+		content: string,
+		reads: readonly { readonly alias: string; readonly source: Identity }[],
+		at: string,
+	): JsonObject => ({
+		Description: structured(NULL_RULE),
+		Command: [
+			{
+				ProgramLanguage: codeValue(VTL),
+				CommandContent: content,
+				InParameter: reads.map((r) => ({
+					...id(`${at}-in-${r.alias}`),
+					Alias: r.alias,
+				})),
+				Binding: reads.map((r) => ({
+					SourceParameterReference: { ...r.source },
+					TargetParameterReference: { ...id(`${at}-in-${r.alias}`) },
+				})),
+			},
+		],
+	});
+	/** A condition's names as the variables they read, once each. */
+	const readsOf = (cond: Cond): { alias: string; source: Identity }[] =>
+		[
+			...new Set(
+				namesOf(cond.expr).flatMap((n) => {
+					const v = exported(n.name);
+					return v === undefined ? [] : [v];
+				}),
+			),
+		].map((v) => ({ alias: v, source: outOf(v) }));
+	const printed = (cond: Cond): string =>
+		// A name that means nothing here is printed as a hole is: VTL's null.
+		printCondition(cond.expr, (n) => exported(n) ?? "null", "null");
 
 	/** A VTL command over a condition: its names in as parameters, bound to their variables. */
 	const command = (
@@ -121,34 +172,8 @@ export function elaborateInstrument(
 		wrap?: (text: string) => string,
 	): JsonObject | undefined => {
 		if (cond === undefined) return undefined;
-		const reads = [
-			...new Set(
-				namesOf(cond.expr).flatMap((n) => {
-					const v = exported(n.name);
-					return v === undefined ? [] : [v];
-				}),
-			),
-		];
-		// A name that means nothing here is printed as a hole is: VTL's null.
-		const text = printCondition(
-			cond.expr,
-			(n) => exported(n) ?? "null",
-			"null",
-		);
-		return {
-			Description: structured(NULL_RULE),
-			Command: [
-				{
-					ProgramLanguage: codeValue(VTL),
-					CommandContent: wrap === undefined ? text : wrap(text),
-					InParameter: reads.map((v) => ({ ...id(`${at}-in-${v}`), Alias: v })),
-					Binding: reads.map((v) => ({
-						SourceParameterReference: { ...outOf(v) },
-						TargetParameterReference: { ...id(`${at}-in-${v}`) },
-					})),
-				},
-			],
-		};
+		const text = printed(cond);
+		return vtl(wrap === undefined ? text : wrap(text), readsOf(cond), at);
 	};
 
 	/** Text with `{{name}}` placeholders, each bound to its variable's OutParameter. */
@@ -425,12 +450,123 @@ export function elaborateInstrument(
 					),
 				];
 			}
+			case "roster":
+				return roster(node);
+			case "each":
+				return each(node);
 			case "stop":
 			case "hole":
 				return [];
 			default:
 				return node satisfies never;
 		}
+	};
+
+	/** Each roster's row count, as `each` over it reads it. */
+	const rosterRows = new Map<
+		string,
+		() => { text: string; reads: { alias: string; source: Identity }[] }
+	>();
+
+	/**
+	 * A roster: with `count`, a Loop numbering rows from 1 while the number is at most the
+	 * count; with `more`, a RepeatUntil whose rows start by counting themselves and end
+	 * when `more` isn't true. Inside, `index` is the row's number.
+	 */
+	const roster = (node: Extract<Node, { kind: "roster" }>): readonly Item[] => {
+		if (node.name === undefined) return [];
+		const name = node.name;
+		const at = local("roster", name);
+		const v = `${name}_index`;
+		const param = id(`out-${v}`);
+		const row = { alias: v, source: param };
+		if (node.end?.kind === "more") {
+			const counter = emit(
+				item("ComputationItem", id(`${at}-next`), {
+					CommandCode: vtl(`nvl(${v}, 0) + 1`, [row], `${at}-next`),
+					AssignedVariableReference: { ...param, ParameterName: [intl(v)] },
+				}),
+			);
+			const more = node.end.cond;
+			rosterRows.set(name, () => ({
+				text: `${name}_rows`,
+				reads: [{ alias: `${name}_rows`, source: param }],
+			}));
+			return withRow(v, param, () => {
+				const body = emit(
+					item("Sequence", id(`${at}-row`), {
+						ControlConstructReference: [
+							ref(counter),
+							...flow(node.flow, `${at}-row`),
+						],
+					}),
+				);
+				return [
+					emit(
+						item(
+							"RepeatUntil",
+							id(at),
+							obj({
+								UntilCondition: command(
+									more,
+									`${at}-until`,
+									(t) => `not nvl(${t}, false)`,
+								),
+								UntilConstructReference: ref(body),
+							}),
+						),
+					),
+				];
+			});
+		}
+		const count = node.end?.value;
+		rosterRows.set(name, () =>
+			count === undefined
+				? { text: "0", reads: [] }
+				: { text: printed(count), reads: readsOf(count) },
+		);
+		return [
+			loop(
+				at,
+				v,
+				param,
+				rosterRows.get(name)?.() ?? { text: "0", reads: [] },
+				node.flow,
+			),
+		];
+	};
+
+	/** Over an earlier roster's rows: a Loop of its own, numbering them again. */
+	const each = (node: Extract<Node, { kind: "each" }>): readonly Item[] => {
+		if (node.roster === undefined) return [];
+		const at = local("each", node.roster);
+		const v = `${node.roster}_index`;
+		const rows = rosterRows.get(node.roster)?.() ?? { text: "0", reads: [] };
+		return [loop(at, v, id(`${at}-out-${v}`), rows, node.flow)];
+	};
+
+	const loop = (
+		at: string,
+		v: string,
+		param: Identity,
+		rows: { text: string; reads: { alias: string; source: Identity }[] },
+		nodes: readonly Node[],
+	): Item => {
+		const row = { alias: v, source: param };
+		const body = withRow(v, param, () => sequence(nodes, `${at}-row`));
+		return emit(
+			item("Loop", id(at), {
+				LoopVariableReference: { ...param, ParameterName: [intl(v)] },
+				InitialValue: vtl("1", [], `${at}-init`),
+				LoopWhile: vtl(
+					`${v} <= ${rows.text}`,
+					[row, ...rows.reads.filter((r) => r.alias !== v)],
+					`${at}-while`,
+				),
+				StepValue: vtl(`${v} + 1`, [row], `${at}-step`),
+				ControlConstructReference: ref(body),
+			}),
+		);
 	};
 
 	const ask = (node: Extract<Node, { kind: "ask" }>): readonly Item[] => {
@@ -684,8 +820,11 @@ function definedNames(draft: InstrumentDraft): ReadonlySet<string> {
 					for (const d of definedVariables(n.question.evaluation.draft))
 						out.add(d.name);
 			} else if (n.kind === "compute" && n.name !== undefined) out.add(n.name);
-			else if (n.kind === "section") walk(n.flow);
-			else if (n.kind === "if") {
+			else if (n.kind === "section" || n.kind === "each") walk(n.flow);
+			else if (n.kind === "roster") {
+				if (n.name !== undefined) out.add(`${n.name}_index`);
+				walk(n.flow);
+			} else if (n.kind === "if") {
 				for (const b of n.branches) walk(b.then);
 				walk(n.else ?? []);
 			}

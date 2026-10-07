@@ -178,6 +178,22 @@ describe("checking an instrument's flow", () => {
 		).toEqual(["info universe flow.2.ask"]);
 	});
 
+	it("reads a row's answers only within its roster, or an `each` over it", () => {
+		const flow = `  - ask: bas.consent
+  - roster: people
+    more: bas.consent = "1"
+    flow:
+      - ask: bas.why
+  - each: people
+    flow:
+      - say: "{{bas.why}}"
+`;
+		expect(checked(flow)).toEqual([]);
+		expect(checked(`${flow}  - say: "{{bas.why}}"\n`)).toEqual([
+			"error misplaced flow.3.say",
+		]);
+	});
+
 	it("advises on whom a question is asked of", () => {
 		expect(
 			checked(

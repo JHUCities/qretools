@@ -293,6 +293,64 @@ flow:
 			}
 	});
 
+	it("makes rosters loops, with each row's number bound where it's read", () => {
+		const parsed = parseInstrument(
+			`name: households
+uses:
+  bas: here
+flow:
+  - ask: bas.rent
+  - roster: members
+    count: bas.rent
+    flow:
+      - say: Person {{index}}.
+      - ask: bas.why
+  - roster: jobs
+    more: bas.consent = "1"
+    flow:
+      - ask: bas.tenure
+      - ask: bas.consent
+  - each: members
+    flow:
+      - say: "Again, person {{index}}: {{bas.why}}"
+`,
+			{ bas: BAS },
+		);
+		expect(
+			[...parsed.findings, ...checkInstrument(parsed)].filter(
+				(f) => f.severity !== "info",
+			),
+		).toEqual([]);
+		const { document, collisions } = instrumentDocument(
+			elaborateInstrument(parsed, { agency: "org.example" }),
+		);
+		expect(validator.ok && validator.value(document)).toEqual([]);
+		expect(collisions).toEqual([]);
+		const commands = [...objects(document)].flatMap((o) =>
+			typeof o.CommandContent === "string" ? [o.CommandContent] : [],
+		);
+		expect(commands).toEqual(
+			expect.arrayContaining([
+				"members_index <= rent",
+				"members_index + 1",
+				"nvl(jobs_index, 0) + 1",
+				'not nvl(consent = "1", false)',
+			]),
+		);
+		expect(Object.keys(document.Loop ?? {})).toHaveLength(2);
+		expect(Object.keys(document.RepeatUntil ?? {})).toHaveLength(1);
+		// Every parameter bound is defined, in the loop or count it comes from.
+		const identities = new Set<string>();
+		for (const o of objects(document))
+			if (typeof o.URN === "string") identities.add(o.URN);
+		for (const o of objects(document)) {
+			const p = o.SourceParameterReference as JsonObject | undefined;
+			if (p !== undefined) expect(identities.has(p.URN as string)).toBe(true);
+			if (typeof o.ID === "string")
+				expect(o.ID.split(".").length <= 2).toBe(true);
+		}
+	});
+
 	it("is total: a draft with holes still elaborates", () => {
 		const parsed = parseInstrument(
 			"name: x\nuses:\n  bas: here\nflow:\n  - if: bas.consent =\n    then:\n      - ask: bas.nope\n  - ask:\n",

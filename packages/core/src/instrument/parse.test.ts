@@ -166,13 +166,72 @@ describe("reading an instrument", () => {
 		]);
 	});
 
-	it("keeps `stop` at the top, and says what isn't in the language yet", () => {
+	it("keeps `stop` at the top", () => {
 		const { findings } = read(
-			"name: x\nflow:\n  - section: s\n    flow:\n      - stop: true\n  - roster: members\n    more: true\n    flow: []\n",
+			"name: x\nflow:\n  - section: s\n    flow:\n      - stop: true\n",
 		);
+		expect(findings.map(brief)).toEqual(["error misplaced flow.0.flow.0.stop"]);
+	});
+
+	it("reads rosters, ending by a count or by `more`, and `each` over one", () => {
+		const { draft, findings } = read(`name: x
+uses:
+  bas: here
+flow:
+  - ask: bas.rent
+  - roster: members
+    count: bas.rent
+    flow:
+      - say: Person {{index}}.
+      - ask: bas.why
+  - roster: jobs
+    more: bas.sat = "1"
+    flow:
+      - ask: bas.sat
+  - each: members
+    flow:
+      - if: members.index > 1
+        then: []
+`);
+		expect(findings.map(brief)).toEqual([]);
+		const [, members, jobs, each] = draft.flow;
+		expect(members?.kind === "roster" && members.end?.kind).toBe("count");
+		expect(jobs?.kind === "roster" && jobs.end?.kind).toBe("more");
+		expect(each?.kind === "each" && each.roster).toBe("members");
+		const say = members?.kind === "roster" ? members.flow[0] : undefined;
+		expect(say?.kind === "say" && say.reads.map((r) => r.name)).toEqual([
+			"members.index",
+		]);
+	});
+
+	it("says what a roster lacks, and where a row's number can't be read", () => {
+		const { findings } = read(`name: x
+uses:
+  bas: here
+flow:
+  - roster: a
+    flow: []
+  - roster: b
+    count: bas.sat = "1"
+    more: true
+    flow: []
+  - if: a.index = 1
+    then: []
+  - each: nope
+    flow: []
+`);
 		expect(findings.map(brief)).toEqual([
-			"error misplaced flow.0.flow.0.stop",
-			"error not-yet flow.1.roster",
+			"hole hole flow.0.roster",
+			"error unknown-key flow.1.more",
+			"error type flow.1.count",
+			"error misplaced flow.2.if",
+			"hole unknown-name flow.3.each",
+		]);
+		const nested = read(
+			"name: x\nflow:\n  - roster: a\n    count: 2\n    flow:\n      - roster: b\n        count: 1\n        flow: []\n",
+		);
+		expect(nested.findings.map(brief)).toEqual([
+			"error not-yet flow.0.flow.0.roster",
 		]);
 	});
 
