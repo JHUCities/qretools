@@ -85,7 +85,13 @@ export type InstrumentCode =
 	/** A step where the language doesn't allow it (`stop` inside a section). */
 	| "misplaced"
 	/** Computed values that each need the other. */
-	| "cycle";
+	| "cycle"
+	/** A name read before the flow asks or computes it, or where it may not have. */
+	| "order"
+	/** A branch the flow never takes, or what follows a stop that always stops. */
+	| "unreachable"
+	/** Advice on whom a question is asked of, against the path that reaches it. */
+	| "universe";
 
 export type FindingCode = ParseCode | LintCode | InstrumentCode | "ddi-invalid";
 

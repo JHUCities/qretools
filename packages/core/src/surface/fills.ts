@@ -28,6 +28,19 @@ export type Piece =
 /** `{{name}}`, spaces inside allowed; the one definition of a placeholder. */
 const PLACEHOLDER = /\{\{\s*([^{}]*?)\s*\}\}/g;
 
+/**
+ * Every `{{…}}` in a text, whatever is inside, with where it is: an instrument's
+ * placeholders name qualified things (`bas.hou_rent`), which a bank's fill names can't be.
+ */
+export function placeholderSpans(
+	text: string,
+): readonly { readonly name: string; readonly range: Range }[] {
+	return [...text.matchAll(PLACEHOLDER)].map((m) => ({
+		name: m[1] ?? "",
+		range: [m.index, m.index + m[0].length] as const,
+	}));
+}
+
 /** Every well-named placeholder in `text`: its name and where it is, `[from, to)`. */
 export function placeholders(
 	text: string,

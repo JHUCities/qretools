@@ -6,6 +6,7 @@
 import type { Expr } from "../cond/ast.ts";
 import type { Type } from "../cond/type.ts";
 import type { Evaluation } from "../evaluate.ts";
+import type { Range } from "../findings.ts";
 import type { Code } from "../surface/draft.ts";
 
 /** A bank imported under an alias; the address is the resolver's, never read here. */
@@ -67,6 +68,12 @@ export interface FillBinding {
 export type Severity = "info" | "warning" | "blocking";
 export const SEVERITIES: readonly Severity[] = ["info", "warning", "blocking"];
 
+/** A `{{name}}` in a statement or message: the name, and where the placeholder is in the source. */
+export interface Placeholder {
+	readonly name: string;
+	readonly range: Range;
+}
+
 /** What must be true of the answers once this question is answered, and what to say if not. */
 export interface Check {
 	readonly path: string;
@@ -74,6 +81,8 @@ export interface Check {
 	readonly ensure?: Cond;
 	readonly severity?: Severity;
 	readonly message?: string;
+	/** The message's placeholders, which read names as conditions do. */
+	readonly messageReads: readonly Placeholder[];
 }
 
 /** A universe: a bank's shared one by name (qualified), or prose. */
@@ -102,7 +111,12 @@ export type Node =
 			readonly fills: readonly FillBinding[];
 			readonly checks: readonly Check[];
 	  }
-	| { readonly kind: "say"; readonly path: string; readonly text?: string }
+	| {
+			readonly kind: "say";
+			readonly path: string;
+			readonly text?: string;
+			readonly reads: readonly Placeholder[];
+	  }
 	| {
 			readonly kind: "section";
 			readonly path: string;
@@ -126,6 +140,7 @@ export type Node =
 			readonly path: string;
 			readonly cond?: Cond;
 			readonly say?: string;
+			readonly sayReads: readonly Placeholder[];
 	  }
 	| {
 			readonly kind: "compute";

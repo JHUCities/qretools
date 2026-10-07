@@ -25,6 +25,7 @@ import type { Finding, Range } from "../findings.ts";
 import { readCodeMap } from "../surface/codes.ts";
 import { type Code, definedVariables } from "../surface/draft.ts";
 import { EMPTY_ENV } from "../surface/env.ts";
+import { placeholderSpans } from "../surface/fills.ts";
 import { readNumber, readOpen } from "../surface/parse.ts";
 import { clampRange, yamlErrors } from "../surface/read.ts";
 import { NAME_PATTERN } from "../surface/schema.ts";
@@ -37,6 +38,7 @@ import type {
 	Named,
 	Node,
 	Order,
+	Placeholder,
 	QuestionRef,
 	Severity,
 	UniverseRef,
@@ -51,8 +53,10 @@ export interface ParsedInstrument {
 	readonly findings: readonly Finding[];
 	/** Every path's range in the source, list items included (`flow.2.then.0`). */
 	readonly ranges: Readonly<Record<string, Range>>;
-	/** Every name the instrument's conditions and fills may read, resolved. */
+	/** The instrument's own names (inputs, computes, `as`), resolved. */
 	readonly scope: ReadonlyMap<string, Named>;
+	/** Every name its conditions, fills and placeholders read, with what it resolved to. */
+	readonly names: ReadonlyMap<string, Named>;
 }
 
 const TOP = [
@@ -110,7 +114,13 @@ export function parseInstrument(
 				`Fields: ${TOP.join(", ")}.`,
 			),
 		);
-		return { draft: empty, findings, ranges, scope: new Map() };
+		return {
+			draft: empty,
+			findings,
+			ranges,
+			scope: new Map(),
+			names: new Map(),
+		};
 	}
 	const say = (f: Finding) => findings.push(f);
 	for (const key of keysOf(top))
@@ -192,6 +202,7 @@ export function parseInstrument(
 		declare,
 		pending: [],
 		computes: [],
+		names: new Map(),
 	};
 	const universe = readUniverse(top.get("universe", true), "universe", ctx);
 	const flowNode = top.get("flow", true);
@@ -221,7 +232,7 @@ export function parseInstrument(
 		inputs,
 		flow,
 	};
-	return { draft, findings, ranges, scope };
+	return { draft, findings, ranges, scope, names: ctx.names };
 }
 
 interface Context {
@@ -234,6 +245,8 @@ interface Context {
 	readonly declare: (name: string, named: Named, path: string) => void;
 	/** Typing to do once every name is known. */
 	readonly pending: (() => void)[];
+	/** What each name read resolved to, for the checks. */
+	readonly names: Map<string, Named>;
 	/** Computes' typing, run first, in the order they read each other. */
 	readonly computes: {
 		readonly name: string;
@@ -706,9 +719,8 @@ function readStep(
 			return readAsk(item, own, path, ctx);
 		case "say": {
 			const text = readText(own, at, true, ctx.say);
-			if (text !== undefined)
-				ctx.pending.push(() => checkFills(text, at, ctx, own));
-			return { kind: "say", path, ...(text !== undefined && { text }) };
+			const reads = placeholdersIn(text, at, ctx, own);
+			return { kind: "say", path, ...(text !== undefined && { text }), reads };
 		}
 		case "section": {
 			const title = readText(own, at, false, ctx.say);
@@ -753,15 +765,18 @@ function readStep(
 				false,
 				ctx.say,
 			);
-			if (sayText !== undefined)
-				ctx.pending.push(() =>
-					checkFills(sayText, `${path}.say`, ctx, item.get("say", true)),
-				);
+			const sayReads = placeholdersIn(
+				sayText,
+				`${path}.say`,
+				ctx,
+				item.get("say", true),
+			);
 			return {
 				kind: "stop",
 				path,
 				...(cond !== undefined && { cond }),
 				...(sayText !== undefined && { say: sayText }),
+				sayReads,
 			};
 		}
 		case "compute": {
@@ -921,18 +936,27 @@ function readAsk(
 					"Lowercase letters, digits and underscores, starting with a letter.",
 				),
 			);
-		else
-			ctx.declare(
-				asName,
-				{
-					kind: "as",
-					name: asName,
-					path,
-					question,
-					type: questionType(question, ctx),
-				},
-				`${path}.as`,
-			);
+		else {
+			// The same question under the same name again (in another branch) is one
+			// name: whether both are on one path is the flow checks' to say.
+			const earlier = ctx.scope.get(asName);
+			if (
+				earlier?.kind !== "as" ||
+				earlier.question?.alias !== question.alias ||
+				earlier.question.path !== question.path
+			)
+				ctx.declare(
+					asName,
+					{
+						kind: "as",
+						name: asName,
+						path,
+						question,
+						type: questionType(question, ctx),
+					},
+					`${path}.as`,
+				);
+		}
 	}
 	const universe = readUniverse(
 		item.get("universe", true),
@@ -1057,6 +1081,12 @@ function questionType(q: QuestionRef, ctx: Context): Type {
  * or a select-all option's), a bare name an input, compute or `as`.
  */
 function lookup(name: string, ctx: Context): Named | undefined {
+	const found = resolve(name, ctx);
+	if (found !== undefined) ctx.names.set(name, found);
+	return found;
+}
+
+function resolve(name: string, ctx: Context): Named | undefined {
 	const bare = ctx.scope.get(name);
 	if (bare !== undefined) return bare;
 	const dot = name.indexOf(".");
@@ -1386,7 +1416,7 @@ function readChecks(
 					"A check has `ensure`, `severity` and `message`.",
 				),
 			);
-			return { path: at };
+			return { path: at, messageReads: [] };
 		}
 		for (const k of keysOf(item))
 			if (!["ensure", "severity", "message", "name"].includes(k))
@@ -1442,10 +1472,12 @@ function readChecks(
 			true,
 			ctx.say,
 		);
-		if (message !== undefined)
-			ctx.pending.push(() =>
-				checkFills(message, `${at}.message`, ctx, item.get("message", true)),
-			);
+		const messageReads = placeholdersIn(
+			message,
+			`${at}.message`,
+			ctx,
+			item.get("message", true),
+		);
 		const name = readText(item.get("name", true), `${at}.name`, false, ctx.say);
 		return {
 			path: at,
@@ -1453,33 +1485,42 @@ function readChecks(
 			...(ensure !== undefined && { ensure }),
 			...(severity !== undefined && { severity }),
 			...(message !== undefined && { message }),
+			messageReads,
 		};
 	});
 }
 
-/** `{{…}}` in a statement or message: each name must mean something here. */
-const PLACEHOLDER = /\{\{\s*([^{}]*?)\s*\}\}/g;
-function checkFills(
-	text: string,
+/**
+ * The `{{…}}` placeholders in a statement or message, where each is in the source; each
+ * name must mean something here, which is checked once every name is known.
+ */
+function placeholdersIn(
+	text: string | undefined,
 	path: string,
 	ctx: Context,
 	node: unknown,
-): void {
+): readonly Placeholder[] {
+	if (text === undefined) return [];
 	const at = isScalar(node) ? scalarMap(ctx.source, node, text) : undefined;
-	for (const m of text.matchAll(PLACEHOLDER)) {
-		const name = m[1] ?? "";
-		if (lookup(name, ctx) === undefined)
-			ctx.say(
-				problem(
-					"unknown-name",
-					"hole",
-					path,
-					`Nothing is named \`${name}\` here, so \`{{${name}}}\` can't be filled.`,
-					selectAllHint(name, ctx) ?? scopeHint(ctx),
-					at?.([m.index, m.index + m[0].length]),
-				),
-			);
-	}
+	const found = placeholderSpans(text).map((p) => ({
+		name: p.name,
+		range: at?.(p.range) ?? p.range,
+	}));
+	ctx.pending.push(() => {
+		for (const { name, range } of found)
+			if (lookup(name, ctx) === undefined)
+				ctx.say(
+					problem(
+						"unknown-name",
+						"hole",
+						path,
+						`Nothing is named \`${name}\` here, so \`{{${name}}}\` can't be filled.`,
+						selectAllHint(name, ctx) ?? scopeHint(ctx),
+						at === undefined ? undefined : range,
+					),
+				);
+	});
+	return found;
 }
 
 /** Every path's range, list items included, so a finding in a flow points at its step. */
