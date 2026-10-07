@@ -8,6 +8,7 @@ import { SCHEME_SINGULAR } from "./copy.js";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { isRoot, ROOT, type RootKind } from "./kinds.js";
 import { missingCollisions } from "./lint.js";
+import { parseBankFile } from "./surface/bankfile.js";
 import type { Code } from "./surface/draft.js";
 import {
 	EMPTY_ENV,
@@ -20,6 +21,7 @@ import {
 } from "./surface/env.js";
 import { labelMarksOf, type Mark } from "./surface/marks.js";
 import { indexDocument, pointAt } from "./surface/parse.js";
+import { hole } from "./surface/read.js";
 import { parseScale, type Scale } from "./surface/scales.js";
 import { withSpacing } from "./surface/spacing.js";
 import { type Symbols, schemeSymbols } from "./symbols.js";
@@ -33,7 +35,7 @@ export { isRoot, ROOT, type RootKind };
 export type SchemeKind = NamedScheme | RootKind;
 export type Kind = "question" | SchemeKind;
 
-/** In the tree's order: what is measured, then how it is asked, then missing data. */
+/** In the tree's order: what is measured, then how it is asked, then missing data, then the bank itself. */
 export const SCHEME_KINDS: readonly SchemeKind[] = [
 	"concept",
 	"scale",
@@ -41,6 +43,7 @@ export const SCHEME_KINDS: readonly SchemeKind[] = [
 	"universe",
 	"instruction",
 	"missing",
+	"bank",
 ];
 
 /** Where each named kind lives in the bank. The loader reads these folders. */
@@ -56,7 +59,7 @@ export const FOLDERS: Readonly<Record<NamedScheme, string>> = {
  * What a kind's file holds, which decides how it is read, previewed and started: a
  * `labels:` map, one `text:` line, or a concept's `label:` and `definition:`.
  */
-export type Shape = "labels" | "text" | "labelled";
+export type Shape = "labels" | "text" | "labelled" | "bank";
 
 export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	concept: "labelled",
@@ -65,6 +68,7 @@ export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	universe: "text",
 	instruction: "text",
 	missing: "labels",
+	bank: "bank",
 };
 
 /** The path a scheme file lives at. The name is the filename; nothing inside repeats it. */
@@ -96,7 +100,8 @@ export function kindAt(
 export type SchemeValue =
 	| { readonly kind: "labels"; readonly codes: readonly Code[] }
 	| { readonly kind: "text"; readonly text: string }
-	| { readonly kind: "labelled"; readonly entry: LabelledEntry };
+	| { readonly kind: "labelled"; readonly entry: LabelledEntry }
+	| { readonly kind: "bank"; readonly agency: string };
 
 export interface SchemeEvaluation {
 	readonly findings: readonly Finding[];
@@ -126,6 +131,14 @@ function readScheme(
 ): Omit<SchemeEvaluation, "symbols"> {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
+	if (SHAPE[kind] === "bank") {
+		const { agency, findings: read } = parseBankFile(source);
+		const findings = withSpacing(doc, source, read.map(pointAt(empties)));
+		const marks: readonly Mark[] = [];
+		return agency === undefined
+			? { findings, ranges, marks }
+			: { findings, ranges, marks, value: { kind: "bank", agency } };
+	}
 	if (SHAPE[kind] === "text") {
 		const { entry, findings: read } = parseTextEntry(source);
 		const findings = withSpacing(doc, source, read.map(pointAt(empties)));
@@ -185,7 +198,12 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	const universes: Record<string, TextEntry> = {};
 	const instructions: Record<string, TextEntry> = {};
 	let missing: readonly Code[] = EMPTY_ENV.missing;
+	let agency: string | undefined;
 	for (const f of files) {
+		if (f.kind === "bank") {
+			agency = parseBankFile(f.text).agency;
+			continue;
+		}
 		if (f.kind === "concept" || f.kind === "unit") {
 			const { entry } = parseLabelled(f.text, SCHEME_SINGULAR[f.kind]);
 			if (entry !== undefined)
@@ -204,7 +222,15 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		if (f.kind === "scale") scales[f.name] = scale;
 		else missing = scale.codes;
 	}
-	return { concepts, units, scales, universes, instructions, missing };
+	return {
+		concepts,
+		units,
+		scales,
+		universes,
+		instructions,
+		missing,
+		...(agency !== undefined && { agency }),
+	};
 }
 
 /**
@@ -223,6 +249,31 @@ export const bankEnv = (files: Readonly<Record<string, string>>): Env =>
 					: [{ kind: at.kind, name: at.name, text }];
 			}),
 	);
+
+/**
+ * The agency items are published under while the bank declares none: `.invalid` is
+ * reserved (RFC 6761) and never a real name, so the DDI stays valid and anyone reading
+ * it sees at once that the agency is missing.
+ */
+export const UNDECLARED_AGENCY = "invalid";
+
+/** Root files a bank must have: the agency its items are published under. */
+export const REQUIRED_ROOTS: readonly RootKind[] = ["bank"];
+
+/**
+ * What a bank without its `kind` root file is told, about the bank, never on each
+ * question: a hole for a required one, nothing for an optional one (missing values).
+ */
+export const absentRoot = (kind: RootKind): readonly Finding[] =>
+	REQUIRED_ROOTS.includes(kind)
+		? [
+				hole(
+					"agency",
+					"This bank declares no DDI agency: add `bank.yaml` with an `agency:` line.",
+					`Until then its items are published under \`${UNDECLARED_AGENCY}\`.`,
+				),
+			]
+		: [];
 
 /** A concept or unit file with its label; the definition is written in the file afterwards. */
 export const labelledSource = (label: string): string =>

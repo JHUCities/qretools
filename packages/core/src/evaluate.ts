@@ -6,6 +6,7 @@
 import type { DdiDocument } from "./ddi/document.js";
 import { elaborate } from "./ddi/elaborate.js";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
+import { ROOT } from "./kinds.js";
 import { lint } from "./lint.js";
 import {
 	type CodebookView,
@@ -14,11 +15,14 @@ import {
 	respondentView,
 } from "./render.js";
 import {
+	absentRoot,
 	bankEnv,
 	evaluateScheme,
 	kindAt,
+	REQUIRED_ROOTS,
 	type SchemeEvaluation,
 	type SchemeKind,
+	UNDECLARED_AGENCY,
 } from "./schemes.js";
 import type { Draft } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
@@ -46,7 +50,9 @@ export interface Evaluation {
 	readonly symbols: Symbols;
 }
 
-export function evaluate(source: string, agency: string, env: Env): Evaluation {
+export { UNDECLARED_AGENCY };
+
+export function evaluate(source: string, env: Env): Evaluation {
 	const parsed = parseSurface(source, env);
 	const { draft, findings, ranges } = parsed;
 	return {
@@ -54,7 +60,7 @@ export function evaluate(source: string, agency: string, env: Env): Evaluation {
 		findings: inDocumentOrder([...findings, ...lint(draft, env)], ranges),
 		ranges,
 		marks: parsed.marks,
-		ddi: elaborate(draft, agency, env.missing),
+		ddi: elaborate(draft, env.agency ?? UNDECLARED_AGENCY, env.missing),
 		respondent: respondentView(draft),
 		codebook: codebookView(draft, env),
 		symbols: symbolsOf(parsed),
@@ -79,18 +85,17 @@ export interface Bank {
 	readonly index: Index<string>;
 	/** Paths given that aren't bank files (`kindAt`): a wrong folder shows here. */
 	readonly ignored: readonly string[];
+	/** The DDI agency the bank declares; absent while it declares none (see `evaluate`). */
+	readonly agency?: string;
 }
 
 /**
  * A bank from its files: path (relative to the bank's root, `/`-separated) to text.
- * Total, and independent of the order the files are given in. It compares every
- * question's wording with every other's, so it's for checking a bank whole, not
- * for every keystroke.
+ * The agency comes from the bank's own file. Total, and independent of the order the
+ * files are given in. It compares every question's wording with every other's, so
+ * it's for checking a bank whole, not for every keystroke.
  */
-export function bankOf(
-	files: Readonly<Record<string, string>>,
-	agency: string,
-): Bank {
+export function bankOf(files: Readonly<Record<string, string>>): Bank {
 	const env = bankEnv(files);
 	const questions: Record<string, Evaluation> = {};
 	const schemes: Record<string, SchemeFileEvaluation> = {};
@@ -99,8 +104,7 @@ export function bankOf(
 		const text = files[path] ?? "";
 		const at = kindAt(path);
 		if (at === undefined) ignored.push(path);
-		else if (at.kind === "question")
-			questions[path] = evaluate(text, agency, env);
+		else if (at.kind === "question") questions[path] = evaluate(text, env);
 		else
 			schemes[path] = {
 				...evaluateScheme(at.kind, text, env),
@@ -123,5 +127,17 @@ export function bankOf(
 	const findings: Record<string, readonly Finding[]> = {};
 	for (const [path, ev] of read)
 		findings[path] = fileFindings(path, ev, index, label);
-	return { env, questions, schemes, findings, index, ignored };
+	// A required root file that's absent is said once, about the bank (`absentRoot`).
+	for (const kind of REQUIRED_ROOTS)
+		if (findings[ROOT[kind]] === undefined)
+			findings[ROOT[kind]] = absentRoot(kind);
+	return {
+		env,
+		questions,
+		schemes,
+		findings,
+		index,
+		ignored,
+		...(env.agency !== undefined && { agency: env.agency }),
+	};
 }

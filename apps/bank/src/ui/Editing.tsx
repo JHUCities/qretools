@@ -33,6 +33,7 @@ import {
 	usedBy,
 } from "@qretools/core";
 import {
+	bankFileJsonSchema,
 	inspect,
 	labelledJsonSchema,
 	labelsJsonSchema,
@@ -51,7 +52,13 @@ import {
 	schemeFileNamed,
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
-import { branchOwner, hrefOf, linkBranch, writeBlocked } from "../update.js";
+import {
+	bankLoading,
+	branchOwner,
+	hrefOf,
+	linkBranch,
+	writeBlocked,
+} from "../update.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
@@ -79,6 +86,7 @@ const SCHEME_SCHEMAS: Readonly<Record<Shape, Record<string, unknown>>> = {
 	labels: labelsJsonSchema(),
 	text: textEntryJsonSchema(),
 	labelled: labelledJsonSchema(),
+	bank: bankFileJsonSchema(),
 };
 
 /**
@@ -131,7 +139,6 @@ function useActions(id: Id) {
 
 function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const { evaluations, effects } = useApp();
-	const agency = useModel((m) => m.agency);
 	const blocked = useModel(writeBlocked);
 	const ddiSchema = useModel((m) => m.ddiSchema);
 	const local = useModel((m) => m.local);
@@ -140,7 +147,13 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const env = useEnv();
 	const { dispatch, onTarget, onFix, on } = useActions(q.id);
 	const stale = useStale(q);
-	const ev = evaluations.get(q, agency, env);
+	const ev = evaluations.get(q, env);
+	// Until the bank declares its agency, say so beside its DDI (not while it loads).
+	const loading = useModel(bankLoading);
+	const declare = useCallback(
+		() => dispatch({ kind: "schemeCreateOpened", scheme: "bank" }),
+		[dispatch],
+	);
 	const { findings, related } = useBankFindings(
 		q.id,
 		ev.findings,
@@ -222,7 +235,12 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 							) : null
 						}
 					/>
-					<Ddi document={ev.ddi} schema={ddiSchema} problems={problems} />
+					<Ddi
+						document={ev.ddi}
+						schema={ddiSchema}
+						problems={problems}
+						{...(env.agency === undefined && !loading && { declare })}
+					/>
 				</ScrollableRegion>
 			</div>
 		</>
@@ -236,7 +254,6 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const blocked = useModel(writeBlocked);
 	const questions = useModel((m) => m.local.questions);
 	const activity = useModel((m) => m.activity);
-	const agency = useModel((m) => m.agency);
 	const env = useEnv();
 	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const eStale = useStale(e);
@@ -257,11 +274,13 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 		? undefined
 		: [...new Set(usedBy(index, e.kind, e.name).map((s) => s.key))];
 	const unsaved = isUnsaved(e);
-	// Whether questions naming this file resolve: it must read as its kind.
+	// Whether the file is in effect: it must read as its kind.
 	const inEffect =
 		e.kind === "missing"
 			? env.missing.length > 0
-			: inScope(env, e.kind)[e.name] !== undefined;
+			: e.kind === "bank"
+				? env.agency !== undefined
+				: inScope(env, e.kind)[e.name] !== undefined;
 	return (
 		<>
 			<FileHeader
@@ -351,7 +370,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 												const name =
 													q === undefined
 														? undefined
-														: evaluations.get(q, agency, env).draft.name;
+														: evaluations.get(q, env).draft.name;
 												return (
 													<li key={id}>
 														<FileLink
@@ -382,6 +401,13 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 	if (value === undefined)
 		return <p className="quiet">Nothing readable yet.</p>;
 	if (value.kind === "text") return <p>{value.text}</p>;
+	if (value.kind === "bank")
+		return (
+			<p>
+				Items are published under the DDI agency{" "}
+				<code className="code">{value.agency}</code>.
+			</p>
+		);
 	if (value.kind === "labelled")
 		return (
 			<>
@@ -430,7 +456,6 @@ function useBankFindings(
 	readonly related: (f: Finding) => Related | undefined;
 } {
 	const { evaluations } = useApp();
-	const agency = useModel((m) => m.agency);
 	const local = useModel((m) => m.local);
 	const owner = useModel((m) => m.settings.owner);
 	const repo = useModel((m) => m.settings.repo);
@@ -441,9 +466,7 @@ function useBankFindings(
 		const label = (other: Id): string => {
 			const q = local.questions[other];
 			if (q)
-				return (
-					evaluations.get(q, agency, env).draft.name ?? q.base?.path ?? UNNAMED
-				);
+				return evaluations.get(q, env).draft.name ?? q.base?.path ?? UNNAMED;
 			return local.schemes[other]?.name ?? UNNAMED;
 		};
 
@@ -476,7 +499,6 @@ function useBankFindings(
 		index,
 		local,
 		evaluations,
-		agency,
 		env,
 		owner,
 		repo,
@@ -683,7 +705,6 @@ export function ForeignView({
 		() => envOfRemote(screen.schemes ?? {}),
 		[screen.schemes],
 	);
-	const agency = useModel((m) => m.agency);
 	const own = useModel((m) =>
 		[
 			...Object.values(m.local.questions),
@@ -696,8 +717,8 @@ export function ForeignView({
 		() =>
 			file === undefined || kind !== "question"
 				? undefined
-				: evaluate(file.text, agency, env),
-		[file, kind, agency, env],
+				: evaluate(file.text, env),
+		[file, kind, env],
 	);
 	const scheme = useMemo(
 		() =>

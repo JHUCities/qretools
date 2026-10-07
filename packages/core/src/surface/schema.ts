@@ -309,6 +309,17 @@ export const TextEntryFileSchema = z.strictObject({
 export const textEntryJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(TextEntryFileSchema) as Record<string, unknown>;
 
+/** The schema of the bank's own file, `bank.yaml`. */
+export const BankFileSchema = z.strictObject({
+	agency: z
+		.string()
+		.describe(
+			"The DDI agency this bank's items are published under: the registered code of the organization that maintains it, such as `org.example`.",
+		),
+});
+export const bankFileJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(BankFileSchema) as Record<string, unknown>;
+
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";
 

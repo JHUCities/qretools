@@ -1,11 +1,16 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { type Bank, bankOf, makeValidator, status } from "@qretools/core";
+import {
+	type Bank,
+	bankOf,
+	makeValidator,
+	ROOT,
+	status,
+	UNDECLARED_AGENCY,
+} from "@qretools/core";
 import { readBank } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
-
-const AGENCY = "org.example";
 
 /** A path beside this file, whatever directory the tests run from. */
 const here = (path: string): string =>
@@ -31,13 +36,39 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 	let bank: Bank;
 	beforeAll(async () => {
 		files = await readBank(SAMPLE);
-		bank = bankOf(files, AGENCY);
+		bank = bankOf(files);
 	});
 
 	it("reads every bank file and nothing else", () => {
-		expect(Object.keys(files).length).toBe(21);
+		expect(Object.keys(files).length).toBe(22);
 		expect(bank.ignored).toEqual([]);
-		expect(Object.keys(bank.schemes)).toContain("missing.yaml");
+		for (const path of Object.values(ROOT))
+			expect(Object.keys(bank.schemes)).toContain(path);
+	});
+
+	it("publishes its items under the agency it declares", () => {
+		expect(bank.agency).toBe("org.example");
+		for (const ev of Object.values(bank.questions))
+			expect(JSON.stringify(ev.ddi)).not.toContain(UNDECLARED_AGENCY);
+	});
+
+	it("without a bank file, says so once and publishes under `invalid`", async () => {
+		const { "bank.yaml": _, ...rest } = files;
+		const without = bankOf(rest);
+		const validate = await validator();
+		expect(without.agency).toBeUndefined();
+		expect(
+			without.findings["bank.yaml"]?.map((f) => [f.severity, f.path]),
+		).toEqual([["hole", "agency"]]);
+		for (const [path, ev] of Object.entries(without.questions)) {
+			expect(JSON.stringify(ev.ddi)).toContain(
+				`"Agency":"${UNDECLARED_AGENCY}"`,
+			);
+			expect([path, validate(ev.ddi)]).toEqual([path, []]);
+			expect(without.findings[path]?.some((f) => f.path === "agency")).toBe(
+				false,
+			);
+		}
 	});
 
 	it("has no holes or errors in any file", () => {
@@ -58,7 +89,7 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 
 	it("doesn't depend on the order the files are given in", () => {
 		const reversed = Object.fromEntries(Object.entries(files).reverse());
-		expect(JSON.stringify(bankOf(reversed, AGENCY).findings)).toBe(
+		expect(JSON.stringify(bankOf(reversed).findings)).toBe(
 			JSON.stringify(bank.findings),
 		);
 	});
@@ -74,7 +105,7 @@ describe.skipIf(!existsSync(REFERENCE))(
 	"the reference bank, when present",
 	() => {
 		it("evaluates whole, and every question's DDI is valid", async () => {
-			const bank = bankOf(await readBank(REFERENCE), AGENCY);
+			const bank = bankOf(await readBank(REFERENCE));
 			expect(Object.keys(bank.questions).length).toBeGreaterThan(0);
 			const validate = await validator();
 			for (const [path, ev] of Object.entries(bank.questions))

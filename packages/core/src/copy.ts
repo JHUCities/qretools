@@ -25,6 +25,7 @@ export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 	universe: "universe",
 	instruction: "instruction",
 	missing: "missing values",
+	bank: "bank details",
 };
 
 /** Each kind, plural, as a section of the tree names it. */
@@ -35,6 +36,7 @@ export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 	universe: "Universes",
 	instruction: "Instructions",
 	missing: "Missing values",
+	bank: "Bank",
 };
 
 /** Each kind in running text: "shared scale", "missing values". */
@@ -45,6 +47,7 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 	universe: "shared universe",
 	instruction: "shared instruction",
 	missing: "missing values",
+	bank: "bank details",
 };
 
 /** A quick fix's label: what the click will write. */

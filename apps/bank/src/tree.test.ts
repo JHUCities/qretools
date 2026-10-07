@@ -50,7 +50,7 @@ const model: Model = {
 };
 const tree = (m: Model) =>
 	treeOf(m, (q) =>
-		evaluate(q.source, m.agency, envOf(m.local.schemes, m.remote.schemes)),
+		evaluate(q.source, envOf(m.local.schemes, m.remote.schemes)),
 	);
 
 describe("treeOf", () => {
@@ -167,11 +167,8 @@ describe("schemeSections", () => {
 		indexOf(
 			Object.values(mm.local.questions).map((q) => ({
 				key: q.id,
-				symbols: evaluate(
-					q.source,
-					mm.agency,
-					envOf(mm.local.schemes, mm.remote.schemes),
-				).symbols,
+				symbols: evaluate(q.source, envOf(mm.local.schemes, mm.remote.schemes))
+					.symbols,
 			})),
 		);
 	const sections = (mm: Model) =>
@@ -204,6 +201,7 @@ describe("schemeSections", () => {
 			["universe", []],
 			["instruction", []],
 			["missing", [["missing", undefined]]],
+			["bank", []],
 		]);
 	});
 

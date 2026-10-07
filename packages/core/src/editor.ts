@@ -19,6 +19,7 @@ export { marksOf } from "./surface/marks.js";
 export { rangesOf } from "./surface/parse.js";
 export { type Place, placeAt } from "./surface/place.js";
 export {
+	bankFileJsonSchema,
 	labelledJsonSchema,
 	labelsJsonSchema,
 	nameFrom,

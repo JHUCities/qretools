@@ -40,6 +40,7 @@ export {
 	type Evaluation,
 	evaluate,
 	type SchemeFileEvaluation,
+	UNDECLARED_AGENCY,
 } from "./evaluate.js";
 export {
 	type Edit,
@@ -68,12 +69,14 @@ export {
 } from "./render.js";
 export { err, ok, type Result } from "./result.js";
 export {
+	absentRoot,
 	bankEnv,
 	evaluateScheme,
 	FOLDERS,
 	isRoot,
 	type Kind,
 	kindAt,
+	REQUIRED_ROOTS,
 	ROOT,
 	type RootKind,
 	SCHEME_KINDS,
@@ -86,6 +89,11 @@ export {
 	schemeEnv,
 	schemePath,
 } from "./schemes.js";
+export {
+	AGENCY_PATTERN,
+	type ParsedBankFile,
+	parseBankFile,
+} from "./surface/bankfile.js";
 export {
 	type Code,
 	type DefinedVariable,

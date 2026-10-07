@@ -231,7 +231,6 @@ export interface Model {
 	readonly settings: BankSettings;
 	readonly loading: Bank;
 	readonly failures: readonly Failure[];
-	readonly agency: string;
 	readonly ddiSchema: DdiSchema;
 	/** Light or dark as chosen on this device, or the system's (until the toggle is used). */
 	readonly theme: ThemeChoice;
@@ -422,10 +421,8 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 	universe: "text:\n",
 	instruction: "text:\n",
 	missing: 'labels:\n  "-8":\n',
+	bank: "agency:\n",
 };
-
-/** The DDI agency identifier for this bank: Johns Hopkins 21st Century Cities. A constant for now; see FEATURES.md, "Generality". */
-const AGENCY = "edu.jhu.21cc";
 
 /** The core's starter scale files, keyed by file name, as a bank names a scale. */
 const SCALE_FILES: Readonly<Record<string, string>> = { agree4, satisfied5 };
@@ -489,7 +486,6 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 			...(flags.notices ?? []),
 			...(flags.signInFailure === undefined ? [] : [flags.signInFailure]),
 		],
-		agency: AGENCY,
 		ddiSchema: { kind: "loading" },
 		theme: flags.theme ?? "system",
 	};

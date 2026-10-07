@@ -25,7 +25,8 @@ responses:
   "2": Neither satisfied nor dissatisfied
   "3": Dissatisfied
 `;
-		const evaluation = evaluate(question, "org.example", EMPTY_ENV);
+		const env = { ...EMPTY_ENV, agency: "org.example" };
+		const evaluation = evaluate(question, env);
 		status(evaluation.findings).kind; // → "complete"
 		Object.keys(evaluation.ddi); // → ["QuestionItem", "CodeList", "Category", "Variable"]
 		expect(status(evaluation.findings).kind).toBe("complete");
@@ -36,7 +37,7 @@ responses:
 			"Variable",
 		]);
 
-		const draft = evaluate("name: nhd_sat\n", "org.example", EMPTY_ENV);
+		const draft = evaluate("name: nhd_sat\n", EMPTY_ENV);
 		draft.findings.map((f) => [f.severity, f.path]);
 		// → [["hole", "text"], ["hole", "intent"], ["hole", ""]]
 		expect(draft.findings.map((f) => [f.severity, f.path])).toEqual([
@@ -45,11 +46,13 @@ responses:
 			["hole", ""],
 		]);
 
-		const bank = bankOf(await readBank("fixtures/bank"), "org.example");
+		const bank = bankOf(await readBank("fixtures/bank"));
 		Object.keys(bank.questions).length; // → 6
 		bank.ignored; // → []
+		bank.agency; // → "org.example"
 		expect(Object.keys(bank.questions).length).toBe(6);
 		expect(bank.ignored).toEqual([]);
+		expect(bank.agency).toBe("org.example");
 
 		const schema = JSON.parse(
 			await readFile(

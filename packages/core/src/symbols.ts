@@ -106,7 +106,9 @@ export function schemeSymbols(
 	value: SchemeValue | undefined,
 ): Symbols {
 	const none = { defines: [], mentions: [], variants: [] };
-	if (value === undefined || isRoot(kind)) return { ...none, fingerprints: [] };
+	// `value.kind` too, though `isRoot` covers it: it narrows the value for what follows.
+	if (value === undefined || isRoot(kind) || value.kind === "bank")
+		return { ...none, fingerprints: [] };
 	const fingerprints =
 		value.kind === "labels"
 			? value.codes.length > 0

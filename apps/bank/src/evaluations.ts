@@ -26,7 +26,7 @@ import {
 
 export interface Evaluations {
 	env(schemes: Local["schemes"], remoteSchemes: Remote["schemes"]): Env;
-	get(q: Question, agency: string, env: Env): Evaluation;
+	get(q: Question, env: Env): Evaluation;
 	scheme(e: SchemeEntry, env: Env): SchemeEvaluation;
 	schema(env: Env): Record<string, unknown>;
 }
@@ -51,10 +51,10 @@ export function createEvaluations(): Evaluations {
 			lastEnv = envOf(schemes, remoteSchemes);
 			return lastEnv;
 		},
-		get(q, agency, env) {
+		get(q, env) {
 			const hit = cache.get(q.id);
 			if (hit && hit.source === q.source && hit.env === env) return hit.ev;
-			const ev = evaluate(q.source, agency, env);
+			const ev = evaluate(q.source, env);
 			cache.set(q.id, { source: q.source, env, ev });
 			return ev;
 		},

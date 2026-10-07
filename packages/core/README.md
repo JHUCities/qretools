@@ -34,8 +34,9 @@ import {
 import { readBank } from "@qretools/core/node";
 ```
 
-A question, evaluated: its findings, the respondent's view, the codebook entry and its
-DDI, all from the text. The DDI agency is yours to give.
+A question, evaluated against its bank's shared files (here none, and the agency its
+DDI is published under): its findings, the respondent's view, the codebook entry and
+its DDI, all from the text.
 
 ```ts
 const question = `name: nhd_sat
@@ -46,7 +47,8 @@ responses:
   "2": Neither satisfied nor dissatisfied
   "3": Dissatisfied
 `;
-const evaluation = evaluate(question, "org.example", EMPTY_ENV);
+const env = { ...EMPTY_ENV, agency: "org.example" };
+const evaluation = evaluate(question, env);
 status(evaluation.findings).kind; // → "complete"
 Object.keys(evaluation.ddi); // → ["QuestionItem", "CodeList", "Category", "Variable"]
 ```
@@ -55,18 +57,21 @@ A draft with gaps is still a value. Each gap is a hole, a finding with the path 
 belongs at; the empty path is the question itself, which has no responses yet:
 
 ```ts
-const draft = evaluate("name: nhd_sat\n", "org.example", EMPTY_ENV);
+const draft = evaluate("name: nhd_sat\n", EMPTY_ENV);
 draft.findings.map((f) => [f.severity, f.path]);
 // → [["hole", "text"], ["hole", "intent"], ["hole", ""]]
 ```
 
 A whole bank from a directory: each file's evaluation and findings by path, the
-shared files' environment, and the paths that aren't bank files.
+shared files' environment, the paths that aren't bank files, and the DDI agency the
+bank declares in its own file, `bank.yaml`. A bank without one is reported once, under
+`bank.yaml`, and its items are published under `invalid` until it has one.
 
 ```ts
-const bank = bankOf(await readBank("fixtures/bank"), "org.example");
+const bank = bankOf(await readBank("fixtures/bank"));
 Object.keys(bank.questions).length; // → 6
 bank.ignored; // → []
+bank.agency; // → "org.example"
 ```
 
 Validating the DDI against the official schema. Compile the validator once; it takes

@@ -4,7 +4,7 @@ import { type Finding, inDocumentOrder, locate, status } from "./findings.js";
 import { EMPTY_ENV } from "./surface/env.js";
 
 const statusOf = (source: string) =>
-	status(evaluate(source, "org.example", EMPTY_ENV).findings);
+	status(evaluate(source, EMPTY_ENV).findings);
 
 describe("status", () => {
 	it("names the most severe advice, so a warning never reads as info", () => {
@@ -71,7 +71,6 @@ describe("inDocumentOrder", () => {
 	it("is how evaluate reports them", () => {
 		const ev = evaluate(
 			"responses:\n  1: Yes\n  1: Yes\ntext: Do you rent and own?\n",
-			"org.example",
 			EMPTY_ENV,
 		);
 		const starts = ev.findings.map((x) => locate(x, ev.ranges)[0]);

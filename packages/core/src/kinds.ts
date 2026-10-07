@@ -5,8 +5,8 @@
  */
 import type { SchemeKind } from "./schemes.js";
 
-/** `missing`: the bank's one missing-value list. */
-export type RootKind = "missing";
+/** `missing`: the bank's one missing-value list; `bank`: what the bank says about itself. */
+export type RootKind = "missing" | "bank";
 
 /**
  * Where each root kind's one file lives, from which paths, the loader and `readBank`
@@ -14,6 +14,7 @@ export type RootKind = "missing";
  */
 export const ROOT: Readonly<Record<RootKind, string>> = {
 	missing: "missing.yaml",
+	bank: "bank.yaml",
 };
 
 /** Whether a kind is one file per bank at its root, rather than named in a folder. */

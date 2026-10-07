@@ -20,7 +20,8 @@ export type ParseCode =
 	| "ignored-key"
 	| "hole"
 	| "too-many-domains"
-	| "missing-space";
+	| "missing-space"
+	| "invalid-agency";
 
 /** Survey-craft advice. Always `warning` or `info`, never a blocker. */
 export type LintCode =

@@ -12,7 +12,7 @@ const env = {
 };
 const source =
 	"name: q\ntext: Q?\nintent: Prevalence of x\nuniverse: renters\nresponses:\n  1.5: Half\n  2: Two\ninstruction: select_x\n";
-const ev = evaluate(source, "org.example", env);
+const ev = evaluate(source, env);
 const at = (needle: string) => source.indexOf(needle) + 1;
 
 describe("pathAt", () => {
@@ -57,29 +57,24 @@ describe("inspect", () => {
 			"name: a\ntext: How are \n",
 			"name: a\ntext: How are ",
 		]) {
-			const ev = evaluate(text, "org.example", env);
+			const ev = evaluate(text, env);
 			const after = text.indexOf("are ") + "are ".length;
 			expect(inspect(ev, env, text, after)?.key).toBe("text");
 		}
 		// A blank line is still the document, indented or not.
 		const blank = "name: a\n  \ntext: hi\n";
-		const ev = evaluate(blank, "org.example", env);
+		const ev = evaluate(blank, env);
 		expect(inspect(ev, env, blank, 10)?.key).toBeUndefined();
 		// An indented new line under a block map is that map: the author is about to
 		// type another code.
 		const codes = "name: a\nresponses:\n  1: A\n  ";
-		const onCodes = evaluate(codes, "org.example", env);
+		const onCodes = evaluate(codes, env);
 		expect(inspect(onCodes, env, codes, codes.length)?.key).toBe("responses");
 	});
 
 	it("between fields and at the end is the document, with the holes of absent fields", () => {
 		const text = "name: a\ntext: hi\n";
-		const doc = inspect(
-			evaluate(text, "org.example", env),
-			env,
-			text,
-			text.length,
-		);
+		const doc = inspect(evaluate(text, env), env, text, text.length);
 		// The document level: no key, and the question's own description.
 		expect(doc?.key).toBeUndefined();
 		expect(doc?.description).toMatch(/survey question/i);
@@ -91,7 +86,7 @@ describe("the inspector on a unit", () => {
 		const env = { ...EMPTY_ENV, units: { days: { label: "days" } } };
 		const source = "name: q\nnumber:\n  unit: days\n";
 		const at = inspect(
-			evaluate(source, "org.example", env),
+			evaluate(source, env),
 			env,
 			source,
 			source.indexOf("days") + 2,

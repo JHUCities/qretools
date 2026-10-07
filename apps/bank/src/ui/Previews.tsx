@@ -24,6 +24,7 @@ import {
 	type Status,
 	type Target,
 	toFillIn,
+	UNDECLARED_AGENCY,
 } from "@qretools/core";
 import { Fragment, memo, type ReactNode, useId } from "react";
 import type { DdiSchema } from "../model.js";
@@ -389,10 +390,13 @@ export const Ddi = memo(function Ddi({
 	document,
 	schema,
 	problems,
+	declare,
 }: {
 	document: DdiDocument;
 	schema: DdiSchema;
 	problems: readonly Finding[];
+	/** Present while the bank declares no agency: opens its bank details. */
+	declare?: () => void;
 }) {
 	const badge =
 		schema.kind === "loading" ? (
@@ -420,6 +424,17 @@ export const Ddi = memo(function Ddi({
 				</h3>
 			</Details.Summary>
 			<div className="pane-body">
+				{declare !== undefined && (
+					<InlineMessage variant="warning">
+						<span>
+							This bank declares no valid DDI agency yet, so its items are
+							published under <code className="code">{UNDECLARED_AGENCY}</code>.{" "}
+							<Link as="button" type="button" onClick={declare}>
+								Add the bank's agency
+							</Link>
+						</span>
+					</InlineMessage>
+				)}
 				{problems.map((f, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: schema problems are positional and can repeat
 					<InlineMessage variant="critical" key={i}>

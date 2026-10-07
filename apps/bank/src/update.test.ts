@@ -654,13 +654,13 @@ describe("diagnostics", () => {
 			"a: [",
 			"name: q\ntext: x: y\nresponses:\n  1:\n",
 		]) {
-			const ev = evaluate(source, "org.example", EMPTY_ENV);
+			const ev = evaluate(source, EMPTY_ENV);
 			for (const d of toDiagnostics(ev.findings, ev.ranges)) {
 				expect(d.from).toBeLessThanOrEqual(d.to);
 				expect(d.to).toBeLessThanOrEqual(source.length);
 			}
 		}
-		const ev = evaluate("name: q\n", "org.example", EMPTY_ENV);
+		const ev = evaluate("name: q\n", EMPTY_ENV);
 		expect(
 			toDiagnostics(ev.findings, ev.ranges).some((d) => d.severity === "hint"),
 		).toBe(true);

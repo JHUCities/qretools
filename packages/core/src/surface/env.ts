@@ -43,6 +43,8 @@ export interface Env {
 	readonly instructions: Scheme<TextEntry>;
 	/** The bank's missing-value codes, in author order; empty when the bank declares none. */
 	readonly missing: readonly Code[];
+	/** The DDI agency the bank declares (`bank.yaml`); absent while it declares none. */
+	readonly agency?: string;
 }
 
 /** A scheme a question can name. `missing` is not one: it is a list, never named. */

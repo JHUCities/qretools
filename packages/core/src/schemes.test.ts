@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	evaluateScheme,
+	isRoot,
 	kindAt,
 	labelledSource,
 	SCHEME_KINDS,
@@ -16,12 +17,10 @@ const brief = (f: { severity: string; code: string; path: string }) =>
 
 describe("scheme paths", () => {
 	it("round-trip between a kind and name and the path they live at", () => {
+		// A root file's name is its kind; any other kind's is the file's name.
 		for (const kind of SCHEME_KINDS) {
-			const path = schemePath(kind, kind === "missing" ? "missing" : "x_1");
-			expect(kindAt(path)).toEqual({
-				kind,
-				name: kind === "missing" ? "missing" : "x_1",
-			});
+			const name = isRoot(kind) ? kind : "x_1";
+			expect(kindAt(schemePath(kind, name))).toEqual({ kind, name });
 		}
 		expect(kindAt("questions/nhd/nhd_sat.yaml")).toEqual({ kind: "question" });
 		for (const other of [

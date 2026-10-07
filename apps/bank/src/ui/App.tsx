@@ -82,8 +82,8 @@ export function App() {
 		[local, browser, screen, activity],
 	);
 	const folders = useMemo(
-		() => treeOf(treeInput, (q) => evaluations.get(q, model.agency, env)),
-		[treeInput, model.agency, evaluations, env],
+		() => treeOf(treeInput, (q) => evaluations.get(q, env)),
+		[treeInput, evaluations, env],
 	);
 	// The bank's symbol table: what each file defines, names and writes, questions and
 	// shared files alike. Rebuilt from cached evaluations, so cheap per keystroke.
@@ -92,14 +92,14 @@ export function App() {
 			indexOf([
 				...Object.values(model.local.questions).map((q) => ({
 					key: q.id,
-					symbols: evaluations.get(q, model.agency, env).symbols,
+					symbols: evaluations.get(q, env).symbols,
 				})),
 				...Object.values(model.local.schemes).map((e) => ({
 					key: e.id,
 					symbols: evaluations.scheme(e, env).symbols,
 				})),
 			]),
-		[model.local, model.agency, evaluations, env],
+		[model.local, evaluations, env],
 	);
 	const sections = useMemo(
 		() => schemeSections(treeInput, (e) => evaluations.scheme(e, env), index),
@@ -133,7 +133,7 @@ export function App() {
 			: confirm.base !== undefined
 				? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
 				: confirm.kind === "question"
-					? evaluations.get(confirm, model.agency, env).draft.name
+					? evaluations.get(confirm, env).draft.name
 					: confirm.name;
 	// Deleting a scheme file others name turns each of those names into a hole: say how many.
 	const confirmUsers =
@@ -408,7 +408,7 @@ export function App() {
 					also={alsoSaves(
 						model.local,
 						model.remote,
-						evaluations.get(movingQuestion, model.agency, env).symbols.mentions,
+						evaluations.get(movingQuestion, env).symbols.mentions,
 						usersIn(index),
 					)}
 					dispatch={dispatch}
@@ -423,14 +423,14 @@ export function App() {
 			)}
 			{saving && savingQuestion && (
 				<SaveDialog
-					draft={evaluations.get(savingQuestion, model.agency, env).draft}
+					draft={evaluations.get(savingQuestion, env).draft}
 					folder={saving.folder}
 					folders={bankFolders(model)}
 					taken={(path) => path in model.remote.questions}
 					also={alsoSaves(
 						model.local,
 						model.remote,
-						evaluations.get(savingQuestion, model.agency, env).symbols.mentions,
+						evaluations.get(savingQuestion, env).symbols.mentions,
 						usersIn(index),
 					)}
 					dispatch={dispatch}
@@ -441,11 +441,11 @@ export function App() {
 					questions={signOut.save.filter((f) => f.kind === "question").length}
 					shared={signOut.save.filter((f) => f.kind !== "question").length}
 					discard={signOut.discard.map(
-						(q) => evaluations.get(q, model.agency, env).draft.name ?? UNNAMED,
+						(q) => evaluations.get(q, env).draft.name ?? UNNAMED,
 					)}
 					blocked={signOut.blocked.map((f) =>
 						f.kind === "question"
-							? (evaluations.get(f, model.agency, env).draft.name ?? UNNAMED)
+							? (evaluations.get(f, env).draft.name ?? UNNAMED)
 							: `${SCHEME_NAME[f.kind]} ${f.name}`,
 					)}
 					saving={signingOut.phase === "saving"}

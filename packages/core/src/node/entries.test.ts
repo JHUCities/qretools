@@ -13,6 +13,7 @@ describe("the entry points", () => {
 		}).toMatchInlineSnapshot(`
 			{
 			  "core": [
+			    "AGENCY_PATTERN",
 			    "EMPTY_ENV",
 			    "FIELD_OF",
 			    "FOLDERS",
@@ -20,13 +21,16 @@ describe("the entry points", () => {
 			    "FOLDER_RULE_TEXT",
 			    "NAME_PATTERN",
 			    "NAME_RULE_TEXT",
+			    "REQUIRED_ROOTS",
 			    "ROOT",
 			    "SCHEME_KINDS",
 			    "SCHEME_LABELS",
 			    "SCHEME_NAME",
 			    "SCHEME_SINGULAR",
 			    "SHAPE",
+			    "UNDECLARED_AGENCY",
 			    "UNNAMED",
+			    "absentRoot",
 			    "bankEnv",
 			    "bankFindings",
 			    "bankLocation",
@@ -53,6 +57,7 @@ describe("the entry points", () => {
 			    "ok",
 			    "optionVariable",
 			    "othersOf",
+			    "parseBankFile",
 			    "parseScale",
 			    "parseSurface",
 			    "plainText",
@@ -68,6 +73,7 @@ describe("the entry points", () => {
 			  "editor": [
 			    "addSpace",
 			    "applyEdits",
+			    "bankFileJsonSchema",
 			    "inspect",
 			    "labelledJsonSchema",
 			    "labelledSource",
