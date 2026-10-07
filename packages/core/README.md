@@ -74,6 +74,11 @@ bank.ignored; // → []
 bank.agency; // → "org.example"
 ```
 
+Every item is published at version 1 unless you say otherwise: DDI's rule is that a
+version changes whenever its item does, and only history knows that. Pass each file's
+version by path, `bankOf(files, { "scales/agree4.yaml": { number: "3" } })`, or a
+question's own and its shared files' to `evaluate(source, env, { own, shared })`.
+
 Validating the DDI against the official schema. Compile the validator once; it takes
 a moment.
 

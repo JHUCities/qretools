@@ -41,18 +41,22 @@ export type DdiDocument = Readonly<
 >;
 
 const LANGUAGE = "en";
-const VERSION = "1";
 
 /** A JSON object without its `undefined` entries. One implementation (`compact`), two types. */
 export const obj = (
 	entries: Readonly<Record<string, Json | undefined>>,
 ): JsonObject => compact(entries) as JsonObject;
 
-export const identity = (agency: string, id: string): Identity => ({
-	URN: `urn:ddi:${agency}:${id}:${VERSION}`,
+/** An item's identity at a version (`1` when nothing is known of its history). */
+export const identity = (
+	agency: string,
+	id: string,
+	version = "1",
+): Identity => ({
+	URN: `urn:ddi:${agency}:${id}:${version}`,
 	Agency: agency,
 	ID: id,
-	Version: VERSION,
+	Version: version,
 });
 
 export const item = (type: ItemType, id: Identity, body: JsonObject): Item => ({

@@ -95,6 +95,22 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 			expect([path, validate(ev.ddi)]).toEqual([path, []]);
 	});
 
+	it("takes each file's version when given, version 1 when not", async () => {
+		const path = "questions/examples/parks_spending.yaml";
+		const versioned = bankOf(files, {
+			[path]: { number: "3" },
+			"scales/support4.yaml": { number: "2" },
+		});
+		const ddi = JSON.stringify(versioned.questions[path]?.ddi);
+		expect(ddi).toContain('"URN":"urn:ddi:org.example:parks_spending:3"');
+		expect(ddi).toContain('"URN":"urn:ddi:org.example:scale-support4.codes:2"');
+		expect(ddi).toContain(
+			'"URN":"urn:ddi:org.example:concept-parks_spending_support:1"',
+		);
+		const validate = await validator();
+		expect(validate(versioned.questions[path]?.ddi ?? {})).toEqual([]);
+	});
+
 	it("doesn't depend on the order the files are given in", () => {
 		const reversed = Object.fromEntries(Object.entries(files).reverse());
 		expect(JSON.stringify(bankOf(reversed).findings)).toBe(

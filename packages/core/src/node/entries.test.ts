@@ -30,6 +30,7 @@ describe("the entry points", () => {
 			    "SHAPE",
 			    "UNDECLARED_AGENCY",
 			    "UNNAMED",
+			    "UNVERSIONED",
 			    "absentRoot",
 			    "bankEnv",
 			    "bankFindings",

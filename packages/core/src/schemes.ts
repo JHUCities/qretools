@@ -6,7 +6,7 @@
 import { parseDocument, stringify } from "yaml";
 import { SCHEME_SINGULAR } from "./copy.js";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
-import { isRoot, ROOT, type RootKind } from "./kinds.js";
+import { FOLDERS, isRoot, ROOT, type RootKind, schemePath } from "./kinds.js";
 import { missingCollisions } from "./lint.js";
 import { parseBankFile } from "./surface/bankfile.js";
 import type { Code } from "./surface/draft.js";
@@ -26,7 +26,7 @@ import { parseScale, type Scale } from "./surface/scales.js";
 import { withSpacing } from "./surface/spacing.js";
 import { type Symbols, schemeSymbols } from "./symbols.js";
 
-export { isRoot, ROOT, type RootKind };
+export { FOLDERS, isRoot, ROOT, type RootKind, schemePath };
 
 /**
  * A shared file is named, in its kind's folder, or one per bank at its root
@@ -46,15 +46,6 @@ export const SCHEME_KINDS: readonly SchemeKind[] = [
 	"bank",
 ];
 
-/** Where each named kind lives in the bank. The loader reads these folders. */
-export const FOLDERS: Readonly<Record<NamedScheme, string>> = {
-	concept: "concepts",
-	scale: "scales",
-	unit: "units",
-	universe: "universes",
-	instruction: "instructions",
-};
-
 /**
  * What a kind's file holds, which decides how it is read, previewed and started: a
  * `labels:` map, one `text:` line, or a concept's `label:` and `definition:`.
@@ -70,10 +61,6 @@ export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	missing: "labels",
 	bank: "bank",
 };
-
-/** The path a scheme file lives at. The name is the filename; nothing inside repeats it. */
-export const schemePath = (kind: SchemeKind, name: string): string =>
-	isRoot(kind) ? ROOT[kind] : `${FOLDERS[kind]}/${name}.yaml`;
 
 /** What a bank path holds, or undefined for a file the tool does not read. */
 export function kindAt(

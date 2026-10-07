@@ -3,8 +3,11 @@
  * Total, like its parts: any text evaluates. A whole bank evaluates the same way,
  * from its files by path (`bankOf`).
  */
+
+import { compact } from "./compact.js";
 import type { DdiDocument } from "./ddi/document.js";
-import { elaborate } from "./ddi/elaborate.js";
+import { elaborate, type Versioning } from "./ddi/elaborate.js";
+import type { Versions } from "./ddi/version.js";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { ROOT } from "./kinds.js";
 import { lint } from "./lint.js";
@@ -52,7 +55,15 @@ export interface Evaluation {
 
 export { UNDECLARED_AGENCY };
 
-export function evaluate(source: string, env: Env): Evaluation {
+/**
+ * A question's evaluation. `versioning` gives its items' DDI versions when history is
+ * known (see `Versioning`); without it every item is version 1.
+ */
+export function evaluate(
+	source: string,
+	env: Env,
+	versioning: Versioning = {},
+): Evaluation {
 	const parsed = parseSurface(source, env);
 	const { draft, findings, ranges } = parsed;
 	return {
@@ -60,7 +71,12 @@ export function evaluate(source: string, env: Env): Evaluation {
 		findings: inDocumentOrder([...findings, ...lint(draft, env)], ranges),
 		ranges,
 		marks: parsed.marks,
-		ddi: elaborate(draft, env.agency ?? UNDECLARED_AGENCY, env.missing),
+		ddi: elaborate(
+			draft,
+			env.agency ?? UNDECLARED_AGENCY,
+			env.missing,
+			versioning,
+		),
 		respondent: respondentView(draft),
 		codebook: codebookView(draft, env),
 		symbols: symbolsOf(parsed),
@@ -95,7 +111,11 @@ export interface Bank {
  * files are given in. It compares every question's wording with every other's, so
  * it's for checking a bank whole, not for every keystroke.
  */
-export function bankOf(files: Readonly<Record<string, string>>): Bank {
+export function bankOf(
+	files: Readonly<Record<string, string>>,
+	/** Each file's DDI version, by path, when history is known. */
+	versions?: Versions,
+): Bank {
 	const env = bankEnv(files);
 	const questions: Record<string, Evaluation> = {};
 	const schemes: Record<string, SchemeFileEvaluation> = {};
@@ -104,7 +124,14 @@ export function bankOf(files: Readonly<Record<string, string>>): Bank {
 		const text = files[path] ?? "";
 		const at = kindAt(path);
 		if (at === undefined) ignored.push(path);
-		else if (at.kind === "question") questions[path] = evaluate(text, env);
+		else if (at.kind === "question")
+			questions[path] = evaluate(
+				text,
+				env,
+				versions === undefined
+					? {}
+					: compact({ own: versions[path], shared: versions }),
+			);
 		else
 			schemes[path] = {
 				...evaluateScheme(at.kind, text, env),

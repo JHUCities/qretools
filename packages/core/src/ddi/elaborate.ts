@@ -15,6 +15,8 @@
  */
 
 import { compact } from "../compact.js";
+import { schemePath } from "../kinds.js";
+import type { SchemeKind } from "../schemes.js";
 import {
 	type Code,
 	type DefinedVariable,
@@ -31,6 +33,7 @@ import {
 	documentOf,
 	type Identity,
 	type Item,
+	type ItemType,
 	identity,
 	intl,
 	item,
@@ -40,11 +43,20 @@ import {
 	ref,
 	structured,
 } from "./document.js";
+import {
+	UNVERSIONED,
+	type Version,
+	type Versions,
+	versionFields,
+} from "./version.js";
 
 /** ID used while `name` is still a hole. Never leaks into QuestionItemName. */
 const UNTITLED = "untitled";
 
-/** Every select-many option is a yes/no variable on this one shared scale. */
+/**
+ * Every select-many option is a yes/no variable on this one shared scale. Coupling:
+ * the bank's `scales/yesno01.yaml` must say the same, and gives the items their version.
+ */
 const BINARY_SCALE = "yesno01";
 const BINARY: readonly Code[] = [
 	{ code: "0", label: "No" },
@@ -54,12 +66,44 @@ const BINARY: readonly Code[] = [
 /** The bank's missing-value list: one managed representation, referenced by every Variable. */
 const MISSING_ID = "missing";
 
+/**
+ * What is known of the versions a question's items take: its own file's, and each
+ * shared file's by path. Absent, an item is `UNVERSIONED`.
+ */
+export interface Versioning {
+	readonly own?: Version;
+	readonly shared?: Versions;
+}
+
 /** A question as one DDI document: its items, keyed once (see `documentOf`). */
 export const elaborate = (
 	draft: Draft,
 	agency: string,
 	missing: readonly Code[],
-): DdiDocument => documentOf(elaborateItems(draft, agency, missing));
+	versioning: Versioning = {},
+): DdiDocument =>
+	documentOf(elaborateItems(draft, agency, missing, versioning));
+
+/** Who publishes the items, and at which version each file's items are. */
+interface Ctx {
+	readonly agency: string;
+	readonly own: Version;
+	readonly shared: (kind: SchemeKind, name: string) => Version;
+}
+
+/** An item at a version; the file's principal item also carries the version's UserID. */
+const versioned = (
+	ctx: Ctx,
+	type: ItemType,
+	id: string,
+	version: Version,
+	body: JsonObject,
+	principal = false,
+): Item =>
+	item(type, identity(ctx.agency, id, version.number), {
+		...body,
+		...versionFields(version, principal),
+	});
 
 /**
  * A question's DDI items, unkeyed: an export of many questions (an instrument, a
@@ -69,25 +113,33 @@ export function elaborateItems(
 	draft: Draft,
 	agency: string,
 	missing: readonly Code[],
+	versioning: Versioning = {},
 ): readonly Item[] {
+	const ctx: Ctx = {
+		agency,
+		own: versioning.own ?? UNVERSIONED,
+		shared: (kind, name) =>
+			versioning.shared?.[schemePath(kind, name)] ?? UNVERSIONED,
+	};
 	const qid = draft.name ?? UNTITLED;
-	const questionId = identity(agency, qid);
-	const named = (suffix: string) => identity(agency, `${qid}.${suffix}`);
+	const named = (suffix: string) => `${qid}.${suffix}`;
 
 	const concept = maybe(draft.concept, (c) =>
-		conceptItem(c, agency, named("concept")),
+		conceptItem(c, ctx, named("concept")),
 	);
 	const universe = maybe(draft.universe, (u) =>
-		universeItem(u, agency, named("universe")),
+		universeItem(u, ctx, named("universe")),
 	);
 	const instruction = maybe(draft.instruction, (i) =>
-		instructionItem(i, agency, named("instruction")),
+		instructionItem(i, ctx, named("instruction")),
 	);
-	const domain = maybe(draft.domain, (d) => elaborateDomain(d, agency, qid));
+	const domain = maybe(draft.domain, (d) => elaborateDomain(d, ctx, qid));
 
-	const question = item(
+	const question = versioned(
+		ctx,
 		"QuestionItem",
-		questionId,
+		qid,
+		ctx.own,
 		obj({
 			QuestionItemName: maybe(draft.name, (n) => [intl(n)]),
 			Label: maybe(draft.title, (t) => [structured(t)]),
@@ -103,6 +155,7 @@ export function elaborateItems(
 				BasedOnRationaleDescription: intl(s),
 			})),
 		}),
+		true,
 	);
 
 	// No name or no domain, no variable: it would have no name or no values.
@@ -110,14 +163,14 @@ export function elaborateItems(
 		definedVariables(draft),
 		draft.title,
 		domain?.value,
-		agency,
+		ctx,
 	);
 	const missingItems =
 		missing.length > 0 && specs.variables.length > 0
-			? missingValueItems(agency, missing)
+			? missingValueItems(ctx, missing)
 			: undefined;
 	const variables = specs.variables.map((v) =>
-		variableItem(v, agency, {
+		variableItem(v, ctx, {
 			question,
 			universe,
 			concept,
@@ -142,51 +195,62 @@ export function elaborateItems(
  * its label, and its definition as the Description. Prose, advice to share it, stays
  * this question's own, as before.
  */
-function conceptItem(
-	c: Named<LabelledEntry>,
-	agency: string,
-	own: Identity,
-): Item {
+function conceptItem(c: Named<LabelledEntry>, ctx: Ctx, own: string): Item {
 	return c.kind === "text"
-		? item("Concept", own, { ConceptName: [intl(c.text)] })
-		: item("Concept", identity(agency, `concept-${c.name}`), {
-				ConceptName: [intl(c.name)],
-				Label: [structured(c.value.label)],
-				...(c.value.definition !== undefined && {
-					Description: structured(c.value.definition),
-				}),
-			});
+		? versioned(ctx, "Concept", own, ctx.own, { ConceptName: [intl(c.text)] })
+		: versioned(
+				ctx,
+				"Concept",
+				`concept-${c.name}`,
+				ctx.shared("concept", c.name),
+				{
+					ConceptName: [intl(c.name)],
+					Label: [structured(c.value.label)],
+					...(c.value.definition !== undefined && {
+						Description: structured(c.value.definition),
+					}),
+				},
+				true,
+			);
 }
 
 /** Prose is this question's own universe; a reference is the bank's, named as the bank names it. */
-function universeItem(
-	u: Named<TextEntry>,
-	agency: string,
-	own: Identity,
-): Item {
+function universeItem(u: Named<TextEntry>, ctx: Ctx, own: string): Item {
 	return u.kind === "text"
-		? item("Universe", own, {
+		? versioned(ctx, "Universe", own, ctx.own, {
 				UniverseName: [intl(u.text)],
 				Description: structured(u.text),
 			})
-		: item("Universe", identity(agency, `universe-${u.name}`), {
-				UniverseName: [intl(u.name)],
-				Label: [structured(u.value.text)],
-				Description: structured(u.value.text),
-			});
+		: versioned(
+				ctx,
+				"Universe",
+				`universe-${u.name}`,
+				ctx.shared("universe", u.name),
+				{
+					UniverseName: [intl(u.name)],
+					Label: [structured(u.value.text)],
+					Description: structured(u.value.text),
+				},
+				true,
+			);
 }
 
-function instructionItem(
-	i: Named<TextEntry>,
-	agency: string,
-	own: Identity,
-): Item {
+function instructionItem(i: Named<TextEntry>, ctx: Ctx, own: string): Item {
 	return i.kind === "text"
-		? item("Instruction", own, { InstructionText: [literalText(i.text)] })
-		: item("Instruction", identity(agency, `instruction-${i.name}`), {
-				InstructionName: [intl(i.name)],
-				InstructionText: [literalText(i.value.text)],
-			});
+		? versioned(ctx, "Instruction", own, ctx.own, {
+				InstructionText: [literalText(i.text)],
+			})
+		: versioned(
+				ctx,
+				"Instruction",
+				`instruction-${i.name}`,
+				ctx.shared("instruction", i.name),
+				{
+					InstructionName: [intl(i.name)],
+					InstructionText: [literalText(i.value.text)],
+				},
+				true,
+			);
 }
 
 /**
@@ -196,21 +260,26 @@ function instructionItem(
  * missing, referenced from every Variable.
  */
 function missingValueItems(
-	agency: string,
+	ctx: Ctx,
 	missing: readonly Code[],
 ): { representation: Item; items: readonly Item[] } {
+	const version = ctx.shared("missing", "missing");
 	const { codeList, categories } = codeListItems(
-		agency,
+		ctx,
+		version,
 		MISSING_ID,
 		missing,
-		true,
+		{ isMissing: true },
 	);
-	const representation = item(
+	const representation = versioned(
+		ctx,
 		"ManagedMissingValuesRepresentation",
-		identity(agency, MISSING_ID),
+		MISSING_ID,
+		version,
 		{
 			MissingCodeRepresentation: [{ CodeListReference: ref(codeList) }],
 		},
+		true,
 	);
 	return { representation, items: [representation, codeList, ...categories] };
 }
@@ -231,12 +300,12 @@ interface ElaboratedDomain {
  */
 function elaborateDomain(
 	domain: Domain,
-	agency: string,
+	ctx: Ctx,
 	qid: string,
 ): ElaboratedDomain {
 	switch (domain.kind) {
 		case "responses":
-			return elaborateResponses(domain, agency, qid);
+			return elaborateResponses(domain, ctx, qid);
 		case "number": {
 			const numeric = obj({
 				$type: "NumericDomain",
@@ -269,13 +338,22 @@ function elaborateDomain(
  */
 function elaborateResponses(
 	domain: Extract<Domain, { kind: "responses" }>,
-	agency: string,
+	ctx: Ctx,
 	qid: string,
 ): ElaboratedDomain {
 	// DDI IDs allow one dot, so every list hangs off a base: `<base>.codes`,
-	// `<base>.cat-i`, `<base>.code-i`. A shared scale's base is `scale-<name>`.
-	const base = domain.scale === undefined ? qid : `scale-${domain.scale}`;
-	const { codeList, categories } = codeListItems(agency, base, domain.codes);
+	// `<base>.cat-i`, `<base>.code-i`. A shared scale's base is `scale-<name>`,
+	// and its items take its file's version.
+	const { codeList, categories } =
+		domain.scale === undefined
+			? codeListItems(ctx, ctx.own, qid, domain.codes)
+			: codeListItems(
+					ctx,
+					ctx.shared("scale", domain.scale),
+					`scale-${domain.scale}`,
+					domain.codes,
+					{ principal: true },
+				);
 	const maximum =
 		domain.select === "one"
 			? 1
@@ -293,28 +371,48 @@ function elaborateResponses(
 	};
 }
 
+/**
+ * A code list and its categories at one version. A Code is not versionable on its own
+ * (the schema gives it its parent list's version), so it carries the number alone.
+ */
 function codeListItems(
-	agency: string,
+	ctx: Ctx,
+	version: Version,
 	base: string,
 	codes: readonly Code[],
-	isMissing = false,
+	{
+		isMissing = false,
+		principal = false,
+	}: {
+		/** The bank's missing-value list: its categories are marked missing. */
+		readonly isMissing?: boolean;
+		/** The list is its file's principal item: a shared scale's. */
+		readonly principal?: boolean;
+	} = {},
 ): { codeList: Item; categories: Item[] } {
 	const options = codes.map((c, i) => {
-		const category = item(
+		const category = versioned(
+			ctx,
 			"Category",
-			identity(agency, `${base}.cat-${i}`),
+			`${base}.cat-${i}`,
+			version,
 			obj({ Label: [structured(c.label)], IsMissing: isMissing || undefined }),
 		);
 		const code: JsonObject = {
-			...identity(agency, `${base}.code-${i}`),
+			...identity(ctx.agency, `${base}.code-${i}`, version.number),
 			Value: codeValue(c.code),
 			CategoryReference: ref(category),
 		};
 		return { category, code };
 	});
-	const codeList = item("CodeList", identity(agency, `${base}.codes`), {
-		Code: options.map((o) => o.code),
-	});
+	const codeList = versioned(
+		ctx,
+		"CodeList",
+		`${base}.codes`,
+		version,
+		{ Code: options.map((o) => o.code) },
+		principal,
+	);
 	return { codeList, categories: options.map((o) => o.category) };
 }
 
@@ -337,7 +435,7 @@ function variableSpecs(
 	defined: readonly DefinedVariable[],
 	title: string | undefined,
 	value: JsonObject | undefined,
-	agency: string,
+	ctx: Ctx,
 ): { variables: readonly VariableSpec[]; items: readonly Item[] } {
 	const [first] = defined;
 	if (first === undefined || value === undefined)
@@ -347,7 +445,14 @@ function variableSpecs(
 			variables: [compact({ name: first.name, label: title, value })],
 			items: [],
 		};
-	const binary = codeListItems(agency, `scale-${BINARY_SCALE}`, BINARY);
+	// The bank's own file for the binary scale gives its version (see BINARY_SCALE).
+	const binary = codeListItems(
+		ctx,
+		ctx.shared("scale", BINARY_SCALE),
+		`scale-${BINARY_SCALE}`,
+		BINARY,
+		{ principal: true },
+	);
 	const yesNo = {
 		$type: "CodeDomain",
 		CodeListReference: ref(binary.codeList),
@@ -366,7 +471,7 @@ function variableSpecs(
 
 function variableItem(
 	v: VariableSpec,
-	agency: string,
+	ctx: Ctx,
 	refs: {
 		readonly question: Item;
 		readonly universe: Item | undefined;
@@ -374,9 +479,11 @@ function variableItem(
 		readonly missing: Item | undefined;
 	},
 ): Item {
-	return item(
+	return versioned(
+		ctx,
 		"Variable",
-		identity(agency, `variable-${v.name}`),
+		`variable-${v.name}`,
+		ctx.own,
 		obj({
 			VariableName: [intl(v.name)],
 			Label: maybe(v.label, (l) => [structured(l)]),

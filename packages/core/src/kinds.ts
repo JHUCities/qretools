@@ -4,6 +4,7 @@
  * modules that read it can't form a cycle through it.
  */
 import type { SchemeKind } from "./schemes.js";
+import type { NamedScheme } from "./surface/env.js";
 
 /** `missing`: the bank's one missing-value list; `bank`: what the bank says about itself. */
 export type RootKind = "missing" | "bank";
@@ -20,3 +21,16 @@ export const ROOT: Readonly<Record<RootKind, string>> = {
 /** Whether a kind is one file per bank at its root, rather than named in a folder. */
 export const isRoot = (kind: SchemeKind): kind is RootKind =>
 	Object.hasOwn(ROOT, kind);
+
+/** Where each named kind lives in the bank. The loader reads these folders. */
+export const FOLDERS: Readonly<Record<NamedScheme, string>> = {
+	concept: "concepts",
+	scale: "scales",
+	unit: "units",
+	universe: "universes",
+	instruction: "instructions",
+};
+
+/** The path a scheme file lives at. The name is the filename; nothing inside repeats it. */
+export const schemePath = (kind: SchemeKind, name: string): string =>
+	isRoot(kind) ? ROOT[kind] : `${FOLDERS[kind]}/${name}.yaml`;

@@ -32,8 +32,17 @@ export type {
 	JsonObject,
 } from "./ddi/document.js";
 export { documentOf } from "./ddi/document.js";
-export { elaborate, elaborateItems } from "./ddi/elaborate.js";
+export {
+	elaborate,
+	elaborateItems,
+	type Versioning,
+} from "./ddi/elaborate.js";
 export { makeValidator, type Validator } from "./ddi/validate.js";
+export {
+	UNVERSIONED,
+	type Version,
+	type Versions,
+} from "./ddi/version.js";
 export {
 	type Bank,
 	bankOf,
