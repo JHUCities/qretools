@@ -1,0 +1,4 @@
+name: more_vehicles
+text: Does your household have another vehicle?
+intent: Whether to ask about another vehicle
+responses: yes_no

@@ -1,0 +1,4 @@
+name: size
+text: How many people live in your household, including you?
+intent: The number of household members, to list each of them
+number: { min: 1, max: 20 }

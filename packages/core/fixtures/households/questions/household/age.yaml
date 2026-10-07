@@ -1,0 +1,5 @@
+name: age
+text: How old is this person?
+intent: Each household member's age in years
+universe: members
+number: { min: 0, max: 120 }

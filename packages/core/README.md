@@ -17,6 +17,31 @@ Three entry points, split by what they need:
 The DDI schema the output is checked against is exported as
 `@qretools/core/schema.json`.
 
+## Instruments
+
+An instrument composes bank questions into a questionnaire: the banks it uses (each
+under an alias), the inputs it receives from outside, and a flow of steps (`ask`,
+`say`, `section`, `if`, `stop`, `compute`, `roster`, `each`) whose conditions are
+written in a subset of VTL 2.1, the SDMX standard. `instrumentOf` reads it against
+its banks, checks its flow (every answer asked before it's read, asked once on a path,
+every branch reachable), and elaborates it to DDI: an `Instrument` whose flow is
+DDI's control constructs, with a Variable for everything it records. What a
+resolver must fetch first, `importsOf` says without reading anything else.
+
+```ts
+const file = "fixtures/instruments/households.yaml";
+const source = await readFile(file, "utf8");
+importsOf(source); // → [{ alias: "hh", address: "../households" }]
+const households = bankOf(await readBank("fixtures/households"));
+const instrument = instrumentOf(source, {
+	banks: { hh: households },
+	agency: "org.example",
+});
+instrument.findings.filter((f) => f.severity !== "info"); // → []
+Object.keys(instrument.ddi.Instrument ?? {});
+// → ["org.example:instrument-households:1"]
+```
+
 ## The `qretools` command
 
 For a bank checked out on disk, in CI or at a terminal:
@@ -26,6 +51,10 @@ qretools check path/to/bank            # findings, one per line; exit 1 on anyth
 qretools check path/to/bank --strict   # warnings fail too
 qretools export path/to/bank -o bank.json   # the bank's DDI, validated
 ```
+
+For an instrument, `qretools instrument check <file>` and `qretools instrument export
+<file> --agency <agency>`; its banks are read from the folders `uses` names by relative
+path, or from `--bank alias=dir`.
 
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses
@@ -46,6 +75,8 @@ import {
 	bankOf,
 	EMPTY_ENV,
 	evaluate,
+	importsOf,
+	instrumentOf,
 	makeValidator,
 	status,
 } from "@qretools/core";

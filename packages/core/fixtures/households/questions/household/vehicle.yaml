@@ -1,0 +1,7 @@
+name: vehicle
+text: What kind of vehicle is it?
+intent: The kinds of vehicles households have
+responses:
+  "1": Car
+  "2": Truck
+  "3": Motorcycle

@@ -66,6 +66,18 @@ export {
 	status,
 	type Target,
 } from "./findings.ts";
+export type {
+	Input as InstrumentInput,
+	InstrumentDraft,
+	Node as InstrumentNode,
+	Use as InstrumentUse,
+} from "./instrument/draft.ts";
+export {
+	type Instrument,
+	type InstrumentContext,
+	importsOf,
+	instrumentOf,
+} from "./instrument/instrument.ts";
 export { lint } from "./lint.ts";
 export {
 	type CodebookView,

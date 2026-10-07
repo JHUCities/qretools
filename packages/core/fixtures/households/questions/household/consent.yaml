@@ -1,0 +1,4 @@
+name: consent
+text: Do you agree to take part in this survey?
+intent: Whether the respondent consents to the interview
+responses: yes_no

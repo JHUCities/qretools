@@ -1,0 +1,5 @@
+name: works
+text: Does this person work for pay?
+intent: Whether each household member is employed
+universe: members
+responses: yes_no

@@ -166,7 +166,7 @@ describe("checking an instrument's flow", () => {
 		expect(checkInstrument(parsed)).toEqual([]);
 	});
 
-	it("counts what follows a stop as reached by only some", () => {
+	it("counts what follows a stop as asked of everyone the instrument is about", () => {
 		expect(
 			checked(
 				`  - ask: bas.consent
@@ -175,7 +175,7 @@ describe("checking an instrument's flow", () => {
 `,
 				true,
 			),
-		).toEqual(["info universe flow.2.ask"]);
+		).toEqual([]);
 	});
 
 	it("reads a row's answers only within its roster, or an `each` over it", () => {

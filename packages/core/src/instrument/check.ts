@@ -141,18 +141,17 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 		return typeof v === "boolean" ? v : undefined;
 	};
 
-	/** Steps in order; after a `stop` that can stop, what follows is reached by only some. */
+	/**
+	 * Steps in order. A `stop` screens out whom the instrument isn't for, so what follows
+	 * it is still asked of everyone the instrument is about.
+	 */
 	const flow = (
 		nodes: readonly Node[],
 		seen: Seen,
 		conditional: boolean,
 	): Seen => {
 		let at = seen;
-		let some = conditional;
-		for (const n of nodes) {
-			at = step(n, at, some);
-			if (n.kind === "stop" && constant(n.cond) !== false) some = true;
-		}
+		for (const n of nodes) at = step(n, at, conditional);
 		return at;
 	};
 

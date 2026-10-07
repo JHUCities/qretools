@@ -1,0 +1,7 @@
+name: utilities
+text: "You said you pay {{rent}} a month. Does that include utilities?"
+intent: Whether the rent reported includes utilities
+universe: renters
+responses: yes_no
+fills:
+  rent: number

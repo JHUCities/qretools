@@ -1,0 +1,5 @@
+name: rent
+text: How much is your rent each month, in dollars?
+intent: Monthly rent paid by renting households
+universe: renters
+number: { min: 0 }

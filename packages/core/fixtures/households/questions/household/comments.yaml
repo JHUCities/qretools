@@ -1,0 +1,4 @@
+name: comments
+text: Is there anything else you'd like to tell us?
+intent: Open feedback at the end of the interview
+open: { max_length: 500 }

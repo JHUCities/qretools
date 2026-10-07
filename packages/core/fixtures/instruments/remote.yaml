@@ -1,0 +1,5 @@
+name: remote
+uses:
+  bas: owner/bank@v1
+flow:
+  - ask: bas.consent

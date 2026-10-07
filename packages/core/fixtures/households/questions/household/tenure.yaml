@@ -1,0 +1,7 @@
+name: tenure
+text: Do you own or rent your home?
+intent: Housing tenure of the household
+responses:
+  "1": Own
+  "2": Rent
+  "3": Neither

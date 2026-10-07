@@ -3,6 +3,8 @@ import {
 	bankOf,
 	EMPTY_ENV,
 	evaluate,
+	importsOf,
+	instrumentOf,
 	makeValidator,
 	status,
 } from "@qretools/core";
@@ -63,6 +65,28 @@ responses:
 		const validator = makeValidator(schema);
 		validator.ok && validator.value(evaluation.ddi); // → []
 		expect(validator.ok && validator.value(evaluation.ddi)).toEqual([]);
+
+		const file = "fixtures/instruments/households.yaml";
+		const source = await readFile(file, "utf8");
+		importsOf(source); // → [{ alias: "hh", address: "../households" }]
+		const households = bankOf(await readBank("fixtures/households"));
+		const instrument = instrumentOf(source, {
+			banks: { hh: households },
+			agency: "org.example",
+		});
+		instrument.findings.filter((f) => f.severity !== "info"); // → []
+		Object.keys(instrument.ddi.Instrument ?? {});
+		// → ["org.example:instrument-households:1"]
+		expect(importsOf(source)).toEqual([
+			{ alias: "hh", address: "../households" },
+		]);
+		expect(instrument.findings.filter((f) => f.severity !== "info")).toEqual(
+			[],
+		);
+		expect(Object.keys(instrument.ddi.Instrument ?? {})).toEqual([
+			"org.example:instrument-households:1",
+		]);
+		expect(validator.ok && validator.value(instrument.ddi)).toEqual([]);
 	});
 
 	it("are this file's code, block for block", async () => {

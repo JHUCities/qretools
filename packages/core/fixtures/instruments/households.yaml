@@ -1,0 +1,49 @@
+name: households
+title: Households and housing
+description: A small instrument with every construct of the language, for the library's tests.
+uses:
+  hh: ../households
+inputs:
+  county:
+    responses:
+      "1": North County
+      "2": South County
+    description: From the sample file.
+flow:
+  - say: Thank you for taking part in this survey of {{county}}.
+  - ask: hh.consent
+  - stop: hh.consent = "2"
+    say: Thank you for your time.
+  - ask: hh.size
+  - roster: members
+    count: hh.size
+    flow:
+      - say: The next questions are about person {{index}}.
+      - ask: hh.age
+      - ask: hh.works
+  - section: Housing
+    flow:
+      - ask: hh.tenure
+      - compute: renter
+        value: hh.tenure = "2"
+      - if: renter
+        then:
+          - ask: hh.rent
+            checks:
+              - ensure: hh.rent < 10000
+                severity: warning
+                message: "{{hh.rent}} dollars is a lot. Is that right?"
+          - ask: hh.utilities
+            fill:
+              rent: hh.rent
+  - roster: vehicles
+    more: hh.more_vehicles = "1"
+    flow:
+      - ask: hh.vehicle
+      - ask: hh.more_vehicles
+  - each: members
+    flow:
+      - if: hh.works = "1"
+        then:
+          - say: Person {{index}} works.
+  - ask: hh.comments
