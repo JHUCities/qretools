@@ -38,11 +38,12 @@ import {
 } from "./persist.js";
 import {
 	AuthError,
+	type BankRef,
+	bankText,
 	type CredentialStore,
 	type Failure,
 	type File,
 	type MakeStore,
-	type Repo,
 	type Store,
 } from "./storage.js";
 
@@ -214,10 +215,11 @@ export function createEffects(deps: Deps): Effects {
 		return renewed.value.access;
 	};
 
-	const storeFor = (repo: Repo): Store | undefined => {
+	const storeFor = (repo: BankRef): Store | undefined => {
 		if (credentials === null && pending === undefined) return undefined;
 		const appToken = credentials?.pasted !== true;
-		const key = `${repo.owner}/${repo.repo}:${appToken}`;
+		// The folder too: two banks in one repository are two stores.
+		const key = `${bankText(repo)}:${appToken}`;
 		if (!store || key !== repoInUse) {
 			store = deps.makeStore(repo, token, { appToken });
 			repoInUse = key;

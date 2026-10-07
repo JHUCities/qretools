@@ -35,10 +35,16 @@ describe("the bank the sign-in page offers first", () => {
 		expect(defaultBank(env({ VITE_DEFAULT_BANK: "a/b" }))).toEqual({
 			owner: "a",
 			repo: "b",
+			path: "",
 		});
 		expect(
 			defaultBank(env({ VITE_DEFAULT_BANK: "https://github.com/a/b" })),
-		).toEqual({ owner: "a", repo: "b" });
+		).toEqual({ owner: "a", repo: "b", path: "" });
+		expect(defaultBank(env({ VITE_DEFAULT_BANK: "a/b/banks/main" }))).toEqual({
+			owner: "a",
+			repo: "b",
+			path: "banks/main",
+		});
 	});
 
 	it("is absent when not set, blank or malformed: an empty field", () => {

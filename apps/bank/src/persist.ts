@@ -23,7 +23,7 @@ import {
 	type BankSettings,
 	type CredentialStore,
 	type Failure,
-	parseRepo,
+	parseBank,
 } from "./storage.js";
 
 const OriginSchema = z.discriminatedUnion("kind", [
@@ -265,6 +265,8 @@ const StoredSettingsSchema = z.strictObject({
 	version: z.literal(1),
 	owner: z.string(),
 	repo: z.string(),
+	/** The bank's folder in the repository; absent for its root (and in older settings). */
+	path: z.string().optional(),
 	remember: z.boolean(),
 });
 
@@ -286,8 +288,8 @@ export function readSettings(raw: string | null): BankSettings | undefined {
 	try {
 		const parsed = StoredSettingsSchema.safeParse(JSON.parse(raw));
 		if (!parsed.success) return undefined;
-		const { owner, repo, remember } = parsed.data;
-		return { owner, repo, remember };
+		const { owner, repo, path, remember } = parsed.data;
+		return { owner, repo, path: path ?? "", remember };
 	} catch {
 		return undefined;
 	}
@@ -296,9 +298,16 @@ export function readSettings(raw: string | null): BankSettings | undefined {
 export const settingsValue = ({
 	owner,
 	repo,
+	path,
 	remember,
 }: BankSettings): string =>
-	JSON.stringify({ version: 1, owner, repo, remember });
+	JSON.stringify({
+		version: 1,
+		owner,
+		repo,
+		...(path !== "" && { path }),
+		remember,
+	});
 
 /**
  * The settings a tab starts with: its own work's bank wins over the stored default, so
@@ -310,7 +319,7 @@ export function startingSettings(
 	fallback: BankSettings,
 ): BankSettings {
 	const settings = stored ?? fallback;
-	const own = work === undefined ? undefined : parseRepo(work.repo);
+	const own = work === undefined ? undefined : parseBank(work.repo);
 	return own?.ok ? { ...settings, ...own.value } : settings;
 }
 
@@ -363,7 +372,7 @@ export function fromLegacy(p: Persisted): {
 			questions: p.questions,
 			schemes: p.schemes,
 		},
-		settings: p.settings,
+		settings: { ...p.settings, path: "" },
 		setAside: Object.values(p.kept).some(
 			(k) => k.questions.length + k.schemes.length > 0,
 		),

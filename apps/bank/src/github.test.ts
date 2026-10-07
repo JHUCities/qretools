@@ -6,10 +6,10 @@ type Seen = { url: string; method: string; body: Record<string, unknown> };
 type Canned = (req: Seen) => Response;
 
 /** A store over a fake fetch that answers with `respond` and records every request. */
-function store(respond: Canned, appToken = false) {
+function store(respond: Canned, appToken = false, path = "") {
 	const seen: Seen[] = [];
 	const s = makeGitHubStore(
-		{ owner: "JHUCities", repo: "bas-question-bank" },
+		{ owner: "JHUCities", repo: "bas-question-bank", path },
 		async () => "tok",
 		{ appToken },
 		(async (url: string, init: RequestInit = {}) => {
@@ -38,6 +38,7 @@ const json = (
 const target: BranchTarget = {
 	owner: "JHUCities",
 	repo: "bas-question-bank",
+	path: "",
 	branch: "qretools-iain",
 	defaultBranch: "main",
 };
@@ -79,6 +80,35 @@ describe("GitHub adapter (Octokit)", () => {
 		expect(await writer.whoAmI()).toMatchObject({
 			value: { access: { kind: "write" }, defaultBranch: "trunk" },
 		});
+	});
+
+	it("refuses a bank folder the default branch doesn't have, rather than load an empty bank", async () => {
+		const who = (dir: unknown) =>
+			store(
+				() =>
+					json({
+						data: {
+							viewer: { login: "iain", avatarUrl: "https://a/iain" },
+							repository: {
+								viewerPermission: "WRITE",
+								defaultBranchRef: { name: "main" },
+								dir,
+							},
+						},
+					}),
+				false,
+				"banks/bsa",
+			);
+		const missing = await who(null).s.whoAmI();
+		expect(!missing.ok && missing.error).toMatchObject({
+			kind: "unreadable",
+			message:
+				"GitHub has no folder `banks/bsa` in JHUCities/bas-question-bank.",
+		});
+		const present = who({ __typename: "Tree" });
+		expect((await present.s.whoAmI()).ok).toBe(true);
+		const body = present.seen[0]?.body as { variables: Record<string, string> };
+		expect(body.variables.dir).toBe("HEAD:banks/bsa");
 	});
 
 	it("knows whether the app it signed in with is installed on the repository", async () => {
@@ -230,7 +260,7 @@ describe("GitHub adapter (Octokit)", () => {
 		).s.whoAmI();
 		expect(!auth.ok && auth.error.kind).toBe("auth");
 		const down = makeGitHubStore(
-			{ owner: "o", repo: "r" },
+			{ owner: "o", repo: "r", path: "" },
 			async () => "tok",
 			{ appToken: false },
 			(async () => {
@@ -249,48 +279,54 @@ describe("GitHub adapter (Octokit)", () => {
 	 */
 	function github(opts: {
 		files: Record<string, string>;
+		/** The bank's folder in the repository; `files` are keyed by repository path. */
+		folder?: string;
 		branch?: boolean;
 		patch?: number[];
 	}) {
 		let exists = opts.branch ?? true;
 		const patches = [...(opts.patch ?? [200])];
-		return store(({ url, method, body }) => {
-			if (url.endsWith("/graphql")) {
-				const vars = body.variables as Record<string, string>;
-				if (!exists) return json({ data: { repository: { head: null } } });
-				const target: Record<string, unknown> = {
-					oid: "head",
-					tree: { oid: "tree" },
-				};
-				for (const [k, path] of Object.entries(vars))
-					if (/^p\d+$/.test(k))
-						target[k] =
-							opts.files[path] === undefined
-								? null
-								: { oid: opts.files[path], object: { text: "old" } };
-				return json({ data: { repository: { head: { target } } } });
-			}
-			if (url.endsWith("/git/ref/heads/main"))
-				return json({ object: { sha: "main-head" } });
-			if (url.endsWith("/git/refs") && method === "POST") {
-				exists = true;
-				return json({ ref: "x" }, 201);
-			}
-			if (url.endsWith("/git/blobs"))
-				return json({ sha: `blob:${body.content}` }, 201);
-			if (url.endsWith("/git/trees")) return json({ sha: "tree2" }, 201);
-			if (url.endsWith("/git/commits")) return json({ sha: "commit2" }, 201);
-			if (method === "PATCH") {
-				const status = patches.shift() ?? 200;
-				return json(
-					status === 200
-						? { object: { sha: "commit2" } }
-						: { message: "Update is not a fast forward" },
-					status,
-				);
-			}
-			return json({ message: "unexpected" }, 500);
-		});
+		return store(
+			({ url, method, body }) => {
+				if (url.endsWith("/graphql")) {
+					const vars = body.variables as Record<string, string>;
+					if (!exists) return json({ data: { repository: { head: null } } });
+					const target: Record<string, unknown> = {
+						oid: "head",
+						tree: { oid: "tree" },
+					};
+					for (const [k, path] of Object.entries(vars))
+						if (/^p\d+$/.test(k))
+							target[k] =
+								opts.files[path] === undefined
+									? null
+									: { oid: opts.files[path], object: { text: "old" } };
+					return json({ data: { repository: { head: { target } } } });
+				}
+				if (url.endsWith("/git/ref/heads/main"))
+					return json({ object: { sha: "main-head" } });
+				if (url.endsWith("/git/refs") && method === "POST") {
+					exists = true;
+					return json({ ref: "x" }, 201);
+				}
+				if (url.endsWith("/git/blobs"))
+					return json({ sha: `blob:${body.content}` }, 201);
+				if (url.endsWith("/git/trees")) return json({ sha: "tree2" }, 201);
+				if (url.endsWith("/git/commits")) return json({ sha: "commit2" }, 201);
+				if (method === "PATCH") {
+					const status = patches.shift() ?? 200;
+					return json(
+						status === 200
+							? { object: { sha: "commit2" } }
+							: { message: "Update is not a fast forward" },
+						status,
+					);
+				}
+				return json({ message: "unexpected" }, 500);
+			},
+			false,
+			opts.folder ?? "",
+		);
 	}
 	const change = (
 		path: string,
@@ -329,6 +365,26 @@ describe("GitHub adapter (Octokit)", () => {
 		const patch = seen.find((q) => q.method === "PATCH");
 		expect(patch?.url).toMatch(/git\/refs\/heads\/qretools-iain$/);
 		expect(patch?.body).toMatchObject({ sha: "commit2", force: false });
+	});
+
+	it("in a bank's folder, reads and writes the repository's paths and answers in the bank's", async () => {
+		const { s, seen } = github({
+			files: { "banks/bas/scales/a.yaml": "s1" },
+			folder: "banks/bas",
+		});
+		const r = await s.commit(
+			target,
+			[change("scales/a.yaml", "s1", "new a")],
+			"Update a",
+		);
+		expect(r).toEqual({
+			ok: true,
+			value: { shas: { "scales/a.yaml": "blob:new a" } },
+		});
+		const tree = seen.find((q) => q.url.endsWith("/git/trees"));
+		expect(tree?.body).toMatchObject({
+			tree: [{ path: "banks/bas/scales/a.yaml", sha: "blob:new a" }],
+		});
 	});
 
 	it("refuses a change set when any path moved on GitHub, writing nothing", async () => {
@@ -501,6 +557,25 @@ describe("GitHub adapter (Octokit)", () => {
 		);
 	});
 
+	it("loads a bank in a folder from that folder, with paths relative to it", async () => {
+		const { s, seen } = store(
+			() => json({ data: { repository: repository(true) } }),
+			false,
+			"banks/bas",
+		);
+		const r = await s.loadBank(target);
+		expect(r.ok && r.value.files.map((f) => f.path)).toContain(
+			"questions/nhd/nhd_sat.yaml",
+		);
+		const body = seen[0]?.body as { variables: Record<string, string> };
+		expect(body.variables).toMatchObject({
+			questions: "qretools-iain:banks/bas/questions",
+			scales: "qretools-iain:banks/bas/scales",
+			root_missing: "qretools-iain:banks/bas/missing.yaml",
+			root_bank: "qretools-iain:banks/bas/bank.yaml",
+		});
+	});
+
 	it("before the first save, loads the bank instead, keeping the data GitHub sends with its errors", async () => {
 		const { s, seen } = store(({ body }) => {
 			const variables = body.variables as Record<string, string>;
@@ -572,7 +647,7 @@ describe("GitHub adapter (Octokit)", () => {
 		let n = 0;
 		const headers: string[] = [];
 		const s = makeGitHubStore(
-			{ owner: "o", repo: "r" },
+			{ owner: "o", repo: "r", path: "" },
 			async () => `tok${++n}`,
 			{ appToken: false },
 			(async (_url: string, init: RequestInit = {}) => {
@@ -596,7 +671,7 @@ describe("GitHub adapter (Octokit)", () => {
 		await s.whoAmI();
 		expect(headers).toEqual(["token tok1", "token tok2"]);
 		const ended = makeGitHubStore(
-			{ owner: "o", repo: "r" },
+			{ owner: "o", repo: "r", path: "" },
 			async () => {
 				throw new AuthError({
 					kind: "auth",

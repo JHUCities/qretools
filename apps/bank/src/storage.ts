@@ -39,6 +39,8 @@ export interface Failure {
 export interface BankSettings {
 	readonly owner: string;
 	readonly repo: string;
+	/** The bank's folder in the repository, `/`-separated; empty for its root. */
+	readonly path: string;
 	/** Keep the token on this device (localStorage) rather than for this tab (sessionStorage). */
 	readonly remember: boolean;
 }
@@ -84,11 +86,81 @@ export interface Repo {
 }
 
 /**
+ * Which bank: a repository, and the folder in it that holds the bank (`banks/bas`),
+ * empty for its root. The folder has no leading or trailing slash. Paths inside the
+ * bank are relative to it everywhere but the GitHub adapter, which adds it.
+ */
+export interface BankRef extends Repo {
+	readonly path: string;
+}
+
+const SEGMENT = /^[^/\s]+$/;
+
+/** A URL segment decoded, or as it is when it isn't valid percent-encoding. */
+const safeDecode = (s: string): string => {
+	try {
+		return decodeURIComponent(s);
+	} catch {
+		return s;
+	}
+};
+
+/**
+ * A bank as written: `owner/name` for one at a repository's root, `owner/name/folder`
+ * for one in a folder, or a pasted GitHub URL of either (`…/tree/<branch>/<folder>`; the
+ * branch is one segment and is dropped, since a bank is read from the default branch
+ * and the author's own). Parsed once, wherever a bank is named: the sign-in form, a
+ * link, stored work.
+ */
+export function parseBank(text: string): Result<BankRef, string> {
+	const pasted = /^https?:\/\//.test(text.trim());
+	const bare = text
+		.trim()
+		.replace(/^https?:\/\/github\.com\//, "")
+		.replace(/\/+$/, "");
+	// A URL's segments are encoded (`my%20bank`); what's written is as is.
+	const [owner, repo, ...rest] = bare
+		.split("/")
+		.map((s) => (pasted ? safeDecode(s) : s));
+	const problem =
+		"Write the bank as owner/name, or owner/name/folder for a bank in a folder, for example octo-org/surveys/banks/main.";
+	const named = parseRepo(
+		`${owner ?? ""}/${(repo ?? "").replace(/\.git$/, "")}`,
+	);
+	if (!named.ok) return err(problem);
+	// A pasted URL's `tree/<branch>/`: the folder follows it.
+	const folder =
+		pasted && rest[0] === "tree"
+			? rest.slice(2)
+			: pasted && rest.length > 0
+				? undefined
+				: rest;
+	if (
+		folder === undefined ||
+		folder.some((s) => s === "." || s === ".." || !SEGMENT.test(s))
+	)
+		return err(problem);
+	return ok({ ...named.value, path: folder.join("/") });
+}
+
+/** A bank as the field, a link and stored work write it: `owner/name[/folder]`; empty when none. */
+export const bankText = (bank: BankRef): string => {
+	const repo = repoText(bank);
+	return repo === "" || bank.path === "" ? repo : `${repo}/${bank.path}`;
+};
+
+/** One bank: owner and name compare as GitHub's do (ignoring case), the folder as git's (exactly). */
+export const sameBank = (a: BankRef, b: BankRef): boolean =>
+	a.owner.toLowerCase() === b.owner.toLowerCase() &&
+	a.repo.toLowerCase() === b.repo.toLowerCase() &&
+	a.path === b.path;
+
+/**
  * Where a command reads and writes: a repository and a resolved branch, never the
  * unresolved "my branch" of the settings. `defaultBranch` is the bank: a branch that
  * does not exist yet is read from it and created from it.
  */
-export interface BranchTarget extends Repo {
+export interface BranchTarget extends BankRef {
 	readonly branch: string;
 	readonly defaultBranch: string;
 }
@@ -164,9 +236,9 @@ export interface CommitFailure {
 	>;
 }
 
-/** A store over one repository; `token` is asked for before every request, so it may renew. */
+/** A store over one bank; `token` is asked for before every request, so it may renew. */
 export type MakeStore = (
-	repo: Repo,
+	bank: BankRef,
 	token: () => Promise<string>,
 	/** A token from the GitHub App's sign-in (its installations can be checked), or pasted. */
 	how: { readonly appToken: boolean },

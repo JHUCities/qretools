@@ -37,9 +37,14 @@ const fresh = (): Model =>
 	init({
 		work: ok(undefined),
 		hasToken: false,
-		defaultBank: { owner: "JHUCities", repo: "bas-question-bank" },
+		defaultBank: { owner: "JHUCities", repo: "bas-question-bank", path: "" },
 	})[0];
-const SETTINGS = { owner: "octo-org", repo: "survey-bank", remember: false };
+const SETTINGS = {
+	owner: "octo-org",
+	repo: "survey-bank",
+	path: "",
+	remember: false,
+};
 const run = (model: Model, ...msgs: Msg[]) =>
 	msgs.reduce<ReturnType<typeof update>>(
 		([m], msg) => update(m, msg),
@@ -127,12 +132,12 @@ describe("init", () => {
 		expect(model.session.kind).toBe("connecting");
 		expect(cmds.at(-1)).toEqual({
 			kind: "connect",
-			repo: { owner: "JHUCities", repo: "bas-question-bank" },
+			repo: { owner: "JHUCities", repo: "bas-question-bank", path: "" },
 		});
 	});
 
 	it("offers the build's default bank when nothing is stored, and an empty field without one", () => {
-		const bank = { owner: "octo-org", repo: "bank-template" };
+		const bank = { owner: "octo-org", repo: "bank-template", path: "" };
 		const [offered] = init({
 			work: ok(undefined),
 			hasToken: false,
@@ -140,7 +145,12 @@ describe("init", () => {
 		});
 		expect(offered.settings).toEqual({ ...bank, remember: false });
 		const [empty] = init({ work: ok(undefined), hasToken: false });
-		expect(empty.settings).toEqual({ owner: "", repo: "", remember: false });
+		expect(empty.settings).toEqual({
+			owner: "",
+			repo: "",
+			path: "",
+			remember: false,
+		});
 	});
 
 	it("keeps an unreadable store as a failure, not a crash", () => {
@@ -364,7 +374,7 @@ describe("saving", () => {
 			{
 				kind: "commit",
 				target: {
-					...{ owner: "JHUCities", repo: "bas-question-bank" },
+					...{ owner: "JHUCities", repo: "bas-question-bank", path: "" },
 					branch: "qretools-iain",
 					defaultBranch: "main",
 				},
@@ -539,7 +549,7 @@ describe("connecting", () => {
 		expect(m1.session.kind).toBe("connecting");
 		expect(c1.find((c) => c.kind === "connect")).toEqual({
 			kind: "connect",
-			repo: { owner: "octo-org", repo: "survey-bank" },
+			repo: { owner: "octo-org", repo: "survey-bank", path: "" },
 		});
 		const [m2, c2] = update(m1, {
 			kind: "connected",
@@ -942,6 +952,7 @@ describe("the author's own branch", () => {
 			target: {
 				owner: "JHUCities",
 				repo: "bas-question-bank",
+				path: "",
 				branch: "qretools-iain",
 				defaultBranch: "main",
 			},
@@ -1358,6 +1369,16 @@ describe("links", () => {
 		});
 		expect(m.failures.at(-1)?.message).toMatch(/other\/bank/);
 	});
+
+	it("a link to a bank in another folder of the same repository is another bank", () => {
+		const m0 = loadedBank();
+		const folder = `${m0.settings.owner}/${m0.settings.repo}/banks/other`;
+		const [m] = update(m0, {
+			kind: "hashChanged",
+			hash: formatLink({ repo: folder, branch: "main" }),
+		});
+		expect(m.failures.at(-1)?.message).toContain(folder);
+	});
 });
 
 describe("moving a question", () => {
@@ -1378,6 +1399,7 @@ describe("moving a question", () => {
 	const target = {
 		owner: "JHUCities",
 		repo: "bas-question-bank",
+		path: "",
 		branch: "qretools-iain",
 		defaultBranch: "main",
 	};
@@ -1704,6 +1726,7 @@ describe("signing in", () => {
 				target: {
 					owner: "JHUCities",
 					repo: "bas-question-bank",
+					path: "",
 					branch: "qretools-iain",
 					defaultBranch: "main",
 				},
@@ -1842,10 +1865,15 @@ describe("work belongs to this tab", () => {
 		};
 		const [m] = init({
 			work: ok(work),
-			settings: { owner: "x", repo: "y", remember: true },
+			settings: { owner: "x", repo: "y", path: "", remember: true },
 			hasToken: false,
 		});
-		expect(m.settings).toEqual({ owner: "a", repo: "bank", remember: true });
+		expect(m.settings).toEqual({
+			owner: "a",
+			repo: "bank",
+			path: "",
+			remember: true,
+		});
 		expect(m.author).toBe("iain");
 		expect(toWork(m)).toEqual(work);
 	});
@@ -1870,7 +1898,7 @@ describe("work belongs to this tab", () => {
 
 	it("signing in to another bank sets this tab's work aside; the same bank keeps it", () => {
 		const mine = withDraft(fresh());
-		const other = { owner: "b", repo: "bank", remember: false };
+		const other = { owner: "b", repo: "bank", path: "", remember: false };
 		const [away, cmds] = update(mine, {
 			kind: "signInRequested",
 			settings: other,
@@ -1884,6 +1912,13 @@ describe("work belongs to this tab", () => {
 		});
 		expect(here.local).toBe(mine.local);
 		expect(hereCmds.some((c) => c.kind === "setAside")).toBe(false);
+		// Another folder of the same repository is another bank: its paths would collide.
+		const [folder, folderCmds] = update(mine, {
+			kind: "signInRequested",
+			settings: { ...mine.settings, path: "banks/other" },
+		});
+		expect(folder.local.questions).toEqual({});
+		expect(folderCmds).toContainEqual({ kind: "setAside", work: toWork(mine) });
 	});
 });
 

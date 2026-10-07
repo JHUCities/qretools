@@ -4,7 +4,7 @@
  * a bank; the author's own unsaved work in this tab waits for the sign-in.
  *
  * A native form: Enter signs in. The repository is written as GitHub writes it,
- * `owner/name`, and parsed once on submit (`parseRepo`); a link to another bank offers
+ * `owner/name[/folder]`, and parsed once on submit (`parseBank`); a link to another bank offers
  * its repository here. The text, the checkbox and a pasted development token are
  * transient input, so component state; the token goes to the effects, never a Msg.
  */
@@ -26,7 +26,7 @@ import { useId, useRef, useState } from "react";
 import { installUrl, SOURCE_URL } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import { hasOwnWork, type Model } from "../model.js";
-import { parseRepo, repoText } from "../storage.js";
+import { bankText, parseBank, sameBank } from "../storage.js";
 import { useApp } from "./AppContext.js";
 import { ExternalLink } from "./ExternalLink.js";
 import { failureDescription } from "./Previews.js";
@@ -35,7 +35,7 @@ export function SignIn({ model }: { model: Model }) {
 	const { dispatch, effects, signIn: config, template } = useApp();
 	const { settings, session } = model;
 	const [text, setText] = useState(
-		model.pendingLink?.repo ?? repoText(settings),
+		model.pendingLink?.repo ?? bankText(settings),
 	);
 	const [remember, setRemember] = useState(settings.remember);
 	const [token, setToken] = useState("");
@@ -44,7 +44,7 @@ export function SignIn({ model }: { model: Model }) {
 	const [tokenTried, setTokenTried] = useState(false);
 	const input = useRef<HTMLInputElement>(null);
 	const headingId = useId();
-	const parsed = parseRepo(text);
+	const parsed = parseBank(text);
 	const problem = tried && !parsed.ok ? parsed.error : undefined;
 	const connecting = session.kind === "connecting";
 	const chosen = () => {
@@ -62,12 +62,8 @@ export function SignIn({ model }: { model: Model }) {
 		dispatch({ kind: "connectRequested", settings: next });
 	};
 	// This tab's unsaved work belongs to its bank: signing in to another sets it aside.
-	const current = repoText(settings);
 	const elsewhere =
-		hasOwnWork(model) &&
-		parsed.ok &&
-		`${parsed.value.owner}/${parsed.value.repo}`.toLowerCase() !==
-			current.toLowerCase();
+		hasOwnWork(model) && parsed.ok && !sameBank(parsed.value, settings);
 	return (
 		<main className="signin" aria-labelledby={headingId}>
 			<Stack gap="normal" className="signin-column">
@@ -131,7 +127,8 @@ export function SignIn({ model }: { model: Model }) {
 								onChange={(e) => setText(e.target.value)}
 							/>
 							<FormControl.Caption>
-								The GitHub repository that holds the bank, as owner/name.
+								The GitHub repository that holds the bank, as owner/name, or
+								owner/name/folder for a bank in a folder.
 							</FormControl.Caption>
 							{problem !== undefined && (
 								<FormControl.Validation variant="error">
@@ -221,8 +218,8 @@ export function SignIn({ model }: { model: Model }) {
 				)}
 				{elsewhere && (
 					<p className="quiet signin-note">
-						Your unsaved work in this tab is for {current}. Signing in to
-						another bank sets it aside.
+						Your unsaved work in this tab is for {bankText(settings)}. Signing
+						in to another bank sets it aside.
 					</p>
 				)}
 				{/* A failed sign-in still holds the GitHub sign-in: a way to let it go. */}

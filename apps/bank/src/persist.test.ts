@@ -42,7 +42,9 @@ class MemoryStorage implements Storage {
 	}
 }
 
-const settings = { owner: "o", repo: "r", remember: false };
+/** Settings as older versions stored them, inside their work; no folder. */
+const legacy = { owner: "o", repo: "r", remember: false };
+const settings = { ...legacy, path: "" };
 const base = { path: "questions/q/q.yaml", sha: "abc", text: "name: q\n" };
 
 describe("readPersisted", () => {
@@ -53,7 +55,7 @@ describe("readPersisted", () => {
 			nextId: 3,
 			questions: [{ kind: "question", id: 1, source: "name: q2\n", base }],
 			schemes: [{ kind: "scale", name: "yn", id: 2, source: "labels: {}\n" }],
-			settings,
+			settings: legacy,
 			workOf: { repo: "o/r", login: "iain" },
 			kept: {
 				"x/y@ann": {
@@ -85,7 +87,7 @@ describe("readPersisted", () => {
 			nextId: 3,
 			questions: [{ kind: "question", id: 1, source: "name: q2\n", base }],
 			schemes: [],
-			settings,
+			settings: legacy,
 		};
 		expect(readPersisted(JSON.stringify(v3))).toEqual({
 			ok: true,
@@ -117,7 +119,7 @@ describe("readPersisted", () => {
 					origin: { kind: "draft" },
 				},
 			],
-			settings,
+			settings: legacy,
 		};
 		expect(readPersisted(JSON.stringify(v2))).toEqual({
 			ok: true,
@@ -126,7 +128,7 @@ describe("readPersisted", () => {
 				nextId: 3,
 				questions: [{ id: 1, kind: "question", source: "name: q2\n", base }],
 				schemes: [{ id: 2, kind: "scale", name: "yn", source: "labels: {}\n" }],
-				settings,
+				settings: legacy,
 				workOf: { repo: "o/r" },
 				kept: {},
 			},
@@ -138,7 +140,7 @@ describe("readPersisted", () => {
 			version: 1,
 			nextId: 2,
 			questions: [{ id: 1, source: "name: q\n", origin: { kind: "draft" } }],
-			settings,
+			settings: legacy,
 		};
 		expect(readPersisted(JSON.stringify(v1))).toEqual({
 			ok: true,
@@ -147,7 +149,7 @@ describe("readPersisted", () => {
 				nextId: 2,
 				questions: [{ id: 1, kind: "question", source: "name: q\n" }],
 				schemes: [],
-				settings,
+				settings: legacy,
 				workOf: { repo: "o/r" },
 				kept: {},
 			},
@@ -160,14 +162,14 @@ describe("readPersisted", () => {
 			nextId: 1,
 			questions: [],
 			schemes: [],
-			settings: { ...settings, branch: "sandbox" },
+			settings: { ...legacy, branch: "sandbox" },
 		};
 		expect(readPersisted(JSON.stringify(stored))).toEqual({
 			ok: true,
 			value: {
 				...stored,
 				version: 4,
-				settings,
+				settings: legacy,
 				workOf: { repo: "o/r" },
 				kept: {},
 			},
@@ -209,7 +211,7 @@ describe("this tab's work and the default settings", () => {
 		expect(readSettings(settingsValue(settings))).toEqual(settings);
 		expect(JSON.parse(settingsValue(settings))).toEqual({
 			version: 1,
-			...settings,
+			...legacy,
 		});
 		expect(readSettings(null)).toBeUndefined();
 		expect(readSettings("{")).toBeUndefined();
@@ -217,13 +219,17 @@ describe("this tab's work and the default settings", () => {
 	});
 
 	it("starts in the work's own bank, whatever another tab stored since", () => {
-		const other = { owner: "x", repo: "y", remember: true };
-		const fallback = { owner: "d", repo: "d", remember: false };
+		const other = { owner: "x", repo: "y", path: "", remember: true };
+		const fallback = { owner: "d", repo: "d", path: "", remember: false };
 		expect(startingSettings(other, work, fallback)).toEqual({
 			owner: "o",
 			repo: "r",
+			path: "",
 			remember: true,
 		});
+		expect(
+			startingSettings(other, { ...work, repo: "o/r/banks/bas" }, fallback),
+		).toMatchObject({ owner: "o", repo: "r", path: "banks/bas" });
 		expect(startingSettings(other, undefined, fallback)).toBe(other);
 		expect(startingSettings(undefined, undefined, fallback)).toBe(fallback);
 	});
@@ -262,7 +268,7 @@ describe("migrating an older version's work", () => {
 		nextId: 5,
 		questions: [{ kind: "question", id: 1, source: "name: q\n", base }],
 		schemes: [],
-		settings,
+		settings: legacy,
 		workOf: { repo: "a/bank", login: "iain" },
 		kept: {},
 	};
@@ -331,7 +337,7 @@ describe("migrating an older version's work", () => {
 				nextId: 1,
 				questions: [],
 				schemes: [],
-				settings,
+				settings: legacy,
 			}),
 		);
 		migrate(local, session);

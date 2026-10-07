@@ -60,7 +60,10 @@ function harness(opts: {
 		},
 	});
 	// A connect builds the store, which hands us the getter.
-	effects.exec({ kind: "connect", repo: { owner: "o", repo: "r" } }, () => {});
+	effects.exec(
+		{ kind: "connect", repo: { owner: "o", repo: "r", path: "" } },
+		() => {},
+	);
 	return {
 		token: () => {
 			if (!getter) throw new Error("no store was built");

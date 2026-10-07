@@ -59,7 +59,15 @@ import {
 	signedOut,
 	toWork,
 } from "./model.js";
-import type { BankSettings, BranchTarget, Change, Failure } from "./storage.js";
+import {
+	type BankSettings,
+	type BranchTarget,
+	bankText,
+	type Change,
+	type Failure,
+	parseBank,
+	sameBank,
+} from "./storage.js";
 import {
 	claimOf,
 	dependencies,
@@ -784,7 +792,11 @@ function step(model: Model, msg: Msg): Step {
 					...cmds,
 					{
 						kind: "connect",
-						repo: { owner: msg.settings.owner, repo: msg.settings.repo },
+						repo: {
+							owner: msg.settings.owner,
+							repo: msg.settings.repo,
+							path: msg.settings.path,
+						},
 					},
 				],
 			]);
@@ -1126,7 +1138,7 @@ function withSettings(model: Model, settings: BankSettings): Step {
 	const [kept, cmds] = otherBank(model, settings)
 		? setAside(
 				model,
-				`Unsaved work in this tab for ${model.settings.owner}/${model.settings.repo} was set aside.`,
+				`Unsaved work in this tab for ${bankText(model.settings)} was set aside.`,
 			)
 		: [model, []];
 	return [{ ...kept, settings }, [...cmds, { kind: "saveSettings", settings }]];
@@ -1249,7 +1261,7 @@ export function linkOf(model: Model): string | undefined {
 	// address alone rather than name a branch dishonestly.
 	if (model.session.kind !== "connected" || model.loading.kind !== "loaded")
 		return undefined;
-	const repo = `${model.settings.owner}/${model.settings.repo}`;
+	const repo = bankText(model.settings);
 	const own =
 		model.loading.kind === "loaded" && model.loading.from === "default"
 			? model.session.defaultBranch
@@ -1274,7 +1286,7 @@ export function hrefOf(model: Model, f: Entry): string | undefined {
 	const branch = linkBranch(model);
 	if (branch === undefined || f.base === undefined) return undefined;
 	return formatLink({
-		repo: `${model.settings.owner}/${model.settings.repo}`,
+		repo: bankText(model.settings),
 		branch,
 		file: f.base.path,
 	});
@@ -1310,9 +1322,10 @@ const claimant = (model: Model, path: Path): Entry | undefined =>
  * version you started from. What cannot be resolved yet waits for the bank.
  */
 function openLink(model: Model, link: Link): Step {
-	const repo = `${model.settings.owner}/${model.settings.repo}`;
-	// GitHub's names ignore case.
-	if (link.repo.toLowerCase() !== repo.toLowerCase()) {
+	const repo = bankText(model.settings);
+	// One bank: GitHub's names ignore case, a folder's doesn't.
+	const linked = parseBank(link.repo);
+	if (!linked.ok || !sameBank(linked.value, model.settings)) {
 		// Until a bank is open, a link to another bank is where to sign in: the form
 		// offers its repository, and the link opens once that bank has loaded.
 		if (model.session.kind !== "connected")
@@ -1543,6 +1556,7 @@ const targetOf = (
 ): BranchTarget => ({
 	owner: settings.owner,
 	repo: settings.repo,
+	path: settings.path,
 	branch: ownBranch(session.login),
 	defaultBranch: session.defaultBranch,
 });

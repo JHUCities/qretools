@@ -490,18 +490,46 @@ const repoUrl = (model: Model): string =>
 	`https://github.com/${model.settings.owner}/${model.settings.repo}`;
 
 /**
- * The bank, as github.com names a repository: `owner / repo`, the repository a link,
- * on one line that truncates from the end. Its branch is the next line (BranchLine).
+ * A branch and the bank's folder in a github.com URL: each folder segment encoded (git
+ * allows nearly any name); the branch keeps its slashes, as github.com writes it.
+ */
+const treeUrl = (model: Model, branch: string): string =>
+	[
+		repoUrl(model),
+		"tree",
+		encodeURI(branch),
+		...model.settings.path
+			.split("/")
+			.filter((s) => s !== "")
+			.map(encodeURIComponent),
+	].join("/");
+
+/** The bank on GitHub: the repository, or its folder on the default branch once that's known. */
+const bankUrl = (model: Model): string =>
+	model.settings.path === "" || model.session.kind !== "connected"
+		? repoUrl(model)
+		: treeUrl(model, model.session.defaultBranch);
+
+/**
+ * The bank, as github.com names a repository: `owner / repo`, then `/ folder` for a
+ * bank in a folder, the last part a link, on one line that truncates from the end. Its
+ * branch is the next line (BranchLine).
  */
 function Bank({ model }: { model: Model }) {
+	const { owner, repo, path } = model.settings;
 	return (
 		<span className="bank">
 			<span className="owner">
-				{model.settings.owner} <span aria-hidden>/</span>{" "}
+				{owner} <span aria-hidden>/</span>{" "}
 			</span>
+			{path !== "" && (
+				<span className="owner">
+					{repo} <span aria-hidden>/</span>{" "}
+				</span>
+			)}
 			{/* No external-link icon, as in github.com's header; still said to screen readers. */}
-			<Link href={repoUrl(model)} target="_blank" rel="noreferrer">
-				<strong>{model.settings.repo}</strong>
+			<Link href={bankUrl(model)} target="_blank" rel="noreferrer">
+				<strong>{path === "" ? repo : path}</strong>
 				<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
 			</Link>
 		</span>
@@ -599,7 +627,7 @@ function BranchLine({ model }: { model: Model }) {
 			{exists ? (
 				<Link
 					className="branch"
-					href={`${repoUrl(model)}/tree/${encodeURI(branch)}`}
+					href={treeUrl(model, branch)}
 					target="_blank"
 					rel="noreferrer"
 					muted

@@ -25,13 +25,13 @@ import {
 } from "@qretools/core";
 import {
 	AuthError,
+	type BankRef,
 	type BranchTarget,
 	type Change,
 	type CommitFailure,
 	type Committed,
 	type Failure,
 	type File,
-	type Repo,
 	type Store,
 } from "./storage.js";
 
@@ -45,12 +45,18 @@ const ONCE = { request: { retries: 0 } } as const;
  * guidance) and retries with backoff. Tests turn it off to run without waiting.
  */
 export const makeGitHubStore = (
-	{ owner, repo }: Repo,
+	{ owner, repo, path: folder }: BankRef,
 	token: () => Promise<string>,
 	{ appToken }: { readonly appToken: boolean } = { appToken: true },
 	fetch: typeof globalThis.fetch = globalThis.fetch,
 	pacing = true,
 ): Store => {
+	/**
+	 * A bank path where the repository has it: the bank's folder in front. The one place
+	 * a repository path is made; every path in and out of the store is the bank's own.
+	 */
+	const at = (path: string): string =>
+		folder === "" ? path : `${folder}/${path}`;
 	const octokit = new GitHub({
 		request: { fetch },
 		headers: { "X-GitHub-Api-Version": "2022-11-28" },
@@ -225,7 +231,7 @@ export const makeGitHubStore = (
 		};
 		const fields = paths
 			.map((p, i) => {
-				vars[`p${i}`] = p;
+				vars[`p${i}`] = at(p);
 				return `p${i}: file(path: $p${i}) { oid object { ... on Blob { text } } }`;
 			})
 			.join(" ");
@@ -325,7 +331,12 @@ export const makeGitHubStore = (
 			}
 			if (sha !== null) shas[c.path] = sha;
 			return [
-				{ path: c.path, mode: "100644" as const, type: "blob" as const, sha },
+				{
+					path: at(c.path),
+					mode: "100644" as const,
+					type: "blob" as const,
+					sha,
+				},
 			];
 		});
 		if (entries.length === 0) return ok({ shas });
@@ -391,9 +402,9 @@ export const makeGitHubStore = (
 				ref: `refs/heads/${ref}`,
 				bank: `refs/heads/${target.defaultBranch}`,
 				head: ref,
-				questions: `${ref}:questions`,
-				...folderVariables(ref),
-				...rootVariables(ref),
+				questions: `${ref}:${at("questions")}`,
+				...folderVariables(ref, at),
+				...rootVariables(ref, at),
 			},
 			"bankRef",
 		);
@@ -425,7 +436,7 @@ export const makeGitHubStore = (
 			// Whether the app can write here is asked alongside, so it adds no wait; a
 			// pasted development token has no installations to ask about.
 			const [r, installed] = await Promise.all([
-				graphql<WhoData>(WHO_QUERY, { owner, repo }),
+				graphql<WhoData>(WHO_QUERY, { owner, repo, dir: `HEAD:${folder}` }),
 				appToken ? installedHere() : Promise.resolve(ok(true)),
 			]);
 			if (!r.ok) return r;
@@ -450,6 +461,14 @@ export const makeGitHubStore = (
 					message: `GitHub has no repository ${owner}/${repo} that you can open.`,
 					hint: "Check the repository's name, and that you can open it on GitHub.",
 					...(r.value.error !== undefined && { detail: r.value.error }),
+				});
+			// A folder that isn't there would read as an empty bank, and the first save would
+			// start a new one at a mistyped path: refuse it, as a folder dialog would.
+			if (folder !== "" && data.repository?.dir?.__typename !== "Tree")
+				return err({
+					kind: "unreadable",
+					message: `GitHub has no folder \`${folder}\` in ${owner}/${repo}.`,
+					hint: "Check the bank's folder, as it is on the repository's default branch.",
 				});
 			if (!installed.ok) return installed;
 			return ok({
@@ -497,9 +516,9 @@ export const makeGitHubStore = (
 			}>(FOREIGN_QUERY, {
 				owner,
 				repo,
-				at: `${ref}:${path}`,
-				...folderVariables(ref),
-				...rootVariables(ref),
+				at: `${ref}:${at(path)}`,
+				...folderVariables(ref, at),
+				...rootVariables(ref, at),
 			});
 			if (!r.ok) return r;
 			const data = r.value.data?.repository;
@@ -525,7 +544,7 @@ export const makeGitHubStore = (
 				`query Read($owner: String!, $repo: String!, $at: String!) {
   repository(owner: $owner, name: $repo) { file: object(expression: $at) { ... on Blob { oid text } } }
 }`,
-				{ owner, repo, at: `${target.branch}:${path}` },
+				{ owner, repo, at: `${target.branch}:${at(path)}` },
 			);
 			if (!r.ok) return r;
 			const file = r.value.data?.repository?.file;
@@ -662,6 +681,8 @@ interface WhoData {
 		readonly viewerPermission: string | null;
 		readonly isEmpty: boolean;
 		readonly defaultBranchRef: { readonly name: string } | null;
+		/** The bank's folder on the default branch: a `Tree` when it exists. */
+		readonly dir?: { readonly __typename: string } | null;
 	} | null;
 }
 
@@ -680,9 +701,12 @@ interface BankData {
 		| null;
 }
 
-const WHO_QUERY = `query Who($owner: String!, $repo: String!) {
+const WHO_QUERY = `query Who($owner: String!, $repo: String!, $dir: String!) {
   viewer { login avatarUrl(size: 64) }
-  repository(owner: $owner, name: $repo) { viewerPermission isEmpty defaultBranchRef { name } }
+  repository(owner: $owner, name: $repo) {
+    viewerPermission isEmpty defaultBranchRef { name }
+    dir: object(expression: $dir) { __typename }
+  }
 }`;
 
 /**
@@ -698,8 +722,11 @@ const FLAT =
  * lowercase words, so they are safe as aliases.
  */
 const SHARED = Object.values(FOLDERS);
-const folderVariables = (ref: string): Record<string, string> =>
-	Object.fromEntries(SHARED.map((f) => [f, `${ref}:${f}`]));
+const folderVariables = (
+	ref: string,
+	at: (path: string) => string,
+): Record<string, string> =>
+	Object.fromEntries(SHARED.map((f) => [f, `${ref}:${at(f)}`]));
 const FOLDER_PARAMS = SHARED.map((f) => `$${f}: String!`).join(", ");
 const FOLDER_FIELDS = SHARED.map(
 	(f) => `${f}: object(expression: $${f}) { ${FLAT} }`,
@@ -721,9 +748,12 @@ const schemeFiles = (data: Folders): File[] =>
  */
 const ROOTS = Object.entries(ROOT) as readonly (readonly [RootKind, string])[];
 const rootAlias = (kind: RootKind): string => `root_${kind}`;
-const rootVariables = (ref: string): Record<string, string> =>
+const rootVariables = (
+	ref: string,
+	at: (path: string) => string,
+): Record<string, string> =>
 	Object.fromEntries(
-		ROOTS.map(([k, path]) => [rootAlias(k), `${ref}:${path}`]),
+		ROOTS.map(([k, path]) => [rootAlias(k), `${ref}:${at(path)}`]),
 	);
 const ROOT_PARAMS = ROOTS.map(([k]) => `$${rootAlias(k)}: String!`).join(", ");
 const ROOT_FIELDS = ROOTS.map(

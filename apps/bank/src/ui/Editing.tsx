@@ -51,6 +51,7 @@ import {
 	type SchemeEntry,
 	schemeFileNamed,
 } from "../model.js";
+import { bankText } from "../storage.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
 import {
 	bankLoading,
@@ -459,6 +460,7 @@ function useBankFindings(
 	const local = useModel((m) => m.local);
 	const owner = useModel((m) => m.settings.owner);
 	const repo = useModel((m) => m.settings.repo);
+	const folder = useModel((m) => m.settings.path);
 	const branch = useModel(linkBranch);
 	const env = useEnv();
 	return useMemo(() => {
@@ -478,7 +480,11 @@ function useBankFindings(
 			return path === undefined
 				? undefined
 				: {
-						href: formatLink({ repo: `${owner}/${repo}`, branch, file: path }),
+						href: formatLink({
+							repo: bankText({ owner, repo, path: folder }),
+							branch,
+							file: path,
+						}),
 						label: `Open ${label(other)}`,
 					};
 		};
@@ -502,6 +508,7 @@ function useBankFindings(
 		env,
 		owner,
 		repo,
+		folder,
 		branch,
 	]);
 }

@@ -32,6 +32,7 @@ import type { Link } from "./link.js";
 import { startingSettings, type Work } from "./persist.js";
 import type {
 	Access,
+	BankRef,
 	BankSettings,
 	BranchTarget,
 	Change,
@@ -40,9 +41,9 @@ import type {
 	Failure,
 	File,
 	Loaded,
-	Repo,
 	Who,
 } from "./storage.js";
+import { bankText, sameBank } from "./storage.js";
 
 export type Id = number;
 
@@ -365,7 +366,7 @@ export type Cmd =
 	| { readonly kind: "applyTheme"; readonly theme: ThemeChoice }
 	/** Work leaving this tab (someone else's, or another bank's): kept in the browser, never dropped. */
 	| { readonly kind: "setAside"; readonly work: Work }
-	| { readonly kind: "connect"; readonly repo: Repo }
+	| { readonly kind: "connect"; readonly repo: BankRef }
 	| { readonly kind: "loadBank"; readonly target: BranchTarget }
 	| {
 			readonly kind: "readFile";
@@ -443,7 +444,7 @@ export interface Flags {
 	/** The bank settings stored on this device; the work's own bank wins over them. */
 	readonly settings?: BankSettings;
 	/** The build's default bank, used when nothing is stored; absent means an empty field. */
-	readonly defaultBank?: Repo;
+	readonly defaultBank?: BankRef;
 	/** Said once at startup (what an upgrade could not bring along). */
 	readonly notices?: readonly Failure[];
 	/** Whether a token is on hand, so connecting can start at once. */
@@ -465,10 +466,14 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	// Zod types an absent optional as possibly-undefined; `compact` makes it absent.
 	const local: Local = stored ? localOf(stored) : EMPTY_LOCAL;
 	const settings = startingSettings(flags.settings, stored, {
-		...(flags.defaultBank ?? { owner: "", repo: "" }),
+		...(flags.defaultBank ?? { owner: "", repo: "", path: "" }),
 		remember: false,
 	});
-	const repo = { owner: settings.owner, repo: settings.repo };
+	const repo = {
+		owner: settings.owner,
+		repo: settings.repo,
+		path: settings.path,
+	};
 	const opened: Model = {
 		local,
 		...(stored?.login !== undefined && { author: stored.login }),
@@ -624,7 +629,7 @@ export const envOfRemote = (schemes: Remote["schemes"]): Env =>
 
 export const toWork = (model: Model): Work => ({
 	version: 5,
-	repo: `${model.settings.owner}/${model.settings.repo}`,
+	repo: bankText(model.settings),
 	...(model.author !== undefined && { login: model.author }),
 	nextId: model.nextId,
 	questions: Object.values(model.local.questions),
@@ -635,9 +640,6 @@ export const toWork = (model: Model): Work => ({
 export const otherAuthor = (model: Model, login: string): boolean =>
 	model.author !== undefined && !sameName(model.author, login);
 
-/** Whether a bank is another than the one the work in hand belongs to. */
+/** Whether a bank is another than the one the work in hand belongs to (a folder of one repository is its own bank). */
 export const otherBank = (model: Model, settings: BankSettings): boolean =>
-	!sameName(
-		`${model.settings.owner}/${model.settings.repo}`,
-		`${settings.owner}/${settings.repo}`,
-	);
+	!sameBank(model.settings, settings);

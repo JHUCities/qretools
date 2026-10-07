@@ -5,7 +5,7 @@
  * and Worker by building with its own values. Absent values mean sign-in is not set up
  * for this build, which the sign-in page says instead of offering a button that fails.
  */
-import { parseRepo, type Repo } from "./storage.js";
+import { type BankRef, parseBank, parseRepo } from "./storage.js";
 
 export interface SignInConfig {
 	readonly clientId: string;
@@ -59,13 +59,13 @@ export function bankTemplate(env: ImportMetaEnv): string | undefined {
 }
 
 /**
- * The bank the sign-in page offers first (`VITE_DEFAULT_BANK`, as owner/name). Its own
+ * The bank the sign-in page offers first (`VITE_DEFAULT_BANK`, as owner/name[/folder]). Its own
  * setting, not the template's: a team may reuse a template and keep its own bank.
  * Absent or malformed means an empty field.
  */
-export function defaultBank(env: ImportMetaEnv): Repo | undefined {
+export function defaultBank(env: ImportMetaEnv): BankRef | undefined {
 	const text = env.VITE_DEFAULT_BANK?.trim();
 	if (!text) return undefined;
-	const parsed = parseRepo(text);
+	const parsed = parseBank(text);
 	return parsed.ok ? parsed.value : undefined;
 }
