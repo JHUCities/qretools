@@ -1,0 +1,8 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		// No DOM: the core is pure, so a browser API used here is a compile error.
+		"lib": ["ES2023"]
+	},
+	"include": ["src"]
+}

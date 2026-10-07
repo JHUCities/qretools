@@ -1,0 +1,29 @@
+{
+	"name": "@qretools/core",
+	"version": "2.0.0-alpha.0",
+	"private": true,
+	"type": "module",
+	"description": "Questions as YAML, read with holes and elaborated to DDI-Lifecycle 4.0: the pure core every qretools tool shares",
+	"exports": {
+		"./*.js": "./src/*.ts",
+		"./schema.json": "./ddi/ddi-lifecycle-4.0-beta4.schema.json",
+		"./examples/*": "./examples/*",
+		"./templates/*": "./templates/*"
+	},
+	"scripts": {
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit",
+		"check": "tsc --noEmit && vitest run"
+	},
+	"dependencies": {
+		"ajv": "^8.20.0",
+		"yaml": "^2.9.1",
+		"zod": "^4.6.5"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2",
+		"vite": "^8.3.0",
+		"vitest": "^5.0.1"
+	}
+}

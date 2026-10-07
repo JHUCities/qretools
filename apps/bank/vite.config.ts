@@ -21,7 +21,7 @@ export default defineConfig({
 	server: { port: 5199, strictPort: true },
 	test: {
 		include: ["src/**/*.test.{ts,tsx}"],
-		setupFiles: ["src/app/ui/test-setup.ts"],
+		setupFiles: ["src/ui/test-setup.ts"],
 		server: {
 			// Primer components import their CSS modules; Node cannot load .css unless Vite transforms them.
 			deps: { inline: [/@primer\//, "codemirror-json-schema"] },

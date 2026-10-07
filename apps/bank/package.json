@@ -35,12 +35,11 @@
 		"@primer/octicons-react": "^19.38.0",
 		"@primer/primitives": "^11.10.0",
 		"@primer/react": "^38.40.0",
-		"ajv": "^8.20.0",
+		"@qretools/core": "workspace:*",
 		"codemirror": "^6.0.2",
 		"codemirror-json-schema": "^0.8.1",
 		"react": "^19.3.0",
 		"react-dom": "^19.3.0",
-		"yaml": "^2.9.1",
 		"zod": "^4.6.5",
 		"zustand": "^5.0.15"
 	},
