@@ -11,9 +11,9 @@ const complete = `name: nhd_sat
 text: How satisfied are you with your neighborhood as a place to live?
 intent: Prevalence of overall neighborhood satisfaction
 responses:
-  1: Very satisfied
-  2: Somewhat satisfied
-  3: Very dissatisfied
+  "1": Very satisfied
+  "2": Somewhat satisfied
+  "3": Very dissatisfied
 `;
 
 describe("parseSurface", () => {
@@ -34,7 +34,7 @@ describe("parseSurface", () => {
 
 	it("keeps response codes in the author's order", () => {
 		const { draft } = parseSurface(
-			"responses:\n  2: b\n  10: c\n  1: a\n",
+			'responses:\n  "2": b\n  "10": c\n  "1": a\n',
 			EMPTY_ENV,
 		);
 		expect(
@@ -57,7 +57,7 @@ describe("parseSurface", () => {
 		["unknown key", `${complete}wording: x\n`, ["error:unknown-key@wording"]],
 		[
 			"a colon in unquoted text swallows the rest of the document",
-			"name: q1\ntext: Rate this: good or bad\nintent: i\nresponses:\n  1: a\n",
+			'name: q1\ntext: Rate this: good or bad\nintent: i\nresponses:\n  "1": a\n',
 			[
 				"error:yaml-syntax@",
 				"error:wrong-type@text",
@@ -67,12 +67,12 @@ describe("parseSurface", () => {
 		],
 		[
 			"number-valued label is an error with a quoting hint",
-			"name: q1\ntext: Q?\nintent: i\nresponses:\n  1: 7\n",
+			'name: q1\ntext: Q?\nintent: i\nresponses:\n  "1": 7\n',
 			["error:wrong-type@responses.1"],
 		],
 		[
 			"two domains",
-			"name: q1\ntext: Q?\nintent: i\nresponses:\n  1: a\nnumber:\n  min: 0\n",
+			'name: q1\ntext: Q?\nintent: i\nresponses:\n  "1": a\nnumber:\n  min: 0\n',
 			["error:too-many-domains@number"],
 		],
 		[
@@ -106,7 +106,7 @@ describe("parseSurface", () => {
 
 	it("reports the later domain in document order as the extra one", () => {
 		const { findings } = parseSurface(
-			"number:\n  min: 0\nresponses:\n  1: a\n",
+			'number:\n  min: 0\nresponses:\n  "1": a\n',
 			EMPTY_ENV,
 		);
 		expect(findings.filter((f) => f.severity === "error").map(brief)).toEqual([
@@ -143,7 +143,7 @@ describe("parseSurface", () => {
 		});
 		expect(
 			parseSurface(
-				`${full}select:\nresponses:\n  1: a\n  2: b\n`,
+				`${full}select:\nresponses:\n  "1": a\n  "2": b\n`,
 				EMPTY_ENV,
 			).findings.map(brief),
 		).toEqual(["hole:hole@select"]);
@@ -166,7 +166,7 @@ describe("parseSurface", () => {
 		for (const [key, hint] of [
 			["number", /number: \{\}/],
 			["open", /open: \{\}/],
-			["responses", /1: Yes/],
+			["responses", /"1": Yes/],
 		] as const) {
 			const p = parseSurface(`${full}${key}:\n`, EMPTY_ENV);
 			expect(p.findings.map(brief)).toEqual([`hole:hole@${key}`]);
@@ -212,7 +212,7 @@ describe("parseSurface", () => {
 			kind: "open",
 		});
 		expect(
-			parseSurface("responses:\n  1: a\nselect: many\n", EMPTY_ENV).draft
+			parseSurface('responses:\n  "1": a\nselect: many\n', EMPTY_ENV).draft
 				.domain,
 		).toMatchObject({ select: "many" });
 	});
@@ -221,7 +221,7 @@ describe("parseSurface", () => {
 		const { ranges } = parseSurface(complete, EMPTY_ENV);
 		expect(ranges[""]).toEqual([0, complete.length]);
 		const r = ranges["responses.2"];
-		expect(r && complete.slice(r[0], r[1])).toBe("2: Somewhat satisfied");
+		expect(r && complete.slice(r[0], r[1])).toBe('"2": Somewhat satisfied');
 		const t = ranges.text;
 		expect(
 			t && complete.slice(t[0], t[1]).startsWith("text: How satisfied"),

@@ -21,7 +21,11 @@ export type ParseCode =
 	| "hole"
 	| "too-many-domains"
 	| "missing-space"
-	| "invalid-agency";
+	| "invalid-agency"
+	/** Advice: a response code YAML reads as a number, not text (`1:` for `"1":`). */
+	| "unquoted-code"
+	/** One code written two ways YAML can't tell apart (`"1"` and `1`). */
+	| "duplicate-code";
 
 /** Survey-craft advice. Always `warning` or `info`, never a blocker. */
 export type LintCode =
@@ -109,6 +113,13 @@ export type Fix =
 			readonly label: string;
 			readonly path: string;
 			readonly word: string;
+	  }
+	| {
+			/** Quotes around the response code `code`, at the key `path` names, as spelled. */
+			readonly kind: "quote";
+			readonly label: string;
+			readonly path: string;
+			readonly code: string;
 	  };
 
 export const holes = (findings: readonly Finding[]): readonly Finding[] =>

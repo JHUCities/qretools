@@ -76,7 +76,7 @@ describe("select-many options", () => {
 		],
 		[
 			"titles on a single select are ignored, and said so",
-			"name: q\ntext: Q?\nintent: Prevalence of a thing\nresponses:\n  1: { label: Yes, title: T }\n  2: No\n",
+			'name: q\ntext: Q?\nintent: Prevalence of a thing\nresponses:\n  "1": { label: Yes, title: T }\n  "2": No\n',
 			["warning:ignored-key@responses.1"],
 		],
 		[

@@ -411,13 +411,13 @@ export const TEMPLATES: ReadonlyArray<{
 ];
 
 /**
- * What a new scheme file starts as: every value empty, so it opens as holes. The
- * missing template shows the shape codes take (quoted, since `-8` is not a key YAML keeps as text).
+ * What a new scheme file starts as: every value empty, so it opens as holes. Codes are
+ * written quoted, as a bank writes them (a code is text).
  */
 export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 	concept: "label:\n",
 	unit: "label:\n",
-	scale: "labels:\n  1:\n  2:\n",
+	scale: 'labels:\n  "1":\n  "2":\n',
 	universe: "text:\n",
 	instruction: "text:\n",
 	missing: 'labels:\n  "-8":\n',

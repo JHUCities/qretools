@@ -7,18 +7,18 @@ universe: all_respondents
 instruction: select_all
 select: many
 responses:
-  1:
+  "1":
     label: A local newspaper or its website
     title: Newspaper
-  2:
+  "2":
     label: Television or radio
     title: Broadcast
-  3:
+  "3":
     label: Social media
     title: Social media
-  4:
+  "4":
     label: Friends, family or neighbors
     title: Word of mouth
-  5:
+  "5":
     label: None of these
     title: None

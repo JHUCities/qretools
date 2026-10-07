@@ -12,6 +12,7 @@ export { labelledSource, textEntrySource } from "./schemes.js";
 export {
 	addSpace,
 	applyEdits,
+	quoteCode,
 	renameEdits,
 	spaceBefore,
 } from "./surface/edit.js";

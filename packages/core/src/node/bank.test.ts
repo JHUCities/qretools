@@ -76,6 +76,14 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 			expect([path, status(findings).kind]).not.toEqual([path, "incomplete"]);
 	});
 
+	it("writes every code quoted", () => {
+		for (const [path, findings] of Object.entries(bank.findings))
+			expect([
+				path,
+				findings.filter((f) => f.code === "unquoted-code"),
+			]).toEqual([path, []]);
+	});
+
 	it("resolves the shared names its questions use", () => {
 		expect(Object.keys(bank.env.scales)).toContain("support4");
 		expect(bank.env.missing.length).toBeGreaterThan(0);

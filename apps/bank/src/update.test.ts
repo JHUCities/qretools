@@ -223,6 +223,45 @@ describe("editing", () => {
 		const after = text.indexOf("open:") + "open: ".length;
 		expect(cmds[0]).toEqual({ kind: "revealRange", range: [after, after] });
 	});
+
+	it("an unquoted code's fix quotes it, in a question or a shared file, caret after it", () => {
+		const text =
+			'name: q\ntext: Hi\nintent: i\nresponses:\n  010: a\n  "2": b\n';
+		const [m] = update(fresh(), { kind: "questionCreated", text });
+		const fix = {
+			kind: "quote",
+			label: "Quote `010`",
+			path: "responses.010",
+			code: "010",
+		} as const;
+		const [next, cmds] = update(m, { kind: "fixApplied", id: 1, fix });
+		expect(next.local.questions[1]?.source).toBe(
+			'name: q\ntext: Hi\nintent: i\nresponses:\n  "010": a\n  "2": b\n',
+		);
+		const after = text.indexOf("010") + '"010"'.length;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [after, after] });
+
+		const [opened] = update(fresh(), {
+			kind: "schemeCreateOpened",
+			scheme: "missing",
+		});
+		const [edited] = update(opened, {
+			kind: "edited",
+			text: "labels:\n  -8: Refused\n",
+		});
+		const id = Number(Object.keys(edited.local.schemes)[0]);
+		const [quoted] = update(edited, {
+			kind: "fixApplied",
+			id,
+			fix: {
+				kind: "quote",
+				label: "Quote `-8`",
+				path: "labels.-8",
+				code: "-8",
+			},
+		});
+		expect(quoted.local.schemes[id]?.source).toBe('labels:\n  "-8": Refused\n');
+	});
 });
 
 describe("a quick fix", () => {

@@ -107,7 +107,10 @@ export function spaceBefore(
 	if (!/^\S/.test(inserted)) return false;
 	const lineStart = source.lastIndexOf("\n", pos - 1) + 1;
 	const lineEnd = source.indexOf("\n", pos);
-	const before = /^( *)[\w-]+:$/.exec(source.slice(lineStart, pos));
+	// A plain key or a quoted one (`"1":`, as codes are written).
+	const before = /^( *)(?:[\w-]+|"[^"\n]*"|'[^'\n]*'):$/.exec(
+		source.slice(lineStart, pos),
+	);
 	if (before === null) return false;
 	if (source.slice(pos, lineEnd === -1 ? undefined : lineEnd).trim() !== "")
 		return false;
@@ -119,4 +122,26 @@ export function spaceBefore(
 	return Object.entries(ranges).some(
 		([path, [from]]) => path !== "" && from === keyStart,
 	);
+}
+
+/**
+ * The text with the response code at `path` in quotes, spelled as written (`010` becomes
+ * `"010"`), or undefined when the place is gone or already quoted: a no-op, never a
+ * guess. Only the code changes; its label, an option's fields and comments stay.
+ */
+export function quoteCode(
+	source: string,
+	path: string,
+	code: string,
+): string | undefined {
+	const { ranges } = indexDocument(
+		parseDocument(source, { prettyErrors: false }),
+		source.length,
+	);
+	const from = ranges[path]?.[0];
+	if (from === undefined || path === "") return undefined;
+	const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	if (!new RegExp(`^${escaped}\\s*:`).test(source.slice(from)))
+		return undefined;
+	return `${source.slice(0, from)}${JSON.stringify(code)}${source.slice(from + code.length)}`;
 }

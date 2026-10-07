@@ -5,7 +5,7 @@ import { parseScale, type Scales } from "./scales.js";
 import { questionJsonSchema } from "./schema.js";
 
 const agree4 = parseScale(
-	"labels:\n  1: Strongly agree\n  2: Agree\n  3: Disagree\n  4: Strongly disagree\n",
+	'labels:\n  "1": Strongly agree\n  "2": Agree\n  "3": Disagree\n  "4": Strongly disagree\n',
 );
 const scales: Scales = agree4.scale ? { agree4: agree4.scale } : {};
 const env = { ...EMPTY_ENV, scales };
@@ -36,7 +36,7 @@ describe("parseScale", () => {
 
 	it("is total: no labels, or bad labels, are findings", () => {
 		expect(parseScale("").findings.map(brief)).toEqual(["hole:hole@labels"]);
-		expect(parseScale("labels:\n  1: 7\n").findings.map(brief)).toEqual([
+		expect(parseScale('labels:\n  "1": 7\n').findings.map(brief)).toEqual([
 			"error:wrong-type@labels.1",
 		]);
 		expect(() => parseScale("labels: [")).not.toThrow();

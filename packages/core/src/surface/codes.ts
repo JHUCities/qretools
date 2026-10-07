@@ -3,8 +3,8 @@
  * and scale files. The AST, not `toJS()`, so codes keep the author's order and
  * spelling (`010` stays `010`, and a quoted `'0'` is `0`).
  */
-import type { Document, Scalar } from "yaml";
-import { isMap, isScalar } from "yaml";
+import type { Document } from "yaml";
+import { isMap, isScalar, Scalar } from "yaml";
 import { compact } from "../compact.js";
 import type { Finding } from "../findings.js";
 import type { Code } from "./draft.js";
@@ -20,7 +20,30 @@ import {
 } from "./read.js";
 import { OptionSchema } from "./schema.js";
 
-export const EXAMPLE = "Example:\n  1: Yes\n  2: No";
+export const EXAMPLE = 'Example:\n  "1": Yes\n  "2": No';
+
+/**
+ * Whether a code is written so that YAML reads it as something other than text: a plain
+ * `1`, `010`, `-8`, `true` or `~`. A code is text (DDI's `StringValue`, compared as text
+ * in conditions), so it is written in quotes. Words (`DK`, `opt1`) already read as text.
+ */
+const unquoted = (key: Scalar): boolean =>
+	key.type === Scalar.PLAIN && typeof key.value !== "string";
+
+/** The advice on an unquoted code, underlining the code alone, with the fix that quotes it. */
+function unquotedCode(key: Scalar, code: string, at: string): Finding {
+	const quoted = JSON.stringify(code);
+	return compact({
+		code: "unquoted-code",
+		severity: "info",
+		path: at,
+		message: `Put the code \`${code}\` in quotes: \`${quoted}\`.`,
+		hint: 'A code is text. In quotes it stays as written (`"010"`, not 10), and `"01"` and `"1"` are two codes.',
+		// AST ranges are offsets into this source, so they are within it.
+		range: key.range ? ([key.range[0], key.range[1]] as const) : undefined,
+		fix: { kind: "quote", label: `Quote \`${code}\``, path: at, code },
+	});
+}
 
 /** The code as the author spelled it (`010` stays `010`), not as YAML typed it (`10`). */
 export const keyText = (key: Scalar): string => key.source ?? String(key.value);
@@ -47,10 +70,31 @@ export function readCodeMap(
 		);
 	const codes: Code[] = [];
 	const findings: Finding[] = [];
+	// Each spelling's first key: `"1"` and `1` are one code to us but two keys to YAML.
+	const seen = new Map<string, Scalar>();
 	for (const pair of node.items) {
 		if (!isScalar(pair.key)) continue;
 		const code = keyText(pair.key);
 		const at = `${path}.${code}`;
+		const first = seen.get(code);
+		if (first === undefined) seen.set(code, pair.key);
+		// YAML already reports two keys of one value; only the ones it can't tell apart are ours.
+		else if (first.value !== pair.key.value)
+			findings.push(
+				compact({
+					...error(
+						"duplicate-code",
+						at,
+						`The code \`${code}\` is written twice.`,
+						"Each response needs its own code.",
+					),
+					// The second key itself: the path names both.
+					range: pair.key.range
+						? ([pair.key.range[0], pair.key.range[1]] as const)
+						: undefined,
+				}),
+			);
+		if (unquoted(pair.key)) findings.push(unquotedCode(pair.key, code, at));
 		if (isScalar(pair.value)) {
 			const label = pair.value.value;
 			if (label === null || label === undefined || label === "") {
@@ -61,7 +105,7 @@ export function readCodeMap(
 						"wrong-type",
 						at,
 						`Label for \`${code}\` must be text.`,
-						`Quote it: ${code}: "${String(label)}"`,
+						`Quote it: ${JSON.stringify(code)}: "${String(label)}"`,
 					),
 				);
 			} else {

@@ -20,6 +20,7 @@ import {
 	labelledSource,
 	locate,
 	mentionAt,
+	quoteCode,
 	rangesOf,
 	renameEdits,
 	textEntrySource,
@@ -166,6 +167,18 @@ function step(model: Model, msg: Msg): Step {
 				return persist([
 					withSource(model, q.id, spaced),
 					[{ kind: "revealRange", range: [at + 1, at + 1] }],
+				]);
+			}
+			if (fix.kind === "quote") {
+				const quoted = quoteCode(q.source, fix.path, fix.code);
+				if (quoted === undefined) return [model, []];
+				// Focus follows the fix: the caret after the closing quote.
+				let at = 0;
+				while (quoted[at] === q.source[at]) at++;
+				const end = at + JSON.stringify(fix.code).length;
+				return persist([
+					withSource(model, q.id, quoted),
+					[{ kind: "revealRange", range: [end, end] }],
 				]);
 			}
 			const text = applyEdits(q.source, fix.edits);

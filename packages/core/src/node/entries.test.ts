@@ -85,6 +85,7 @@ describe("the entry points", () => {
 			    "pathAt",
 			    "placeAt",
 			    "questionJsonSchema",
+			    "quoteCode",
 			    "rangesOf",
 			    "renameEdits",
 			    "spaceBefore",

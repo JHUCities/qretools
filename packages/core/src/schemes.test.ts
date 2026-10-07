@@ -46,10 +46,14 @@ describe("evaluateScheme", () => {
 		expect(
 			evaluateScheme("instruction", "text:\n", EMPTY_ENV).findings.map(brief),
 		).toEqual(["hole:hole@text"]);
-		const scale = evaluateScheme("scale", 'labels:\n  1: Yes\n  "-8": Oops\n', {
-			...EMPTY_ENV,
-			missing,
-		});
+		const scale = evaluateScheme(
+			"scale",
+			'labels:\n  "1": Yes\n  "-8": Oops\n',
+			{
+				...EMPTY_ENV,
+				missing,
+			},
+		);
 		expect(scale.findings.map(brief)).toEqual([
 			"warning:missing-code@labels.-8",
 		]);
@@ -67,7 +71,7 @@ describe("evaluateScheme", () => {
 describe("schemeEnv", () => {
 	it("builds the environment; a broken file contributes nothing, and its users become holes", () => {
 		const env = schemeEnv([
-			{ kind: "scale", name: "yn", text: "labels:\n  1: Yes\n  2: No\n" },
+			{ kind: "scale", name: "yn", text: 'labels:\n  "1": Yes\n  "2": No\n' },
 			{ kind: "scale", name: "broken", text: "labels:\n" },
 			{ kind: "universe", name: "renters", text: "text: Renters\n" },
 			{ kind: "instruction", name: "one", text: "text: Select one\n" },
