@@ -89,11 +89,14 @@ pnpm build
 The app is TypeScript, React 19 and GitHub's [Primer](https://primer.style/) design
 system, with CodeMirror 6 for the editor, Zod for the question schema and ajv for DDI
 validation, built with Vite and tested with Vitest. It runs entirely in the browser: a
-functional core (`src/core/`: parse, check, elaborate, render) and an imperative shell
-in the Elm style (`src/app/`: one Model, one `update`, effects described as data).
+functional core (`apps/bank/src/core/`: parse, check, elaborate, render) and an
+imperative shell in the Elm style (`apps/bank/src/app/`: one Model, one `update`,
+effects described as data).
 
 Signing in with GitHub needs a GitHub App and one small token-exchange Worker
-(`worker/`, Cloudflare), the only server-side piece; `.env` names them. The site
+(`worker/`, Cloudflare), the only server-side piece; `apps/bank/.env` names them. The
+Worker keeps its own lockfile outside the workspace: install it with
+`pnpm --dir worker --ignore-workspace install`. The site
 deploys to GitHub Pages from `main` (`.github/workflows/pages.yml`).
 
 [`AGENTS.md`](AGENTS.md) records every design decision and why; read it before

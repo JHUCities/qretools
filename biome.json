@@ -5,12 +5,17 @@
 	},
 	"files": {
 		"includes": [
-			"src/**",
+			"apps/*/src/**",
+			"apps/*/*.ts",
+			"apps/*/*.json",
+			"packages/*/src/**",
+			"packages/*/*.ts",
+			"packages/*/*.json",
 			"worker/src/**",
 			"*.ts",
 			"*.json",
-			"!node_modules",
-			"!dist"
+			"!**/node_modules",
+			"!**/dist"
 		]
 	},
 	"formatter": {
