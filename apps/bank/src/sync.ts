@@ -6,6 +6,7 @@
  */
 import {
 	type Index,
+	isRoot,
 	kindAt,
 	type Mention,
 	schemePath,
@@ -230,11 +231,11 @@ export function dependencies(
 	return { include, blocked };
 }
 
-/** The questions naming a scheme file, for `alsoSaves` (nothing names the missing list). */
+/** The questions naming a scheme file, for `alsoSaves` (nothing names a root file). */
 export const usersIn =
 	(index: Index<Id>) =>
 	(e: SchemeEntry): readonly Id[] =>
-		e.kind === "missing"
+		isRoot(e.kind)
 			? []
 			: // Once per question, however many times it names the file.
 				[...new Set(usedBy(index, e.kind, e.name).map((s) => s.key))];

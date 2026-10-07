@@ -15,7 +15,14 @@ import { Octokit } from "@octokit/core";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 import { RequestError } from "@octokit/request-error";
-import { err, FOLDERS, ok, type Result } from "@qretools/core";
+import {
+	err,
+	FOLDERS,
+	ok,
+	type Result,
+	ROOT,
+	type RootKind,
+} from "@qretools/core";
 import {
 	AuthError,
 	type BranchTarget,
@@ -386,7 +393,7 @@ export const makeGitHubStore = (
 				head: ref,
 				questions: `${ref}:questions`,
 				...folderVariables(ref),
-				missing: `${ref}:missing.yaml`,
+				...rootVariables(ref),
 			},
 			"bankRef",
 		);
@@ -404,16 +411,9 @@ export const makeGitHubStore = (
 				blobFile(`questions/${folder.name}/${e.name}`, e),
 			),
 		);
-		const missing = data.missing
-			? blobFile("missing.yaml", {
-					name: "missing.yaml",
-					type: "blob",
-					object: data.missing,
-				})
-			: [];
 		const compare = data.bankRef?.compare;
 		return ok({
-			files: [...questions, ...schemeFiles(data), ...missing],
+			files: [...questions, ...schemeFiles(data), ...rootFiles(data)],
 			exists: data.mine !== null && data.mine !== undefined,
 			aheadBy: compare?.aheadBy ?? 0,
 			behindBy: compare?.behindBy ?? 0,
@@ -492,7 +492,6 @@ export const makeGitHubStore = (
 				repository:
 					| ({
 							file: { oid: string; text: string | null } | null;
-							missing?: Entry["object"] | null;
 					  } & Folders)
 					| null;
 			}>(FOREIGN_QUERY, {
@@ -500,7 +499,7 @@ export const makeGitHubStore = (
 				repo,
 				at: `${ref}:${path}`,
 				...folderVariables(ref),
-				missing: `${ref}:missing.yaml`,
+				...rootVariables(ref),
 			});
 			if (!r.ok) return r;
 			const data = r.value.data?.repository;
@@ -513,16 +512,7 @@ export const makeGitHubStore = (
 				});
 			return ok({
 				file: { path, sha: file.oid, text: file.text },
-				schemes: [
-					...schemeFiles(data),
-					...(data.missing
-						? blobFile("missing.yaml", {
-								name: "missing.yaml",
-								type: "blob",
-								object: data.missing,
-							})
-						: []),
-				],
+				schemes: [...schemeFiles(data), ...rootFiles(data)],
 			});
 		},
 
@@ -686,7 +676,6 @@ interface BankData {
 					} | null;
 				} | null;
 				readonly questions?: Tree;
-				readonly missing?: Entry["object"] | null;
 		  } & Folders)
 		| null;
 }
@@ -715,7 +704,10 @@ const FOLDER_PARAMS = SHARED.map((f) => `$${f}: String!`).join(", ");
 const FOLDER_FIELDS = SHARED.map(
 	(f) => `${f}: object(expression: $${f}) { ${FLAT} }`,
 ).join("\n    ");
-type Folders = { readonly [folder: string]: Tree | undefined };
+/** The folders' trees and the root files' blobs, each under its alias. */
+type Folders = {
+	readonly [alias: string]: Entry["object"] | null | undefined;
+};
 const schemeFiles = (data: Folders): File[] =>
 	SHARED.flatMap((folder) =>
 		(data[folder]?.entries ?? []).flatMap((e) =>
@@ -723,21 +715,42 @@ const schemeFiles = (data: Folders): File[] =>
 		),
 	);
 
-const FOREIGN_QUERY = `query Foreign($owner: String!, $repo: String!, $at: String!, ${FOLDER_PARAMS}, $missing: String!) {
+/**
+ * The bank's root files (`ROOT`), one alias and variable each, prefixed so a kind's
+ * name can't collide with the queries' own variables (`$bank` is the default branch).
+ */
+const ROOTS = Object.entries(ROOT) as readonly (readonly [RootKind, string])[];
+const rootAlias = (kind: RootKind): string => `root_${kind}`;
+const rootVariables = (ref: string): Record<string, string> =>
+	Object.fromEntries(
+		ROOTS.map(([k, path]) => [rootAlias(k), `${ref}:${path}`]),
+	);
+const ROOT_PARAMS = ROOTS.map(([k]) => `$${rootAlias(k)}: String!`).join(", ");
+const ROOT_FIELDS = ROOTS.map(
+	([k]) =>
+		`${rootAlias(k)}: object(expression: $${rootAlias(k)}) { ... on Blob { oid text isBinary isTruncated } }`,
+).join("\n    ");
+const rootFiles = (data: Folders): File[] =>
+	ROOTS.flatMap(([k, path]) => {
+		const object = data[rootAlias(k)];
+		return object ? blobFile(path, { name: path, type: "blob", object }) : [];
+	});
+
+const FOREIGN_QUERY = `query Foreign($owner: String!, $repo: String!, $at: String!, ${FOLDER_PARAMS}, ${ROOT_PARAMS}) {
   repository(owner: $owner, name: $repo) {
     file: object(expression: $at) { ... on Blob { oid text } }
     ${FOLDER_FIELDS}
-    missing: object(expression: $missing) { ... on Blob { oid text isBinary isTruncated } }
+    ${ROOT_FIELDS}
   }
 }`;
-const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, ${FOLDER_PARAMS}, $missing: String!) {
+const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, ${FOLDER_PARAMS}, ${ROOT_PARAMS}) {
   repository(owner: $owner, name: $repo) {
     mine: ref(qualifiedName: $ref) { name }
     bankRef: ref(qualifiedName: $bank) { compare(headRef: $head) { aheadBy behindBy } }
     questions: object(expression: $questions) { ... on Tree { entries { name type object {
       ... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } } } } } }
     ${FOLDER_FIELDS}
-    missing: object(expression: $missing) { ... on Blob { oid text isBinary isTruncated } }
+    ${ROOT_FIELDS}
   }
 }`;
 

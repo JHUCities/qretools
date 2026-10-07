@@ -6,6 +6,7 @@
 import { parseDocument, stringify } from "yaml";
 import { SCHEME_SINGULAR } from "./copy.js";
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
+import { isRoot, ROOT, type RootKind } from "./kinds.js";
 import { missingCollisions } from "./lint.js";
 import type { Code } from "./surface/draft.js";
 import {
@@ -23,8 +24,13 @@ import { parseScale, type Scale } from "./surface/scales.js";
 import { withSpacing } from "./surface/spacing.js";
 import { type Symbols, schemeSymbols } from "./symbols.js";
 
-/** `missing` is a scheme file too, but one list for the bank, never named by a question. */
-export type SchemeKind = NamedScheme | "missing";
+export { isRoot, ROOT, type RootKind };
+
+/**
+ * A shared file is named, in its kind's folder, or one per bank at its root
+ * (`kinds.ts`), never named by a question.
+ */
+export type SchemeKind = NamedScheme | RootKind;
 export type Kind = "question" | SchemeKind;
 
 /** In the tree's order: what is measured, then how it is asked, then missing data. */
@@ -46,8 +52,6 @@ export const FOLDERS: Readonly<Record<NamedScheme, string>> = {
 	instruction: "instructions",
 };
 
-export const MISSING_NAME = "missing";
-
 /**
  * What a kind's file holds, which decides how it is read, previewed and started: a
  * `labels:` map, one `text:` line, or a concept's `label:` and `definition:`.
@@ -65,7 +69,7 @@ export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 
 /** The path a scheme file lives at. The name is the filename; nothing inside repeats it. */
 export const schemePath = (kind: SchemeKind, name: string): string =>
-	kind === "missing" ? `${MISSING_NAME}.yaml` : `${FOLDERS[kind]}/${name}.yaml`;
+	isRoot(kind) ? ROOT[kind] : `${FOLDERS[kind]}/${name}.yaml`;
 
 /** What a bank path holds, or undefined for a file the tool does not read. */
 export function kindAt(
@@ -75,8 +79,8 @@ export function kindAt(
 	| { readonly kind: SchemeKind; readonly name: string }
 	| undefined {
 	if (!path.endsWith(".yaml")) return undefined;
-	if (path === schemePath("missing", MISSING_NAME))
-		return { kind: "missing", name: MISSING_NAME };
+	const root = (Object.keys(ROOT) as RootKind[]).find((k) => ROOT[k] === path);
+	if (root !== undefined) return { kind: root, name: root };
 	const parts = path.slice(0, -".yaml".length).split("/");
 	if (parts.length === 3 && parts[0] === "questions")
 		return { kind: "question" };

@@ -465,7 +465,7 @@ describe("GitHub adapter (Octokit)", () => {
 		},
 		// A bank without instructions: GitHub answers null.
 		instructions: null,
-		missing: blob('labels:\n  "-8": NR\n'),
+		root_missing: blob('labels:\n  "-8": NR\n'),
 	});
 
 	it("loads the author's branch in one request: complete YAML blobs, and how it compares with the bank", async () => {

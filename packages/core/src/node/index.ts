@@ -5,13 +5,13 @@
  */
 import { glob, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { FOLDERS, MISSING_NAME } from "../index.js";
+import { FOLDERS, ROOT } from "../index.js";
 
 /** Where a bank keeps its files, as the GitHub loader reads them: nothing else is walked. */
 const PATTERNS: readonly string[] = [
 	"questions/*/*.yaml",
 	...Object.values(FOLDERS).map((folder) => `${folder}/*.yaml`),
-	`${MISSING_NAME}.yaml`,
+	...Object.values(ROOT),
 ];
 
 /**

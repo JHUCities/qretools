@@ -13,6 +13,7 @@
  */
 import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { fold, labelsKey } from "./fold.js";
+import { isRoot } from "./kinds.js";
 import type { SchemeKind, SchemeValue } from "./schemes.js";
 import {
 	type Code,
@@ -105,8 +106,7 @@ export function schemeSymbols(
 	value: SchemeValue | undefined,
 ): Symbols {
 	const none = { defines: [], mentions: [], variants: [] };
-	if (value === undefined || kind === "missing")
-		return { ...none, fingerprints: [] };
+	if (value === undefined || isRoot(kind)) return { ...none, fingerprints: [] };
 	const fingerprints =
 		value.kind === "labels"
 			? value.codes.length > 0

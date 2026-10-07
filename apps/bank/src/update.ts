@@ -4,7 +4,7 @@ import {
 	EMPTY_ENV,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
-	MISSING_NAME,
+	isRoot,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
 	type NamedScheme,
@@ -310,7 +310,7 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "schemeCreateOpened": {
-			if (msg.scheme !== "missing")
+			if (!isRoot(msg.scheme))
 				return [
 					{
 						...model,
@@ -329,16 +329,17 @@ function step(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
-			// One list per bank: open it if it exists, else start it.
+			// One file per bank: open it if it exists, else start it.
+			const root = msg.scheme;
 			const existing = Object.values(model.local.schemes).find(
-				(e) => e.kind === "missing",
+				(e) => e.kind === root,
 			);
 			if (existing)
 				return [{ ...model, screen: { kind: "editing", id: existing.id } }, []];
 			const [next, id] = add(model, {
-				kind: "missing",
-				name: MISSING_NAME,
-				source: SCHEME_TEMPLATES.missing,
+				kind: root,
+				name: root,
+				source: SCHEME_TEMPLATES[root],
 			});
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
 		}
@@ -346,8 +347,7 @@ function step(model: Model, msg: Msg): Step {
 		case "schemeRenameOpened": {
 			// Only a draft: a saved file's name is its path on GitHub, and other branches'.
 			const e = model.local.schemes[msg.id];
-			if (!e || e.kind === "missing" || e.base !== undefined)
-				return [model, []];
+			if (!e || isRoot(e.kind) || e.base !== undefined) return [model, []];
 			return [
 				{
 					...model,
@@ -387,8 +387,7 @@ function step(model: Model, msg: Msg): Step {
 			if (naming.purpose.kind === "rename") {
 				const { id } = naming.purpose;
 				const e = model.local.schemes[id];
-				if (!e || e.kind === "missing" || e.base !== undefined)
-					return [closed, []];
+				if (!e || isRoot(e.kind) || e.base !== undefined) return [closed, []];
 				const renamed = withFile(closed, { ...e, name: naming.name });
 				return persist([
 					renameReferences(renamed, e.kind, e.name, naming.name),

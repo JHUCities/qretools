@@ -4,7 +4,7 @@
  */
 
 import type { Draft, SchemeKind } from "@qretools/core";
-import { SCHEME_NAME } from "@qretools/core";
+import { isRoot, SCHEME_NAME } from "@qretools/core";
 
 const FIELDS = [
 	"name",
@@ -71,7 +71,7 @@ export const describeSchemeChange = (
 	name: string,
 	op: "add" | "update" | "delete",
 ): string =>
-	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${kind === "missing" ? SCHEME_NAME.missing : `${SCHEME_NAME[kind]} ${name}`}`;
+	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${isRoot(kind) ? SCHEME_NAME[kind] : `${SCHEME_NAME[kind]} ${name}`}`;
 
 /**
  * The message for a commit of several files: the main file's line as the subject, the

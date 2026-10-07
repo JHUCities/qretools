@@ -29,6 +29,7 @@ import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import { useTheme } from "@primer/react/next";
 import {
 	indexOf,
+	isRoot,
 	kindAt,
 	plainText,
 	SCHEME_KINDS,
@@ -136,9 +137,7 @@ export function App() {
 					: confirm.name;
 	// Deleting a scheme file others name turns each of those names into a hole: say how many.
 	const confirmUsers =
-		confirm === undefined ||
-		confirm.kind === "question" ||
-		confirm.kind === "missing"
+		confirm === undefined || confirm.kind === "question" || isRoot(confirm.kind)
 			? 0
 			: new Set(usedBy(index, confirm.kind, confirm.name).map((s) => s.key))
 					.size;

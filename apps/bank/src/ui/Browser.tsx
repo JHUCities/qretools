@@ -20,7 +20,7 @@ import {
 	SkeletonBox,
 	SkeletonText,
 } from "@primer/react/experimental";
-import { SCHEME_SINGULAR, type Status, UNNAMED } from "@qretools/core";
+import { isRoot, SCHEME_SINGULAR, type Status, UNNAMED } from "@qretools/core";
 import { useId } from "react";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
@@ -157,9 +157,9 @@ function FolderItem({
 	);
 }
 
-/** A section's count, heard: "3 scales"; the one missing-values list is there or not. */
+/** A section's count, heard: "3 scales"; a bank's one root file is there or not. */
 const sectionCount = (s: SchemeSection): string =>
-	s.kind === "missing"
+	isRoot(s.kind)
 		? s.leaves.length === 0
 			? "none yet"
 			: "defined"

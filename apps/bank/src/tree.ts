@@ -8,6 +8,7 @@
 import {
 	type Evaluation,
 	type Index,
+	isRoot,
 	labelOf,
 	SCHEME_KINDS,
 	SCHEME_LABELS,
@@ -160,7 +161,7 @@ export function schemeSections(
 					...marks(model, e),
 					name: e.name,
 					status: status(evaluate(e).findings),
-					...(e.kind !== "missing" && {
+					...(!isRoot(e.kind) && {
 						usedBy: usedBy(index, e.kind, e.name).length,
 					}),
 				}),

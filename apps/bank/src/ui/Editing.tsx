@@ -16,6 +16,7 @@ import {
 	fileFindings,
 	type Index,
 	inScope,
+	isRoot,
 	kindAt,
 	type Mark,
 	othersOf,
@@ -252,10 +253,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 		[findings, ev.ranges, onFix],
 	);
 	const [listed, flush] = useSettled(findings, SETTLE_MS, e.id);
-	const users =
-		e.kind === "missing"
-			? undefined
-			: [...new Set(usedBy(index, e.kind, e.name).map((s) => s.key))];
+	const users = isRoot(e.kind)
+		? undefined
+		: [...new Set(usedBy(index, e.kind, e.name).map((s) => s.key))];
 	const unsaved = isUnsaved(e);
 	// Whether questions naming this file resolve: it must read as its kind.
 	const inEffect =
@@ -278,7 +278,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						flush();
 						on.save();
 					},
-					...(e.kind !== "missing" &&
+					...(!isRoot(e.kind) &&
 						e.base === undefined && {
 							rename: () => dispatch({ kind: "schemeRenameOpened", id: e.id }),
 						}),
