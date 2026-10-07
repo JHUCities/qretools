@@ -26,12 +26,23 @@ import {
 	textEntrySource,
 } from "@qretools/core/editor";
 import {
+	type BankSettings,
+	type BranchTarget,
+	bankText,
+	type Change,
+	type Failure,
+	formatLink,
+	type Link,
+	parseBank,
+	parseLink,
+	sameBank,
+} from "@qretools/shell";
+import {
 	describeChange,
 	describeChangeSet,
 	describeMove,
 	describeSchemeChange,
 } from "./commits.js";
-import { formatLink, type Link, parseLink } from "./link.js";
 import {
 	type Activity,
 	allFiles,
@@ -59,15 +70,6 @@ import {
 	signedOut,
 	toWork,
 } from "./model.js";
-import {
-	type BankSettings,
-	type BranchTarget,
-	bankText,
-	type Change,
-	type Failure,
-	parseBank,
-	sameBank,
-} from "./storage.js";
 import {
 	claimOf,
 	dependencies,

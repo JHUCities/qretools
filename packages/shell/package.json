@@ -1,0 +1,28 @@
+{
+	"name": "@qretools/shell",
+	"version": "2.0.0-alpha.0",
+	"private": true,
+	"type": "module",
+	"description": "What the QREtools apps share at their edge: GitHub sign-in, storage, links",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit",
+		"check": "tsc --noEmit && vitest run"
+	},
+	"dependencies": {
+		"@octokit/core": "^7.0.8",
+		"@octokit/plugin-retry": "^8.1.1",
+		"@octokit/plugin-throttling": "^11.0.5",
+		"@octokit/request-error": "^7.1.2",
+		"@qretools/core": "workspace:*",
+		"zod": "^4.6.5"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2",
+		"vite": "^8.3.0",
+		"vitest": "^5.0.1"
+	}
+}

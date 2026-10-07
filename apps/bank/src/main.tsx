@@ -12,15 +12,20 @@ import "@primer/primitives/dist/css/functional/themes/dark.css";
 import "./app.css";
 import { BaseStyles } from "@primer/react";
 import { ThemeProvider } from "@primer/react/next";
+import type { Failure } from "@qretools/shell";
+import {
+	type Callback,
+	callbackOf,
+	makeGitHubStore,
+	PendingSchema,
+	signInConfig,
+} from "@qretools/shell";
 import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { type Callback, callbackOf, PendingSchema } from "./auth.js";
-import { bankTemplate, defaultBank, signInConfig } from "./config.js";
+import { bankTemplate, defaultBank } from "./config.js";
 import { PENDING_KEY } from "./effects.js";
-import { makeGitHubStore } from "./github.js";
 import { warnOnLeave } from "./model.js";
 import { browserCredentialStore, readStartup } from "./persist.js";
-import type { Failure } from "./storage.js";
 import { createApp } from "./store.js";
 import { App } from "./ui/App.js";
 import { AppContext, useModel } from "./ui/AppContext.js";

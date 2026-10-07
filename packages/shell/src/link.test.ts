@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLink, parseLink } from "./link.js";
+import { formatLink, parseLink } from "./link.ts";
 
 describe("links", () => {
 	it("round-trip a repository, a branch with slashes and a path with slashes", () => {

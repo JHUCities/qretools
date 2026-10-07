@@ -1,9 +1,10 @@
 import { EMPTY_ENV, evaluate, ok } from "@qretools/core";
 import { locate } from "@qretools/core/editor";
 import { toDiagnostics } from "@qretools/editor";
+import type { File } from "@qretools/shell";
+import { formatLink } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
-import { formatLink } from "./link.js";
 import {
 	allFiles,
 	envOf,
@@ -18,7 +19,6 @@ import {
 	toWork,
 	warnOnLeave,
 } from "./model.js";
-import type { File } from "./storage.js";
 import { remoteBlob, syncOf } from "./sync.js";
 import {
 	bankLoading,

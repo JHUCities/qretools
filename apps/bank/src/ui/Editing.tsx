@@ -40,8 +40,8 @@ import {
 	textEntryJsonSchema,
 } from "@qretools/core/editor";
 import { toDiagnostics } from "@qretools/editor";
+import { bankText, formatLink } from "@qretools/shell";
 import { memo, type ReactNode, useCallback, useMemo } from "react";
-import { formatLink } from "../link.js";
 import {
 	envOfRemote,
 	fileOf,
@@ -51,7 +51,6 @@ import {
 	type SchemeEntry,
 	schemeFileNamed,
 } from "../model.js";
-import { bankText } from "../storage.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
 import {
 	bankLoading,

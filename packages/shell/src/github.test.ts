@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { makeGitHubStore } from "./github.js";
-import { AuthError, type BranchTarget } from "./storage.js";
+import { makeGitHubStore } from "./github.ts";
+import { AuthError, type BranchTarget } from "./storage.ts";
 
 type Seen = { url: string; method: string; body: Record<string, unknown> };
 type Canned = (req: Seen) => Response;

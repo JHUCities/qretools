@@ -8,8 +8,8 @@
 
 import { err, ok, type Result } from "@qretools/core";
 import { z } from "zod";
-import type { SignInConfig } from "./config.js";
-import type { Failure } from "./storage.js";
+import type { SignInConfig } from "./signin.ts";
+import type { Failure } from "./storage.ts";
 
 /** What the app holds for GitHub: an access token and, for an App user token, how to renew it. */
 export interface Credentials {

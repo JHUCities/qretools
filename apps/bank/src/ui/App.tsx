@@ -38,8 +38,9 @@ import {
 	UNNAMED,
 	usedBy,
 } from "@qretools/core";
+import { installUrl } from "@qretools/shell";
 import { useMemo } from "react";
-import { installUrl, SOURCE_URL } from "../config.js";
+import { SOURCE_URL } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
 import { bankFolders, schemeSections, treeOf } from "../tree.js";

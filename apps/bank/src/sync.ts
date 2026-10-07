@@ -12,6 +12,7 @@ import {
 	schemePath,
 	usedBy,
 } from "@qretools/core";
+import type { File } from "@qretools/shell";
 import type {
 	Blob,
 	Entry,
@@ -22,7 +23,6 @@ import type {
 	Remote,
 	SchemeEntry,
 } from "./model.js";
-import type { File } from "./storage.js";
 
 export type Sync =
 	/** Never saved, and nothing on GitHub where it would go. */

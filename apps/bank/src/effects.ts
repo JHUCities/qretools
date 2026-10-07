@@ -17,17 +17,25 @@ import {
 	type Validator,
 } from "@qretools/core";
 import type { Editor } from "@qretools/editor";
+import type { SignInConfig } from "@qretools/shell";
 import {
+	AuthError,
 	authorizeUrl,
+	type BankRef,
+	bankText,
 	base64url,
 	type Callback,
+	type CredentialStore,
 	type Credentials,
 	exchange,
+	type Failure,
+	type File,
+	type MakeStore,
 	type PendingSignIn,
 	refresh,
+	type Store,
 	stale,
-} from "./auth.js";
-import type { SignInConfig } from "./config.js";
+} from "@qretools/shell";
 import type { Cmd, Dispatch } from "./model.js";
 import {
 	SETTINGS_KEY,
@@ -36,16 +44,6 @@ import {
 	THEME_KEY,
 	WORK_KEY,
 } from "./persist.js";
-import {
-	AuthError,
-	type BankRef,
-	bankText,
-	type CredentialStore,
-	type Failure,
-	type File,
-	type MakeStore,
-	type Store,
-} from "./storage.js";
 
 export interface Deps {
 	readonly makeStore: MakeStore;

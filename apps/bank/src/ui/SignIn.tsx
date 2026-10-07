@@ -22,11 +22,11 @@ import {
 	VisuallyHidden,
 } from "@primer/react";
 import { plainText } from "@qretools/core";
+import { bankText, installUrl, parseBank, sameBank } from "@qretools/shell";
 import { useId, useRef, useState } from "react";
-import { installUrl, SOURCE_URL } from "../config.js";
+import { SOURCE_URL } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import { hasOwnWork, type Model } from "../model.js";
-import { bankText, parseBank, sameBank } from "../storage.js";
 import { useApp } from "./AppContext.js";
 import { ExternalLink } from "./ExternalLink.js";
 import { failureDescription } from "./Previews.js";

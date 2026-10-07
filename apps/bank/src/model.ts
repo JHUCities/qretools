@@ -28,8 +28,6 @@ import choiceTemplate from "@qretools/core/templates/choice.yaml?raw";
 import numberTemplate from "@qretools/core/templates/number.yaml?raw";
 import scaleTemplate from "@qretools/core/templates/scale.yaml?raw";
 import selectManyTemplate from "@qretools/core/templates/select-many.yaml?raw";
-import type { Link } from "./link.js";
-import { startingSettings, type Work } from "./persist.js";
 import type {
 	Access,
 	BankRef,
@@ -40,10 +38,12 @@ import type {
 	Committed,
 	Failure,
 	File,
+	Link,
 	Loaded,
 	Who,
-} from "./storage.js";
-import { bankText, sameBank } from "./storage.js";
+} from "@qretools/shell";
+import { bankText, sameBank } from "@qretools/shell";
+import { startingSettings, type Work } from "./persist.js";
 
 export type Id = number;
 

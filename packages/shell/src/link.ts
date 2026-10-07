@@ -4,7 +4,7 @@
  * since branch names and paths both contain `/`. The browser keeps the history.
  */
 
-import { parseBank } from "./storage.js";
+import { parseBank } from "./storage.ts";
 
 export interface Link {
 	/** The bank: `owner/repo`, or `owner/repo/folder` for a bank in a folder. */

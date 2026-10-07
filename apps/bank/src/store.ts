@@ -5,9 +5,9 @@
  * `dispatch` is not store state and is never wrapped in a thunk.
  */
 
+import type { SignInConfig } from "@qretools/shell";
 import { devtools } from "zustand/middleware";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { SignInConfig } from "./config.js";
 import { createEffects, type Deps, type Effects } from "./effects.js";
 import { createEvaluations, type Evaluations } from "./evaluations.js";
 import { type Dispatch, type Flags, init, type Model } from "./model.js";

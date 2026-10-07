@@ -5,7 +5,7 @@ import {
 	parseRepo,
 	repoText,
 	sameBank,
-} from "./storage.js";
+} from "./storage.ts";
 
 describe("a repository as written", () => {
 	it("reads owner/name, and a pasted GitHub URL", () => {

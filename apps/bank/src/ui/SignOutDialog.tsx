@@ -7,8 +7,8 @@
 
 import { Banner, Dialog } from "@primer/react";
 import { plainText } from "@qretools/core";
+import type { Failure } from "@qretools/shell";
 import type { Dispatch } from "../model.js";
-import type { Failure } from "../storage.js";
 import { failureDescription } from "./Previews.js";
 
 const plural = (n: number, noun: string): string =>

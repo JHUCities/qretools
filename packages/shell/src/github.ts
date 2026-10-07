@@ -33,7 +33,7 @@ import {
 	type Failure,
 	type File,
 	type Store,
-} from "./storage.js";
+} from "./storage.ts";
 
 const GitHub = Octokit.plugin(retry, throttling);
 

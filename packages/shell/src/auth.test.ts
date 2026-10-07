@@ -8,8 +8,8 @@ import {
 	MARGIN,
 	refresh,
 	stale,
-} from "./auth.js";
-import type { SignInConfig } from "./config.js";
+} from "./auth.ts";
+import type { SignInConfig } from "./signin.ts";
 
 const config: SignInConfig = {
 	clientId: "Iv23.id",

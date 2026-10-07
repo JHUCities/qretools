@@ -17,14 +17,14 @@ import {
 	SCHEME_KINDS,
 	type SchemeKind,
 } from "@qretools/core";
-import { z } from "zod";
-import type { Credentials } from "./auth.js";
+import type { Credentials } from "@qretools/shell";
 import {
 	type BankSettings,
 	type CredentialStore,
 	type Failure,
 	parseBank,
-} from "./storage.js";
+} from "@qretools/shell";
+import { z } from "zod";
 
 const OriginSchema = z.discriminatedUnion("kind", [
 	z.strictObject({ kind: z.literal("draft") }),

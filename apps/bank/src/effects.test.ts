@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest";
-import type { Credentials } from "./auth.js";
-import { createEffects } from "./effects.js";
+import type { Credentials } from "@qretools/shell";
 import {
 	AuthError,
 	type CredentialStore,
 	type MakeStore,
 	type Store,
-} from "./storage.js";
+} from "@qretools/shell";
+import { describe, expect, it } from "vitest";
+import { createEffects } from "./effects.js";
 
 const config = {
 	clientId: "id",
