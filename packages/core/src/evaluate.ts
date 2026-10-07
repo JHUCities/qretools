@@ -107,6 +107,8 @@ export interface Bank {
 	readonly ignored: readonly string[];
 	/** The DDI agency the bank declares; absent while it declares none (see `evaluate`). */
 	readonly agency?: string;
+	/** The versions the bank was evaluated at, by path, when they were given. */
+	readonly versions?: Versions;
 }
 
 /**
@@ -170,5 +172,6 @@ export function bankOf(
 		index,
 		ignored,
 		...(env.agency !== undefined && { agency: env.agency }),
+		...(versions !== undefined && { versions }),
 	};
 }

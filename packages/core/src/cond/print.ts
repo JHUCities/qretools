@@ -27,13 +27,15 @@ const MEMBER = 3;
 export function printCondition(
 	e: Expr,
 	rename: (name: string) => string = (n) => n,
+	/** What a hole prints as: `?` for a draft; an export that must be VTL says `null`. */
+	hole = "?",
 ): string {
 	const go = (x: Expr, min: number): string => {
 		const wrap = (power: number, text: string) =>
 			power < min ? `(${text})` : text;
 		switch (x.kind) {
 			case "hole":
-				return "?";
+				return hole;
 			case "name":
 				return rename(x.name);
 			case "string":

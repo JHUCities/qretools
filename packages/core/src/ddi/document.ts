@@ -20,7 +20,15 @@ export type ItemType =
 	| "Instruction"
 	| "Universe"
 	| "Variable"
-	| "ManagedMissingValuesRepresentation";
+	| "ManagedMissingValuesRepresentation"
+	| "Instrument"
+	| "Sequence"
+	| "QuestionConstruct"
+	| "IfThenElse"
+	| "Loop"
+	| "RepeatUntil"
+	| "StatementItem"
+	| "ComputationItem";
 
 export interface Identity {
 	readonly URN: string;

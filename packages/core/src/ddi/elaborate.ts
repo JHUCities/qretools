@@ -546,3 +546,20 @@ const maybe = <A, B>(a: A | undefined, f: (a: A) => B): B | undefined =>
 	a === undefined ? undefined : f(a);
 
 export type { Identity };
+
+/**
+ * A bank's shared universe as the bank publishes it (`universe-<name>`), for an export
+ * that names it without asking a question that does (an instrument's default universe).
+ */
+export function sharedUniverseItem(
+	name: string,
+	entry: TextEntry,
+	agency: string,
+	version: Version = UNVERSIONED,
+): Item {
+	return universeItem(
+		{ kind: "ref", name, value: entry },
+		{ agency, own: UNVERSIONED, shared: () => version },
+		"",
+	);
+}

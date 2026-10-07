@@ -57,6 +57,8 @@ export interface ParsedInstrument {
 	readonly scope: ReadonlyMap<string, Named>;
 	/** Every name its conditions, fills and placeholders read, with what it resolved to. */
 	readonly names: ReadonlyMap<string, Named>;
+	/** The banks in reach (those `uses` names), by alias. */
+	readonly banks: Readonly<Record<string, Bank>>;
 }
 
 const TOP = [
@@ -120,6 +122,7 @@ export function parseInstrument(
 			ranges,
 			scope: new Map(),
 			names: new Map(),
+			banks: {},
 		};
 	}
 	const say = (f: Finding) => findings.push(f);
@@ -232,7 +235,7 @@ export function parseInstrument(
 		inputs,
 		flow,
 	};
-	return { draft, findings, ranges, scope, names: ctx.names };
+	return { draft, findings, ranges, scope, names: ctx.names, banks: available };
 }
 
 interface Context {
@@ -1372,6 +1375,17 @@ function readFills(
 				),
 			);
 		const source = readCond(pair.value, at, ctx, "value");
+		// "Which answer fills it": one name. An expression would need a computed value first.
+		if (source !== undefined && source.expr.kind !== "name")
+			ctx.say(
+				problem(
+					"not-yet",
+					"error",
+					at,
+					"A fill is filled by one answer or input, named.",
+					"Compute the value first (`compute:`), then fill with its name.",
+				),
+			);
 		bindings.push({ name, path: at, ...(source !== undefined && { source }) });
 	}
 	for (const f of declared)

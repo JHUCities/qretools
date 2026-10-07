@@ -199,6 +199,13 @@ describe("reading an instrument", () => {
 		]);
 	});
 
+	it("fills a fill with one name, for now", () => {
+		const { findings } = read(
+			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.rent\n  - ask: bas.util\n    fill:\n      rent: bas.rent + 1\n",
+		);
+		expect(findings.map(brief)).toEqual(["error not-yet flow.1.fill.rent"]);
+	});
+
 	it("asks for each check's severity and message", () => {
 		const { findings } = read(
 			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.rent\n    checks:\n      - ensure: bas.rent > 0\n        severity: fatal\n      - ensure:\n",
