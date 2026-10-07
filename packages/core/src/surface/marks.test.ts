@@ -15,7 +15,7 @@ const QUESTIONS = import.meta.glob(
 		eager: true,
 	},
 ) as Readonly<Record<string, string>>;
-const SCALES = import.meta.glob("../../examples/scales/*.yaml", {
+const SCALES = import.meta.glob("../../starter/scales/*.yaml", {
 	query: "?raw",
 	import: "default",
 	eager: true,

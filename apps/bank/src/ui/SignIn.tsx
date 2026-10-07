@@ -21,7 +21,7 @@ import {
 	TextInput,
 	VisuallyHidden,
 } from "@primer/react";
-import { plainText } from "@qretools/core/codeSpans.js";
+import { plainText } from "@qretools/core";
 import { useId, useRef, useState } from "react";
 import { installUrl, SOURCE_URL } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";

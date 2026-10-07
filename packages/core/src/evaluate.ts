@@ -1,6 +1,7 @@
 /**
  * Live evaluation: everything the page shows is one pure function of the text.
- * Total, like its parts: any text evaluates.
+ * Total, like its parts: any text evaluates. A whole bank evaluates the same way,
+ * from its files by path (`bankOf`).
  */
 import type { DdiDocument } from "./ddi/document.js";
 import { elaborate } from "./ddi/elaborate.js";
@@ -12,11 +13,24 @@ import {
 	type RespondentView,
 	respondentView,
 } from "./render.js";
+import {
+	bankEnv,
+	evaluateScheme,
+	kindAt,
+	type SchemeEvaluation,
+	type SchemeKind,
+} from "./schemes.js";
 import type { Draft } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
 import type { Mark } from "./surface/marks.js";
 import { parseSurface } from "./surface/parse.js";
-import { type Symbols, symbolsOf } from "./symbols.js";
+import {
+	fileFindings,
+	type Index,
+	indexOf,
+	type Symbols,
+	symbolsOf,
+} from "./symbols.js";
 
 export interface Evaluation {
 	readonly draft: Draft;
@@ -45,4 +59,69 @@ export function evaluate(source: string, agency: string, env: Env): Evaluation {
 		codebook: codebookView(draft, env),
 		symbols: symbolsOf(parsed),
 	};
+}
+
+/** A shared file's evaluation, with the kind and name its path gives it. */
+export interface SchemeFileEvaluation extends SchemeEvaluation {
+	readonly kind: SchemeKind;
+	readonly name: string;
+}
+
+/** A whole bank, evaluated: each file by its path. */
+export interface Bank {
+	/** The shared files' environment the questions were read against. */
+	readonly env: Env;
+	readonly questions: Readonly<Record<string, Evaluation>>;
+	readonly schemes: Readonly<Record<string, SchemeFileEvaluation>>;
+	/** Every file's findings, its own and the bank's about it (`fileFindings`). */
+	readonly findings: Readonly<Record<string, readonly Finding[]>>;
+	/** The bank's symbol table, keyed by path. */
+	readonly index: Index<string>;
+	/** Paths given that aren't bank files (`kindAt`): a wrong folder shows here. */
+	readonly ignored: readonly string[];
+}
+
+/**
+ * A bank from its files: path (relative to the bank's root, `/`-separated) to text.
+ * Total, and independent of the order the files are given in. It compares every
+ * question's wording with every other's, so it's for checking a bank whole, not
+ * for every keystroke.
+ */
+export function bankOf(
+	files: Readonly<Record<string, string>>,
+	agency: string,
+): Bank {
+	const env = bankEnv(files);
+	const questions: Record<string, Evaluation> = {};
+	const schemes: Record<string, SchemeFileEvaluation> = {};
+	const ignored: string[] = [];
+	for (const path of Object.keys(files).sort()) {
+		const text = files[path] ?? "";
+		const at = kindAt(path);
+		if (at === undefined) ignored.push(path);
+		else if (at.kind === "question")
+			questions[path] = evaluate(text, agency, env);
+		else
+			schemes[path] = {
+				...evaluateScheme(at.kind, text, env),
+				kind: at.kind,
+				name: at.name,
+			};
+	}
+	const read: readonly (readonly [
+		string,
+		Evaluation | SchemeFileEvaluation,
+	])[] = [...Object.entries(questions), ...Object.entries(schemes)].sort(
+		([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+	);
+	const index = indexOf(
+		read.map(([key, ev]) => ({ key, symbols: ev.symbols })),
+	);
+	// Another file, as a bank finding cites it: its name, else its path.
+	const label = (path: string): string =>
+		questions[path]?.draft.name ?? schemes[path]?.name ?? path;
+	const findings: Record<string, readonly Finding[]> = {};
+	for (const [path, ev] of read)
+		findings[path] = fileFindings(path, ev, index, label);
+	return { env, questions, schemes, findings, index, ignored };
 }

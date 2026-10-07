@@ -9,9 +9,14 @@
  * are read once, by `migrate`, and retired.
  */
 
-import { compact } from "@qretools/core/compact.js";
-import { err, ok, type Result } from "@qretools/core/result.js";
-import { SCHEME_KINDS, type SchemeKind } from "@qretools/core/schemes.js";
+import {
+	compact,
+	err,
+	ok,
+	type Result,
+	SCHEME_KINDS,
+	type SchemeKind,
+} from "@qretools/core";
 import { z } from "zod";
 import type { Credentials } from "./auth.js";
 import {

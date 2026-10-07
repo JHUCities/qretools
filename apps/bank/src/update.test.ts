@@ -1,7 +1,5 @@
-import { evaluate } from "@qretools/core/evaluate.js";
-import { locate } from "@qretools/core/findings.js";
-import { ok } from "@qretools/core/result.js";
-import { EMPTY_ENV } from "@qretools/core/surface/env.js";
+import { EMPTY_ENV, evaluate, ok } from "@qretools/core";
+import { locate } from "@qretools/core/editor";
 import { describe, expect, it } from "vitest";
 import { toDiagnostics } from "./diagnostics.js";
 import { createEvaluations } from "./evaluations.js";

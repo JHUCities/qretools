@@ -1,0 +1,10 @@
+name: library_visits
+title: Days visiting a library
+text: In the past 30 days, on how many days did you visit a public library?
+intent: Estimates how often residents use public libraries; an example of a number question with a range and a unit.
+concept: library_use
+universe: all_respondents
+number:
+  min: 0
+  max: 30
+  unit: days

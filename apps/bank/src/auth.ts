@@ -6,7 +6,7 @@
  * the code: the shell carries both.
  */
 
-import { err, ok, type Result } from "@qretools/core/result.js";
+import { err, ok, type Result } from "@qretools/core";
 import { z } from "zod";
 import type { SignInConfig } from "./config.js";
 import type { Failure } from "./storage.js";

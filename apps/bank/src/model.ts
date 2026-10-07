@@ -7,14 +7,23 @@
  * a question is unsaved follows from its text and origin; what a question shows
  * follows from its text.
  */
-import { compact } from "@qretools/core/compact.js";
-import agree4 from "@qretools/core/examples/scales/agree4.yaml?raw";
-import satisfied5 from "@qretools/core/examples/scales/satisfied5.yaml?raw";
-import type { Finding, Fix, Range, Target } from "@qretools/core/findings.js";
-import type { Result } from "@qretools/core/result.js";
-import { kindAt, type SchemeKind, schemeEnv } from "@qretools/core/schemes.js";
-import type { Env, NamedScheme } from "@qretools/core/surface/env.js";
-import { parseScale, type Scales } from "@qretools/core/surface/scales.js";
+import {
+	bankEnv,
+	compact,
+	type Env,
+	type Finding,
+	type Fix,
+	type NamedScheme,
+	parseScale,
+	type Range,
+	type Result,
+	type Scales,
+	type SchemeKind,
+	schemeEnv,
+	type Target,
+} from "@qretools/core";
+import agree4 from "@qretools/core/starter/scales/agree4.yaml?raw";
+import satisfied5 from "@qretools/core/starter/scales/satisfied5.yaml?raw";
 import choiceTemplate from "@qretools/core/templates/choice.yaml?raw";
 import numberTemplate from "@qretools/core/templates/number.yaml?raw";
 import scaleTemplate from "@qretools/core/templates/scale.yaml?raw";
@@ -418,7 +427,7 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 /** The DDI agency identifier for this bank: Johns Hopkins 21st Century Cities. A constant for now; see FEATURES.md, "Generality". */
 const AGENCY = "edu.jhu.21cc";
 
-/** The core's example scale files, keyed by file name, as a bank names a scale. */
+/** The core's starter scale files, keyed by file name, as a bank names a scale. */
 const SCALE_FILES: Readonly<Record<string, string>> = { agree4, satisfied5 };
 
 /** Bundled example scales, named by file. A malformed example is a bug, not a user error, so it is simply absent. */
@@ -610,16 +619,12 @@ export function envOf(
 }
 
 /** The environment of a branch as GitHub has it: for reading another author's version. */
-export function envOfRemote(schemes: Remote["schemes"]): Env {
-	return schemeEnv(
-		Object.entries(schemes).flatMap(([path, blob]) => {
-			const at = kindAt(path);
-			return at === undefined || at.kind === "question"
-				? []
-				: [{ kind: at.kind, name: at.name, text: blob.text }];
-		}),
+export const envOfRemote = (schemes: Remote["schemes"]): Env =>
+	bankEnv(
+		Object.fromEntries(
+			Object.entries(schemes).map(([path, blob]) => [path, blob.text]),
+		),
 	);
-}
 
 export const toWork = (model: Model): Work => ({
 	version: 5,

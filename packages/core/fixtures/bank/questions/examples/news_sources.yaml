@@ -1,0 +1,24 @@
+name: news_sources
+title: Sources of local news
+text: Where do you get news about your community?
+intent: Describes which channels reach residents; an example of a select-all-that-apply question, recorded as one variable per option.
+concept: news_consumption
+universe: all_respondents
+instruction: select_all
+select: many
+responses:
+  1:
+    label: A local newspaper or its website
+    title: Newspaper
+  2:
+    label: Television or radio
+    title: Broadcast
+  3:
+    label: Social media
+    title: Social media
+  4:
+    label: Friends, family or neighbors
+    title: Word of mouth
+  5:
+    label: None of these
+    title: None

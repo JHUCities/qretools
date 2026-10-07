@@ -10,8 +10,7 @@ import {
 	Truncate,
 	VisuallyHidden,
 } from "@primer/react";
-import { plainText } from "@qretools/core/codeSpans.js";
-import { UNNAMED } from "@qretools/core/copy.js";
+import { plainText, UNNAMED } from "@qretools/core";
 import { useId } from "react";
 import type { Activity, Entry } from "../model.js";
 import { SESSION_STATUS } from "./AppContext.js";

@@ -10,18 +10,21 @@ import {
 } from "@primer/octicons-react";
 import { Details, Label, Link } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
-import { codeSpans } from "@qretools/core/codeSpans.js";
-import { toFillIn } from "@qretools/core/copy.js";
-import type { DdiDocument } from "@qretools/core/ddi/document.js";
-import type { Finding, Fix, Status, Target } from "@qretools/core/findings.js";
-import type {
-	CodebookView,
-	Hole,
-	Input,
-	Resolved,
-	RespondentView,
-	Slot,
-} from "@qretools/core/render.js";
+import {
+	type CodebookView,
+	codeSpans,
+	type DdiDocument,
+	type Finding,
+	type Fix,
+	type Hole,
+	type Input,
+	type Resolved,
+	type RespondentView,
+	type Slot,
+	type Status,
+	type Target,
+	toFillIn,
+} from "@qretools/core";
 import { Fragment, memo, type ReactNode, useId } from "react";
 import type { DdiSchema } from "../model.js";
 

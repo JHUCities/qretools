@@ -4,5 +4,7 @@
 		// No DOM: the core is pure, so a browser API used here is a compile error.
 		"lib": ["ES2023"]
 	},
-	"include": ["src"]
+	"include": ["src"],
+	// The Node entry is the one place with I/O; it has its own config.
+	"exclude": ["src/node"]
 }

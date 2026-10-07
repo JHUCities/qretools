@@ -54,11 +54,22 @@ const BINARY: readonly Code[] = [
 /** The bank's missing-value list: one managed representation, referenced by every Variable. */
 const MISSING_ID = "missing";
 
-export function elaborate(
+/** A question as one DDI document: its items, keyed once (see `documentOf`). */
+export const elaborate = (
 	draft: Draft,
 	agency: string,
 	missing: readonly Code[],
-): DdiDocument {
+): DdiDocument => documentOf(elaborateItems(draft, agency, missing));
+
+/**
+ * A question's DDI items, unkeyed: an export of many questions (an instrument, a
+ * bank) concatenates their lists and calls `documentOf` once, at its edge.
+ */
+export function elaborateItems(
+	draft: Draft,
+	agency: string,
+	missing: readonly Code[],
+): readonly Item[] {
 	const qid = draft.name ?? UNTITLED;
 	const questionId = identity(agency, qid);
 	const named = (suffix: string) => identity(agency, `${qid}.${suffix}`);
@@ -114,18 +125,16 @@ export function elaborate(
 		}),
 	);
 
-	return documentOf(
-		[
-			question,
-			...(domain?.items ?? []),
-			...variables,
-			...specs.items,
-			concept,
-			instruction,
-			universe,
-			...(missingItems?.items ?? []),
-		].filter((it) => it !== undefined),
-	);
+	return [
+		question,
+		...(domain?.items ?? []),
+		...variables,
+		...specs.items,
+		concept,
+		instruction,
+		universe,
+		...(missingItems?.items ?? []),
+	].filter((it) => it !== undefined);
 }
 
 /**

@@ -5,16 +5,18 @@
  * it or whenever a filter is active. Opening a file opens its folder once, in
  * `update` (`openFolder`), so the user can still close it.
  */
-import { SCHEME_LABELS } from "@qretools/core/copy.js";
-import type { Evaluation } from "@qretools/core/evaluate.js";
-import { type Status, status } from "@qretools/core/findings.js";
 import {
+	type Evaluation,
+	type Index,
+	labelOf,
 	SCHEME_KINDS,
+	SCHEME_LABELS,
 	type SchemeEvaluation,
 	type SchemeKind,
-} from "@qretools/core/schemes.js";
-import { labelOf } from "@qretools/core/surface/draft.js";
-import { type Index, usedBy } from "@qretools/core/symbols.js";
+	type Status,
+	status,
+	usedBy,
+} from "@qretools/core";
 import type { Entry, Id, Model, Question, SchemeEntry } from "./model.js";
 
 /** What the tree is drawn from. Not the whole Model: a caret move must not redraw it. */

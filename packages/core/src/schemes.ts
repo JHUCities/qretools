@@ -203,6 +203,23 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	return { concepts, units, scales, universes, instructions, missing };
 }
 
+/**
+ * The environment of a bank given as files by path: every path that holds a shared
+ * file, read as its kind; questions and paths the tool doesn't read are skipped.
+ */
+export const bankEnv = (files: Readonly<Record<string, string>>): Env =>
+	schemeEnv(
+		Object.keys(files)
+			.sort()
+			.flatMap((path) => {
+				const at = kindAt(path);
+				const text = files[path];
+				return at === undefined || at.kind === "question" || text === undefined
+					? []
+					: [{ kind: at.kind, name: at.name, text }];
+			}),
+	);
+
 /** A concept or unit file with its label; the definition is written in the file afterwards. */
 export const labelledSource = (label: string): string =>
 	stringify({ label: label.trim() }, { lineWidth: 0 });

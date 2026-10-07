@@ -1,0 +1,84 @@
+# @qretools/core
+
+The library under QREtools: survey questions and a question bank's shared files,
+written in a small YAML surface language, read with holes, checked, and elaborated to
+[DDI-Lifecycle 4.0](https://ddialliance.org/). It runs in the browser and in Node.
+Questions, banks, findings and DDI are plain values. A broken draft still evaluates:
+what's missing is a finding with a path into the text, never an exception.
+
+Three entry points, split by what they need:
+
+| Import | What it gives |
+|---|---|
+| `@qretools/core` | Read, check and elaborate questions and shared files, a whole bank at once (`bankOf`), and validate the DDI. Pure. |
+| `@qretools/core/editor` | What an editor needs as well: where the caret is, what to colour, the cursor inspector, edits and fixes, the JSON Schemas for completion. Pure. |
+| `@qretools/core/node` | `readBank(dir)`: a bank's files read from a directory. The only entry that does I/O. |
+
+The DDI schema the output is checked against is exported as
+`@qretools/core/schema.json`.
+
+## Examples
+
+Every example below runs as a test (`src/node/readme.test.ts`). They share these
+imports:
+
+```ts
+import { readFile } from "node:fs/promises";
+import {
+	bankOf,
+	EMPTY_ENV,
+	evaluate,
+	makeValidator,
+	status,
+} from "@qretools/core";
+import { readBank } from "@qretools/core/node";
+```
+
+A question, evaluated: its findings, the respondent's view, the codebook entry and its
+DDI, all from the text. The DDI agency is yours to give.
+
+```ts
+const question = `name: nhd_sat
+text: How satisfied are you with your neighborhood as a place to live?
+intent: How satisfied residents are with their neighborhood overall
+responses:
+  "1": Satisfied
+  "2": Neither satisfied nor dissatisfied
+  "3": Dissatisfied
+`;
+const evaluation = evaluate(question, "org.example", EMPTY_ENV);
+status(evaluation.findings).kind; // → "complete"
+Object.keys(evaluation.ddi); // → ["QuestionItem", "CodeList", "Category", "Variable"]
+```
+
+A draft with gaps is still a value. Each gap is a hole, a finding with the path it
+belongs at; the empty path is the question itself, which has no responses yet:
+
+```ts
+const draft = evaluate("name: nhd_sat\n", "org.example", EMPTY_ENV);
+draft.findings.map((f) => [f.severity, f.path]);
+// → [["hole", "text"], ["hole", "intent"], ["hole", ""]]
+```
+
+A whole bank from a directory: each file's evaluation and findings by path, the
+shared files' environment, and the paths that aren't bank files.
+
+```ts
+const bank = bankOf(await readBank("fixtures/bank"), "org.example");
+Object.keys(bank.questions).length; // → 6
+bank.ignored; // → []
+```
+
+Validating the DDI against the official schema. Compile the validator once; it takes
+a moment.
+
+```ts
+const schema = JSON.parse(
+	await readFile(
+		new URL(import.meta.resolve("@qretools/core/schema.json")),
+		"utf8",
+	),
+);
+const validator = makeValidator(schema);
+validator.ok && validator.value(evaluation.ddi); // → []
+```

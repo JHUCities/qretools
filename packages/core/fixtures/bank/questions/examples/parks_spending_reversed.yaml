@@ -1,0 +1,10 @@
+name: parks_spending_reversed
+title: Support for more parks spending (reversed order)
+text: Would you support the city spending more on parks, even if it meant higher taxes?
+intent: Measures support for parks spending traded against taxes; the other half of the response-order experiment, options shown in reverse.
+concept: parks_spending_support
+universe: all_respondents
+responses: support4_reversed
+instruction: select_one
+variant_of:
+  parks_spending: response-order experiment, options shown in reverse

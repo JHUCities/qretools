@@ -7,38 +7,36 @@
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, CounterLabel, Label, Link, PageHeader } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
-import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "@qretools/core/copy.js";
-import { type Evaluation, evaluate } from "@qretools/core/evaluate.js";
 import {
+	type Evaluation,
+	evaluate,
+	evaluateScheme,
 	type Finding,
 	type Fix,
-	inDocumentOrder,
-	type Range,
-	status,
-	type Target,
-} from "@qretools/core/findings.js";
-import { inspect } from "@qretools/core/inspect.js";
-import {
-	evaluateScheme,
+	fileFindings,
+	type Index,
+	inScope,
 	kindAt,
+	type Mark,
+	othersOf,
+	type Range,
+	SCHEME_NAME,
+	SCHEME_SINGULAR,
 	type SchemeEvaluation,
 	SHAPE,
 	type Shape,
-} from "@qretools/core/schemes.js";
-import { inScope } from "@qretools/core/surface/env.js";
-import type { Mark } from "@qretools/core/surface/marks.js";
+	type Symbols,
+	status,
+	type Target,
+	UNNAMED,
+	usedBy,
+} from "@qretools/core";
 import {
+	inspect,
 	labelledJsonSchema,
 	labelsJsonSchema,
 	textEntryJsonSchema,
-} from "@qretools/core/surface/schema.js";
-import {
-	bankFindings,
-	type Index,
-	othersOf,
-	type Symbols,
-	usedBy,
-} from "@qretools/core/symbols.js";
+} from "@qretools/core/editor";
 import { memo, type ReactNode, useCallback, useMemo } from "react";
 import { toDiagnostics } from "../diagnostics.js";
 import { formatLink } from "../link.js";
@@ -448,7 +446,7 @@ function useBankFindings(
 				);
 			return local.schemes[other]?.name ?? UNNAMED;
 		};
-		const bank = bankFindings(id, symbols, index, label);
+
 		// From the finding itself: the list shows settled, older objects while typing.
 		const related = (f: Finding): Related | undefined => {
 			const other = othersOf<Id>(f)[0];
@@ -462,7 +460,12 @@ function useBankFindings(
 					};
 		};
 		return {
-			findings: inDocumentOrder([...own, ...bank], ranges),
+			findings: fileFindings(
+				id,
+				{ findings: own, symbols, ranges },
+				index,
+				label,
+			),
 			related,
 		};
 	}, [

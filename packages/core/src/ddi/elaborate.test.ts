@@ -4,7 +4,7 @@ import demRace from "../../examples/dem_race.yaml?raw";
 import nhdCohes1 from "../../examples/nhd_cohes1.yaml?raw";
 import nhdNyrs from "../../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../../examples/nhd_sat.yaml?raw";
-import agree4Text from "../../examples/scales/agree4.yaml?raw";
+import agree4Text from "../../starter/scales/agree4.yaml?raw";
 import { EMPTY_ENV } from "../surface/env.js";
 import { parseSurface } from "../surface/parse.js";
 import { parseScale } from "../surface/scales.js";

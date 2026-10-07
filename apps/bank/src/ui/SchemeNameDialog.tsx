@@ -5,10 +5,16 @@
  * A draft (never saved) can be renamed with the same dialog. The reason a name cannot be
  * used is policy from `update`, shown as the author types.
  */
+
 import { Dialog, FormControl, Stack, Textarea, TextInput } from "@primer/react";
-import { SCHEME_NAME, SCHEME_SINGULAR } from "@qretools/core/copy.js";
-import { SHAPE, schemePath } from "@qretools/core/schemes.js";
-import { FIELD_OF, type NamedScheme } from "@qretools/core/surface/env.js";
+import {
+	FIELD_OF,
+	type NamedScheme,
+	SCHEME_NAME,
+	SCHEME_SINGULAR,
+	SHAPE,
+	schemePath,
+} from "@qretools/core";
 import { useId } from "react";
 import type { Dispatch, Naming } from "../model.js";
 import { inlineCode } from "./Previews.js";

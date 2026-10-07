@@ -1,4 +1,4 @@
-import { indexOf } from "@qretools/core/symbols.js";
+import { indexOf } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import type { Local, Question, Remote, SchemeEntry } from "./model.js";
 import { rebase, remoteOf, type Sync, syncOf, usersIn } from "./sync.js";

@@ -1,13 +1,15 @@
 /** Findings as CodeMirror diagnostics. Decides nothing about surveys. */
+
 import type { Diagnostic } from "@codemirror/lint";
-import { codeSpans, plainText } from "@qretools/core/codeSpans.js";
 import {
+	codeSpans,
 	type Finding,
 	type Fix,
-	locate,
+	plainText,
 	type Range,
 	type Severity,
-} from "@qretools/core/findings.js";
+} from "@qretools/core";
+import { locate } from "@qretools/core/editor";
 
 /** CodeMirror has four severities and nothing else uses `hint`, so holes get it, and their own look. */
 const SEVERITY: Readonly<Record<Severity, Diagnostic["severity"]>> = {

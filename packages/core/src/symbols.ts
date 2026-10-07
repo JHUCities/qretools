@@ -11,7 +11,7 @@
  * lists, codes ignored); and, for question text only, similar wording (word overlap),
  * computed for one file at a time against the index, never for every pair.
  */
-import type { Finding } from "./findings.js";
+import { type Finding, inDocumentOrder, type Range } from "./findings.js";
 import { fold, labelsKey } from "./fold.js";
 import type { SchemeKind, SchemeValue } from "./schemes.js";
 import {
@@ -416,3 +416,26 @@ export function bankFindings<K>(
 
 	return [...variables, ...unknown, ...repeated, ...similar];
 }
+
+/**
+ * Everything a file reports: its own findings and the bank's about it, in document
+ * order. The one merge rule, so a bank checked whole and a file open in an editor
+ * agree.
+ */
+export const fileFindings = <K>(
+	key: K,
+	evaluation: {
+		readonly findings: readonly Finding[];
+		readonly symbols: Symbols;
+		readonly ranges: Readonly<Record<string, Range>>;
+	},
+	index: Index<K>,
+	label: (key: K) => string,
+): readonly Finding[] =>
+	inDocumentOrder(
+		[
+			...evaluation.findings,
+			...bankFindings(key, evaluation.symbols, index, label),
+		],
+		evaluation.ranges,
+	);

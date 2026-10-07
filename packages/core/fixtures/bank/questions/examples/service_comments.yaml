@@ -1,0 +1,8 @@
+name: service_comments
+title: Comments on the service
+text: Is there anything else you would like to tell us about the service you received?
+intent: Collects comments in the respondent's own words; an example of an open question with a length limit.
+concept: service_satisfaction
+universe: all_respondents
+open:
+  max_length: 500

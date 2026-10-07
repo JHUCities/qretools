@@ -1,4 +1,5 @@
 /** The page: a split layout with the bank tree in the pane and the open file in the content. */
+
 import {
 	GitBranchIcon,
 	GitPullRequestIcon,
@@ -26,10 +27,16 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import { useTheme } from "@primer/react/next";
-import { plainText } from "@qretools/core/codeSpans.js";
-import { SCHEME_NAME, SCHEME_SINGULAR, UNNAMED } from "@qretools/core/copy.js";
-import { kindAt, SCHEME_KINDS } from "@qretools/core/schemes.js";
-import { indexOf, usedBy } from "@qretools/core/symbols.js";
+import {
+	indexOf,
+	kindAt,
+	plainText,
+	SCHEME_KINDS,
+	SCHEME_NAME,
+	SCHEME_SINGULAR,
+	UNNAMED,
+	usedBy,
+} from "@qretools/core";
 import { useMemo } from "react";
 import { installUrl, SOURCE_URL } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";

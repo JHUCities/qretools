@@ -10,12 +10,12 @@
  * retried creation is harmless; the branch update runs once, and a lost fast-forward
  * (someone pushed meanwhile) starts over from the read, once.
  */
+
 import { Octokit } from "@octokit/core";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 import { RequestError } from "@octokit/request-error";
-import { err, ok, type Result } from "@qretools/core/result.js";
-import { FOLDERS } from "@qretools/core/schemes.js";
+import { err, FOLDERS, ok, type Result } from "@qretools/core";
 import {
 	AuthError,
 	type BranchTarget,

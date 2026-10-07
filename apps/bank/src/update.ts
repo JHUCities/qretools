@@ -1,36 +1,35 @@
 import {
 	bankLocation,
+	compact,
+	EMPTY_ENV,
+	FOLDER_PATTERN,
+	FOLDER_RULE_TEXT,
+	MISSING_NAME,
+	NAME_PATTERN,
+	NAME_RULE_TEXT,
+	type NamedScheme,
+	parseSurface,
+	SCHEME_NAME,
+	SHAPE,
+	saveableName,
+	schemePath,
+} from "@qretools/core";
+import {
+	addSpace,
+	applyEdits,
+	labelledSource,
+	locate,
+	mentionAt,
+	rangesOf,
+	renameEdits,
+	textEntrySource,
+} from "@qretools/core/editor";
+import {
 	describeChange,
 	describeChangeSet,
 	describeMove,
 	describeSchemeChange,
-	FOLDER_PATTERN,
-	saveableName,
-} from "@qretools/core/bank.js";
-import { compact } from "@qretools/core/compact.js";
-import {
-	FOLDER_RULE_TEXT,
-	NAME_RULE_TEXT,
-	SCHEME_NAME,
-} from "@qretools/core/copy.js";
-import { locate } from "@qretools/core/findings.js";
-import { mentionAt } from "@qretools/core/inspect.js";
-import {
-	labelledSource,
-	MISSING_NAME,
-	SHAPE,
-	schemePath,
-	textEntrySource,
-} from "@qretools/core/schemes.js";
-import {
-	addSpace,
-	applyEdits,
-	renameEdits,
-} from "@qretools/core/surface/edit.js";
-import type { NamedScheme } from "@qretools/core/surface/env.js";
-import { EMPTY_ENV } from "@qretools/core/surface/env.js";
-import { parseSurface, rangesOf } from "@qretools/core/surface/parse.js";
-import { NAME_PATTERN } from "@qretools/core/surface/schema.js";
+} from "./commits.js";
 import { formatLink, type Link, parseLink } from "./link.js";
 import {
 	type Activity,

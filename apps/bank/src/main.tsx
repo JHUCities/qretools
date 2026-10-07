@@ -1,6 +1,7 @@
 // GitHub's typefaces, served with the app: Mona Sans for the interface, Monaspace Neon
 // for code (app.css points Primer's font stacks at them), and the header's wordmark:
 // Radon for "QRE", Krypton for "tools", one weight each.
+import { ok, type Result } from "@qretools/core";
 import "@fontsource-variable/mona-sans";
 import "@fontsource/monaspace-neon/400.css";
 import "@fontsource/monaspace-radon/latin-700.css";
@@ -11,7 +12,6 @@ import "@primer/primitives/dist/css/functional/themes/dark.css";
 import "./app.css";
 import { BaseStyles } from "@primer/react";
 import { ThemeProvider } from "@primer/react/next";
-import { ok, type Result } from "@qretools/core/result.js";
 import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { type Callback, callbackOf, PendingSchema } from "./auth.js";

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { Finding } from "@qretools/core/findings.js";
+import type { Finding } from "@qretools/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Findings } from "./Previews.js";

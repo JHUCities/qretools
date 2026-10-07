@@ -1,0 +1,8 @@
+name: service_satisfaction
+title: Overall satisfaction
+text: Overall, how satisfied are you with the service you received?
+intent: Estimates overall satisfaction with the service; an example of a single-choice question on a shared scale.
+concept: service_satisfaction
+universe: all_respondents
+responses: satisfied5
+instruction: select_one

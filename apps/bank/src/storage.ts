@@ -5,7 +5,7 @@
  *
  * A Failure is a shell value: HTTP and networks are not the core's vocabulary.
  */
-import { err, ok, type Result } from "@qretools/core/result.js";
+import { err, ok, type Result } from "@qretools/core";
 import type { Credentials } from "./auth.js";
 
 export interface File {

@@ -7,10 +7,10 @@
  * A native form: Enter submits, the primary button is its submit button, and what is
  * wrong is Primer's validation message, tied to the input.
  */
+
 import { Dialog } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
-import { bankLocation } from "@qretools/core/bank.js";
-import type { Draft } from "@qretools/core/surface/draft.js";
+import { bankLocation, type Draft } from "@qretools/core";
 import { useId } from "react";
 import type { Dispatch } from "../model.js";
 import { FolderField } from "./FolderField.js";

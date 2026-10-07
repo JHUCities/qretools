@@ -1,0 +1,8 @@
+name: parks_spending
+title: Support for more parks spending
+text: Would you support the city spending more on parks, even if it meant higher taxes?
+intent: Measures support for parks spending traded against taxes; an example of one half of a response-order experiment.
+concept: parks_spending_support
+universe: all_respondents
+responses: support4
+instruction: select_one

@@ -7,13 +7,14 @@
  * change to a scheme file replaces `local.schemes`, so editing a question can never
  * rebuild the environment and so never re-evaluates the bank.
  */
-import { type Evaluation, evaluate } from "@qretools/core/evaluate.js";
 import {
+	type Env,
+	type Evaluation,
+	evaluate,
 	evaluateScheme,
 	type SchemeEvaluation,
-} from "@qretools/core/schemes.js";
-import type { Env } from "@qretools/core/surface/env.js";
-import { questionJsonSchema } from "@qretools/core/surface/schema.js";
+} from "@qretools/core";
+import { questionJsonSchema } from "@qretools/core/editor";
 import {
 	envOf,
 	type Id,

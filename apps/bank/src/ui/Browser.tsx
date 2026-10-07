@@ -20,8 +20,7 @@ import {
 	SkeletonBox,
 	SkeletonText,
 } from "@primer/react/experimental";
-import { SCHEME_SINGULAR, UNNAMED } from "@qretools/core/copy.js";
-import type { Status } from "@qretools/core/findings.js";
+import { SCHEME_SINGULAR, type Status, UNNAMED } from "@qretools/core";
 import { useId } from "react";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";

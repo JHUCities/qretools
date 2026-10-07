@@ -1,7 +1,10 @@
-import { evaluate } from "@qretools/core/evaluate.js";
-import { ok } from "@qretools/core/result.js";
-import { evaluateScheme, schemePath } from "@qretools/core/schemes.js";
-import { indexOf } from "@qretools/core/symbols.js";
+import {
+	evaluate,
+	evaluateScheme,
+	indexOf,
+	ok,
+	schemePath,
+} from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import {
 	envOf,

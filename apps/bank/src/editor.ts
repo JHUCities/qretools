@@ -7,6 +7,7 @@
  * (resolved names, codes, `legacy`, holes) arrive with the diagnostics, in the same
  * transaction, and become decorations only here.
  */
+
 import { startCompletion } from "@codemirror/autocomplete";
 import { isolateHistory } from "@codemirror/commands";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
@@ -34,9 +35,8 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import issueDraftSvg from "@primer/octicons/build/svg/issue-draft-16.svg?raw";
-import type { Range } from "@qretools/core/findings.js";
-import { spaceBefore } from "@qretools/core/surface/edit.js";
-import type { Mark } from "@qretools/core/surface/marks.js";
+import type { Mark, Range } from "@qretools/core";
+import { spaceBefore } from "@qretools/core/editor";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";

@@ -7,11 +7,15 @@
  * (a DOM object).
  */
 
-import type { DdiDocument } from "@qretools/core/ddi/document.js";
-import type { Validator } from "@qretools/core/ddi/validate.js";
-import { makeValidator } from "@qretools/core/ddi/validate.js";
-import type { Finding } from "@qretools/core/findings.js";
-import { err, ok, type Result } from "@qretools/core/result.js";
+import {
+	type DdiDocument,
+	err,
+	type Finding,
+	makeValidator,
+	ok,
+	type Result,
+	type Validator,
+} from "@qretools/core";
 import {
 	authorizeUrl,
 	base64url,

@@ -9,12 +9,13 @@
  * means, and never a floating info panel. A field's meaning is the cursor
  * inspector's, once the field is written.
  */
+
 import type {
 	Completion,
 	CompletionContext,
 	CompletionResult,
 } from "@codemirror/autocomplete";
-import { placeAt } from "@qretools/core/surface/place.js";
+import { placeAt } from "@qretools/core/editor";
 import { getJSONSchema } from "codemirror-json-schema";
 
 interface SchemaNode {

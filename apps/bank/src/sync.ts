@@ -4,9 +4,13 @@
  * it started from, and GitHub's copy in `remote`. Every status is derived from those
  * three; nothing about it is stored.
  */
-import { kindAt, schemePath } from "@qretools/core/schemes.js";
-import type { Mention } from "@qretools/core/surface/env.js";
-import { type Index, usedBy } from "@qretools/core/symbols.js";
+import {
+	type Index,
+	kindAt,
+	type Mention,
+	schemePath,
+	usedBy,
+} from "@qretools/core";
 import type {
 	Blob,
 	Entry,

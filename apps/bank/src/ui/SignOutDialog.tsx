@@ -4,8 +4,9 @@
  * the save are `update`'s (`signOutPlan`); this only says them. A failed save comes back
  * here, as Primer's Banner inside the dialog.
  */
+
 import { Banner, Dialog } from "@primer/react";
-import { plainText } from "@qretools/core/codeSpans.js";
+import { plainText } from "@qretools/core";
 import type { Dispatch } from "../model.js";
 import type { Failure } from "../storage.js";
 import { failureDescription } from "./Previews.js";

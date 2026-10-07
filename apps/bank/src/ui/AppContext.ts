@@ -1,4 +1,4 @@
-import type { Env } from "@qretools/core/surface/env.js";
+import type { Env } from "@qretools/core";
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import type { Model } from "../model.js";

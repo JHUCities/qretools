@@ -7,11 +7,11 @@
  * Which panes a file shows is decided here, once (`panesOf`), and both this skeleton
  * and the loaded views draw them through `Panes`, so the two cannot disagree.
  */
+
 import { ArrowLeftIcon } from "@primer/octicons-react";
 import { Button, PageHeader } from "@primer/react";
 import { SkeletonText } from "@primer/react/experimental";
-import { SCHEME_SINGULAR } from "@qretools/core/copy.js";
-import type { SchemeKind } from "@qretools/core/schemes.js";
+import { SCHEME_SINGULAR, type SchemeKind } from "@qretools/core";
 import type { ReactNode } from "react";
 
 export type FileKind = "question" | SchemeKind;
