@@ -4,8 +4,9 @@
  * `sync` pushes the Model's text, diagnostics, marks and schema in. The handle is
  * registered with the effects so `revealRange` can reach it.
  */
+
+import { createEditor, type Editor, type EditorInputs } from "@qretools/editor";
 import { useLayoutEffect, useRef } from "react";
-import { createEditor, type Editor, type EditorInputs } from "../editor.js";
 import { useApp } from "./AppContext.js";
 
 export function EditorPane(inputs: EditorInputs) {

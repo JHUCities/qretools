@@ -40,7 +40,7 @@ import { spaceBefore } from "@qretools/core/editor";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
-import { schemaCompletion, withoutInfo } from "./complete.js";
+import { schemaCompletion, withoutInfo } from "./complete.ts";
 
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
 const external = Annotation.define<boolean>();

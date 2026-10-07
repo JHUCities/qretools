@@ -16,6 +16,7 @@ import {
 	type Result,
 	type Validator,
 } from "@qretools/core";
+import type { Editor } from "@qretools/editor";
 import {
 	authorizeUrl,
 	base64url,
@@ -27,7 +28,6 @@ import {
 	stale,
 } from "./auth.js";
 import type { SignInConfig } from "./config.js";
-import type { Editor } from "./editor.js";
 import type { Cmd, Dispatch } from "./model.js";
 import {
 	SETTINGS_KEY,

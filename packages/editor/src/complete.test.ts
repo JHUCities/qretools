@@ -4,7 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { stateExtensions } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import { describe, expect, it } from "vitest";
-import { schemaCompletion, withoutInfo } from "./complete.js";
+import { schemaCompletion, withoutInfo } from "./complete.ts";
 
 const schema = {
 	type: "object",

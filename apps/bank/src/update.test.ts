@@ -1,7 +1,7 @@
 import { EMPTY_ENV, evaluate, ok } from "@qretools/core";
 import { locate } from "@qretools/core/editor";
+import { toDiagnostics } from "@qretools/editor";
 import { describe, expect, it } from "vitest";
-import { toDiagnostics } from "./diagnostics.js";
 import { createEvaluations } from "./evaluations.js";
 import { formatLink } from "./link.js";
 import {

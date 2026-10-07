@@ -39,8 +39,8 @@ import {
 	labelsJsonSchema,
 	textEntryJsonSchema,
 } from "@qretools/core/editor";
+import { toDiagnostics } from "@qretools/editor";
 import { memo, type ReactNode, useCallback, useMemo } from "react";
-import { toDiagnostics } from "../diagnostics.js";
 import { formatLink } from "../link.js";
 import {
 	envOfRemote,

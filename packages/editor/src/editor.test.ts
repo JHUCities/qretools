@@ -2,7 +2,7 @@
 import { undo } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it, vi } from "vitest";
-import { changeBetween, createEditor, refRangeAt } from "./editor.js";
+import { changeBetween, createEditor, refRangeAt } from "./editor.ts";
 
 describe("the change an outside edit makes", () => {
 	it("turns one text into the other, touching nothing outside the common start and end", () => {
