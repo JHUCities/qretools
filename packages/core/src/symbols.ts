@@ -11,7 +11,7 @@
  * lists, codes ignored); and, for question text only, similar wording (word overlap),
  * computed for one file at a time against the index, never for every pair.
  */
-import type { Finding, Fix } from "./findings.js";
+import type { Finding } from "./findings.js";
 import { fold, labelsKey } from "./fold.js";
 import type { SchemeKind, SchemeValue } from "./schemes.js";
 import {
