@@ -117,3 +117,23 @@ export function namesOf(
 			return [];
 	}
 }
+
+/** The same expression with every range moved by `at` (from the text's offsets to a source's). */
+export function moveRanges(e: Expr, at: (r: Range) => Range): Expr {
+	const go = (x: Expr): Expr => {
+		const range = at(x.range);
+		switch (x.kind) {
+			case "unary":
+				return { ...x, operand: go(x.operand), range };
+			case "binary":
+				return { ...x, left: go(x.left), right: go(x.right), range };
+			case "member":
+				return { ...x, operand: go(x.operand), set: x.set.map(go), range };
+			case "call":
+				return { ...x, args: x.args.map(go), range };
+			default:
+				return { ...x, range };
+		}
+	};
+	return go(e);
+}

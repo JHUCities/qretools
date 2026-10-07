@@ -66,7 +66,28 @@ export type LintCode =
 	/** The bank's `yesno01` scale doesn't say what select-all items are coded on. */
 	| "binary-scale";
 
-export type FindingCode = ParseCode | LintCode | "ddi-invalid";
+/** Reported by an instrument's parse and checks. */
+export type InstrumentCode =
+	/** A condition that isn't written as the condition language reads it. */
+	| "condition"
+	/** A condition or fill whose types don't fit. */
+	| "type"
+	/** A name that means nothing where it's written. */
+	| "unknown-name"
+	/** A bank question, variable or shared entry an instrument names that the bank lacks. */
+	| "unknown-question"
+	/** An alias `uses` names that no bank was given for. */
+	| "unknown-bank"
+	/** Two things in one instrument under one name. */
+	| "name-clash"
+	/** Written correctly, but not part of this version of the language yet. */
+	| "not-yet"
+	/** A step where the language doesn't allow it (`stop` inside a section). */
+	| "misplaced"
+	/** Computed values that each need the other. */
+	| "cycle";
+
+export type FindingCode = ParseCode | LintCode | InstrumentCode | "ddi-invalid";
 
 /** Character offsets into the source text, `[from, to)`. */
 export type Range = readonly [from: number, to: number];

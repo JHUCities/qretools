@@ -534,7 +534,7 @@ function textAt(
 	return typeof node === "string" ? node : undefined;
 }
 
-function readNumber(value: unknown, env: Env): Read<Domain> {
+export function readNumber(value: unknown, env: Env): Read<Domain> {
 	const { rest, holes } = opened(value, "number");
 	const result = NumberDomainSchema.safeParse(rest);
 	if (!result.success)
@@ -561,7 +561,7 @@ function readNumber(value: unknown, env: Env): Read<Domain> {
 	);
 }
 
-function readOpen(value: unknown): Read<Domain> {
+export function readOpen(value: unknown): Read<Domain> {
 	const { rest, holes } = opened(value, "open");
 	const result = OpenDomainSchema.safeParse(rest);
 	if (!result.success)
