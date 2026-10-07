@@ -23,6 +23,7 @@ import {
 	type Slot,
 	type Status,
 	type Target,
+	type TextSlot,
 	toFillIn,
 	UNDECLARED_AGENCY,
 } from "@qretools/core";
@@ -74,6 +75,25 @@ function HoleButton({ hole, onTarget }: { hole: Hole; onTarget: OnTarget }) {
 
 const slot = (s: Slot, onTarget: OnTarget): ReactNode =>
 	s.kind === "filled" ? s.text : <HoleButton hole={s} onTarget={onTarget} />;
+
+/**
+ * Question text, each fill shown as the gap it is, `[rent]`, as a codebook writes it:
+ * what goes there is the instrument's to say.
+ */
+const textSlot = (s: TextSlot, onTarget: OnTarget): ReactNode =>
+	s.kind === "filled" && s.pieces !== undefined
+		? s.pieces.map((p, i) =>
+				p.kind === "words" ? (
+					// biome-ignore lint/suspicious/noArrayIndexKey: pieces are positional
+					<Fragment key={i}>{p.text}</Fragment>
+				) : (
+					// biome-ignore lint/suspicious/noArrayIndexKey: pieces are positional
+					<span key={i} className="fill-slot">
+						[{p.name}]
+					</span>
+				),
+			)
+		: slot(s, onTarget);
 
 export function StatusBadge({ status }: { status: Status }) {
 	switch (status.kind) {
@@ -130,7 +150,7 @@ export function Respondent({
 }) {
 	return (
 		<fieldset className="respondent">
-			<legend>{slot(view.text, onTarget)}</legend>
+			<legend>{textSlot(view.text, onTarget)}</legend>
 			{view.instruction !== undefined && (
 				<p className="instruction">
 					<ResolvedText value={view.instruction} />
@@ -206,7 +226,7 @@ export function Codebook({
 					Variable: {slot(view.variable, onTarget)}
 				</span>
 			</p>
-			<p className="cb-text">{slot(view.text, onTarget)}</p>
+			<p className="cb-text">{textSlot(view.text, onTarget)}</p>
 			{view.values.kind === "hole" ? (
 				<HoleButton hole={view.values} onTarget={onTarget} />
 			) : (

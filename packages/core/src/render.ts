@@ -19,6 +19,7 @@ import {
 	textOf,
 } from "./surface/draft.js";
 import type { Env } from "./surface/env.js";
+import { hasFill, type Piece, piecesOf } from "./surface/fills.js";
 
 export interface Hole {
 	readonly kind: "hole";
@@ -28,6 +29,18 @@ export interface Hole {
 }
 
 export type Slot = { readonly kind: "filled"; readonly text: string } | Hole;
+
+/**
+ * Question text: like a slot, and in pieces when it has a fill, so a view can show
+ * each fill as the gap it is (`[rent]`).
+ */
+export type TextSlot =
+	| {
+			readonly kind: "filled";
+			readonly text: string;
+			readonly pieces?: readonly Piece[];
+	  }
+	| Hole;
 
 /** Prose or a resolved reference: the text to show, and the name when it came from a scheme. */
 export interface Resolved {
@@ -53,7 +66,7 @@ export type Input =
 
 /** The question as the respondent sees it. */
 export interface RespondentView {
-	readonly text: Slot;
+	readonly text: TextSlot;
 	readonly instruction?: Resolved;
 	readonly input: Input;
 }
@@ -65,7 +78,7 @@ export interface RespondentView {
 export interface CodebookView {
 	readonly title: Slot;
 	readonly variable: Slot;
-	readonly text: Slot;
+	readonly text: TextSlot;
 	readonly values:
 		| { readonly kind: "lines"; readonly lines: readonly string[] }
 		| Hole;
@@ -95,6 +108,17 @@ const slot = (value: string | undefined, path: "name" | "text"): Slot =>
 
 const domainHole: Hole = { kind: "hole", path: "", prompt: DOMAIN_PROMPT };
 
+/** The question's text, in pieces when it has a declared fill. */
+function textSlot(draft: Draft): TextSlot {
+	const text = draft.text;
+	if (text === undefined)
+		return { kind: "hole", path: "text", prompt: PROMPT.text };
+	const pieces = piecesOf(text, draft.fills ?? []);
+	return hasFill(pieces)
+		? { kind: "filled", text, pieces }
+		: { kind: "filled", text };
+}
+
 /** A field that may name a shared entry: its words (by `wordsOf`), and its name when shared. */
 const resolved = <T>(
 	n: Named<T> | undefined,
@@ -106,7 +130,7 @@ const resolved = <T>(
 
 export function respondentView(draft: Draft): RespondentView {
 	return compact({
-		text: slot(draft.text, "text"),
+		text: textSlot(draft),
 		instruction: resolved(draft.instruction, textOf),
 		input: draft.domain ? input(draft.domain) : domainHole,
 	});
@@ -139,7 +163,7 @@ export function codebookView(draft: Draft, env: Env): CodebookView {
 	return compact({
 		title: title(draft),
 		variable: slot(draft.name, "name"),
-		text: slot(draft.text, "text"),
+		text: textSlot(draft),
 		values,
 		missing:
 			env.missing.length === 0

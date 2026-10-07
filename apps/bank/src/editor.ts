@@ -227,6 +227,7 @@ const MARK_CLASS = {
 	ref: Decoration.mark({ class: "cm-ref" }),
 	code: Decoration.mark({ class: "cm-code" }),
 	legacy: Decoration.mark({ class: "cm-legacy" }),
+	fill: Decoration.mark({ class: "cm-fill" }),
 } as const;
 
 /** Clamped to the document as it is now: a mark past its end is dropped, never thrown. */
@@ -569,6 +570,10 @@ const primerTheme = EditorView.theme({
 	},
 	".cm-legacy, .cm-legacy *": {
 		color: "var(--prettylights-syntax-comment)",
+	},
+	// A fill: a gap an instrument fills, in its own colour (green means a shared name).
+	".cm-fill, .cm-fill *": {
+		color: "var(--prettylights-syntax-variable)",
 	},
 	// A hole: CodeMirror's own point marker (one per place, however many holes it holds),
 	// drawn as Primer's dashed circle (`IssueDraftIcon`), as in the Findings panel, so one

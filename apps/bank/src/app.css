@@ -769,3 +769,9 @@ button.finding-message {
 .save-path {
 	margin: var(--base-size-12) 0 var(--base-size-4);
 }
+
+/* A fill in question text: the gap an instrument fills, in the editor's fill colour. */
+.fill-slot {
+	color: var(--prettylights-syntax-variable);
+	font-family: var(--fontStack-monospace);
+}

@@ -23,6 +23,7 @@ import {
 	inScope,
 	type LabelledEntry,
 } from "./surface/env.js";
+import { withoutFills } from "./surface/fills.js";
 import { nameFrom } from "./surface/schema.js";
 
 type Rule = (draft: Draft, env: Env) => readonly Finding[];
@@ -121,7 +122,7 @@ const noNoneOption: Rule = ({ domain }) =>
  * asks rather than asserts. `{{FILL}}` placeholders are not words the respondent reads.
  */
 const asksTwoThings = (text: string): boolean => {
-	const plain = text.replace(/\{\{[^}]*\}\}/g, "");
+	const plain = withoutFills(text);
 	const asking =
 		plain.match(/[^.?!]*\?/g)?.find((s) => s.trim() !== "") ?? plain;
 	const withoutSafeAnds = asking

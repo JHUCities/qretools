@@ -88,6 +88,9 @@ export const OptionSchema = z
 	})
 	.describe("A response option with its own documentation.");
 
+/** What a fill holds: a number, or words. The one list, read by the parser too. */
+export const FILL_TYPES = ["number", "text"] as const;
+
 export const QuestionSchema = z
 	.strictObject({
 		name: z
@@ -162,6 +165,15 @@ export const QuestionSchema = z
 			.optional()
 			.describe(
 				"Documentation not shown to the respondent: fills, randomization, history.",
+			),
+		fills: z
+			.record(
+				z.string().regex(NAME_PATTERN, NAME_RULE_TEXT),
+				z.enum(FILL_TYPES),
+			)
+			.optional()
+			.describe(
+				"Gaps in the text that an instrument fills when it asks the question, each with its type, e.g. rent: number. Written in the text as {{rent}}.",
 			),
 		variant_of: z
 			.record(z.string().regex(NAME_PATTERN, NAME_RULE_TEXT), z.string())

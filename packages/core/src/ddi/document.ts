@@ -95,6 +95,24 @@ export const literalText = (text: string): JsonObject => ({
 	TextContent: [{ Text: langString(text) }],
 });
 
+/**
+ * DynamicTextType in parts: the author's words, and a parameter's value where it goes.
+ * The schema types `SourceParameterReference` as the parameter itself (identifiable),
+ * not as a reference, so it carries the parameter's identity rather than `ref()`'s shape.
+ */
+export const dynamicText = (
+	parts: readonly (
+		| { readonly text: string }
+		| { readonly parameter: Identity }
+	)[],
+): JsonObject => ({
+	TextContent: parts.map((p) =>
+		"text" in p
+			? { Text: langString(p.text) }
+			: { SourceParameterReference: { ...p.parameter } },
+	),
+});
+
 /** CodeValueType. */
 export const codeValue = (value: string): JsonObject => ({
 	StringValue: value,

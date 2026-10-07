@@ -6,6 +6,7 @@
  * (an unresolved name is a hole and absent here).
  */
 import type { LabelledEntry, TextEntry } from "./env.js";
+import type { Fill } from "./fills.js";
 
 export interface Code {
 	readonly code: string;
@@ -68,6 +69,8 @@ export interface Draft {
 	readonly legacy?: readonly string[];
 	/** Absent means a hole: no response domain yet. */
 	readonly domain?: Domain;
+	/** The gaps the text leaves for an instrument to fill, in the author's order. */
+	readonly fills?: readonly Fill[];
 }
 
 /**

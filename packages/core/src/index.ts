@@ -75,6 +75,7 @@ export {
 	type RespondentView,
 	respondentView,
 	type Slot,
+	type TextSlot,
 } from "./render.js";
 export { err, ok, type Result } from "./result.js";
 export {
@@ -126,6 +127,14 @@ export {
 	type NamedScheme,
 	type TextEntry,
 } from "./surface/env.js";
+export {
+	FILL_TYPES,
+	type Fill,
+	type FillType,
+	type Piece,
+	piecesOf,
+	placeholders,
+} from "./surface/fills.js";
 export type { Mark, MarkKind } from "./surface/marks.js";
 export { type Parsed, parseSurface } from "./surface/parse.js";
 export { parseScale, type Scale, type Scales } from "./surface/scales.js";

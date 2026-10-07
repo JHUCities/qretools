@@ -25,7 +25,11 @@ export type ParseCode =
 	/** Advice: a response code YAML reads as a number, not text (`1:` for `"1":`). */
 	| "unquoted-code"
 	/** One code written two ways YAML can't tell apart (`"1"` and `1`). */
-	| "duplicate-code";
+	| "duplicate-code"
+	| "fill-name"
+	| "fill-type"
+	/** Advice: a declared fill the text never uses. */
+	| "fill-unused";
 
 /** Survey-craft advice. Always `warning` or `info`, never a blocker. */
 export type LintCode =

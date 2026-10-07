@@ -29,6 +29,7 @@ import {
 	type NamedScheme,
 	type SchemeEntries,
 } from "./env.js";
+import { fillFindings, fillMarks, leadingFill, readFills } from "./fills.js";
 import { type Mark, marksOf, ordered } from "./marks.js";
 import {
 	clampRange,
@@ -122,10 +123,14 @@ export function parseSurface(text: string, env: Env): Parsed {
 
 	const fields: { -readonly [K in TextKey]?: string } = {};
 	const fieldFindings: Finding[] = [];
+	// Text that starts with a fill reads as a map: say that, not "must be text".
+	const leading = leadingFill(text, ranges.text, data.text);
 	for (const key of TEXT_KEYS) {
 		const read = readText(key, data[key]);
 		if (read.value !== undefined) fields[key] = read.value;
-		fieldFindings.push(...read.findings);
+		fieldFindings.push(
+			...(key === "text" && leading !== undefined ? [leading] : read.findings),
+		);
 	}
 
 	const {
@@ -152,6 +157,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		),
 	];
 	const legacy = readLegacy(data.legacy);
+	const fills = readFills(doc);
 	const variants = readVariants(data.variant_of);
 	const domain = readDomain(doc, data, ranges, env);
 	const draft: Draft = compact({
@@ -161,6 +167,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		instruction: instruction.value,
 		legacy: legacy.value,
 		domain: domain.value,
+		fills: fills.value,
 	});
 
 	const findings = withSpacing(
@@ -177,6 +184,8 @@ export function parseSurface(text: string, env: Env): Parsed {
 			...legacy.findings,
 			...variants.findings,
 			...domain.findings,
+			...fills.findings,
+			...fillFindings(text, ranges.text, fills.value ?? []),
 		].map(pointAt(empties)),
 	);
 	return {
@@ -186,7 +195,10 @@ export function parseSurface(text: string, env: Env): Parsed {
 		empties,
 		mentions,
 		variants: variants.value ?? [],
-		marks: ordered(marksOf(doc, mentions, env, text.length)),
+		marks: ordered([
+			...marksOf(doc, mentions, env, text.length),
+			...fillMarks(doc, text, ranges.text, fills.value ?? []),
+		]),
 	};
 }
 

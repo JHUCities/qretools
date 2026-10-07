@@ -27,10 +27,12 @@ import {
 	type Named,
 } from "../surface/draft.js";
 import type { LabelledEntry, TextEntry } from "../surface/env.js";
+import { hasFill, piecesOf } from "../surface/fills.js";
 import {
 	codeValue,
 	type DdiDocument,
 	documentOf,
+	dynamicText,
 	type Identity,
 	type Item,
 	type ItemType,
@@ -135,6 +137,22 @@ export function elaborateItems(
 	);
 	const domain = maybe(draft.domain, (d) => elaborateDomain(d, ctx, qid));
 
+	// Each declared fill is a typed parameter of the question; the text names it where it goes.
+	const fills = (draft.fills ?? []).map((f) => {
+		const id = identity(ctx.agency, named(`fill-${f.name}`), ctx.own.number);
+		return {
+			name: f.name,
+			id,
+			parameter: obj({
+				...id,
+				ParameterName: [intl(f.name)],
+				Alias: f.name,
+				ValueRepresentation: maybe(f.type, (t) => ({
+					$type: t === "number" ? "NumericDomain" : "TextDomain",
+				})),
+			}),
+		};
+	});
 	const question = versioned(
 		ctx,
 		"QuestionItem",
@@ -144,7 +162,8 @@ export function elaborateItems(
 			QuestionItemName: maybe(draft.name, (n) => [intl(n)]),
 			Label: maybe(draft.title, (t) => [structured(t)]),
 			Description: maybe(draft.note, structured),
-			QuestionText: maybe(draft.text, (t) => [literalText(t)]),
+			QuestionText: maybe(draft.text, (t) => [questionText(t, fills)]),
+			InParameter: fills.length > 0 ? fills.map((f) => f.parameter) : undefined,
 			QuestionIntent: maybe(draft.intent, structured),
 			ResponseDomain: domain?.responseDomain,
 			ConceptReference: maybe(concept, (c) => [ref(c)]),
@@ -188,6 +207,29 @@ export function elaborateItems(
 		universe,
 		...(missingItems?.items ?? []),
 	].filter((it) => it !== undefined);
+}
+
+/**
+ * Question text: literal unless a declared fill is written in it, then dynamic, the
+ * words and each fill's parameter in order. Without fills it is exactly as before.
+ */
+function questionText(
+	text: string,
+	fills: readonly { readonly name: string; readonly id: Identity }[],
+): JsonObject {
+	const pieces = piecesOf(
+		text,
+		fills.map((f) => ({ name: f.name })),
+	);
+	if (!hasFill(pieces)) return literalText(text);
+	const ids = new Map(fills.map((f) => [f.name, f.id]));
+	return dynamicText(
+		pieces.flatMap((p): ({ text: string } | { parameter: Identity })[] => {
+			if (p.kind === "words") return [{ text: p.text }];
+			const parameter = ids.get(p.name);
+			return parameter === undefined ? [] : [{ parameter }];
+		}),
+	);
 }
 
 /**

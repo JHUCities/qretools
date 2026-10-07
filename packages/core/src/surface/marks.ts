@@ -10,7 +10,7 @@ import type { Range } from "../findings.js";
 import { type Env, inScope, type Mention } from "./env.js";
 import { clampRange } from "./read.js";
 
-export type MarkKind = "ref" | "code" | "legacy";
+export type MarkKind = "ref" | "code" | "legacy" | "fill";
 
 export interface Mark {
 	readonly kind: MarkKind;
