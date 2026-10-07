@@ -9,17 +9,17 @@
  */
 import { type Document, isMap, isNode, isScalar, parseDocument } from "yaml";
 import type { ZodError } from "zod";
-import { compact } from "../compact.js";
+import { compact } from "../compact.ts";
 import {
 	fixLabel,
 	NAME_RULE_TEXT,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
-} from "../copy.js";
-import type { Finding, Fix, Range } from "../findings.js";
-import { unitKey } from "../fold.js";
-import { EXAMPLE, keyText, readCodeMap } from "./codes.js";
-import type { Domain, Draft, Named } from "./draft.js";
+} from "../copy.ts";
+import type { Finding, Fix, Range } from "../findings.ts";
+import { unitKey } from "../fold.ts";
+import { EXAMPLE, keyText, readCodeMap } from "./codes.ts";
+import type { Domain, Draft, Named } from "./draft.ts";
 import {
 	type Env,
 	FIELD_OF,
@@ -28,9 +28,9 @@ import {
 	type Mention,
 	type NamedScheme,
 	type SchemeEntries,
-} from "./env.js";
-import { fillFindings, fillMarks, leadingFill, readFills } from "./fills.js";
-import { type Mark, marksOf, ordered } from "./marks.js";
+} from "./env.ts";
+import { fillFindings, fillMarks, leadingFill, readFills } from "./fills.ts";
+import { type Mark, marksOf, ordered } from "./marks.ts";
 import {
 	clampRange,
 	EMPTY_HINT,
@@ -44,7 +44,7 @@ import {
 	type Read,
 	yamlError,
 	yamlErrors,
-} from "./read.js";
+} from "./read.ts";
 import {
 	DOMAIN_KEYS,
 	describe,
@@ -56,8 +56,8 @@ import {
 	REQUIRED_KEYS,
 	type SurfaceKey,
 	TEXT_KEYS,
-} from "./schema.js";
-import { withSpacing } from "./spacing.js";
+} from "./schema.ts";
+import { withSpacing } from "./spacing.ts";
 
 export interface Parsed {
 	readonly draft: Draft;

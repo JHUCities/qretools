@@ -14,10 +14,10 @@
  * they cannot collide with a question); the one allowed dot hangs parts off a base.
  */
 
-import { BINARY, BINARY_SCALE } from "../binary.js";
-import { compact } from "../compact.js";
-import { schemePath } from "../kinds.js";
-import type { SchemeKind } from "../schemes.js";
+import { BINARY, BINARY_SCALE } from "../binary.ts";
+import { compact } from "../compact.ts";
+import { schemePath } from "../kinds.ts";
+import type { SchemeKind } from "../schemes.ts";
 import {
 	type Code,
 	type DefinedVariable,
@@ -26,9 +26,9 @@ import {
 	definedVariables,
 	labelOf,
 	type Named,
-} from "../surface/draft.js";
-import type { LabelledEntry, TextEntry } from "../surface/env.js";
-import { hasFill, piecesOf } from "../surface/fills.js";
+} from "../surface/draft.ts";
+import type { LabelledEntry, TextEntry } from "../surface/env.ts";
+import { hasFill, piecesOf } from "../surface/fills.ts";
 import {
 	codeValue,
 	type DdiDocument,
@@ -45,13 +45,13 @@ import {
 	obj,
 	ref,
 	structured,
-} from "./document.js";
+} from "./document.ts";
 import {
 	UNVERSIONED,
 	type Version,
 	type Versions,
 	versionFields,
-} from "./version.js";
+} from "./version.ts";
 
 /** ID used while `name` is still a hole. Never leaks into QuestionItemName. */
 const UNTITLED = "untitled-question";

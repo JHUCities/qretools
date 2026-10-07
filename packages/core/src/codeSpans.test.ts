@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeSpans, plainText } from "./codeSpans.js";
+import { codeSpans, plainText } from "./codeSpans.ts";
 
 describe("codeSpans", () => {
 	it("splits plain text and backticked code", () => {

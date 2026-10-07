@@ -6,9 +6,9 @@
  * already holds. (Holes are findings, drawn by the editor's lint layer: `pointHoles`.)
  */
 import { type Document, isMap, isNode, isScalar } from "yaml";
-import type { Range } from "../findings.js";
-import { type Env, inScope, type Mention } from "./env.js";
-import { clampRange } from "./read.js";
+import type { Range } from "../findings.ts";
+import { type Env, inScope, type Mention } from "./env.ts";
+import { clampRange } from "./read.ts";
 
 export type MarkKind = "ref" | "code" | "legacy" | "fill";
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import nhdNyrs from "../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../examples/nhd_sat.yaml?raw";
-import { lint } from "./lint.js";
-import { applyEdits } from "./surface/edit.js";
-import { EMPTY_ENV } from "./surface/env.js";
-import { parseSurface } from "./surface/parse.js";
+import { lint } from "./lint.ts";
+import { applyEdits } from "./surface/edit.ts";
+import { EMPTY_ENV } from "./surface/env.ts";
+import { parseSurface } from "./surface/parse.ts";
 
 const base =
 	"name: q\ntext: How often do you take the bus?\nintent: Prevalence of bus use among adults\n";
@@ -117,8 +117,8 @@ describe("parse findings added with the lints", () => {
 
 describe("scheme lints", () => {
 	it("an inline list identical to a shared scale is pointed at the scale; a reserved code is a warning", async () => {
-		const { EMPTY_ENV } = await import("./surface/env.js");
-		const { parseScale } = await import("./surface/scales.js");
+		const { EMPTY_ENV } = await import("./surface/env.ts");
+		const { parseScale } = await import("./surface/scales.ts");
 		const agree4 = parseScale(
 			"labels:\n  1: Strongly agree\n  2: Agree\n  3: Disagree\n  4: Strongly disagree\n",
 		).scale;

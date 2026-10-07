@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
-import type { Finding } from "../findings.js";
-import { evaluateScheme, type SchemeKind } from "../schemes.js";
-import { EMPTY_ENV, type Env } from "./env.js";
-import type { Mark } from "./marks.js";
-import { indexDocument, parseSurface } from "./parse.js";
-import { parseScale } from "./scales.js";
+import type { Finding } from "../findings.ts";
+import { evaluateScheme, type SchemeKind } from "../schemes.ts";
+import { EMPTY_ENV, type Env } from "./env.ts";
+import type { Mark } from "./marks.ts";
+import { indexDocument, parseSurface } from "./parse.ts";
+import { parseScale } from "./scales.ts";
 
 const QUESTIONS = import.meta.glob(
 	["../../templates/*.yaml", "../../examples/*.yaml"],

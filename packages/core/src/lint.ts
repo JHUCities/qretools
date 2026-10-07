@@ -8,23 +8,23 @@
  * "single-select needs a residual option" (bipolar scales are exhaustive
  * without one), "text must end in ?" (stems like "Please indicate..." are fine).
  */
-import { fixLabel, SCHEME_LABELS, SCHEME_NAME } from "./copy.js";
-import type { Finding, Fix, LintCode } from "./findings.js";
-import { fold, labelsKey, unitKey } from "./fold.js";
+import { fixLabel, SCHEME_LABELS, SCHEME_NAME } from "./copy.ts";
+import type { Finding, Fix, LintCode } from "./findings.ts";
+import { fold, labelsKey, unitKey } from "./fold.ts";
 import {
 	type Code,
 	type Draft,
 	type Named,
 	optionVariable,
-} from "./surface/draft.js";
+} from "./surface/draft.ts";
 import {
 	type Env,
 	FIELD_OF,
 	inScope,
 	type LabelledEntry,
-} from "./surface/env.js";
-import { withoutFills } from "./surface/fills.js";
-import { nameFrom } from "./surface/schema.js";
+} from "./surface/env.ts";
+import { withoutFills } from "./surface/fills.ts";
+import { nameFrom } from "./surface/schema.ts";
 
 type Rule = (draft: Draft, env: Env) => readonly Finding[];
 

@@ -10,7 +10,7 @@
  * text (AGENTS.md).
  */
 import { isMap, isScalar, type Pair, parseDocument, type YAMLMap } from "yaml";
-import { keyText } from "./codes.js";
+import { keyText } from "./codes.ts";
 
 export type Place =
 	| {

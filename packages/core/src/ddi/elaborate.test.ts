@@ -5,12 +5,12 @@ import nhdCohes1 from "../../examples/nhd_cohes1.yaml?raw";
 import nhdNyrs from "../../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../../examples/nhd_sat.yaml?raw";
 import agree4Text from "../../starter/scales/agree4.yaml?raw";
-import { EMPTY_ENV } from "../surface/env.js";
-import { parseSurface } from "../surface/parse.js";
-import { parseScale } from "../surface/scales.js";
-import type { DdiDocument, ItemType, JsonObject } from "./document.js";
-import { elaborate } from "./elaborate.js";
-import { makeValidator } from "./validate.js";
+import { EMPTY_ENV } from "../surface/env.ts";
+import { parseSurface } from "../surface/parse.ts";
+import { parseScale } from "../surface/scales.ts";
+import type { DdiDocument, ItemType, JsonObject } from "./document.ts";
+import { elaborate } from "./elaborate.ts";
+import { makeValidator } from "./validate.ts";
 
 const AGENCY = "org.example";
 // The examples name a shared unit, `years`.

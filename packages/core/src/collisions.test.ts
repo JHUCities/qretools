@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { collisions } from "./ddi/document.js";
-import { elaborateItems } from "./ddi/elaborate.js";
-import { type Bank, bankOf } from "./evaluate.js";
+import { collisions } from "./ddi/document.ts";
+import { elaborateItems } from "./ddi/elaborate.ts";
+import { type Bank, bankOf } from "./evaluate.ts";
 
 const BANK = {
 	"bank.yaml": "agency: org.example\n",

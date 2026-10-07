@@ -7,8 +7,8 @@
  * so the shell can offer "go to definition".
  */
 
-import { compact } from "./compact.js";
-import { UNNAMED } from "./copy.js";
+import { compact } from "./compact.ts";
+import { UNNAMED } from "./copy.ts";
 import {
 	type Code,
 	type Domain,
@@ -17,9 +17,9 @@ import {
 	type Named,
 	optionVariable,
 	textOf,
-} from "./surface/draft.js";
-import type { Env } from "./surface/env.js";
-import { hasFill, type Piece, piecesOf } from "./surface/fills.js";
+} from "./surface/draft.ts";
+import type { Env } from "./surface/env.ts";
+import { hasFill, type Piece, piecesOf } from "./surface/fills.ts";
 
 export interface Hole {
 	readonly kind: "hole";

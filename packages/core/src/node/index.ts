@@ -5,7 +5,7 @@
  */
 import { glob, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { FOLDERS, ROOT } from "../index.js";
+import { FOLDERS, ROOT } from "../index.ts";
 
 /** Where a bank keeps its files, as the GitHub loader reads them: nothing else is walked. */
 const PATTERNS: readonly string[] = [

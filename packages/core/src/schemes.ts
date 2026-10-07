@@ -4,13 +4,13 @@
  * Pure; the shell decides which text of a file counts (the saved bank version).
  */
 import { parseDocument, stringify } from "yaml";
-import { BINARY, BINARY_SCALE } from "./binary.js";
-import { SCHEME_SINGULAR } from "./copy.js";
-import { type Finding, inDocumentOrder, type Range } from "./findings.js";
-import { FOLDERS, isRoot, ROOT, type RootKind, schemePath } from "./kinds.js";
-import { missingCollisions } from "./lint.js";
-import { parseBankFile } from "./surface/bankfile.js";
-import type { Code } from "./surface/draft.js";
+import { BINARY, BINARY_SCALE } from "./binary.ts";
+import { SCHEME_SINGULAR } from "./copy.ts";
+import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
+import { FOLDERS, isRoot, ROOT, type RootKind, schemePath } from "./kinds.ts";
+import { missingCollisions } from "./lint.ts";
+import { parseBankFile } from "./surface/bankfile.ts";
+import type { Code } from "./surface/draft.ts";
 import {
 	EMPTY_ENV,
 	type Env,
@@ -19,13 +19,13 @@ import {
 	parseLabelled,
 	parseTextEntry,
 	type TextEntry,
-} from "./surface/env.js";
-import { labelMarksOf, type Mark } from "./surface/marks.js";
-import { indexDocument, pointAt } from "./surface/parse.js";
-import { hole } from "./surface/read.js";
-import { parseScale, type Scale } from "./surface/scales.js";
-import { withSpacing } from "./surface/spacing.js";
-import { type Symbols, schemeSymbols } from "./symbols.js";
+} from "./surface/env.ts";
+import { labelMarksOf, type Mark } from "./surface/marks.ts";
+import { indexDocument, pointAt } from "./surface/parse.ts";
+import { hole } from "./surface/read.ts";
+import { parseScale, type Scale } from "./surface/scales.ts";
+import { withSpacing } from "./surface/spacing.ts";
+import { type Symbols, schemeSymbols } from "./symbols.ts";
 
 export { FOLDERS, isRoot, ROOT, type RootKind, schemePath };
 

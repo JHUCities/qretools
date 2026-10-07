@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import nhdNyrs from "../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../examples/nhd_sat.yaml?raw";
-import { codebookView, respondentView } from "./render.js";
-import { EMPTY_ENV } from "./surface/env.js";
-import { parseSurface } from "./surface/parse.js";
+import { codebookView, respondentView } from "./render.ts";
+import { EMPTY_ENV } from "./surface/env.ts";
+import { parseSurface } from "./surface/parse.ts";
 
 // The examples name a shared unit, `years`.
 const WITH_UNITS = { ...EMPTY_ENV, units: { years: { label: "years" } } };
@@ -136,8 +136,8 @@ describe("codebookView", () => {
 
 describe("scheme references in the previews", () => {
 	it("shows the resolved text with the name kept, and the bank's missing-value line", async () => {
-		const { EMPTY_ENV } = await import("./surface/env.js");
-		const { parseScale } = await import("./surface/scales.js");
+		const { EMPTY_ENV } = await import("./surface/env.ts");
+		const { parseScale } = await import("./surface/scales.ts");
 		const env = {
 			...EMPTY_ENV,
 			universes: { renters: { text: "Renters only" } },

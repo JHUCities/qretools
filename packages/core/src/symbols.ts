@@ -11,17 +11,17 @@
  * lists, codes ignored); and, for question text only, similar wording (word overlap),
  * computed for one file at a time against the index, never for every pair.
  */
-import { type Finding, inDocumentOrder, type Range } from "./findings.js";
-import { fold, labelsKey } from "./fold.js";
-import { isRoot } from "./kinds.js";
-import type { SchemeKind, SchemeValue } from "./schemes.js";
+import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
+import { fold, labelsKey } from "./fold.ts";
+import { isRoot } from "./kinds.ts";
+import type { SchemeKind, SchemeValue } from "./schemes.ts";
 import {
 	type Code,
 	type DefinedVariable,
 	definedVariables,
-} from "./surface/draft.js";
-import type { Mention, NamedScheme } from "./surface/env.js";
-import type { Parsed, Variant } from "./surface/parse.js";
+} from "./surface/draft.ts";
+import type { Mention, NamedScheme } from "./surface/env.ts";
+import type { Parsed, Variant } from "./surface/parse.ts";
 
 /**
  * What a piece of content is, for comparing like with like. A question's own list or

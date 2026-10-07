@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { bankLocation, saveableName } from "./bank.js";
-import { EMPTY_ENV } from "./surface/env.js";
-import { parseSurface } from "./surface/parse.js";
+import { bankLocation, saveableName } from "./bank.ts";
+import { EMPTY_ENV } from "./surface/env.ts";
+import { parseSurface } from "./surface/parse.ts";
 
 const draft = (text: string) => parseSurface(text, EMPTY_ENV).draft;
 

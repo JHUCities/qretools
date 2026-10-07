@@ -3,8 +3,8 @@
  * through a mutable accumulator, so data flow is visible in signatures.
  */
 import type { ZodError } from "zod";
-import { compact } from "../compact.js";
-import type { Finding, ParseCode, Range } from "../findings.js";
+import { compact } from "../compact.ts";
+import type { Finding, ParseCode, Range } from "../findings.ts";
 
 export interface Read<T> {
 	readonly value?: T;

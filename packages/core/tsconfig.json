@@ -2,7 +2,9 @@
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
 		// No DOM: the core is pure, so a browser API used here is a compile error.
-		"lib": ["ES2023"]
+		"lib": ["ES2023"],
+		// Node runs the core as written, stripping types: only syntax it can strip.
+		"erasableSyntaxOnly": true
 	},
 	"include": ["src"],
 	// The Node entry is the one place with I/O; it has its own config.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { evaluate } from "./evaluate.js";
-import { type Finding, inDocumentOrder, locate, status } from "./findings.js";
-import { EMPTY_ENV } from "./surface/env.js";
+import { evaluate } from "./evaluate.ts";
+import { type Finding, inDocumentOrder, locate, status } from "./findings.ts";
+import { EMPTY_ENV } from "./surface/env.ts";
 
 const statusOf = (source: string) =>
 	status(evaluate(source, EMPTY_ENV).findings);

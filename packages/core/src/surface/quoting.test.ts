@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type Finding, locate } from "../findings.js";
-import { quoteCode, spaceBefore } from "./edit.js";
-import { EMPTY_ENV } from "./env.js";
-import { parseSurface } from "./parse.js";
-import { parseScale } from "./scales.js";
+import { type Finding, locate } from "../findings.ts";
+import { quoteCode, spaceBefore } from "./edit.ts";
+import { EMPTY_ENV } from "./env.ts";
+import { parseSurface } from "./parse.ts";
+import { parseScale } from "./scales.ts";
 
 const QUESTIONS = import.meta.glob(
 	["../../templates/*.yaml", "../../examples/*.yaml"],

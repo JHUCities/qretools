@@ -5,8 +5,8 @@
  * this. Pure: the shell adds what needs the bank (who uses a name,
  * which file to open) around it.
  */
-import type { Evaluation } from "./evaluate.js";
-import { pathAt, type Range } from "./findings.js";
+import type { Evaluation } from "./evaluate.ts";
+import { pathAt, type Range } from "./findings.ts";
 import {
 	type Env,
 	FIELD_OF,
@@ -15,14 +15,14 @@ import {
 	type Mention,
 	type NamedScheme,
 	type TextEntry,
-} from "./surface/env.js";
-import type { Scale } from "./surface/scales.js";
+} from "./surface/env.ts";
+import type { Scale } from "./surface/scales.ts";
 import {
 	describePath,
 	KNOWN_KEYS,
 	QuestionSchema,
 	type SurfaceKey,
-} from "./surface/schema.js";
+} from "./surface/schema.ts";
 
 export interface Inspection {
 	/** The most specific path at the caret, e.g. `responses.2`. */

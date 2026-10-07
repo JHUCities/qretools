@@ -5,8 +5,8 @@
  * prose or a resolved reference into the bank's schemes, never a dangling name
  * (an unresolved name is a hole and absent here).
  */
-import type { LabelledEntry, TextEntry } from "./env.js";
-import type { Fill } from "./fills.js";
+import type { LabelledEntry, TextEntry } from "./env.ts";
+import type { Fill } from "./fills.ts";
 
 export interface Code {
 	readonly code: string;

@@ -5,11 +5,11 @@
  * whose inside isn't a name, or names no declared fill, is the author's words.
  */
 import { type Document, isMap, isScalar, type Scalar } from "yaml";
-import { compact } from "../compact.js";
-import type { Finding, Range } from "../findings.js";
-import type { Mark } from "./marks.js";
-import { clampRange, error, fail, hole, ok, type Read } from "./read.js";
-import { FILL_TYPES, NAME_PATTERN } from "./schema.js";
+import { compact } from "../compact.ts";
+import type { Finding, Range } from "../findings.ts";
+import type { Mark } from "./marks.ts";
+import { clampRange, error, fail, hole, ok, type Read } from "./read.ts";
+import { FILL_TYPES, NAME_PATTERN } from "./schema.ts";
 
 export { FILL_TYPES };
 export type FillType = (typeof FILL_TYPES)[number];

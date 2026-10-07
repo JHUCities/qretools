@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Finding } from "../findings.js";
-import { EMPTY_ENV } from "./env.js";
-import { parseSurface } from "./parse.js";
+import type { Finding } from "../findings.ts";
+import { EMPTY_ENV } from "./env.ts";
+import { parseSurface } from "./parse.ts";
 
 const WITH_UNITS = { ...EMPTY_ENV, units: { years: { label: "years" } } };
 

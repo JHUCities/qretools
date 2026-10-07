@@ -4,19 +4,19 @@
  * from its files by path (`bankOf`).
  */
 
-import { compact } from "./compact.js";
-import type { DdiDocument } from "./ddi/document.js";
-import { elaborate, type Versioning } from "./ddi/elaborate.js";
-import type { Versions } from "./ddi/version.js";
-import { type Finding, inDocumentOrder, type Range } from "./findings.js";
-import { ROOT } from "./kinds.js";
-import { lint } from "./lint.js";
+import { compact } from "./compact.ts";
+import type { DdiDocument } from "./ddi/document.ts";
+import { elaborate, type Versioning } from "./ddi/elaborate.ts";
+import type { Versions } from "./ddi/version.ts";
+import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
+import { ROOT } from "./kinds.ts";
+import { lint } from "./lint.ts";
 import {
 	type CodebookView,
 	codebookView,
 	type RespondentView,
 	respondentView,
-} from "./render.js";
+} from "./render.ts";
 import {
 	absentRoot,
 	bankEnv,
@@ -26,18 +26,18 @@ import {
 	type SchemeEvaluation,
 	type SchemeKind,
 	UNDECLARED_AGENCY,
-} from "./schemes.js";
-import type { Draft } from "./surface/draft.js";
-import type { Env } from "./surface/env.js";
-import type { Mark } from "./surface/marks.js";
-import { parseSurface } from "./surface/parse.js";
+} from "./schemes.ts";
+import type { Draft } from "./surface/draft.ts";
+import type { Env } from "./surface/env.ts";
+import type { Mark } from "./surface/marks.ts";
+import { parseSurface } from "./surface/parse.ts";
 import {
 	fileFindings,
 	type Index,
 	indexOf,
 	type Symbols,
 	symbolsOf,
-} from "./symbols.js";
+} from "./symbols.ts";
 
 export interface Evaluation {
 	readonly draft: Draft;

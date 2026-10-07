@@ -9,9 +9,9 @@
  * `elaborate` carry that weight.
  */
 import { Ajv2020 } from "ajv/dist/2020.js";
-import type { Finding } from "../findings.js";
-import { err, ok, type Result } from "../result.js";
-import type { DdiDocument } from "./document.js";
+import type { Finding } from "../findings.ts";
+import { err, ok, type Result } from "../result.ts";
+import type { DdiDocument } from "./document.ts";
 
 export type Validator = (document: DdiDocument) => readonly Finding[];
 

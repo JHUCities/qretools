@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import schemaText from "../../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
-import { elaborate } from "../ddi/elaborate.js";
-import { makeValidator } from "../ddi/validate.js";
-import { locate } from "../findings.js";
-import { codebookView, respondentView } from "../render.js";
-import { EMPTY_ENV } from "./env.js";
-import { piecesOf, withoutFills } from "./fills.js";
-import { parseSurface } from "./parse.js";
+import { elaborate } from "../ddi/elaborate.ts";
+import { makeValidator } from "../ddi/validate.ts";
+import { locate } from "../findings.ts";
+import { codebookView, respondentView } from "../render.ts";
+import { EMPTY_ENV } from "./env.ts";
+import { piecesOf, withoutFills } from "./fills.ts";
+import { parseSurface } from "./parse.ts";
 
 const question = (text: string, fills = "fills:\n  rent: number\n") =>
 	`name: q\ntext: ${text}\nintent: i\nopen: {}\n${fills}`;

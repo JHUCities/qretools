@@ -3,7 +3,7 @@
  * way (AGENTS.md, "Glossary for everything a user reads"). Only shared phrases live
  * here; a sentence used once stays where it is used.
  */
-import type { SchemeKind } from "./schemes.js";
+import type { SchemeKind } from "./schemes.ts";
 
 /** Anything without a name: a draft, an option variable whose question has none. */
 export const UNNAMED = "(no name yet)";

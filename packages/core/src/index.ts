@@ -11,9 +11,9 @@ export {
 	bankLocation,
 	FOLDER_PATTERN,
 	saveableName,
-} from "./bank.js";
-export { codeSpans, plainText, type Span } from "./codeSpans.js";
-export { type Compacted, compact } from "./compact.js";
+} from "./bank.ts";
+export { codeSpans, plainText, type Span } from "./codeSpans.ts";
+export { type Compacted, compact } from "./compact.ts";
 export {
 	FOLDER_RULE_TEXT,
 	NAME_RULE_TEXT,
@@ -22,7 +22,7 @@ export {
 	SCHEME_SINGULAR,
 	toFillIn,
 	UNNAMED,
-} from "./copy.js";
+} from "./copy.ts";
 export type {
 	Collision,
 	DdiDocument,
@@ -31,19 +31,19 @@ export type {
 	ItemType,
 	Json,
 	JsonObject,
-} from "./ddi/document.js";
-export { collisions, documentOf } from "./ddi/document.js";
+} from "./ddi/document.ts";
+export { collisions, documentOf } from "./ddi/document.ts";
 export {
 	elaborate,
 	elaborateItems,
 	type Versioning,
-} from "./ddi/elaborate.js";
-export { makeValidator, type Validator } from "./ddi/validate.js";
+} from "./ddi/elaborate.ts";
+export { makeValidator, type Validator } from "./ddi/validate.ts";
 export {
 	UNVERSIONED,
 	type Version,
 	type Versions,
-} from "./ddi/version.js";
+} from "./ddi/version.ts";
 export {
 	type Bank,
 	bankOf,
@@ -51,7 +51,7 @@ export {
 	evaluate,
 	type SchemeFileEvaluation,
 	UNDECLARED_AGENCY,
-} from "./evaluate.js";
+} from "./evaluate.ts";
 export {
 	type Edit,
 	type Finding,
@@ -65,8 +65,8 @@ export {
 	type Status,
 	status,
 	type Target,
-} from "./findings.js";
-export { lint } from "./lint.js";
+} from "./findings.ts";
+export { lint } from "./lint.ts";
 export {
 	type CodebookView,
 	codebookView,
@@ -77,8 +77,8 @@ export {
 	respondentView,
 	type Slot,
 	type TextSlot,
-} from "./render.js";
-export { err, ok, type Result } from "./result.js";
+} from "./render.ts";
+export { err, ok, type Result } from "./result.ts";
 export {
 	absentRoot,
 	bankEnv,
@@ -99,12 +99,12 @@ export {
 	type Shape,
 	schemeEnv,
 	schemePath,
-} from "./schemes.js";
+} from "./schemes.ts";
 export {
 	AGENCY_PATTERN,
 	type ParsedBankFile,
 	parseBankFile,
-} from "./surface/bankfile.js";
+} from "./surface/bankfile.ts";
 export {
 	type Code,
 	type DefinedVariable,
@@ -117,7 +117,7 @@ export {
 	type Prose,
 	type Ref,
 	textOf,
-} from "./surface/draft.js";
+} from "./surface/draft.ts";
 export {
 	EMPTY_ENV,
 	type Env,
@@ -127,7 +127,7 @@ export {
 	type Mention,
 	type NamedScheme,
 	type TextEntry,
-} from "./surface/env.js";
+} from "./surface/env.ts";
 export {
 	FILL_TYPES,
 	type Fill,
@@ -135,11 +135,11 @@ export {
 	type Piece,
 	piecesOf,
 	placeholders,
-} from "./surface/fills.js";
-export type { Mark, MarkKind } from "./surface/marks.js";
-export { type Parsed, parseSurface } from "./surface/parse.js";
-export { parseScale, type Scale, type Scales } from "./surface/scales.js";
-export { NAME_PATTERN } from "./surface/schema.js";
+} from "./surface/fills.ts";
+export type { Mark, MarkKind } from "./surface/marks.ts";
+export { type Parsed, parseSurface } from "./surface/parse.ts";
+export { parseScale, type Scale, type Scales } from "./surface/scales.ts";
+export { NAME_PATTERN } from "./surface/schema.ts";
 export {
 	type BankFinding,
 	bankFindings,
@@ -150,4 +150,4 @@ export {
 	type Site,
 	type Symbols,
 	usedBy,
-} from "./symbols.js";
+} from "./symbols.ts";

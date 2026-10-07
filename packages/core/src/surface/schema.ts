@@ -7,15 +7,15 @@
  * the rest of the program reasons about.
  */
 import { z } from "zod";
-import { NAME_RULE_TEXT } from "../copy.js";
+import { NAME_RULE_TEXT } from "../copy.ts";
 import {
 	EMPTY_ENV,
 	type Env,
 	FIELD_OF,
 	inScope,
 	type NamedScheme,
-} from "./env.js";
-import type { Scale } from "./scales.js";
+} from "./env.ts";
+import type { Scale } from "./scales.ts";
 
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 

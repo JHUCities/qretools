@@ -6,7 +6,7 @@
  * can mark it in place. Severity `hole` means "required, not yet filled in".
  */
 
-import type { NamedScheme } from "./surface/env.js";
+import type { NamedScheme } from "./surface/env.ts";
 
 export type Severity = "hole" | "error" | "warning" | "info";
 

@@ -4,8 +4,8 @@
  * Filenames are names. `missing` is one bank-level list, not a namespace.
  */
 import { isMap, parseDocument } from "yaml";
-import type { Finding } from "../findings.js";
-import type { Code } from "./draft.js";
+import type { Finding } from "../findings.ts";
+import type { Code } from "./draft.ts";
 import {
 	EMPTY_HINT,
 	error,
@@ -16,8 +16,8 @@ import {
 	type Read,
 	yamlError,
 	yamlErrors,
-} from "./read.js";
-import type { Scale } from "./scales.js";
+} from "./read.ts";
+import type { Scale } from "./scales.ts";
 
 export type Scheme<T> = Readonly<Record<string, T>>;
 

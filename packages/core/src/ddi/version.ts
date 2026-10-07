@@ -9,7 +9,7 @@
  * binary scale for a select-all question), since a reference carries the referenced
  * item's version.
  */
-import { type JsonObject, obj } from "./document.js";
+import { type JsonObject, obj } from "./document.ts";
 
 export interface Version {
 	/** DDI's Version: digits and dots, `1`, `2`, `1.2`. */

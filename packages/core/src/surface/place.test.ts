@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placeAt } from "./place.js";
+import { placeAt } from "./place.ts";
 
 /** The place at `▮`. */
 const at = (marked: string) =>

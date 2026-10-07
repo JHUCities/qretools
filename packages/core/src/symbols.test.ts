@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Finding } from "./findings.js";
-import { EMPTY_ENV } from "./surface/env.js";
-import { parseSurface } from "./surface/parse.js";
+import type { Finding } from "./findings.ts";
+import { EMPTY_ENV } from "./surface/env.ts";
+import { parseSurface } from "./surface/parse.ts";
 import {
 	bankFindings,
 	indexOf,
@@ -9,7 +9,7 @@ import {
 	schemeSymbols,
 	symbolsOf,
 	usedBy,
-} from "./symbols.js";
+} from "./symbols.ts";
 
 const symbols = (text: string) => symbolsOf(parseSurface(text, EMPTY_ENV));
 

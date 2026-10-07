@@ -7,9 +7,9 @@
  * `Time:10pm` is text, and stays text. Pure.
  */
 import { type Document, isMap, isScalar, Scalar } from "yaml";
-import type { Finding, Range } from "../findings.js";
-import { keyText } from "./codes.js";
-import { clampRange } from "./read.js";
+import type { Finding, Range } from "../findings.ts";
+import { keyText } from "./codes.ts";
+import { clampRange } from "./read.ts";
 
 /** A word, its colon, and something other than a space straight after. */
 const SLIP = /^([\w-]+):(?=\S)/;

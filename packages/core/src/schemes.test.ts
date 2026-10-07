@@ -7,10 +7,10 @@ import {
 	SCHEME_KINDS,
 	schemeEnv,
 	schemePath,
-} from "./schemes.js";
-import { EMPTY_ENV } from "./surface/env.js";
-import { parseSurface } from "./surface/parse.js";
-import { nameFrom } from "./surface/schema.js";
+} from "./schemes.ts";
+import { EMPTY_ENV } from "./surface/env.ts";
+import { parseSurface } from "./surface/parse.ts";
+import { nameFrom } from "./surface/schema.ts";
 
 const brief = (f: { severity: string; code: string; path: string }) =>
 	`${f.severity}:${f.code}@${f.path}`;

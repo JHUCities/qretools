@@ -9,12 +9,12 @@
  * map's name on a line of its own.
  */
 import { parseDocument, stringify } from "yaml";
-import type { Edit } from "../findings.js";
-import type { NamedScheme } from "./env.js";
-import { EMPTY_ENV } from "./env.js";
-import { indexDocument, parseSurface } from "./parse.js";
+import type { Edit } from "../findings.ts";
+import type { NamedScheme } from "./env.ts";
+import { EMPTY_ENV } from "./env.ts";
+import { indexDocument, parseSurface } from "./parse.ts";
 
-export type { Edit, Fix } from "../findings.js";
+export type { Edit, Fix } from "../findings.ts";
 
 /** A value as YAML writes it on one line, quoted only when it must be. */
 const scalar = (value: string): string =>

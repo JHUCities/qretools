@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import schemaText from "../../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
-import { EMPTY_ENV, type Env } from "../surface/env.js";
-import { parseSurface } from "../surface/parse.js";
-import type { DdiDocument, ItemType, JsonObject } from "./document.js";
-import { elaborate, type Versioning } from "./elaborate.js";
-import { makeValidator } from "./validate.js";
+import { EMPTY_ENV, type Env } from "../surface/env.ts";
+import { parseSurface } from "../surface/parse.ts";
+import type { DdiDocument, ItemType, JsonObject } from "./document.ts";
+import { elaborate, type Versioning } from "./elaborate.ts";
+import { makeValidator } from "./validate.ts";
 
 const AGENCY = "org.example";
 const validator = makeValidator(JSON.parse(schemaText));

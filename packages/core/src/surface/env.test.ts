@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_ENV, type Env, parseTextEntry } from "./env.js";
-import { parseSurface } from "./parse.js";
-import { parseScale } from "./scales.js";
+import { EMPTY_ENV, type Env, parseTextEntry } from "./env.ts";
+import { parseSurface } from "./parse.ts";
+import { parseScale } from "./scales.ts";
 
 const brief = (f: { severity: string; code: string; path: string }) =>
 	`${f.severity}:${f.code}@${f.path}`;

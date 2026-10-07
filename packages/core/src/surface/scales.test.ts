@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_ENV } from "./env.js";
-import { parseSurface } from "./parse.js";
-import { parseScale, type Scales } from "./scales.js";
-import { questionJsonSchema } from "./schema.js";
+import { EMPTY_ENV } from "./env.ts";
+import { parseSurface } from "./parse.ts";
+import { parseScale, type Scales } from "./scales.ts";
+import { questionJsonSchema } from "./schema.ts";
 
 const agree4 = parseScale(
 	'labels:\n  "1": Strongly agree\n  "2": Agree\n  "3": Disagree\n  "4": Strongly disagree\n',

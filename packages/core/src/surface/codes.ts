@@ -5,9 +5,9 @@
  */
 import type { Document } from "yaml";
 import { isMap, isScalar, Scalar } from "yaml";
-import { compact } from "../compact.js";
-import type { Finding } from "../findings.js";
-import type { Code } from "./draft.js";
+import { compact } from "../compact.ts";
+import type { Finding } from "../findings.ts";
+import type { Code } from "./draft.ts";
 import {
 	error,
 	fail,
@@ -17,8 +17,8 @@ import {
 	ok,
 	opened,
 	type Read,
-} from "./read.js";
-import { OptionSchema } from "./schema.js";
+} from "./read.ts";
+import { OptionSchema } from "./schema.ts";
 
 export const EXAMPLE = 'Example:\n  "1": Yes\n  "2": No';
 

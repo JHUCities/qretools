@@ -4,8 +4,8 @@
  * defines is published under.
  */
 import { isMap, isScalar, parseDocument } from "yaml";
-import type { Finding } from "../findings.js";
-import { error, hole, isPlainObject, yamlError, yamlErrors } from "./read.js";
+import type { Finding } from "../findings.ts";
+import { error, hole, isPlainObject, yamlError, yamlErrors } from "./read.ts";
 
 /**
  * A DDI agency: a registered code with optional sub-agencies after dots, as the DDI

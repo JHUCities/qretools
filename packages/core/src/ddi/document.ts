@@ -5,7 +5,7 @@
  * Schema check them.
  */
 
-import { compact } from "../compact.js";
+import { compact } from "../compact.ts";
 
 export type Json = string | number | boolean | readonly Json[] | JsonObject;
 export interface JsonObject {

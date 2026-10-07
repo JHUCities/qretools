@@ -4,7 +4,7 @@
  * it, and a bank's own `scales/yesno01.yaml` is checked against it, since both are
  * published under one identity and must say the same.
  */
-import type { Code } from "./surface/draft.js";
+import type { Code } from "./surface/draft.ts";
 
 export const BINARY_SCALE = "yesno01";
 

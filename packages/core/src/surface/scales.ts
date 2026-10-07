@@ -4,10 +4,10 @@
  * shell loads and the core is given; one file per scale, body `labels: {code: label}`.
  */
 import { isMap, isScalar, parseDocument } from "yaml";
-import type { Finding } from "../findings.js";
-import { EXAMPLE, readCodeMap } from "./codes.js";
-import type { Code } from "./draft.js";
-import { hole, yamlErrors } from "./read.js";
+import type { Finding } from "../findings.ts";
+import { EXAMPLE, readCodeMap } from "./codes.ts";
+import type { Code } from "./draft.ts";
+import { hole, yamlErrors } from "./read.ts";
 
 export interface Scale {
 	readonly codes: readonly Code[];

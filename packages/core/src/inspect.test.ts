@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { evaluate } from "./evaluate.js";
-import { pathAt } from "./findings.js";
-import { inspect, mentionAt } from "./inspect.js";
-import { EMPTY_ENV } from "./surface/env.js";
-import { parseSurface } from "./surface/parse.js";
+import { evaluate } from "./evaluate.ts";
+import { pathAt } from "./findings.ts";
+import { inspect, mentionAt } from "./inspect.ts";
+import { EMPTY_ENV } from "./surface/env.ts";
+import { parseSurface } from "./surface/parse.ts";
 
 const env = {
 	...EMPTY_ENV,

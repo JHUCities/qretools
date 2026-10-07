@@ -3,8 +3,8 @@
  * than named files in a kind's folder. A leaf module (it imports only types), so the
  * modules that read it can't form a cycle through it.
  */
-import type { SchemeKind } from "./schemes.js";
-import type { NamedScheme } from "./surface/env.js";
+import type { SchemeKind } from "./schemes.ts";
+import type { NamedScheme } from "./surface/env.ts";
 
 /** `missing`: the bank's one missing-value list; `bank`: what the bank says about itself. */
 export type RootKind = "missing" | "bank";

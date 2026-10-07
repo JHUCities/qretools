@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEdits, renameEdits } from "./edit.js";
+import { applyEdits, renameEdits } from "./edit.ts";
 
 describe("applying edits", () => {
 	it("replaces a block map with the name, keeping the line that follows", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { schemeEnv } from "../schemes.js";
-import { parseBankFile } from "./bankfile.js";
+import { schemeEnv } from "../schemes.ts";
+import { parseBankFile } from "./bankfile.ts";
 
 const found = (source: string) =>
 	parseBankFile(source).findings.map((f) => [f.severity, f.code, f.path]);

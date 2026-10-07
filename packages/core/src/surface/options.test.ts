@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import demRace from "../../examples/dem_race.yaml?raw";
-import { lint } from "../lint.js";
-import { codebookView } from "../render.js";
-import { optionVariable } from "./draft.js";
-import { EMPTY_ENV } from "./env.js";
-import { parseSurface } from "./parse.js";
+import { lint } from "../lint.ts";
+import { codebookView } from "../render.ts";
+import { optionVariable } from "./draft.ts";
+import { EMPTY_ENV } from "./env.ts";
+import { parseSurface } from "./parse.ts";
 
 const brief = (f: { severity: string; code: string; path: string }) =>
 	`${f.severity}:${f.code}@${f.path}`;

@@ -3,11 +3,11 @@
  * carries the results to GitHub.
  */
 
-import { FOLDER_RULE_TEXT, NAME_RULE_TEXT } from "./copy.js";
-import type { Finding } from "./findings.js";
-import { err, ok, type Result } from "./result.js";
-import type { Draft } from "./surface/draft.js";
-import { NAME_PATTERN } from "./surface/schema.js";
+import { FOLDER_RULE_TEXT, NAME_RULE_TEXT } from "./copy.ts";
+import type { Finding } from "./findings.ts";
+import { err, ok, type Result } from "./result.ts";
+import type { Draft } from "./surface/draft.ts";
+import { NAME_PATTERN } from "./surface/schema.ts";
 
 /** Folders are directory names, not variable names: hyphens are allowed. */
 export const FOLDER_PATTERN = /^[a-z][a-z0-9_-]*$/;

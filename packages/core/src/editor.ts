@@ -6,19 +6,19 @@
  * readable for programs that only check and export.
  */
 
-export { locate, pathAt } from "./findings.js";
-export { type Inspection, inspect, mentionAt } from "./inspect.js";
-export { labelledSource, textEntrySource } from "./schemes.js";
+export { locate, pathAt } from "./findings.ts";
+export { type Inspection, inspect, mentionAt } from "./inspect.ts";
+export { labelledSource, textEntrySource } from "./schemes.ts";
 export {
 	addSpace,
 	applyEdits,
 	quoteCode,
 	renameEdits,
 	spaceBefore,
-} from "./surface/edit.js";
-export { marksOf } from "./surface/marks.js";
-export { rangesOf } from "./surface/parse.js";
-export { type Place, placeAt } from "./surface/place.js";
+} from "./surface/edit.ts";
+export { marksOf } from "./surface/marks.ts";
+export { rangesOf } from "./surface/parse.ts";
+export { type Place, placeAt } from "./surface/place.ts";
 export {
 	bankFileJsonSchema,
 	labelledJsonSchema,
@@ -26,4 +26,4 @@ export {
 	nameFrom,
 	questionJsonSchema,
 	textEntryJsonSchema,
-} from "./surface/schema.js";
+} from "./surface/schema.ts";

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { evaluateScheme } from "../schemes.js";
-import { addSpace, spaceBefore } from "./edit.js";
-import { EMPTY_ENV } from "./env.js";
-import { parseSurface } from "./parse.js";
+import { evaluateScheme } from "../schemes.ts";
+import { addSpace, spaceBefore } from "./edit.ts";
+import { EMPTY_ENV } from "./env.ts";
+import { parseSurface } from "./parse.ts";
 
 const HEAD = "name: q\ntext: Hi\nintent: What we learn\n";
 const slips = (text: string) =>
