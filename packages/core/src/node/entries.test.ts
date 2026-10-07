@@ -98,6 +98,7 @@ describe("the entry points", () => {
 			    "textEntrySource",
 			  ],
 			  "node": [
+			    "main",
 			    "readBank",
 			  ],
 			}

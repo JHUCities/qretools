@@ -76,13 +76,14 @@ responses:
 				.split("\n")
 				.map((l) => l.trim())
 				.filter((l) => l !== "");
-		// Only `ts` blocks are code; anything else would be skipped silently.
+		// `ts` blocks are this file's code; `sh` blocks are commands (the CLI's own tests
+		// run them). Any other kind would be skipped silently, so there is none.
 		expect(fences.length).toBeGreaterThan(0);
-		expect(fences.map((f) => f[1])).toEqual(fences.map(() => "ts"));
+		expect(fences.filter((f) => f[1] !== "ts" && f[1] !== "sh")).toEqual([]);
 		const test = lines(await readFile(new URL(import.meta.url), "utf8")).join(
 			"\n",
 		);
-		for (const [, , block] of fences)
+		for (const [, , block] of fences.filter((f) => f[1] === "ts"))
 			expect(`\n${test}\n`).toContain(`\n${lines(block ?? "").join("\n")}\n`);
 	});
 });

@@ -17,6 +17,24 @@ Three entry points, split by what they need:
 The DDI schema the output is checked against is exported as
 `@qretools/core/schema.json`.
 
+## The `qretools` command
+
+For a bank checked out on disk, in CI or at a terminal:
+
+```sh
+qretools check path/to/bank            # findings, one per line; exit 1 on anything to fill in or fix
+qretools check path/to/bank --strict   # warnings fail too
+qretools export path/to/bank -o bank.json   # the bank's DDI, validated
+```
+
+`check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
+CI annotate it. `export` writes every question's DDI items in one document, and refuses
+when it would be wrong: no declared agency, two items under one identity, or a document
+the official schema rejects. In this repository, `pnpm qretools check <dir>` runs it.
+
+It runs from source under Node 26, which strips TypeScript's types; no build. A copy
+installed under `node_modules` would need one, since Node won't strip types there.
+
 ## Examples
 
 Every example below runs as a test (`src/node/readme.test.ts`). They share these

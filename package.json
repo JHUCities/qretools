@@ -12,7 +12,8 @@
 		"lint": "biome check .",
 		"format": "biome format --write .",
 		"check": "biome check . && pnpm -r run check",
-		"check:worker": "pnpm --dir worker --ignore-workspace check"
+		"check:worker": "pnpm --dir worker --ignore-workspace check",
+		"qretools": "node packages/core/bin/qretools.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.14"

@@ -1,0 +1,123 @@
+import { execFile } from "node:child_process";
+import { glob, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { describe, expect, it } from "vitest";
+import { documentOf } from "../ddi/document.ts";
+import { bankOf } from "../evaluate.ts";
+import { findingLine, type Io, lineCol, main } from "./cli.ts";
+import { readBank } from "./index.ts";
+
+const here = (path: string): string =>
+	fileURLToPath(new URL(path, import.meta.url));
+const SAMPLE = here("../../fixtures/bank");
+
+/** `main` with its output kept, as a shell would show it. */
+async function run(...argv: string[]) {
+	const out: string[] = [];
+	const err: string[] = [];
+	const written: Record<string, string> = {};
+	const io: Io = {
+		out: (t) => out.push(t),
+		err: (t) => err.push(t),
+		writeFile: async (path, text) => {
+			written[path] = text;
+		},
+	};
+	const code = await main(argv, io);
+	return { code, out: out.join(""), err: err.join(""), written };
+}
+
+describe("qretools check", () => {
+	it("passes a clean bank, saying how many files it read", async () => {
+		const r = await run("check", SAMPLE);
+		expect(r).toMatchObject({ code: 0, out: "" });
+		expect(r.err).toMatch(/^22 files, 0 findings/);
+	});
+
+	it("reports findings as compilers do, and fails on anything to fill in", async () => {
+		const source = "name: q\ntext: Q?\n";
+		const ranges = { "": [0, source.length] as const };
+		expect(
+			findingLine("questions/a/q.yaml", source, ranges, {
+				code: "hole",
+				severity: "hole",
+				path: "intent",
+				message: "`intent` is required.",
+			}),
+		).toBe("questions/a/q.yaml:3:1: error: `intent` is required. [to fill in]");
+		expect(lineCol("ab\ncd", 4)).toEqual({ line: 2, col: 2 });
+	});
+
+	it("says it can't read a directory that isn't there, rather than check nothing", async () => {
+		const r = await run("check", here("./nope"));
+		expect(r.code).toBe(2);
+		expect(r.err).toMatch(/Can't read the bank/);
+	});
+
+	it("refuses an unknown command or option, or one of the other command's, with the usage", async () => {
+		expect((await run("lint")).code).toBe(2);
+		expect((await run("check", "--nope")).code).toBe(2);
+		expect((await run("check", SAMPLE, "-o", "x")).code).toBe(2);
+		expect((await run("export", SAMPLE, "--strict")).code).toBe(2);
+		expect((await run("--help")).code).toBe(0);
+	});
+
+	it("names files as the user named the bank, so editors find them from here", async () => {
+		const r = await run("check", here("../../../../../bas-question-bank"));
+		if (r.err.startsWith("Can't read")) return; // the reference bank isn't checked out here
+		expect(r.out.split("\n")[0]).toMatch(
+			/bas-question-bank\/.*\.yaml:\d+:\d+: /,
+		);
+	});
+});
+
+describe("qretools export", () => {
+	it("writes the bank's DDI, valid, with every question's items once", async () => {
+		const r = await run("export", SAMPLE, "-o", "out.json");
+		expect(r.code).toBe(0);
+		const doc = JSON.parse(r.written["out.json"] ?? "{}");
+		expect(Object.keys(doc.QuestionItem ?? {})).toHaveLength(6);
+		expect(Object.keys(doc.QuestionItem ?? {})[0]).toMatch(/^org\.example:/);
+	});
+
+	it("exports each question's items as the bank evaluated them, versions and all", async () => {
+		const files = await readBank(SAMPLE);
+		const path = "questions/examples/parks_spending.yaml";
+		const bank = bankOf(files, { [path]: { number: "3" } });
+		expect(
+			bank.questions[path]?.items.map((i) => i.identity.Version),
+		).toContain("3");
+		expect(documentOf(bank.questions[path]?.items ?? [])).toEqual(
+			bank.questions[path]?.ddi,
+		);
+	});
+});
+
+describe("the command under real Node", () => {
+	it("runs from source with no build or loader", async () => {
+		const exec = promisify(execFile);
+		const bin = here("../../bin/qretools.ts");
+		const { stdout, stderr } = await exec(process.execPath, [
+			bin,
+			"check",
+			SAMPLE,
+		]);
+		expect(stdout).toBe("");
+		expect(stderr).toMatch(/^22 files/);
+		const exported = await exec(process.execPath, [bin, "export", SAMPLE]);
+		expect(JSON.parse(exported.stdout).QuestionItem).toBeDefined();
+	});
+
+	it("imports the core's own modules by their .ts names, which Node can find", async () => {
+		const stale: string[] = [];
+		for await (const file of glob("**/*.ts", { cwd: here("..") }))
+			if (
+				/from\s+"\.{1,2}\/[^"]*\.js"/.test(
+					await readFile(here(`../${file}`), "utf8"),
+				)
+			)
+				stale.push(file);
+		expect(stale).toEqual([]);
+	});
+});

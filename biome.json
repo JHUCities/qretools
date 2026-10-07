@@ -10,6 +10,7 @@
 			"apps/*/*.json",
 			"packages/*/src/**",
 			"packages/*/*.ts",
+			"packages/*/bin/*.ts",
 			"packages/*/*.json",
 			"worker/src/**",
 			"*.ts",

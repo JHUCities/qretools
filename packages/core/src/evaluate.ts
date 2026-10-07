@@ -5,8 +5,8 @@
  */
 
 import { compact } from "./compact.ts";
-import type { DdiDocument } from "./ddi/document.ts";
-import { elaborate, type Versioning } from "./ddi/elaborate.ts";
+import { type DdiDocument, documentOf, type Item } from "./ddi/document.ts";
+import { elaborateItems, type Versioning } from "./ddi/elaborate.ts";
 import type { Versions } from "./ddi/version.ts";
 import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
 import { ROOT } from "./kinds.ts";
@@ -46,6 +46,8 @@ export interface Evaluation {
 	readonly ranges: Readonly<Record<string, Range>>;
 	/** What the editor colours by meaning (see marks.ts). */
 	readonly marks: readonly Mark[];
+	/** The question's DDI items, unkeyed, for an export of many questions to gather. */
+	readonly items: readonly Item[];
 	readonly ddi: DdiDocument;
 	readonly respondent: RespondentView;
 	readonly codebook: CodebookView;
@@ -65,18 +67,20 @@ export function evaluate(
 	versioning: Versioning = {},
 ): Evaluation {
 	const parsed = parseSurface(source, env);
+	const items = elaborateItems(
+		parsed.draft,
+		env.agency ?? UNDECLARED_AGENCY,
+		env.missing,
+		versioning,
+	);
 	const { draft, findings, ranges } = parsed;
 	return {
 		draft,
 		findings: inDocumentOrder([...findings, ...lint(draft, env)], ranges),
 		ranges,
 		marks: parsed.marks,
-		ddi: elaborate(
-			draft,
-			env.agency ?? UNDECLARED_AGENCY,
-			env.missing,
-			versioning,
-		),
+		items,
+		ddi: documentOf(items),
 		respondent: respondentView(draft),
 		codebook: codebookView(draft, env),
 		symbols: symbolsOf(parsed),
