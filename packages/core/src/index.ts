@@ -24,6 +24,7 @@ export {
 	UNNAMED,
 } from "./copy.js";
 export type {
+	Collision,
 	DdiDocument,
 	Identity,
 	Item,
@@ -31,7 +32,7 @@ export type {
 	Json,
 	JsonObject,
 } from "./ddi/document.js";
-export { documentOf } from "./ddi/document.js";
+export { collisions, documentOf } from "./ddi/document.js";
 export {
 	elaborate,
 	elaborateItems,

@@ -59,8 +59,11 @@ describe("elaborate", () => {
 	});
 
 	it("uses a placeholder ID while name is a hole, and does not leak it into the name", () => {
-		const q = question(elaborate({ text: "Q?" }, AGENCY, []), "untitled");
-		expect(q.ID).toBe("untitled");
+		const q = question(
+			elaborate({ text: "Q?" }, AGENCY, []),
+			"untitled-question",
+		);
+		expect(q.ID).toBe("untitled-question");
 		expect(q.QuestionItemName).toBeUndefined();
 	});
 
@@ -293,7 +296,7 @@ describe("schemes", () => {
 			?.codes ?? [];
 	const missingRef = {
 		$type: "ManagedMissingValuesRepresentation",
-		value: [AGENCY, "missing", "1"],
+		value: [AGENCY, "missing-values", "1"],
 	};
 
 	it("every question has its variable: named like it, holding its answers, with the bank's missing values", () => {
@@ -341,7 +344,9 @@ describe("schemes", () => {
 		expect(
 			(question(doc, "nhd_sat").ResponseDomain as JsonObject).MissingValue,
 		).toBeUndefined();
-		expect(itemOf(doc, "Category", "missing.cat-0").IsMissing).toBe(true);
+		expect(itemOf(doc, "Category", "missing-values.cat-0").IsMissing).toBe(
+			true,
+		);
 	});
 
 	it("number and open questions get a variable with the question's domain, no label unless titled", () => {

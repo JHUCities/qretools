@@ -39,6 +39,7 @@ describe("the entry points", () => {
 			    "bankOf",
 			    "codeSpans",
 			    "codebookView",
+			    "collisions",
 			    "compact",
 			    "definedVariables",
 			    "documentOf",

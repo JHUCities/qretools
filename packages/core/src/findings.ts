@@ -60,7 +60,11 @@ export type LintCode =
 	| "duplicate-concept"
 	| "duplicate-unit"
 	| "similar-text"
-	| "unknown-variant";
+	| "unknown-variant"
+	/** Bank-level: another question has the same name, so the same DDI identity. */
+	| "duplicate-name"
+	/** The bank's `yesno01` scale doesn't say what select-all items are coded on. */
+	| "binary-scale";
 
 export type FindingCode = ParseCode | LintCode | "ddi-invalid";
 

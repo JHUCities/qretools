@@ -109,24 +109,25 @@ describe("marksOf", () => {
 describe("scheme file marks", () => {
 	it("marks a scale's codes, and points at its empty labels", () => {
 		const text = "labels:\n  1: Yes\n  2:\n";
-		const ev = evaluateScheme("scale", text, ENV);
+		const ev = evaluateScheme("scale", text, ENV, "x");
 		expect(shown(text, ev.marks)).toEqual(["code:1", "code:2"]);
 		expect(points(ev.findings)).toEqual([text.length - 1]);
 	});
 
 	it("marks the missing list's codes", () => {
 		const text = "labels:\n  -99: Refused\n  -98: Don't know\n";
-		expect(shown(text, evaluateScheme("missing", text, ENV).marks)).toEqual([
-			"code:-99",
-			"code:-98",
-		]);
+		expect(
+			shown(text, evaluateScheme("missing", text, ENV, "missing").marks),
+		).toEqual(["code:-99", "code:-98"]);
 	});
 
 	it("points at the hole of an empty universe, and marks nothing", () => {
-		const ev = evaluateScheme("universe", "text:\n", ENV);
+		const ev = evaluateScheme("universe", "text:\n", ENV, "x");
 		expect(ev.marks).toEqual([]);
 		expect(points(ev.findings)).toEqual([5]);
-		expect(evaluateScheme("universe", "text: All\n", ENV).marks).toEqual([]);
+		expect(evaluateScheme("universe", "text: All\n", ENV, "x").marks).toEqual(
+			[],
+		);
 	});
 });
 
@@ -166,7 +167,7 @@ describe("holes at empty values are points there", () => {
 	for (const [path, text] of Object.entries(SCALES))
 		for (const kind of kinds)
 			it(`${path} as ${kind}`, () => {
-				agrees(evaluateScheme(kind, text, ENV).findings, emptiesOf(text));
+				agrees(evaluateScheme(kind, text, ENV, "x").findings, emptiesOf(text));
 			});
 
 	it("holds on hand-written questions, each with a point", () => {
@@ -194,7 +195,7 @@ describe("holes at empty values are points there", () => {
 			["universe", "text:\n"],
 			["instruction", "text:\n"],
 		] as const) {
-			const ev = evaluateScheme(kind, text, ENV);
+			const ev = evaluateScheme(kind, text, ENV, "x");
 			agrees(ev.findings, emptiesOf(text));
 			expect(points(ev.findings).length, text).toBeGreaterThan(0);
 		}

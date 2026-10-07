@@ -35,7 +35,7 @@ export function createEvaluations(): Evaluations {
 	const cache = new Map<Id, { source: string; env: Env; ev: Evaluation }>();
 	const schemes = new Map<
 		Id,
-		{ source: string; env: Env; ev: SchemeEvaluation }
+		{ source: string; name: string; env: Env; ev: SchemeEvaluation }
 	>();
 	let envOfSlice: Local["schemes"] | undefined;
 	let envOfRemote: Remote["schemes"] | undefined;
@@ -60,9 +60,15 @@ export function createEvaluations(): Evaluations {
 		},
 		scheme(e, env) {
 			const hit = schemes.get(e.id);
-			if (hit && hit.source === e.source && hit.env === env) return hit.ev;
-			const ev = evaluateScheme(e.kind, e.source, env);
-			schemes.set(e.id, { source: e.source, env, ev });
+			if (
+				hit &&
+				hit.source === e.source &&
+				hit.name === e.name &&
+				hit.env === env
+			)
+				return hit.ev;
+			const ev = evaluateScheme(e.kind, e.source, env, e.name);
+			schemes.set(e.id, { source: e.source, name: e.name, env, ev });
 			return ev;
 		},
 		schema(env) {

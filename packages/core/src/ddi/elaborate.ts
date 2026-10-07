@@ -14,6 +14,7 @@
  * they cannot collide with a question); the one allowed dot hangs parts off a base.
  */
 
+import { BINARY, BINARY_SCALE } from "../binary.js";
 import { compact } from "../compact.js";
 import { schemePath } from "../kinds.js";
 import type { SchemeKind } from "../schemes.js";
@@ -53,20 +54,10 @@ import {
 } from "./version.js";
 
 /** ID used while `name` is still a hole. Never leaks into QuestionItemName. */
-const UNTITLED = "untitled";
-
-/**
- * Every select-many option is a yes/no variable on this one shared scale. Coupling:
- * the bank's `scales/yesno01.yaml` must say the same, and gives the items their version.
- */
-const BINARY_SCALE = "yesno01";
-const BINARY: readonly Code[] = [
-	{ code: "0", label: "No" },
-	{ code: "1", label: "Yes" },
-];
+const UNTITLED = "untitled-question";
 
 /** The bank's missing-value list: one managed representation, referenced by every Variable. */
-const MISSING_ID = "missing";
+const MISSING_ID = "missing-values";
 
 /**
  * What is known of the versions a question's items take: its own file's, and each

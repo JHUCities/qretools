@@ -38,13 +38,15 @@ describe("evaluateScheme", () => {
 	const missing = [{ code: "-8", label: "Item non-response" }];
 	it("reads each kind, and says what is wrong in place", () => {
 		expect(
-			evaluateScheme("universe", "text: Renters\n", EMPTY_ENV),
+			evaluateScheme("universe", "text: Renters\n", EMPTY_ENV, "x"),
 		).toMatchObject({
 			findings: [],
 			value: { kind: "text", text: "Renters" },
 		});
 		expect(
-			evaluateScheme("instruction", "text:\n", EMPTY_ENV).findings.map(brief),
+			evaluateScheme("instruction", "text:\n", EMPTY_ENV, "x").findings.map(
+				brief,
+			),
 		).toEqual(["hole:hole@text"]);
 		const scale = evaluateScheme(
 			"scale",
@@ -53,6 +55,7 @@ describe("evaluateScheme", () => {
 				...EMPTY_ENV,
 				missing,
 			},
+			"x",
 		);
 		expect(scale.findings.map(brief)).toEqual([
 			"warning:missing-code@labels.-8",
@@ -60,10 +63,15 @@ describe("evaluateScheme", () => {
 		expect(scale.ranges["labels.-8"]).toBeDefined();
 		// The missing list is not checked against itself.
 		expect(
-			evaluateScheme("missing", 'labels:\n  "-8": x\n', {
-				...EMPTY_ENV,
-				missing,
-			}).findings,
+			evaluateScheme(
+				"missing",
+				'labels:\n  "-8": x\n',
+				{
+					...EMPTY_ENV,
+					missing,
+				},
+				"missing",
+			).findings,
 		).toEqual([]);
 	});
 });
@@ -100,6 +108,7 @@ describe("a concept file", () => {
 				"concept",
 				"label: Neighborhood satisfaction\ndefinition: How content residents are.\n",
 				EMPTY_ENV,
+				"x",
 			).value,
 		).toEqual({
 			kind: "labelled",
@@ -109,7 +118,7 @@ describe("a concept file", () => {
 			},
 		});
 		expect(
-			evaluateScheme("concept", "definition: x\n", EMPTY_ENV).findings.map(
+			evaluateScheme("concept", "definition: x\n", EMPTY_ENV, "x").findings.map(
 				(f) => `${f.severity}@${f.path}`,
 			),
 		).toEqual(["hole@label"]);
@@ -118,6 +127,7 @@ describe("a concept file", () => {
 				"concept",
 				"label: x\nlabels: y\n",
 				EMPTY_ENV,
+				"x",
 			).findings.map((f) => f.code),
 		).toEqual(["unknown-key"]);
 	});

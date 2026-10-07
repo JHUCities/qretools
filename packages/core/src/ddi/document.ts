@@ -120,9 +120,9 @@ export const codeValue = (value: string): JsonObject => ({
 
 /**
  * Items keyed by type and URN. A repeated URN keeps the last item silently: two
- * options naming one variable do this inside one question today (the
- * `duplicate-option-variable` lint warns the author), and role 2 will reach it by
- * concatenating questions.
+ * options naming one variable do this inside one question (the
+ * `duplicate-option-variable` lint warns the author). An export of many questions
+ * checks `collisions` first.
  */
 export const documentOf = (items: readonly Item[]): DdiDocument => {
 	const doc: Partial<Record<ItemType, Record<string, JsonObject>>> = {};
@@ -134,3 +134,35 @@ export const documentOf = (items: readonly Item[]): DdiDocument => {
 	}
 	return doc;
 };
+
+/** Where one URN names different items, and whose items they were. */
+export interface Collision<K> {
+	readonly urn: string;
+	readonly keys: readonly K[];
+}
+
+/**
+ * The URNs that name more than one item, across items gathered from several sources
+ * (each question's, keyed by its file). A URN carries no type, so two items of
+ * different types with one URN collide too. The same item emitted by several sources
+ * (a shared scale every question using it emits) is not a collision.
+ */
+export function collisions<K>(
+	sources: readonly (readonly [K, readonly Item[]])[],
+): readonly Collision<K>[] {
+	const seen = new Map<string, { item: string; keys: K[]; differs: boolean }>();
+	for (const [key, items] of sources)
+		for (const it of items) {
+			const body = JSON.stringify([it.type, it.body]);
+			const at = seen.get(it.identity.URN);
+			if (at === undefined)
+				seen.set(it.identity.URN, { item: body, keys: [key], differs: false });
+			else {
+				if (!at.keys.includes(key)) at.keys.push(key);
+				if (at.item !== body) at.differs = true;
+			}
+		}
+	return [...seen].flatMap(([urn, at]) =>
+		at.differs ? [{ urn, keys: at.keys }] : [],
+	);
+}

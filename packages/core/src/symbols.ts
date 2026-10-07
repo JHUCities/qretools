@@ -355,6 +355,26 @@ export function bankFindings<K>(
 		];
 	});
 
+	// One name, one identity: two questions named alike would elaborate to the same IDs.
+	const named = symbols.name;
+	const sameName =
+		named === undefined
+			? []
+			: (index.names.get(named) ?? []).filter((k) => k !== key);
+	const duplicateName: BankFinding<K>[] =
+		sameName.length === 0
+			? []
+			: [
+					{
+						code: "duplicate-name",
+						severity: "warning",
+						path: "name",
+						message: `Other questions are also named \`${named}\`.`,
+						hint: "A name is a question's identity, in the bank and in DDI: give each its own.",
+						others: sameName,
+					},
+				];
+
 	const unknown = symbols.variants.flatMap((v): BankFinding<K>[] =>
 		(index.names.get(v.name) ?? []).some((k) => k !== key)
 			? []
@@ -416,7 +436,7 @@ export function bankFindings<K>(
 					];
 				});
 
-	return [...variables, ...unknown, ...repeated, ...similar];
+	return [...duplicateName, ...variables, ...unknown, ...repeated, ...similar];
 }
 
 /**

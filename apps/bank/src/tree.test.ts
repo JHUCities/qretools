@@ -179,6 +179,7 @@ describe("schemeSections", () => {
 					e.kind,
 					e.source,
 					envOf(mm.local.schemes, mm.remote.schemes),
+					e.name,
 				),
 			index(mm),
 		);

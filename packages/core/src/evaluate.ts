@@ -134,7 +134,7 @@ export function bankOf(
 			);
 		else
 			schemes[path] = {
-				...evaluateScheme(at.kind, text, env),
+				...evaluateScheme(at.kind, text, env, at.name),
 				kind: at.kind,
 				name: at.name,
 			};

@@ -50,7 +50,7 @@ describe("a key's colon with no space after it", () => {
 	});
 
 	it("is found in a shared file too", () => {
-		const ev = evaluateScheme("scale", "labels:\n  1:Yes\n", EMPTY_ENV);
+		const ev = evaluateScheme("scale", "labels:\n  1:Yes\n", EMPTY_ENV, "x");
 		expect(ev.findings.map((f) => f.code)).toContain("missing-space");
 	});
 

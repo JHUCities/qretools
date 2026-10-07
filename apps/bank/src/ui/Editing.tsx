@@ -719,7 +719,9 @@ export function ForeignView({
 		].find((f) => f.base?.path === screen.path),
 	);
 	const file = screen.file;
-	const kind = kindAt(screen.path)?.kind;
+	// One value per path, so the evaluations below keep theirs between renders.
+	const at = useMemo(() => kindAt(screen.path), [screen.path]);
+	const kind = at?.kind;
 	const ev = useMemo(
 		() =>
 			file === undefined || kind !== "question"
@@ -729,10 +731,10 @@ export function ForeignView({
 	);
 	const scheme = useMemo(
 		() =>
-			file === undefined || kind === undefined || kind === "question"
+			file === undefined || at === undefined || at.kind === "question"
 				? undefined
-				: evaluateScheme(kind, file.text, env),
-		[file, kind, env],
+				: evaluateScheme(at.kind, file.text, env, at.name),
+		[file, at, env],
 	);
 	const findings = ev?.findings ?? scheme?.findings ?? [];
 	const ranges = ev?.ranges ?? scheme?.ranges ?? {};
