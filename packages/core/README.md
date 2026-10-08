@@ -55,12 +55,21 @@ qretools export path/to/bank -o bank.json   # the bank's DDI, validated
 `check` also reads a workspace: a folder holding banks (each a folder with
 `bank.yaml`, or its root), `instruments/` and `workspace.yaml`. It reports every bank's
 findings, every instrument's (read against the banks beside it, under the agency
-`workspace.yaml` gives), and notes YAML files it reads as nothing. A bank in another
-repository (`owner/repo@v1`) isn't fetched yet, and its use says so.
+`workspace.yaml` gives), and notes YAML files it reads as nothing.
+
+A bank in another repository (`owner/repo@v1`, or `owner/repo/folder@v1`) is read at
+that tag with your own `git`, so whatever credentials git has reach a private
+repository. Only `refs/tags/v1` is fetched, never a branch of that name, shallow and
+only its folder, into a cache by tag and folder (`$XDG_CACHE_HOME/qretools`, else
+`~/.cache/qretools`) beside the commit it resolved to; later runs read the cache. A tag
+is immutable by convention only: to read one that was moved, delete its entry in the
+cache. In CI, a private bank needs git credentials for it, such as `GITHUB_TOKEN` given
+to git (`git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf https://github.com/`)
+or a deploy key.
 
 For one instrument, `qretools instrument check <file>` and `qretools instrument export
 <file> --agency <agency>`; its banks are read from the folders `uses` names by relative
-path, or from `--bank alias=dir`.
+path, from another repository at its tag, or from `--bank alias=dir`.
 
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses

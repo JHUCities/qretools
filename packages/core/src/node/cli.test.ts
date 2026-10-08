@@ -16,6 +16,15 @@ const SAMPLE = here("../../fixtures/bank");
 
 /** `main` with its output kept, as a shell would show it. */
 async function run(...argv: string[]) {
+	return runWith(unreachable, ...argv);
+}
+const unreachable: Io["readRemote"] = async (a) => ({
+	kind: "unavailable",
+	reason: `\`${a.key}\` isn't reachable from these tests.`,
+});
+
+/** The same, with banks in other repositories read by `readRemote`. */
+async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
 	const out: string[] = [];
 	const err: string[] = [];
 	const written: Record<string, string> = {};
@@ -25,10 +34,32 @@ async function run(...argv: string[]) {
 		writeFile: async (path, text) => {
 			written[path] = text;
 		},
+		readRemote,
 	};
 	const code = await main(argv, io);
 	return { code, out: out.join(""), err: err.join(""), written };
 }
+
+describe("a bank in another repository", () => {
+	it("is read once, at its tag, and the instrument checked against it", async () => {
+		const asked: string[] = [];
+		const hh = await readBank(here("../../fixtures/households"));
+		const r = await runWith(
+			async (a) => {
+				asked.push(a.key);
+				return { kind: "files", files: hh };
+			},
+			"instrument",
+			"check",
+			here("../../fixtures/instruments/remote.yaml"),
+			"--agency",
+			"org.example",
+		);
+		expect(asked).toEqual(["owner/bank@v1"]);
+		expect(r.err).not.toMatch(/Can't read/);
+		expect(r.code).toBe(0);
+	});
+});
 
 describe("qretools check", () => {
 	it("passes a clean bank, saying how many files it read", async () => {
@@ -78,14 +109,14 @@ describe("qretools check", () => {
 		await writeFile(join(ws, "a-stray.yaml"), "x: 1\n");
 		const r = await run("check", ws);
 		const lines = r.out.trimEnd().split("\n");
-		// The households instrument reads its bank beside it; remote's bank isn't read here.
+		// The households instrument reads its bank beside it; remote's can't be read here.
 		expect(
 			lines.filter(
 				(l) => l.includes("households.yaml:") && !l.includes(": note: "),
 			),
 		).toEqual([]);
 		expect(lines.find((l) => l.includes("remote.yaml:3:3:"))).toMatch(
-			/error: `owner\/bank@v1` is in another repository, which `qretools check` doesn't read yet\./,
+			/error: `owner\/bank@v1` isn't reachable from these tests\./,
 		);
 		// Noted in its place among the others, by path, as compilers report per file.
 		expect(lines[0]).toBe(

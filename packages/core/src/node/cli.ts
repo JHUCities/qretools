@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
-import { addressOf } from "../address.ts";
+import { type Address, addressOf } from "../address.ts";
 import {
 	collisions,
 	type DdiDocument,
@@ -14,7 +14,7 @@ import {
 	type Item,
 } from "../ddi/document.ts";
 import { makeValidator } from "../ddi/validate.ts";
-import { type Bank, bankOf } from "../evaluate.ts";
+import { type Bank, type BankScope, bankOf, scopeOf } from "../evaluate.ts";
 import {
 	type Finding,
 	locate,
@@ -38,7 +38,11 @@ export interface Io {
 	readonly out: (text: string) => void;
 	readonly err: (text: string) => void;
 	readonly writeFile: (path: string, text: string) => Promise<void>;
+	/** A bank in another repository, read at its tag (the command uses git: `readTagged`). */
+	readonly readRemote: (address: RemoteAddress) => Promise<RemoteBank>;
 }
+
+type RemoteAddress = Extract<Address, { kind: "remote" }>;
 
 const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a bank's or workspace's findings; fail on anything to fill in or fix
@@ -49,7 +53,8 @@ const USAGE = `Usage:
 dir is the bank's or workspace's folder (default: the current directory). A workspace
 holds banks (each a folder with bank.yaml, or its root), instruments/ and workspace.yaml.
 An instrument's banks are read from the folders its \`uses\` names by relative path
-(\`./banks/x\`), or from --bank for an alias.
+(\`./banks/x\`), from another repository at its tag (\`owner/repo@v1\`, with git), or
+from --bank for an alias.
 --strict  also fail on warnings.
 --agency  the DDI agency the instrument is published under.`;
 
@@ -173,15 +178,16 @@ async function checkWorkspace(
 		);
 		return USAGE_ERROR;
 	}
-	// Banks in other repositories aren't fetched here yet: each says so on its use.
+	// Banks in other repositories, each read once at its tag; one that can't be says why on its use.
 	const remote = Object.fromEntries(
-		remotesOf(files).map((a): [string, RemoteBank] => [
-			a.key,
-			{
-				kind: "unavailable",
-				reason: `\`${a.owner}/${a.repo}${a.path === "" ? "" : `/${a.path}`}@${a.ref}\` is in another repository, which \`qretools check\` doesn't read yet.`,
-			},
-		]),
+		await Promise.all(
+			remotesOf(files).map(
+				async (a): Promise<[string, RemoteBank]> => [
+					a.key,
+					await io.readRemote(a),
+				],
+			),
+		),
 	);
 	const ws = workspaceOf(files, { remote });
 	// Each file as the workspace has it: its findings, its text, and its ranges.
@@ -405,10 +411,20 @@ async function instrument(
 			);
 			return USAGE_ERROR;
 		}
-	const banks: Record<string, Bank> = {};
+	const banks: Record<string, BankScope> = {};
 	for (const use of uses) {
 		const address =
 			use.address === undefined ? undefined : addressOf(use.address);
+		// In another repository, with no folder given for it: read at its tag.
+		if (address?.kind === "remote" && !given.has(use.alias)) {
+			const read = await io.readRemote(address);
+			if (read.kind === "unavailable") {
+				io.err(`Can't read \`${use.alias}\`: ${read.reason}\n`);
+				return USAGE_ERROR;
+			}
+			banks[use.alias] = scopeOf(read.files);
+			continue;
+		}
 		const dir =
 			given.get(use.alias) ??
 			(address?.kind === "local"

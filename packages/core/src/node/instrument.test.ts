@@ -144,6 +144,10 @@ describe("qretools instrument", () => {
 			writeFile: async (p, t) => {
 				written[p] = t;
 			},
+			readRemote: async (a) => ({
+				kind: "unavailable",
+				reason: `\`${a.key}\` isn't reachable from these tests.`,
+			}),
 		};
 		return {
 			code: await main(argv, io),
@@ -181,14 +185,17 @@ describe("qretools instrument", () => {
 		expect(none.err).toMatch(/--agency/);
 	});
 
-	it("asks where a bank is when its address isn't a folder beside it", async () => {
+	it("reads a bank in another repository at its tag, or says why it can't", async () => {
 		const r = await run(
 			"instrument",
 			"check",
 			here("../../fixtures/instruments/remote.yaml"),
 		);
+		// In another repository: read at its tag, and here it can't be.
 		expect(r.code).toBe(2);
-		expect(r.err).toMatch(/give its folder with --bank bas=/);
+		expect(r.err).toMatch(
+			/^Can't read `bas`: `owner\/bank@v1` isn't reachable from these tests\./,
+		);
 		const elsewhere = await run(
 			"instrument",
 			"check",
