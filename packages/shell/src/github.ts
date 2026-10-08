@@ -666,32 +666,6 @@ export const makeGitHubStore = (
 			});
 		},
 
-		async readFolder(target, dir) {
-			const r = await graphql<{
-				repository: { dir: Entry["object"] | null } | null;
-			}>(
-				`query Folder($owner: String!, $repo: String!, $dir: String!) {
-  repository(owner: $owner, name: $repo) { dir: object(expression: $dir) { ${FLAT} } }
-}`,
-				{
-					owner,
-					repo,
-					dir: `${target.branch}:${dir === "" ? folder : at(dir)}`,
-				},
-			);
-			if (!r.ok) return r;
-			const tree = r.value.data?.repository?.dir;
-			// No folder there: null, which the caller tells apart from an empty one.
-			if (tree === null || tree === undefined) return ok(null);
-			return ok(
-				(tree.entries ?? []).flatMap((e) =>
-					e.type === "blob"
-						? blobFile(dir === "" ? e.name : `${dir}/${e.name}`, e)
-						: [],
-				),
-			);
-		},
-
 		async read(target, path) {
 			const r = await graphql<{
 				repository: {

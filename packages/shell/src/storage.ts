@@ -215,16 +215,6 @@ export interface Store {
 	 */
 	loadBankAt(tag: string): Promise<Result<TaggedBank, Failure>>;
 	/**
-	 * The `.yaml` files directly in a folder (a path like any other here, under the
-	 * store's own folder; `""` is that folder itself), or null when there is no such
-	 * folder on the target branch, or no such branch: unlike `loadWorkspace`, it never
-	 * falls back to the default branch.
-	 */
-	readFolder(
-		target: BranchTarget,
-		dir: string,
-	): Promise<Result<readonly File[] | null, Failure>>;
-	/**
 	 * Another author's file with the scheme files of their branch, in one request, so
 	 * their question reads as it does for them, never against the viewer's own edits.
 	 */
