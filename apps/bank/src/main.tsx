@@ -11,7 +11,7 @@ import {
 } from "@qretools/shell";
 import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { bankTemplate, defaultBank } from "./config.js";
+import { bankTemplate, defaultBank, workspaceTemplate } from "./config.js";
 import { warnOnLeave } from "./model.js";
 import { readStartup } from "./persist.js";
 import { createApp } from "./store.js";
@@ -30,6 +30,7 @@ if (root) {
 		// No storage (a private window, blocked site data): start fresh.
 	}
 	const template = bankTemplate(import.meta.env);
+	const workspace = workspaceTemplate(import.meta.env);
 	const bank = defaultBank(import.meta.env);
 	const config = signInConfig(
 		import.meta.env,
@@ -70,7 +71,10 @@ if (root) {
 				signIn: { config, ...(returned !== undefined && { returned }) },
 			}),
 		},
-		template === undefined ? {} : { template },
+		{
+			...(template !== undefined && { template }),
+			...(workspace !== undefined && { workspaceTemplate: workspace }),
+		},
 	);
 	// Links live in the hash. The address is read when the event is handled, never
 	// taken from the event: a stale event after quick navigation must not pull back.

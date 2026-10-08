@@ -31,7 +31,13 @@ import { hasOwnWork, type Model } from "../model.js";
 import { useApp } from "./AppContext.js";
 
 export function SignIn({ model }: { model: Model }) {
-	const { dispatch, effects, signIn: config, template } = useApp();
+	const {
+		dispatch,
+		effects,
+		signIn: config,
+		template,
+		workspaceTemplate,
+	} = useApp();
 	const { settings, session } = model;
 	const [text, setText] = useState(
 		model.pendingLink?.repo ?? bankText(settings),
@@ -126,8 +132,9 @@ export function SignIn({ model }: { model: Model }) {
 								onChange={(e) => setText(e.target.value)}
 							/>
 							<FormControl.Caption>
-								The GitHub repository that holds the bank, as owner/name, or
-								owner/name/folder for a bank in a folder.
+								The GitHub repository that holds the bank, or a workspace of
+								banks and instruments, as owner/name, or owner/name/folder for
+								one in a folder.
 							</FormControl.Caption>
 							{problem !== undefined && (
 								<FormControl.Validation variant="error">
@@ -192,11 +199,21 @@ export function SignIn({ model }: { model: Model }) {
 					</Stack>
 				</form>
 				{/* As github.com offers "New to GitHub?" under its form. */}
+				{workspaceTemplate !== undefined && (
+					<p className="quiet signin-note">
+						New workspace?{" "}
+						<Link href={workspaceTemplate} target="_blank" rel="noreferrer">
+							Start a workspace from the template
+							<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+						</Link>
+						: an example instrument and the bank it uses.
+					</p>
+				)}
 				{template !== undefined && (
 					<p className="quiet signin-note">
 						New bank?{" "}
 						<Link href={template} target="_blank" rel="noreferrer">
-							Start one from the template
+							Start a bank from the template
 							<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
 						</Link>
 						{config?.appSlug !== undefined && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bankTemplate, defaultBank } from "./config.js";
+import { bankTemplate, defaultBank, workspaceTemplate } from "./config.js";
 
 const env = (values: Record<string, string>) =>
 	values as unknown as ImportMetaEnv;
@@ -21,6 +21,23 @@ describe("the template a new bank starts from", () => {
 		expect(bankTemplate(env({ VITE_BANK_TEMPLATE: "  " }))).toBeUndefined();
 		expect(
 			bankTemplate(env({ VITE_BANK_TEMPLATE: "not a repository" })),
+		).toBeUndefined();
+	});
+});
+
+describe("the template a new workspace starts from", () => {
+	it("is its own setting, read as the bank template is", () => {
+		expect(
+			workspaceTemplate(
+				env({
+					VITE_WORKSPACE_TEMPLATE: "JHUCities/qretools-instrument-template",
+				}),
+			),
+		).toBe(
+			"https://github.com/JHUCities/qretools-instrument-template/generate",
+		);
+		expect(
+			workspaceTemplate(env({ VITE_BANK_TEMPLATE: "a/b" })),
 		).toBeUndefined();
 	});
 });
