@@ -66,7 +66,7 @@ export function createEffects(deps: CredentialsDeps): Effects {
 				continue;
 			}
 			inFlight.add(key);
-			s.loadBank(target).then((result) => {
+			s.loadWorkspace(target).then((result) => {
 				inFlight.delete(key);
 				dispatch({ kind: "bankLoaded", key, result });
 			});

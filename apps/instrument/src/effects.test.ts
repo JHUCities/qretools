@@ -19,7 +19,7 @@ describe("reading the banks an instrument uses", () => {
 	it("waits for the address to settle, reads only the latest, and never one twice at once", async () => {
 		const read: string[] = [];
 		const store = {
-			loadBank: (t: BranchTarget) => {
+			loadWorkspace: (t: BranchTarget) => {
 				read.push(t.path);
 				return Promise.resolve(
 					ok({
@@ -28,6 +28,7 @@ describe("reading the banks an instrument uses", () => {
 						from: "default",
 						aheadBy: 0,
 						behindBy: 0,
+						unread: [],
 					}),
 				);
 			},

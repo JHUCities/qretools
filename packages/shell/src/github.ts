@@ -387,61 +387,6 @@ export const makeGitHubStore = (
 	}
 
 	/** The files at a branch, whether the branch exists, and how it compares with the bank. */
-	async function loadFrom(
-		ref: string,
-		target: BranchTarget,
-	): Promise<
-		Result<
-			{
-				files: File[];
-				exists: boolean;
-				found: boolean;
-				aheadBy: number;
-				behindBy: number;
-			},
-			Failure
-		>
-	> {
-		const r = await graphql<BankData>(
-			BANK_QUERY,
-			{
-				owner,
-				repo,
-				ref: `refs/heads/${ref}`,
-				bank: `refs/heads/${target.defaultBranch}`,
-				head: ref,
-				questions: `${ref}:${at("questions")}`,
-				bankFolder: `${ref}:${folder}`,
-				...folderVariables(ref, at),
-				...rootVariables(ref, at),
-			},
-			"bankRef",
-		);
-		if (!r.ok) return r;
-		const data = r.value.data?.repository;
-		if (!data)
-			return err({
-				kind: "unreadable",
-				message: "GitHub couldn't read the bank.",
-				hint: "Check the repository's name, and that you can open it on GitHub.",
-				...(r.value.error !== undefined && { detail: r.value.error }),
-			});
-		const questions = (data.questions?.entries ?? []).flatMap((folder) =>
-			(folder.object?.entries ?? []).flatMap((e) =>
-				blobFile(`questions/${folder.name}/${e.name}`, e),
-			),
-		);
-		const compare = data.bankRef?.compare;
-		return ok({
-			files: [...questions, ...schemeFiles(data), ...rootFiles(data)],
-			exists: data.mine !== null && data.mine !== undefined,
-			// A folder that isn't there is no bank, never an empty one.
-			found: data.bankFolder !== null && data.bankFolder !== undefined,
-			aheadBy: compare?.aheadBy ?? 0,
-			behindBy: compare?.behindBy ?? 0,
-		});
-	}
-
 	/**
 	 * Blob texts by oid, for as long as the store lives: a blob never changes, so a
 	 * reload reads only what changed since. Hidden state, as the Octokit instance is.
@@ -626,30 +571,6 @@ export const makeGitHubStore = (
 						: { kind: "notInstalled" },
 				defaultBranch: branch,
 			});
-		},
-
-		async loadBank(target) {
-			const first = await loadFrom(target.branch, target);
-			if (!first.ok) return first;
-			if (first.value.exists)
-				return ok({
-					files: first.value.files,
-					found: first.value.found,
-					from: "branch",
-					aheadBy: first.value.aheadBy,
-					behindBy: first.value.behindBy,
-				});
-			// The author's branch does not exist yet: the bank is what they start from.
-			const bank = await loadFrom(target.defaultBranch, target);
-			return bank.ok
-				? ok({
-						files: bank.value.files,
-						found: bank.value.found,
-						from: "default",
-						aheadBy: 0,
-						behindBy: 0,
-					})
-				: bank;
 		},
 
 		loadWorkspace: workspaceOn,
@@ -848,8 +769,6 @@ interface Entry {
 		readonly entries?: readonly Entry[];
 	};
 }
-type Tree = { readonly entries?: readonly Entry[] } | null;
-
 interface WhoData {
 	readonly viewer: { readonly login: string; readonly avatarUrl: string };
 	readonly repository: {
@@ -859,21 +778,6 @@ interface WhoData {
 		/** The bank's folder on the default branch: a `Tree` when it exists. */
 		readonly dir?: { readonly __typename: string } | null;
 	} | null;
-}
-
-interface BankData {
-	readonly repository?:
-		| ({
-				readonly mine?: { readonly name: string } | null;
-				readonly bankRef?: {
-					readonly compare?: {
-						readonly aheadBy: number;
-						readonly behindBy: number;
-					} | null;
-				} | null;
-				readonly questions?: Tree;
-		  } & Folders)
-		| null;
 }
 
 /**
@@ -1022,18 +926,6 @@ const FOREIGN_QUERY = `query Foreign($owner: String!, $repo: String!, $at: Strin
     ${ROOT_FIELDS}
   }
 }`;
-const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, $bankFolder: String!, ${FOLDER_PARAMS}, ${ROOT_PARAMS}) {
-  repository(owner: $owner, name: $repo) {
-    mine: ref(qualifiedName: $ref) { name }
-    bankFolder: object(expression: $bankFolder) { __typename }
-    bankRef: ref(qualifiedName: $bank) { compare(headRef: $head) { aheadBy behindBy } }
-    questions: object(expression: $questions) { ... on Tree { entries { name type object {
-      ... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } } } } } }
-    ${FOLDER_FIELDS}
-    ${ROOT_FIELDS}
-  }
-}`;
-
 function blobFile(path: string, e: Entry): File[] {
 	const o = e.object;
 	if (

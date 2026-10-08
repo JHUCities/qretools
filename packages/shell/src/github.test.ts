@@ -474,178 +474,6 @@ describe("GitHub adapter (Octokit)", () => {
 		isTruncated: false,
 		...extra,
 	});
-	const repository = (mine: boolean) => ({
-		mine: mine ? { name: "qretools-iain" } : null,
-		bankRef: { compare: mine ? { aheadBy: 2, behindBy: 1 } : null },
-		questions: {
-			entries: [
-				{
-					name: "nhd",
-					type: "tree",
-					object: {
-						entries: [
-							{
-								name: "nhd_sat.yaml",
-								type: "blob",
-								object: blob("name: nhd_sat\n"),
-							},
-							{ name: "notes.txt", type: "blob", object: blob("x") },
-							{
-								name: "big.yaml",
-								type: "blob",
-								object: blob("", { isTruncated: true }),
-							},
-						],
-					},
-				},
-			],
-		},
-		scales: {
-			entries: [
-				{
-					name: "agree4.yaml",
-					type: "blob",
-					object: blob("labels:\n  1: a\n"),
-				},
-			],
-		},
-		universes: {
-			entries: [
-				{ name: "renters.yaml", type: "blob", object: blob("text: Renters\n") },
-			],
-		},
-		concepts: {
-			entries: [
-				{ name: "trust.yaml", type: "blob", object: blob("label: Trust\n") },
-			],
-		},
-		// A bank without instructions: GitHub answers null.
-		instructions: null,
-		root_missing: blob('labels:\n  "-8": NR\n'),
-	});
-
-	it("loads the author's branch in one request: complete YAML blobs, and how it compares with the bank", async () => {
-		const { s, seen } = store(() =>
-			json({ data: { repository: repository(true) } }),
-		);
-		const r = await s.loadBank(target);
-		expect(r.ok && r.value.files.map((f) => f.path)).toEqual([
-			"questions/nhd/nhd_sat.yaml",
-			"concepts/trust.yaml",
-			"scales/agree4.yaml",
-			"universes/renters.yaml",
-			"missing.yaml",
-		]);
-		expect(r.ok && [r.value.from, r.value.aheadBy, r.value.behindBy]).toEqual([
-			"branch",
-			2,
-			1,
-		]);
-		expect(seen).toHaveLength(1);
-		// Every shared kind's folder is asked for, from the one table.
-		const body = seen[0]?.body as
-			| { variables: Record<string, string> }
-			| undefined;
-		const variables = body?.variables ?? {};
-		expect(Object.keys(variables)).toEqual(
-			expect.arrayContaining([
-				"concepts",
-				"scales",
-				"universes",
-				"instructions",
-			]),
-		);
-	});
-
-	it("loads a bank in a folder from that folder, with paths relative to it", async () => {
-		const { s, seen } = store(
-			() => json({ data: { repository: repository(true) } }),
-			false,
-			"banks/bas",
-		);
-		const r = await s.loadBank(target);
-		expect(r.ok && r.value.files.map((f) => f.path)).toContain(
-			"questions/nhd/nhd_sat.yaml",
-		);
-		const body = seen[0]?.body as { variables: Record<string, string> };
-		expect(body.variables).toMatchObject({
-			questions: "qretools-iain:banks/bas/questions",
-			scales: "qretools-iain:banks/bas/scales",
-			root_missing: "qretools-iain:banks/bas/missing.yaml",
-			root_bank: "qretools-iain:banks/bas/bank.yaml",
-		});
-	});
-
-	it("before the first save, loads the bank instead, keeping the data GitHub sends with its errors", async () => {
-		const { s, seen } = store(({ body }) => {
-			const variables = body.variables as Record<string, string>;
-			return variables.ref === "refs/heads/qretools-iain"
-				? json({
-						data: { repository: repository(false) },
-						errors: [
-							{
-								message: "Could not resolve head ref",
-								path: ["repository", "bankRef", "compare"],
-							},
-						],
-					})
-				: json({ data: { repository: repository(true) } });
-		});
-		const r = await s.loadBank(target);
-		expect(r.ok && r.value.from).toBe("default");
-		expect(r.ok && r.value.files).toHaveLength(5);
-		expect(seen).toHaveLength(2);
-	});
-
-	it("reports a missing repository as unreadable", async () => {
-		const r = await store(() =>
-			json({
-				data: { repository: null },
-				errors: [{ message: "Could not resolve" }],
-			}),
-		).s.loadBank(target);
-		expect(!r.ok && r.error.kind).toBe("unreadable");
-	});
-
-	it("any other error in the reply is a failure, not an empty folder", async () => {
-		const r = await store(() =>
-			json({
-				data: { repository: { ...repository(true), questions: null } },
-				errors: [{ message: "timeout", path: ["repository", "questions"] }],
-			}),
-		).s.loadBank(target);
-		expect(!r.ok && r.error.kind).toBe("unreadable");
-	});
-
-	it("says whether the bank's folder is there: a missing one is no bank, never an empty one", async () => {
-		const { s, seen } = store(
-			() =>
-				json({
-					data: {
-						repository: {
-							...repository(true),
-							bankFolder: { __typename: "Tree" },
-						},
-					},
-				}),
-			false,
-			"banks/bas",
-		);
-		const there = await s.loadBank(target);
-		expect(there.ok && there.value.found).toBe(true);
-		const body = seen[0]?.body as { variables: Record<string, string> };
-		expect(body.variables.bankFolder).toBe("qretools-iain:banks/bas");
-		const missing = await store(
-			() =>
-				json({
-					data: { repository: { ...repository(true), bankFolder: null } },
-				}),
-			false,
-			"banks/typo",
-		).s.loadBank(target);
-		expect(missing.ok && missing.value.found).toBe(false);
-	});
-
 	it("reads one folder's YAML files, or null when there is no folder", async () => {
 		const { s, seen } = store(
 			() =>
@@ -892,6 +720,58 @@ describe("loading a workspace", () => {
 		expect(Object.keys(blobQueries(seen)[0]?.body.variables as object)).toEqual(
 			["owner", "repo", "b0", "b1"],
 		);
+	});
+
+	it("reports a missing repository as unreadable", async () => {
+		const r = await store(() =>
+			json({
+				data: { repository: null },
+				errors: [{ message: "Could not resolve" }],
+			}),
+		).s.loadWorkspace(target);
+		expect(!r.ok && r.error.kind).toBe("unreadable");
+	});
+
+	it("takes an error on any other field as a failure, never a missing folder", async () => {
+		const r = await store(() =>
+			json({
+				data: { repository: { mine: { name: "qretools-iain" }, folder: null } },
+				errors: [{ message: "timeout", path: ["repository", "folder"] }],
+			}),
+		).s.loadWorkspace(target);
+		expect(!r.ok && r.error.kind).toBe("unreadable");
+	});
+
+	it("keeps the data GitHub sends with an error about comparing a branch not made yet", async () => {
+		const repo = workspaceRepo({
+			branches: { main: { "instruments/x.yaml": "name: x\n" } },
+		});
+		const { s } = store((req) => {
+			const answer = repo(req);
+			if (!String(req.body.query ?? "").startsWith("query Head")) return answer;
+			return new Response(
+				JSON.stringify({
+					data: {
+						repository: {
+							mine: null,
+							folder: null,
+							bankFolder: { oid: "tree-main" },
+						},
+					},
+					errors: [
+						{
+							message: "Could not resolve head ref",
+							path: ["repository", "bankRef", "compare"],
+						},
+					],
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			);
+		});
+		expect(await s.loadWorkspace(target)).toMatchObject({
+			ok: true,
+			value: { from: "default", files: [{ path: "instruments/x.yaml" }] },
+		});
 	});
 
 	it("reads the bank's default branch while the author's branch doesn't exist, in the same request", async () => {

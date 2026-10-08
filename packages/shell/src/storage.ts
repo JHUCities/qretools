@@ -195,8 +195,6 @@ export interface LoadedWorkspace extends Loaded {
 
 export interface Store {
 	whoAmI(): Promise<Result<Who, Failure>>;
-	/** Every file the tool reads, from the target branch, or the default branch while it does not exist. */
-	loadBank(target: BranchTarget): Promise<Result<Loaded, Failure>>;
 	/**
 	 * Every file of the workspace (`readsInWorkspace`), by path in it, from the target
 	 * branch, or the default branch while it does not exist: every text from one tree,
@@ -209,8 +207,8 @@ export interface Store {
 	/**
 	 * The `.yaml` files directly in a folder (a path like any other here, under the
 	 * store's own folder; `""` is that folder itself), or null when there is no such
-	 * folder on the target branch, or no such branch: unlike `loadBank`, it never falls
-	 * back to the default branch.
+	 * folder on the target branch, or no such branch: unlike `loadWorkspace`, it never
+	 * falls back to the default branch.
 	 */
 	readFolder(
 		target: BranchTarget,
