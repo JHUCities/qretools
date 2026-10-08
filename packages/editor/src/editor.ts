@@ -479,7 +479,10 @@ const primerTheme = EditorView.theme({
 	".cm-cursor, .cm-dropCursor": {
 		borderLeftColor: "var(--codeMirror-cursor-fgColor)",
 	},
-	"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+	// The focused selector is CodeMirror's own, as specific as its base theme's: anything
+	// less and its light default (a pale lavender) wins whenever the editor has focus,
+	// under dark mode's light text.
+	"&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
 		{ backgroundColor: "var(--codeMirror-selection-bgColor)" },
 	".cm-activeLine": { backgroundColor: "var(--codeMirror-activeline-bgColor)" },
 	".cm-gutters": {

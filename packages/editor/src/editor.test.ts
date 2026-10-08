@@ -151,3 +151,40 @@ describe("go to definition in the editor", () => {
 		editor.destroy();
 	});
 });
+
+describe("the selection's colour", () => {
+	it("is Primer's, focused or not: CodeMirror's light default never wins", () => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+		);
+		editor.sync({
+			id: 1,
+			text: "a: b",
+			diagnostics: [],
+			marks: [],
+			schema: {},
+		});
+		const rules = [...document.styleSheets].flatMap((s) =>
+			[...s.cssRules].map((r) => r.cssText),
+		);
+		// As specific as the base theme's focused rule, and later, so it wins.
+		const focused = (r: string) =>
+			r.includes(
+				".cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground",
+			);
+		const base = rules.findIndex(
+			(r) => focused(r) && r.includes("rgb(215, 212, 240)"),
+		);
+		const ours = rules.findIndex(
+			(r) => focused(r) && r.includes("var(--codeMirror-selection-bgColor)"),
+		);
+		// Both found: a CodeMirror upgrade that renames its rule fails here, not silently.
+		expect([base >= 0, ours >= 0]).toEqual([true, true]);
+		expect(ours).toBeGreaterThan(base);
+		editor.destroy();
+	});
+});
