@@ -9,6 +9,11 @@
 export { locate, pathAt } from "./findings.ts";
 export { type Inspection, inspect, mentionAt } from "./inspect.ts";
 export {
+	type CompletionOption,
+	type InstrumentCompletion,
+	instrumentCompletion,
+} from "./instrument/complete.ts";
+export {
 	type OutlineItem,
 	type OutlinePart,
 	outlineOf,

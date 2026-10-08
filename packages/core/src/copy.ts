@@ -52,3 +52,12 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 
 /** A quick fix's label: what the click will write. */
 export const fixLabel = (value: string): string => `Use \`${value}\``;
+
+/** What a name a condition reads is, as an instrument's author is told it. */
+export const NAME_KIND = {
+	input: "from outside",
+	compute: "computed",
+	as: "asked again",
+	index: "row number",
+	bank: "a bank's answer",
+} as const;

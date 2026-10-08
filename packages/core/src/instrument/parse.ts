@@ -70,7 +70,8 @@ const TOP = [
 	"inputs",
 	"flow",
 ];
-const CONSTRUCTS = [
+/** The steps a flow is made of, each named by its own key. */
+export const CONSTRUCTS = [
 	"ask",
 	"say",
 	"section",
@@ -91,6 +92,22 @@ const FIELDS: Readonly<Record<string, readonly string[]>> = {
 	roster: ["count", "more", "flow"],
 	each: ["flow"],
 };
+/**
+ * Where the condition language is written, by what holds it: each construct's fields
+ * (and a check's) that hold a condition or a value. The parser reads them by this table
+ * and completion offers names in them, so the two can't disagree. A fill's source,
+ * `fill: {name: <value>}`, is the one more place (`FILL_SOURCE`).
+ */
+export const EXPRESSIONS = {
+	if: { if: "condition" },
+	stop: { stop: "condition" },
+	compute: { value: "value" },
+	roster: { count: "value", more: "condition" },
+	check: { ensure: "condition" },
+} as const satisfies Readonly<
+	Record<string, Readonly<Record<string, "condition" | "value">>>
+>;
+export const FILL_SOURCE = "value";
 const ORDERS: readonly Order[] = ["random", "rotate"];
 
 /**
@@ -766,7 +783,7 @@ function readStep(
 						"Inside a section or branch, put what follows under an `if` instead.",
 					),
 				);
-			const cond = readCond(own, at, ctx, "condition");
+			const cond = readCond(own, at, ctx, EXPRESSIONS.stop.stop);
 			const sayText = readText(
 				item.get("say", true),
 				`${path}.say`,
@@ -793,7 +810,7 @@ function readStep(
 				item.get("value", true),
 				`${path}.value`,
 				ctx,
-				"value",
+				EXPRESSIONS.compute.value,
 				name === undefined ? undefined : { name, path },
 			);
 			if (name !== undefined) {
@@ -913,7 +930,14 @@ function readRoster(
 					kind: "count",
 					...optional(
 						"value",
-						readCond(count, `${path}.count`, ctx, "value", undefined, "number"),
+						readCond(
+							count,
+							`${path}.count`,
+							ctx,
+							EXPRESSIONS.roster.count,
+							undefined,
+							"number",
+						),
 					),
 				}
 			: more !== undefined
@@ -922,7 +946,7 @@ function readRoster(
 						...optional(
 							"cond",
 							within(name, ctx, () =>
-								readCond(more, `${path}.more`, ctx, "condition"),
+								readCond(more, `${path}.more`, ctx, EXPRESSIONS.roster.more),
 							),
 						),
 					}
@@ -1023,7 +1047,12 @@ function readIf(item: YAMLMap, path: string, ctx: Context): Node {
 	let otherwise: readonly Node[] | undefined;
 	// `else` holding one `if` is else-if: walk the chain into one node.
 	while (at !== undefined) {
-		const cond = readCond(at.get("if", true), `${atPath}.if`, ctx, "condition");
+		const cond = readCond(
+			at.get("if", true),
+			`${atPath}.if`,
+			ctx,
+			EXPRESSIONS.if.if,
+		);
 		const thenNode = at.get("then", true);
 		const then =
 			thenNode === undefined
@@ -1565,7 +1594,7 @@ function readFills(
 						: "It has no fills.",
 				),
 			);
-		const source = readCond(pair.value, at, ctx, "value");
+		const source = readCond(pair.value, at, ctx, FILL_SOURCE);
 		// "Which answer fills it": one name. An expression would need a computed value first.
 		if (source !== undefined && source.expr.kind !== "name")
 			ctx.say(
@@ -1638,7 +1667,7 @@ function readChecks(
 			item.get("ensure", true),
 			`${at}.ensure`,
 			ctx,
-			"condition",
+			EXPRESSIONS.check.ensure,
 		);
 		const severityNode = item.get("severity", true);
 		const severityValue = isScalar(severityNode)
