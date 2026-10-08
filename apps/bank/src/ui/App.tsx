@@ -165,7 +165,7 @@ export function App() {
 					paddingInline={{ narrow: "normal", regular: "spacious" }}
 				>
 					{/*
-					 * The wordmark: real text in two typefaces (app.css), read as one word.
+					 * The wordmark: real text in two typefaces (the shell's app.css), read as one word.
 					 * Which bank is open is the sidebar's title, not the header's.
 					 */}
 					<h1 className="brand">

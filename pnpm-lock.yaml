@@ -14,24 +14,9 @@ importers:
 
   apps/bank:
     dependencies:
-      '@fontsource-variable/mona-sans':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/monaspace-krypton':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/monaspace-neon':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/monaspace-radon':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@primer/octicons-react':
         specifier: ^19.38.0
         version: 19.38.0(react@19.3.0)
-      '@primer/primitives':
-        specifier: ^11.10.0
-        version: 11.10.0
       '@primer/react':
         specifier: ^38.40.0
         version: 38.40.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react-is@19.3.0)(react@19.3.0)
@@ -164,6 +149,18 @@ importers:
 
   packages/shell:
     dependencies:
+      '@fontsource-variable/mona-sans':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/monaspace-krypton':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/monaspace-neon':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/monaspace-radon':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@octokit/core':
         specifier: ^7.0.8
         version: 7.0.8
@@ -176,6 +173,9 @@ importers:
       '@octokit/request-error':
         specifier: ^7.1.2
         version: 7.1.2
+      '@primer/primitives':
+        specifier: ^11.10.0
+        version: 11.10.0
       '@qretools/core':
         specifier: workspace:*
         version: link:../core

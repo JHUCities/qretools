@@ -671,7 +671,7 @@ function Inspector({
 }
 
 /**
- * The inspector's fixed box (four lines; app.css): what does not fit scrolls, and
+ * The inspector's fixed box (four lines; the shell's app.css): what does not fit scrolls, and
  * Primer's ScrollableRegion makes it focusable and a named region only then. A plain
  * div around it: one name, not two, and no complementary landmark nested inside the
  * source's region.
