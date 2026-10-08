@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeGitHubStore } from "./github.ts";
+import { batchesOf, makeGitHubStore } from "./github.ts";
 import { AuthError, type BranchTarget } from "./storage.ts";
 
 type Seen = { url: string; method: string; body: Record<string, unknown> };
@@ -766,5 +766,251 @@ describe("GitHub adapter (Octokit)", () => {
 			kind: "auth",
 			message: "Your GitHub sign-in has ended.",
 		});
+	});
+});
+
+describe("loading a workspace", () => {
+	/** A repository with one branch per entry: each a folder tree of path to text. */
+	function workspaceRepo({
+		branches,
+		truncated = false,
+		odd = {},
+	}: {
+		branches: Record<string, Record<string, string> | null>;
+		truncated?: boolean;
+		/** Blobs GitHub won't give as text, by path. */
+		odd?: Record<string, "binary" | "truncated">;
+	}) {
+		const sha = (branch: string, path: string, text: string) =>
+			odd[path] === undefined ? `t:${text}` : `o:${branch}:${path}`;
+		return (req: Seen): Response => {
+			// What the repository holds now: a test may push between loads.
+			const blobs = new Map<string, { text: string; path: string }>();
+			for (const [branch, tree] of Object.entries(branches))
+				for (const [path, text] of Object.entries(tree ?? {}))
+					blobs.set(sha(branch, path, text), { text, path });
+			if (req.url.includes("/git/trees/")) {
+				const branch = decodeURIComponent(
+					/\/git\/trees\/tree-([^?]+)/.exec(req.url)?.[1] ?? "",
+				);
+				return json({
+					truncated,
+					tree: [
+						{ path: "banks", type: "tree", sha: "d" },
+						...Object.entries(branches[branch] ?? {}).map(([path, text]) => ({
+							path,
+							type: "blob",
+							sha: sha(branch, path, text),
+						})),
+					],
+				});
+			}
+			const query = String(req.body.query);
+			const v = req.body.variables as Record<string, string>;
+			if (query.startsWith("query Head")) {
+				// A folder on a branch, as `branch:folder` names it: its tree, if there.
+				const folderOn = (expression = "") => {
+					const branch = expression.slice(0, expression.indexOf(":"));
+					const tree = branches[branch];
+					return tree === null || tree === undefined
+						? null
+						: { oid: `tree-${branch}` };
+				};
+				const branch = (v.ref ?? "").replace("refs/heads/", "");
+				return json({
+					data: {
+						repository: {
+							mine: branch in branches ? { name: branch } : null,
+							bankRef: { compare: { aheadBy: 2, behindBy: 1 } },
+							folder: folderOn(v.folder),
+							bankFolder: folderOn(v.bankFolder),
+						},
+					},
+				});
+			}
+			const repository: Record<string, unknown> = {};
+			for (const [k, oid] of Object.entries(v))
+				if (/^b\d+$/.test(k)) {
+					const b = blobs.get(oid);
+					const how = b === undefined ? undefined : odd[b.path];
+					repository[k] =
+						b === undefined
+							? null
+							: how === "binary"
+								? { text: null, isBinary: true, isTruncated: false }
+								: how === "truncated"
+									? { text: "", isBinary: false, isTruncated: true }
+									: { text: b.text, isBinary: false, isTruncated: false };
+				}
+			return json({ data: { repository } });
+		};
+	}
+	const blobQueries = (seen: Seen[]) =>
+		seen.filter((r) => String(r.body.query ?? "").startsWith("query Blobs"));
+
+	it("reads every workspace file from the author's branch, from its folder's one tree", async () => {
+		const { s, seen } = store(
+			workspaceRepo({
+				branches: {
+					"qretools-iain": {
+						"workspace.yaml": "agency: org.example\n",
+						"instruments/x.yaml": "name: x\n",
+						"banks/hh/bank.yaml": "agency: org.example\n",
+						"README.md": "# hi\n",
+						".github/workflows/check.yaml": "on: push\n",
+						"node_modules/p/x.yaml": "x\n",
+					},
+				},
+			}),
+		);
+		const r = await s.loadWorkspace(target);
+		expect(r).toEqual({
+			ok: true,
+			value: {
+				files: [
+					{
+						path: "workspace.yaml",
+						sha: "t:agency: org.example\n",
+						text: "agency: org.example\n",
+					},
+					{ path: "instruments/x.yaml", sha: "t:name: x\n", text: "name: x\n" },
+					{
+						path: "banks/hh/bank.yaml",
+						sha: "t:agency: org.example\n",
+						text: "agency: org.example\n",
+					},
+				],
+				unread: [],
+				found: true,
+				from: "branch",
+				aheadBy: 2,
+				behindBy: 1,
+			},
+		});
+		// The head, the tree, and one batch of texts, the same text fetched once.
+		expect(seen).toHaveLength(3);
+		expect(Object.keys(blobQueries(seen)[0]?.body.variables as object)).toEqual(
+			["owner", "repo", "b0", "b1"],
+		);
+	});
+
+	it("reads the bank's default branch while the author's branch doesn't exist, in the same request", async () => {
+		const { s, seen } = store(
+			workspaceRepo({
+				branches: { main: { "instruments/x.yaml": "name: x\n" } },
+			}),
+		);
+		expect(await s.loadWorkspace(target)).toMatchObject({
+			ok: true,
+			value: {
+				from: "default",
+				aheadBy: 0,
+				behindBy: 0,
+				found: true,
+				files: [{ path: "instruments/x.yaml" }],
+			},
+		});
+		// One head (both branches), the tree, one batch.
+		expect(seen).toHaveLength(3);
+	});
+
+	it("is no workspace where its folder isn't, never an empty one", async () => {
+		const { s } = store(workspaceRepo({ branches: { "qretools-iain": null } }));
+		expect(await s.loadWorkspace(target)).toMatchObject({
+			ok: true,
+			value: { found: false, files: [] },
+		});
+	});
+
+	it("refuses a tree GitHub cut short, rather than read the rest as deleted", async () => {
+		const { s } = store(
+			workspaceRepo({
+				branches: { "qretools-iain": { "x.yaml": "x\n" } },
+				truncated: true,
+			}),
+		);
+		expect(await s.loadWorkspace(target)).toMatchObject({
+			ok: false,
+			error: {
+				kind: "unreadable",
+				message: expect.stringMatching(/too large/),
+			},
+		});
+	});
+
+	it("lists the files GitHub won't give as text, and reads the rest", async () => {
+		const { s } = store(
+			workspaceRepo({
+				branches: {
+					"qretools-iain": {
+						"a.yaml": "a\n",
+						"b.yaml": "b\n",
+						"c.yaml": "c\n",
+					},
+				},
+				odd: { "a.yaml": "binary", "b.yaml": "truncated" },
+			}),
+		);
+		expect(await s.loadWorkspace(target)).toMatchObject({
+			ok: true,
+			value: {
+				files: [{ path: "c.yaml" }],
+				unread: [
+					{ path: "a.yaml", reason: "It isn't text." },
+					{
+						path: "b.yaml",
+						reason: "It's too large for GitHub to send as text.",
+					},
+				],
+			},
+		});
+	});
+
+	it("asks for texts in batches, and on a reload only for those that changed", async () => {
+		const many = Object.fromEntries(
+			Array.from({ length: 300 }, (_, i) => [`q/${i}.yaml`, `n: ${i}\n`]),
+		);
+		const branches: Record<string, Record<string, string>> = {
+			"qretools-iain": many,
+		};
+		const { s, seen } = store(workspaceRepo({ branches }));
+		await s.loadWorkspace(target);
+		expect(blobQueries(seen)).toHaveLength(2);
+		branches["qretools-iain"] = { ...many, "q/0.yaml": "n: changed\n" };
+		seen.length = 0;
+		const again = await s.loadWorkspace(target);
+		expect(blobQueries(seen)).toHaveLength(1);
+		expect(
+			Object.values(blobQueries(seen)[0]?.body.variables as object),
+		).toContain("t:n: changed\n");
+		expect(again.ok && again.value.files.length).toBe(300);
+	});
+
+	it("reads paths within the workspace's folder, and asks for that folder's tree", async () => {
+		const { s, seen } = store(
+			workspaceRepo({ branches: { "qretools-iain": { "w.yaml": "w\n" } } }),
+			false,
+			"teams/a",
+		);
+		const r = await s.loadWorkspace(target);
+		expect(r.ok && r.value.files.map((f) => f.path)).toEqual(["w.yaml"]);
+		expect(seen[0]?.body.variables).toMatchObject({
+			folder: "qretools-iain:teams/a",
+		});
+	});
+});
+
+describe("batches of blobs", () => {
+	const ids = (n: number) => Array.from({ length: n }, (_, i) => i);
+	it("hold at most 250, in order", () => {
+		expect(batchesOf(ids(600), () => 1).map((b) => b.length)).toEqual([
+			250, 250, 100,
+		]);
+	});
+
+	it("hold at most a megabyte, a larger file alone", () => {
+		const size = (i: number) => [600_000, 600_000, 2_000_000, 10][i] ?? 0;
+		expect(batchesOf(ids(4), size)).toEqual([[0], [1], [2], [3]]);
+		expect(batchesOf(ids(3), () => 400_000)).toEqual([[0, 1], [2]]);
 	});
 });

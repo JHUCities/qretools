@@ -47,6 +47,7 @@ export {
 	type Failure,
 	type File,
 	type Loaded,
+	type LoadedWorkspace,
 	type MakeStore,
 	parseBank,
 	parseRepo,

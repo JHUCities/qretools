@@ -184,10 +184,27 @@ export interface Loaded {
 	readonly behindBy: number;
 }
 
+/** A workspace as read: its files, and the ones GitHub couldn't give as text. */
+export interface LoadedWorkspace extends Loaded {
+	/** Workspace files read as nothing: binary, or too large for GitHub to send as text. */
+	readonly unread: readonly {
+		readonly path: string;
+		readonly reason: string;
+	}[];
+}
+
 export interface Store {
 	whoAmI(): Promise<Result<Who, Failure>>;
 	/** Every file the tool reads, from the target branch, or the default branch while it does not exist. */
 	loadBank(target: BranchTarget): Promise<Result<Loaded, Failure>>;
+	/**
+	 * Every file of the workspace (`readsInWorkspace`), by path in it, from the target
+	 * branch, or the default branch while it does not exist: every text from one tree,
+	 * so a push during the load can't mix versions.
+	 */
+	loadWorkspace(
+		target: BranchTarget,
+	): Promise<Result<LoadedWorkspace, Failure>>;
 	read(target: BranchTarget, path: string): Promise<Result<File, Failure>>;
 	/**
 	 * The `.yaml` files directly in a folder (a path like any other here, under the

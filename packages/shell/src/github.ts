@@ -22,6 +22,7 @@ import {
 	type Result,
 	ROOT,
 	type RootKind,
+	readsInWorkspace,
 } from "@qretools/core";
 import {
 	AuthError,
@@ -32,6 +33,7 @@ import {
 	type Committed,
 	type Failure,
 	type File,
+	type LoadedWorkspace,
 	type Store,
 } from "./storage.ts";
 
@@ -440,6 +442,140 @@ export const makeGitHubStore = (
 		});
 	}
 
+	/**
+	 * Blob texts by oid, for as long as the store lives: a blob never changes, so a
+	 * reload reads only what changed since. Hidden state, as the Octokit instance is.
+	 */
+	const texts = new Map<string, string>();
+
+	/**
+	 * The workspace on the author's branch, or the default branch while it does not
+	 * exist: its folder's tree, recursively, then the texts of its files by oid (all from
+	 * that one tree), a batch at a time.
+	 */
+	async function workspaceOn(
+		target: BranchTarget,
+	): Promise<Result<LoadedWorkspace, Failure>> {
+		const r = await graphql<HeadData>(
+			HEAD_QUERY,
+			{
+				owner,
+				repo,
+				ref: `refs/heads/${target.branch}`,
+				bank: `refs/heads/${target.defaultBranch}`,
+				head: target.branch,
+				folder: `${target.branch}:${folder}`,
+				bankFolder: `${target.defaultBranch}:${folder}`,
+			},
+			"bankRef",
+		);
+		if (!r.ok) return r;
+		const data = r.value.data?.repository;
+		if (!data)
+			return err({
+				kind: "unreadable",
+				message: "GitHub couldn't read the workspace.",
+				hint: "Check the repository's name, and that you can open it on GitHub.",
+				...(r.value.error !== undefined && { detail: r.value.error }),
+			});
+		const compare = data.bankRef?.compare;
+		// The author's branch does not exist yet: the bank is what they start from.
+		const head =
+			data.mine !== null && data.mine !== undefined
+				? {
+						from: "branch" as const,
+						tree: data.folder?.oid,
+						aheadBy: compare?.aheadBy ?? 0,
+						behindBy: compare?.behindBy ?? 0,
+					}
+				: {
+						from: "default" as const,
+						tree: data.bankFolder?.oid,
+						aheadBy: 0,
+						behindBy: 0,
+					};
+		const { tree, ...loaded } = head;
+		// A folder that isn't there is no workspace, never an empty one.
+		if (tree === undefined)
+			return ok({ ...loaded, found: false, files: [], unread: [] });
+		const listed = await run(() =>
+			octokit.request("GET /repos/{owner}/{repo}/git/trees/{tree_sha}", {
+				owner,
+				repo,
+				tree_sha: tree,
+				recursive: "1",
+			}),
+		);
+		if (!listed.ok) return listed;
+		// A partial list would read the files left out as deleted.
+		if (listed.value.data.truncated)
+			return err({
+				kind: "unreadable",
+				message:
+					"This workspace is too large for GitHub to list at once (over 100,000 files or 7 MB of tree).",
+				hint: "Keep the workspace in a smaller folder of the repository.",
+			});
+		const blobs = listed.value.data.tree.flatMap((e) =>
+			e.type === "blob" &&
+			e.path !== undefined &&
+			e.sha !== undefined &&
+			readsInWorkspace(e.path)
+				? [{ path: e.path, sha: e.sha, size: e.size ?? 0 }]
+				: [],
+		);
+		const reasons = new Map<string, string>();
+		const sizes = new Map(blobs.map((b) => [b.sha, b.size]));
+		const wanted = [...sizes.keys()].filter((sha) => !texts.has(sha));
+		for (const batch of batchesOf(wanted, (sha) => sizes.get(sha) ?? 0)) {
+			const b = await blobTexts(batch);
+			if (!b.ok) return b;
+			for (const [sha, blob] of b.value)
+				if (blob === null) reasons.set(sha, "GitHub has no such file.");
+				else if (blob.isBinary) reasons.set(sha, "It isn't text.");
+				else if (blob.isTruncated || typeof blob.text !== "string")
+					reasons.set(sha, "It's too large for GitHub to send as text.");
+				else texts.set(sha, blob.text);
+		}
+		const files: File[] = [];
+		const unread: { path: string; reason: string }[] = [];
+		for (const b of blobs) {
+			const text = texts.get(b.sha);
+			if (text !== undefined) files.push({ path: b.path, sha: b.sha, text });
+			else
+				unread.push({
+					path: b.path,
+					reason: reasons.get(b.sha) ?? "GitHub has no such file.",
+				});
+		}
+		return ok({ ...loaded, found: true, files, unread });
+	}
+
+	/** Blobs by oid, in one request: each one's text, or null for an oid GitHub lacks. */
+	async function blobTexts(
+		shas: readonly string[],
+	): Promise<Result<Map<string, BlobData | null>, Failure>> {
+		const params = shas.map((_, i) => `$b${i}: GitObjectID!`).join(", ");
+		const fields = shas
+			.map(
+				(_, i) =>
+					`b${i}: object(oid: $b${i}) { ... on Blob { text isBinary isTruncated } }`,
+			)
+			.join("\n    ");
+		const r = await graphql<{
+			repository?: Record<string, BlobData | null> | null;
+		}>(
+			`query Blobs($owner: String!, $repo: String!, ${params}) {\n  repository(owner: $owner, name: $repo) {\n    ${fields}\n  }\n}`,
+			{
+				owner,
+				repo,
+				...Object.fromEntries(shas.map((sha, i) => [`b${i}`, sha])),
+			},
+		);
+		if (!r.ok) return r;
+		const data = r.value.data?.repository ?? {};
+		return ok(new Map(shas.map((sha, i) => [sha, data[`b${i}`] ?? null])));
+	}
+
 	return {
 		async whoAmI() {
 			// Whether the app can write here is asked alongside, so it adds no wait; a
@@ -515,6 +651,8 @@ export const makeGitHubStore = (
 					})
 				: bank;
 		},
+
+		loadWorkspace: workspaceOn,
 
 		async readWithSchemes(target, path) {
 			const ref = target.branch;
@@ -736,6 +874,80 @@ interface BankData {
 				readonly questions?: Tree;
 		  } & Folders)
 		| null;
+}
+
+/**
+ * A workspace's head: whether the author's branch exists, how it compares, and the
+ * folder's tree on it and on the default branch, so a branch not made yet costs no
+ * second request.
+ */
+interface HeadData {
+	readonly repository?: {
+		readonly mine?: { readonly name: string } | null;
+		readonly bankRef?: {
+			readonly compare?: {
+				readonly aheadBy: number;
+				readonly behindBy: number;
+			} | null;
+		} | null;
+		readonly folder?: { readonly oid?: string } | null;
+		readonly bankFolder?: { readonly oid?: string } | null;
+	} | null;
+}
+
+const HEAD_QUERY = `query Head($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $folder: String!, $bankFolder: String!) {
+  repository(owner: $owner, name: $repo) {
+    mine: ref(qualifiedName: $ref) { name }
+    bankRef: ref(qualifiedName: $bank) { compare(headRef: $head) { aheadBy behindBy } }
+    folder: object(expression: $folder) { ... on Tree { oid } }
+    bankFolder: object(expression: $bankFolder) { ... on Tree { oid } }
+  }
+}`;
+
+/** A blob's text as GraphQL gives it. */
+interface BlobData {
+	readonly text?: string | null;
+	readonly isBinary?: boolean;
+	readonly isTruncated?: boolean;
+}
+
+/**
+ * Blobs per GraphQL request. Octokit's throttling spaces GraphQL requests a second
+ * apart (it counts them with writes), so the number of requests is the load's time:
+ * measured on the reference bank (473 files), 100 a request took 5.6 s, 250 took 2.5 s.
+ * Still well inside GitHub's node and time limits for files of this size.
+ */
+const BLOB_BATCH = 250;
+/**
+ * Bytes of text per GraphQL request, so a workspace of large YAML files (an archive, say)
+ * can't make one response slow enough to hit GitHub's ten-second limit. A blob larger
+ * than this goes alone.
+ */
+const BLOB_BYTES = 1_000_000;
+
+/** Items in order, in batches of at most `BLOB_BATCH` items and `BLOB_BYTES` bytes; a larger item goes alone. */
+export function batchesOf<T>(
+	items: readonly T[],
+	size: (item: T) => number,
+): T[][] {
+	const batches: T[][] = [];
+	let batch: T[] = [];
+	let bytes = 0;
+	for (const item of items) {
+		const n = size(item);
+		if (
+			batch.length > 0 &&
+			(batch.length === BLOB_BATCH || bytes + n > BLOB_BYTES)
+		) {
+			batches.push(batch);
+			batch = [];
+			bytes = 0;
+		}
+		batch.push(item);
+		bytes += n;
+	}
+	if (batch.length > 0) batches.push(batch);
+	return batches;
 }
 
 const WHO_QUERY = `query Who($owner: String!, $repo: String!, $dir: String!) {
