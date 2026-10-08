@@ -9,7 +9,7 @@ import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
 import type { Store } from "@qretools/shell";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
 import { AppContext } from "./AppContext.js";
@@ -115,6 +115,8 @@ describe("a workspace of several banks", () => {
 		await act(async () => {});
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+			"Instrument…",
+			"Workspace details",
 			"banks/a",
 			"banks/b",
 		]);
@@ -131,6 +133,17 @@ describe("a workspace of several banks", () => {
 });
 
 describe("a workspace's instruments", () => {
+	// jsdom makes no blob URLs; an open instrument's download link needs one.
+	const { createObjectURL, revokeObjectURL } = URL;
+	beforeEach(() => {
+		URL.createObjectURL = () => "blob:ddi";
+		URL.revokeObjectURL = () => {};
+	});
+	afterEach(() => {
+		URL.createObjectURL = createObjectURL;
+		URL.revokeObjectURL = revokeObjectURL;
+	});
+
 	it("come first, then each bank, with the workspace details last among them", async () => {
 		renderWorkspace();
 		await act(async () => {});
@@ -149,14 +162,6 @@ describe("a workspace's instruments", () => {
 	});
 
 	it("open as their source, findings, outline and DDI", async () => {
-		// jsdom makes no blob URLs; the download link needs one.
-		const { createObjectURL, revokeObjectURL } = URL;
-		URL.createObjectURL = () => "blob:ddi";
-		URL.revokeObjectURL = () => {};
-		onTestFinished(() => {
-			URL.createObjectURL = createObjectURL;
-			URL.revokeObjectURL = revokeObjectURL;
-		});
 		renderWorkspace();
 		await act(async () => {});
 		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
@@ -169,6 +174,30 @@ describe("a workspace's instruments", () => {
 		// The outline is the flow, each step a way to its place.
 		expect(screen.getByRole("button", { name: /alpha/ })).toBeTruthy();
 		expect(screen.getByRole("button", { name: /Close/ })).toBeTruthy();
+	});
+
+	it("are made from New, named first", async () => {
+		const app = renderWorkspace();
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Instrument…" }));
+		const dialog = await screen.findByRole("dialog", {
+			name: "New instrument",
+		});
+		fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), {
+			target: { value: "wave2" },
+		});
+		expect(within(dialog).getByText("instruments/wave2.yaml")).toBeTruthy();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+		await act(async () => {});
+		const tree = screen.getByRole("tree", { name: "Instruments" });
+		expect(within(tree).getByRole("treeitem", { name: /^wave2/ })).toBeTruthy();
+		const { model } = app.store.getState();
+		expect(
+			Object.values(model.local.workspace).map((e) =>
+				e.kind === "instrument" ? e.name : e.kind,
+			),
+		).toContain("wave2");
 	});
 
 	it("aren't shown for a workspace that is one bank alone", async () => {

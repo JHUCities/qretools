@@ -9,6 +9,7 @@ import {
 	type InstrumentIn,
 	inBank,
 	instrumentOf,
+	instrumentPath,
 	isRoot,
 	joinFolder,
 	type Mention,
@@ -68,6 +69,7 @@ import {
 	hasOwnWork,
 	type Id,
 	type InstrumentEntry,
+	instrumentSource,
 	isBankEntry,
 	type Model,
 	type Msg,
@@ -81,9 +83,12 @@ import {
 	type Remote,
 	SCHEME_TEMPLATES,
 	type SchemeEntry,
+	sameName,
 	schemeFileNamed,
 	signedOut,
 	toWork,
+	WORKSPACE_DETAILS_TEMPLATE,
+	type WorkspaceFileEntry,
 } from "./model.js";
 import {
 	claimOf,
@@ -439,6 +444,73 @@ function step(model: Model, msg: Msg): Step {
 					? { ...naming, name: msg.name }
 					: { ...naming, text: msg.text };
 			return [{ ...model, browser: { ...model.browser, naming: changed } }, []];
+		}
+
+		case "instrumentCreateOpened":
+			return [
+				{
+					...model,
+					browser: { ...model.browser, namingInstrument: { name: "" } },
+				},
+				[],
+			];
+
+		case "instrumentNameChanged":
+			return model.browser.namingInstrument === undefined
+				? [model, []]
+				: [
+						{
+							...model,
+							browser: {
+								...model.browser,
+								namingInstrument: { name: msg.name },
+							},
+						},
+						[],
+					];
+
+		case "instrumentNamingCancelled":
+			return [
+				{
+					...model,
+					browser: compact({ ...model.browser, namingInstrument: undefined }),
+				},
+				[],
+			];
+
+		case "instrumentNamingConfirmed": {
+			const naming = model.browser.namingInstrument;
+			if (
+				naming === undefined ||
+				instrumentNameProblem(model, naming.name) !== undefined
+			)
+				return [model, []];
+			const [added, id] = add(
+				{
+					...model,
+					browser: compact({ ...model.browser, namingInstrument: undefined }),
+				},
+				{
+					kind: "instrument",
+					name: naming.name,
+					source: instrumentSource(naming.name),
+				},
+			);
+			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
+		}
+
+		case "workspaceDetailsOpened": {
+			// One per workspace: open it if it exists, else start it.
+			const existing = Object.values(model.local.workspace).find(
+				(e) => e.kind === "workspaceFile",
+			);
+			if (existing)
+				return [{ ...model, screen: { kind: "editing", id: existing.id } }, []];
+			const [added, id] = add(model, {
+				kind: "workspaceFile",
+				source: WORKSPACE_DETAILS_TEMPLATE,
+			});
+			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
 		}
 
 		case "schemeNamingCancelled":
@@ -1613,6 +1685,26 @@ const taken = (model: Model, path: Path, self?: Id): boolean =>
  * Why a name cannot be given to a new scheme file, or undefined when it can. The
  * dialog shows it as the author types; `update` refuses on it.
  */
+/**
+ * Why a new instrument can't have this name, or undefined: the name is its file's
+ * (`instruments/<name>.yaml`), compared ignoring case, as two files differing only in
+ * case collide in a checkout on macOS or Windows and read as one to an author.
+ */
+export function instrumentNameProblem(
+	model: Pick<Model, "local" | "remote">,
+	name: string,
+): string | undefined {
+	if (name === "") return "Give it a name.";
+	if (!NAME_PATTERN.test(name)) return NAME_RULE_TEXT;
+	const key = instrumentPath(name).toLowerCase();
+	const taken =
+		Object.values(model.local.workspace).some(
+			(e) => e.kind === "instrument" && sameName(e.name, name),
+		) ||
+		Object.keys(model.remote.workspace).some((p) => p.toLowerCase() === key);
+	return taken ? `An instrument named \`${name}\` already exists.` : undefined;
+}
+
 export function schemeNameProblem(
 	model: Model,
 	kind: NamedScheme,
@@ -1880,7 +1972,9 @@ function without(model: Model, id: Id): Model {
 
 type NewFile =
 	| Pick<Question, "kind" | "bank" | "source">
-	| Pick<SchemeEntry, "kind" | "name" | "bank" | "source">;
+	| Pick<SchemeEntry, "kind" | "name" | "bank" | "source">
+	| Pick<InstrumentEntry, "kind" | "name" | "source">
+	| Pick<WorkspaceFileEntry, "kind" | "source">;
 
 function add(model: Model, file: NewFile): [Model, Id] {
 	const id = model.nextId;

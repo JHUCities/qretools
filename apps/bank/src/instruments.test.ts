@@ -4,7 +4,7 @@
  * reads here; the workspace details save alone.
  */
 import { fileURLToPath } from "node:url";
-import { ok } from "@qretools/core";
+import { NAME_RULE_TEXT, ok } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
@@ -19,6 +19,7 @@ import {
 import {
 	instrumentAlsoSaves,
 	instrumentDependencies,
+	instrumentNameProblem,
 	signOutPlan,
 	update,
 } from "./update.js";
@@ -265,5 +266,90 @@ describe("an open instrument", () => {
 				(q) => read(q).draft.name ?? "",
 			),
 		).toEqual(["consent", "shared scale yes_no"]);
+	});
+});
+
+describe("a new instrument", () => {
+	const named = (m: Model, name: string): Model =>
+		update(update(m, { kind: "instrumentCreateOpened" })[0], {
+			kind: "instrumentNameChanged",
+			name,
+		})[0];
+
+	it("is named by the rule its file's path needs, never as another's", () => {
+		const m = loaded();
+		expect(instrumentNameProblem(m, "")).toBe("Give it a name.");
+		expect(instrumentNameProblem(m, "Wave 2")).toBe(NAME_RULE_TEXT);
+		// On GitHub already, in any case.
+		expect(instrumentNameProblem(m, "households")).toMatch(/already exists/);
+		const [made] = update(named(m, "wave2"), {
+			kind: "instrumentNamingConfirmed",
+		});
+		// In this tab, before it's saved.
+		expect(instrumentNameProblem(made, "wave2")).toMatch(/already exists/);
+		// The rule allows lowercase only, but GitHub may hold a file in any case: the
+		// two would collide in a checkout on macOS or Windows.
+		const capital: Model = {
+			...m,
+			remote: {
+				...m.remote,
+				workspace: {
+					...m.remote.workspace,
+					"instruments/Wave3.yaml": { sha: "w", text: "name: Wave3\n" },
+				},
+			},
+		};
+		expect(instrumentNameProblem(capital, "wave3")).toMatch(/already exists/);
+		const [refused] = update(named(made, "wave2"), {
+			kind: "instrumentNamingConfirmed",
+		});
+		expect(Object.keys(refused.local.workspace)).toEqual(
+			Object.keys(made.local.workspace),
+		);
+	});
+
+	it("opens as the template with its name written, and saves at its name's path", () => {
+		const [m] = update(named(loaded(), "wave2"), {
+			kind: "instrumentNamingConfirmed",
+		});
+		expect(m.browser.namingInstrument).toBeUndefined();
+		const e = Object.values(m.local.workspace).find(
+			(f) => f.kind === "instrument" && f.name === "wave2",
+		);
+		expect(e?.source).toMatch(/^name: wave2$/m);
+		expect(e?.source).toMatch(/^uses:$/m);
+		expect(m.screen).toEqual({ kind: "editing", id: e?.id });
+		expect(
+			commitOf(update(m, { kind: "saveRequested", id: e?.id ?? -1 })[1]),
+		).toMatchObject({
+			changes: [{ path: "instruments/wave2.yaml", expected: null }],
+		});
+	});
+
+	it("is only discarded when deleted before it's saved", () => {
+		const [m] = update(named(loaded(), "wave2"), {
+			kind: "instrumentNamingConfirmed",
+		});
+		const id = m.nextId - 1;
+		const [asked] = update(m, { kind: "deleteRequested", id });
+		const [gone, cmds] = update(asked, { kind: "deleteRequested", id });
+		expect(commitOf(cmds)).toBeUndefined();
+		expect(gone.local.workspace[id]).toBeUndefined();
+	});
+});
+
+describe("the workspace details", () => {
+	it("are started once, then opened", () => {
+		const [start] = init({ work: ok(undefined), hasToken: false });
+		const [made] = update(start, { kind: "workspaceDetailsOpened" });
+		const [e] = Object.values(made.local.workspace);
+		expect(e).toMatchObject({ kind: "workspaceFile", source: "agency:\n" });
+		expect(made.screen).toEqual({ kind: "editing", id: e?.id });
+		const [again] = update(
+			{ ...made, screen: { kind: "blank" } },
+			{ kind: "workspaceDetailsOpened" },
+		);
+		expect(Object.values(again.local.workspace)).toHaveLength(1);
+		expect(again.screen).toEqual({ kind: "editing", id: e?.id });
 	});
 });

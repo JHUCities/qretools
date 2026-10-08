@@ -25,6 +25,7 @@ import {
 import agree4 from "@qretools/core/starter/scales/agree4.yaml?raw";
 import satisfied5 from "@qretools/core/starter/scales/satisfied5.yaml?raw";
 import choiceTemplate from "@qretools/core/templates/choice.yaml?raw";
+import instrumentTemplate from "@qretools/core/templates/instrument.yaml?raw";
 import numberTemplate from "@qretools/core/templates/number.yaml?raw";
 import scaleTemplate from "@qretools/core/templates/scale.yaml?raw";
 import selectManyTemplate from "@qretools/core/templates/select-many.yaml?raw";
@@ -141,7 +142,7 @@ export interface Local {
 	readonly workspace: Readonly<Record<Id, WorkspaceEntry>>;
 }
 
-const sameName = (a: string, b: string): boolean =>
+export const sameName = (a: string, b: string): boolean =>
 	a.toLowerCase() === b.toLowerCase();
 
 export const EMPTY_LOCAL: Local = { questions: {}, schemes: {}, workspace: {} };
@@ -204,6 +205,8 @@ export interface Browser {
 	 * the question it was asked from; or a draft shared file is renamed.
 	 */
 	readonly naming?: Naming;
+	/** A new instrument is named before it exists, as a shared file is: its name is its file's. */
+	readonly namingInstrument?: { readonly name: string };
 	/**
 	 * Signing out with unsaved work: asking what to do with it, or saving it first. A
 	 * failed save comes back here, never on a file.
@@ -360,6 +363,13 @@ export type Msg =
 	| { readonly kind: "schemeTextChanged"; readonly text: string }
 	| { readonly kind: "schemeNamingConfirmed" }
 	| { readonly kind: "schemeNamingCancelled" }
+	/** New instrument: its name first, in its own dialog. */
+	| { readonly kind: "instrumentCreateOpened" }
+	| { readonly kind: "instrumentNameChanged"; readonly name: string }
+	| { readonly kind: "instrumentNamingCancelled" }
+	| { readonly kind: "instrumentNamingConfirmed" }
+	/** The workspace details: opened if they exist, else started. One per workspace. */
+	| { readonly kind: "workspaceDetailsOpened" }
 	| { readonly kind: "deleteRequested"; readonly id: Id }
 	| { readonly kind: "deleteCancelled" }
 	| { readonly kind: "saveRequested"; readonly id: Id }
@@ -489,6 +499,16 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 	missing: 'labels:\n  "-8":\n',
 	bank: "agency:\n",
 };
+
+/**
+ * What a new instrument starts as: the core's template, every field empty but its name,
+ * which is its file's (chosen in the dialog).
+ */
+export const instrumentSource = (name: string): string =>
+	instrumentTemplate.replace(/^name:[ \t]*$/m, `name: ${name}`);
+
+/** What new workspace details start as: the agency, to fill in. */
+export const WORKSPACE_DETAILS_TEMPLATE = "agency:\n";
 
 /** The core's starter scale files, keyed by file name, as a bank names a scale. */
 const SCALE_FILES: Readonly<Record<string, string>> = { agree4, satisfied5 };

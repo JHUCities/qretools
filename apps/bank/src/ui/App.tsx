@@ -23,10 +23,10 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import {
+	fileAt,
 	type Index,
 	indexOf,
 	isRoot,
-	placeOf,
 	plainText,
 	SCHEME_KINDS,
 	SCHEME_NAME,
@@ -68,6 +68,7 @@ import {
 import {
 	bankLoading,
 	folderOfPath,
+	instrumentNameProblem,
 	movedPath,
 	moveProblem,
 	namingProblem,
@@ -79,7 +80,8 @@ import {
 import { SESSION_STATUS, useApp, useModel } from "./AppContext.js";
 import { BankFilter, type BankTree, Browser, bankLabel } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
-import { FileSkeleton } from "./FileSkeleton.js";
+import { type FileKind, FileSkeleton } from "./FileSkeleton.js";
+import { InstrumentNameDialog } from "./InstrumentNameDialog.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
@@ -107,6 +109,19 @@ function NewMenu({
 			</ActionMenu.Anchor>
 			<ActionMenu.Overlay>
 				<ActionList>
+					{/* The workspace's own files first, as the tree shows them. */}
+					<ActionList.GroupHeading>Workspace</ActionList.GroupHeading>
+					<ActionList.Item
+						onSelect={() => dispatch({ kind: "instrumentCreateOpened" })}
+					>
+						Instrument…
+					</ActionList.Item>
+					<ActionList.Item
+						onSelect={() => dispatch({ kind: "workspaceDetailsOpened" })}
+					>
+						Workspace details
+					</ActionList.Item>
+					<ActionList.Divider />
 					{banks.length <= 1 ? (
 						<NewItems dispatch={dispatch} />
 					) : (
@@ -170,6 +185,16 @@ function NewItems({ bank, dispatch }: { bank?: string; dispatch: Dispatch }) {
 			))}
 		</>
 	);
+}
+
+/** The shape a file at a workspace path will have, while it is on its way. */
+function skeletonKind(path: string, banks: readonly string[]): FileKind {
+	const at = fileAt(path, banks);
+	return at === undefined
+		? "question"
+		: at.kind === "bank"
+			? at.at.kind
+			: at.kind;
 }
 
 /** A bank with no files yet indexes nothing. */
@@ -262,6 +287,7 @@ export function App() {
 		[treeInput, evaluations, local, model.remote, model.banks],
 	);
 	const naming = model.browser.naming;
+	const namingInstrument = model.browser.namingInstrument;
 	const moving = model.browser.moving;
 	const movingQuestion =
 		moving === undefined ? undefined : model.local.questions[moving.id];
@@ -505,10 +531,7 @@ export function App() {
 								<ForeignView screen={model.screen} />
 							) : open === undefined && waiting && model.pendingLink ? (
 								<FileSkeleton
-									kind={
-										placeOf(model.pendingLink.file ?? "", model.banks)?.at
-											.kind ?? "question"
-									}
+									kind={skeletonKind(model.pendingLink.file ?? "", model.banks)}
 									onBack={() => dispatch({ kind: "listOpened" })}
 								/>
 							) : open === undefined ? (
@@ -551,6 +574,13 @@ export function App() {
 						usersIn(indexFor(movingQuestion.bank)),
 						movingQuestion.bank,
 					)}
+					dispatch={dispatch}
+				/>
+			)}
+			{namingInstrument && (
+				<InstrumentNameDialog
+					name={namingInstrument.name}
+					problem={instrumentNameProblem(model, namingInstrument.name)}
 					dispatch={dispatch}
 				/>
 			)}
