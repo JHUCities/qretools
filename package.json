@@ -6,7 +6,8 @@
 	"scripts": {
 		"dev": "pnpm --filter @qretools/bank dev",
 		"dev:verify": "pnpm --filter @qretools/bank dev:verify",
-		"dev:instrument": "pnpm --filter @qretools/instrument dev:verify",
+		"dev:instrument": "pnpm --filter @qretools/instrument dev",
+		"dev:instrument:verify": "pnpm --filter @qretools/instrument dev:verify",
 		"build": "pnpm --filter @qretools/bank build",
 		"preview": "pnpm --filter @qretools/bank preview",
 		"test": "pnpm -r run test",
