@@ -7,7 +7,7 @@ import {
 } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import {
-	envOf,
+	envIn,
 	init,
 	type Model,
 	type Question,
@@ -50,10 +50,7 @@ const model: Model = {
 		},
 	},
 };
-const tree = (m: Model) =>
-	treeOf(m, (q) =>
-		evaluate(q.source, envOf(m.local.schemes, m.remote.schemes)),
-	);
+const tree = (m: Model) => treeOf(m, (q) => evaluate(q.source, envIn(m, "")));
 
 describe("treeOf", () => {
 	it("files bank questions by their path, and every draft, named or not, under unfiled", () => {
@@ -170,21 +167,14 @@ describe("schemeSections", () => {
 		indexOf(
 			Object.values(mm.local.questions).map((q) => ({
 				key: q.id,
-				symbols: evaluate(q.source, envOf(mm.local.schemes, mm.remote.schemes))
-					.symbols,
+				symbols: evaluate(q.source, envIn(mm, "")).symbols,
 			})),
 		);
 	const sections = (mm: Model) =>
 		schemeSections(
 			mm,
-			(e) =>
-				evaluateScheme(
-					e.kind,
-					e.source,
-					envOf(mm.local.schemes, mm.remote.schemes),
-					e.name,
-				),
-			index(mm),
+			(e) => evaluateScheme(e.kind, e.source, envIn(mm, ""), e.name),
+			() => index(mm),
 		);
 
 	it("shows every kind, even empty, with how many questions name each file", () => {

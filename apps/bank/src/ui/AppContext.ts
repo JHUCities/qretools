@@ -18,12 +18,16 @@ export function useModel<T>(select: (model: Model) => T): T {
 	return useStore(store, (s) => select(s.model));
 }
 
-/** The environment questions are read against. Keeps its identity until a scheme file changes; see evaluations.ts. */
-export function useEnv(): Env {
+/**
+ * The environment a bank's questions are read against. Keeps its identity until one of
+ * that bank's scheme files changes; see evaluations.ts.
+ */
+export function useEnv(bank: string): Env {
 	const { evaluations } = useApp();
-	const schemes = useModel((m) => m.local.schemes);
-	const remoteSchemes = useModel((m) => m.remote.schemes);
-	return evaluations.env(schemes, remoteSchemes);
+	const local = useModel((m) => m.local);
+	const remote = useModel((m) => m.remote);
+	const banks = useModel((m) => m.banks);
+	return evaluations.env({ local, remote, banks }, bank);
 }
 
 /** The top bar's status, which a file's inactive write buttons name as their reason. */

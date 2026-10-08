@@ -152,7 +152,8 @@ export function openFolder(model: TreeInput): string | undefined {
 export function schemeSections(
 	model: TreeInput,
 	evaluate: (e: SchemeEntry) => SchemeEvaluation,
-	index: Index<Id>,
+	/** Each bank's symbol table: a file is used by questions of its own bank only. */
+	indexOf: (bank: string) => Index<Id>,
 ): readonly SchemeSection[] {
 	const filter = model.browser.filter.trim().toLowerCase();
 	const entries = Object.values(model.local.schemes);
@@ -166,7 +167,7 @@ export function schemeSections(
 					name: e.name,
 					status: status(evaluate(e).findings),
 					...(!isRoot(e.kind) && {
-						usedBy: usedBy(index, e.kind, e.name).length,
+						usedBy: usedBy(indexOf(e.bank), e.kind, e.name).length,
 					}),
 				}),
 			)

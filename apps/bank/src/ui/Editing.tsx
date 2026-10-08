@@ -143,7 +143,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
 	const activity = useModel((m) => m.activity);
-	const env = useEnv();
+	const env = useEnv(q.bank);
 	const { dispatch, onTarget, onFix, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, env);
@@ -175,8 +175,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		[findings, ev.ranges, onFix],
 	);
 	const also = useMemo(
-		() => alsoSaves(local, remote, ev.symbols.mentions, usersIn(index)),
-		[local, remote, ev.symbols.mentions, index],
+		() => alsoSaves(local, remote, ev.symbols.mentions, usersIn(index), q.bank),
+		[local, remote, ev.symbols.mentions, index, q.bank],
 	);
 	// Schema validation runs over the whole document: only when the document changes,
 	// never on a caret move.
@@ -262,7 +262,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const blocked = useModel(writeBlocked);
 	const questions = useModel((m) => m.local.questions);
 	const activity = useModel((m) => m.activity);
-	const env = useEnv();
+	const env = useEnv(e.bank);
 	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const eStale = useStale(e);
 	const ev = evaluations.scheme(e, env);
@@ -469,7 +469,9 @@ function useBankFindings(
 	const repo = useModel((m) => m.settings.repo);
 	const folder = useModel((m) => m.settings.path);
 	const branch = useModel(linkBranch);
-	const env = useEnv();
+	// The files a bank finding cites are in this file's bank: the index is that bank's.
+	const bank = useModel((m) => fileOf(m, id)?.bank ?? "");
+	const env = useEnv(bank);
 	return useMemo(() => {
 		// Another file's name, as a bank-level finding cites it.
 		const label = (other: Id): string => {
@@ -567,7 +569,7 @@ function Inspector({
 	index: Index<Id>;
 }) {
 	const { dispatch } = useApp();
-	const env = useEnv();
+	const env = useEnv(q.bank);
 	const cursor = useModel((m) => m.cursor);
 	const schemes = useModel((m) => m.local.schemes);
 	const at =
@@ -582,7 +584,9 @@ function Inspector({
 		);
 	const m = at.mention;
 	const file =
-		m === undefined ? undefined : schemeFileNamed(schemes, m.scheme, m.name);
+		m === undefined
+			? undefined
+			: schemeFileNamed(schemes, m.scheme, m.name, q.bank);
 	const users =
 		m === undefined
 			? 0

@@ -8,6 +8,7 @@ const naming = (over: Partial<Naming>): Naming => ({
 	kind: "instruction",
 	name: "se",
 	text: "",
+	bank: "",
 	purpose: { kind: "create", use: { id: 1, path: "instruction" } },
 	...over,
 });

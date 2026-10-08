@@ -237,11 +237,14 @@ export function dependencies(
 	local: Local,
 	remote: Remote,
 	mentions: readonly Mention[],
+	/** The question's bank: the only one whose names it reads. */
+	bank: string,
 ): { include: readonly SchemeEntry[]; blocked: readonly SchemeEntry[] } {
 	const named = new Set<SchemeEntry>();
 	for (const m of mentions)
 		for (const e of Object.values(local.schemes))
-			if (e.kind === m.scheme && e.name === m.name) named.add(e);
+			if (e.bank === bank && e.kind === m.scheme && e.name === m.name)
+				named.add(e);
 	const include: SchemeEntry[] = [];
 	const blocked: SchemeEntry[] = [];
 	for (const e of named) {
@@ -271,8 +274,9 @@ export function alsoSaves(
 	remote: Remote,
 	mentions: readonly Mention[],
 	usersOf: (e: SchemeEntry) => readonly Id[],
+	bank: string,
 ): readonly string[] {
-	return dependencies(local, remote, mentions).include.map((e) => {
+	return dependencies(local, remote, mentions, bank).include.map((e) => {
 		const saved = usersOf(e).filter((id) => {
 			const q = local.questions[id];
 			return q !== undefined && syncOf(q, remoteBlob(remote, q)) === "inSync";

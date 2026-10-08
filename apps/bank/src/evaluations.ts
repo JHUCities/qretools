@@ -2,10 +2,11 @@
  * Pure caches. Not state: the same inputs always give the same outputs; the caches
  * only save work.
  *
- * The environment is memoised on the reference of the scheme slice it is built from,
- * as Elm's `lazy` does. That is exact because of how the Model is shaped: only a
- * change to a scheme file replaces `local.schemes`, so editing a question can never
- * rebuild the environment and so never re-evaluates the bank.
+ * Each bank's environment is memoised on the list of its own scheme entries, element
+ * by element, as Elm's `lazy` does on a reference. That is exact because entries are
+ * immutable values: editing a question replaces no scheme entry, and editing a scale
+ * replaces only that scale's entry, so every other bank's list holds the same
+ * references and keeps its environment, and its questions their evaluations.
  */
 import {
 	type Env,
@@ -18,18 +19,25 @@ import { questionJsonSchema } from "@qretools/core/editor";
 import {
 	envOf,
 	type Id,
-	type Local,
+	knownBank,
+	type Model,
 	type Question,
-	type Remote,
 	type SchemeEntry,
+	schemesOf,
 } from "./model.js";
 
 export interface Evaluations {
-	env(schemes: Local["schemes"], remoteSchemes: Remote["schemes"]): Env;
+	/** A bank's environment, from the model's slices it is built from. */
+	env(model: Pick<Model, "local" | "remote" | "banks">, bank: string): Env;
 	get(q: Question, env: Env): Evaluation;
 	scheme(e: SchemeEntry, env: Env): SchemeEvaluation;
 	schema(env: Env): Record<string, unknown>;
 }
+
+const sameEntries = (
+	a: readonly SchemeEntry[],
+	b: readonly SchemeEntry[],
+): boolean => a.length === b.length && a.every((e, i) => e === b[i]);
 
 export function createEvaluations(): Evaluations {
 	const cache = new Map<Id, { source: string; env: Env; ev: Evaluation }>();
@@ -37,19 +45,22 @@ export function createEvaluations(): Evaluations {
 		Id,
 		{ source: string; name: string; env: Env; ev: SchemeEvaluation }
 	>();
-	let envOfSlice: Local["schemes"] | undefined;
-	let envOfRemote: Remote["schemes"] | undefined;
-	let lastEnv: Env | undefined;
-	let schemaEnv: Env | undefined;
-	let lastSchema: Record<string, unknown> | undefined;
+	const envs = new Map<
+		string,
+		{ entries: readonly SchemeEntry[]; known: boolean; env: Env }
+	>();
+	// A bank's editor schema, kept for as long as its environment is.
+	const schemas = new WeakMap<Env, Record<string, unknown>>();
 	return {
-		env(schemes, remoteSchemes) {
-			if (lastEnv && envOfSlice === schemes && envOfRemote === remoteSchemes)
-				return lastEnv;
-			envOfSlice = schemes;
-			envOfRemote = remoteSchemes;
-			lastEnv = envOf(schemes, remoteSchemes);
-			return lastEnv;
+		env(model, bank) {
+			const entries = schemesOf(model.local.schemes, bank);
+			const known = knownBank(model.remote.schemes, bank, model.banks);
+			const hit = envs.get(bank);
+			if (hit && hit.known === known && sameEntries(hit.entries, entries))
+				return hit.env;
+			const env = envOf(entries, known);
+			envs.set(bank, { entries, known, env });
+			return env;
 		},
 		get(q, env) {
 			const hit = cache.get(q.id);
@@ -72,10 +83,11 @@ export function createEvaluations(): Evaluations {
 			return ev;
 		},
 		schema(env) {
-			if (lastSchema && schemaEnv === env) return lastSchema;
-			schemaEnv = env;
-			lastSchema = questionJsonSchema(env);
-			return lastSchema;
+			const kept = schemas.get(env);
+			if (kept !== undefined) return kept;
+			const schema = questionJsonSchema(env);
+			schemas.set(env, schema);
+			return schema;
 		},
 	};
 }

@@ -23,8 +23,8 @@ describe("the bank's agency", () => {
 	});
 	const urns = (source: string) =>
 		Object.keys(
-			evaluate("name: q\ntext: Q?\n", envOf(bank(source), {})).ddi
-				.QuestionItem ?? {},
+			evaluate("name: q\ntext: Q?\n", envOf(Object.values(bank(source)), false))
+				.ddi.QuestionItem ?? {},
 		);
 
 	it("comes from the working copy of the bank's own file, as it is typed", () => {

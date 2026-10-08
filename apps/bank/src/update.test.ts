@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
 	allFiles,
-	envOf,
+	envIn,
 	fileOf,
 	type Id,
 	init,
@@ -596,7 +596,7 @@ describe("connecting", () => {
 			"missing:missing",
 		]);
 		// Questions are read against the saved schemes; an unreadable one contributes nothing.
-		const env = envOf(m3.local.schemes, m3.remote.schemes);
+		const env = envIn(m3, "");
 		expect(Object.keys(env.scales)).toEqual(["agree4"]);
 		expect(env.universes.renters?.text).toBe("Renters");
 		expect(env.missing.map((c) => c.code)).toEqual(["-8"]);
@@ -614,9 +614,7 @@ describe("connecting", () => {
 			{ ...m, screen: { kind: "editing", id } },
 			{ kind: "edited", text: "labels:\n  1: Yes\n  2: No\n" },
 		);
-		expect(
-			envOf(edited.local.schemes, edited.remote.schemes).scales.yn?.codes,
-		).toHaveLength(2);
+		expect(envIn(edited, "").scales.yn?.codes).toHaveLength(2);
 		// GitHub's copy is untouched until a save.
 		expect(edited.remote).toBe(m.remote);
 	});
@@ -733,10 +731,11 @@ describe("scheme files", () => {
 			kind: "scale",
 			name: "",
 			text: "",
+			bank: "",
 			purpose: { kind: "create" },
 		});
-		expect(schemeNameProblem(asked, "scale", "")).toMatch(/name/);
-		expect(schemeNameProblem(asked, "scale", "Agree 5")).toMatch(
+		expect(schemeNameProblem(asked, "scale", "", "")).toMatch(/name/);
+		expect(schemeNameProblem(asked, "scale", "Agree 5", "")).toMatch(
 			/Lowercase letters, digits and underscores/,
 		);
 		// Confirming an unusable name does nothing.
@@ -754,11 +753,11 @@ describe("scheme files", () => {
 		expect(made.local.schemes[id]?.base).toBeUndefined();
 		expect(made.screen).toEqual({ kind: "editing", id });
 		expect(made.browser.naming).toBeUndefined();
-		expect(schemeNameProblem(made, "scale", "agree5")).toMatch(
+		expect(schemeNameProblem(made, "scale", "agree5", "")).toMatch(
 			/already exists/,
 		);
 		// A universe may share a scale's name: they are different namespaces.
-		expect(schemeNameProblem(made, "universe", "agree5")).toBeUndefined();
+		expect(schemeNameProblem(made, "universe", "agree5", "")).toBeUndefined();
 	});
 
 	it("missing values are one list: created once, then opened", () => {
@@ -842,9 +841,7 @@ describe("the environment's identity", () => {
 		expect(edited.local.schemes).toBe(loaded.local.schemes);
 		expect(edited.remote).toBe(loaded.remote);
 		const evaluations = createEvaluations();
-		expect(evaluations.env(edited.local.schemes, edited.remote.schemes)).toBe(
-			evaluations.env(loaded.local.schemes, loaded.remote.schemes),
-		);
+		expect(evaluations.env(edited, "")).toBe(evaluations.env(loaded, ""));
 	});
 
 	it("editing a scheme file touches only local.schemes", () => {
@@ -927,7 +924,7 @@ describe("writing waits for this session's load", () => {
 			{ kind: "schemeNameChanged", name: "mine" },
 			{ kind: "schemeNamingConfirmed" },
 		);
-		const env = envOf(m.local.schemes, m.remote.schemes);
+		const env = envIn(m, "");
 		expect(Object.keys(env.scales)).toContain("agree4");
 	});
 });
@@ -1031,7 +1028,7 @@ describe("the cursor inspector's messages", () => {
 			kind: "universe",
 			name: "renters",
 		});
-		expect(schemeNameProblem(m, "universe", "renters")).toBeUndefined();
+		expect(schemeNameProblem(m, "universe", "renters", "")).toBeUndefined();
 	});
 });
 
@@ -2227,6 +2224,7 @@ describe("making a concept shared from a question", () => {
 			kind: "concept",
 			name: "racial_identification",
 			text: "Racial identification",
+			bank: "",
 			purpose: { kind: "create", use: { id: 1, path: "concept" } },
 		});
 		const [done] = update(asked, { kind: "schemeNamingConfirmed" });

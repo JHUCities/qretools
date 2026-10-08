@@ -53,7 +53,7 @@ import {
 	EMPTY_LOCAL,
 	EMPTY_REMOTE,
 	type Entry,
-	envOf,
+	envIn,
 	fileOf,
 	hasOwnWork,
 	type Id,
@@ -164,6 +164,7 @@ function step(model: Model, msg: Msg): Step {
 								kind: scheme,
 								name,
 								text,
+								bank: q.bank,
 								purpose: { kind: "create", use: { id: q.id, path } },
 							},
 						},
@@ -305,7 +306,7 @@ function step(model: Model, msg: Msg): Step {
 			const target =
 				m === undefined
 					? undefined
-					: schemeFileNamed(model.local.schemes, m.scheme, m.name);
+					: schemeFileNamed(model.local.schemes, m.scheme, m.name, q.bank);
 			return target === undefined
 				? [model, []]
 				: step(model, { kind: "fileOpened", id: target.id });
@@ -350,6 +351,12 @@ function step(model: Model, msg: Msg): Step {
 								kind: msg.scheme,
 								name: msg.name ?? "",
 								text: "",
+								// The bank of the question that named it, where the name is read.
+								bank:
+									(msg.use === undefined
+										? undefined
+										: model.local.questions[msg.use.id]?.bank) ??
+									newBank(model),
 								purpose: {
 									kind: "create",
 									...(msg.use !== undefined && { use: msg.use }),
@@ -389,6 +396,7 @@ function step(model: Model, msg: Msg): Step {
 							kind: e.kind,
 							name: e.name,
 							text: "",
+							bank: e.bank,
 							purpose: { kind: "rename", id: e.id },
 						},
 					},
@@ -422,7 +430,7 @@ function step(model: Model, msg: Msg): Step {
 				if (!e || isRoot(e.kind) || e.base !== undefined) return [closed, []];
 				const renamed = withFile(closed, { ...e, name: naming.name });
 				return persist([
-					renameReferences(renamed, e.kind, e.name, naming.name),
+					renameReferences(renamed, e.kind, e.name, naming.name, e.bank),
 					[],
 				]);
 			}
@@ -437,14 +445,10 @@ function step(model: Model, msg: Msg): Step {
 						: SCHEME_TEMPLATES[naming.kind];
 			// The question that named it now names the file, whatever name was chosen.
 			const { use } = naming.purpose;
-			// In the bank of the question that named it, where its name is read.
-			const bank =
-				(use === undefined ? undefined : model.local.questions[use.id]?.bank) ??
-				newBank(model);
 			const [added, id] = add(closed, {
 				kind: naming.kind,
 				name: naming.name,
-				bank,
+				bank: naming.bank,
 				source,
 			});
 			const q = use === undefined ? undefined : added.local.questions[use.id];
@@ -496,10 +500,7 @@ function step(model: Model, msg: Msg): Step {
 						message:
 							q.kind === "question"
 								? describeChange(
-										parseSurface(
-											q.base.text,
-											envOf(model.local.schemes, model.remote.schemes),
-										).draft,
+										parseSurface(q.base.text, envIn(model, q.bank)).draft,
 										undefined,
 									)
 								: describeSchemeChange(q.kind, q.name, "delete"),
@@ -536,8 +537,7 @@ function step(model: Model, msg: Msg): Step {
 			}
 			// Where it goes is the author's choice: the dialog opens with none chosen.
 			const name = saveableName(
-				parseSurface(q.source, envOf(model.local.schemes, model.remote.schemes))
-					.draft,
+				parseSurface(q.source, envIn(model, q.bank)).draft,
 			);
 			if (!name.ok)
 				return [refuse(model, msg.id, name.error.message, name.error.hint), []];
@@ -576,8 +576,7 @@ function step(model: Model, msg: Msg): Step {
 				return [model, []];
 			const closed = { ...model, browser: withoutSaving(model.browser) };
 			const where = bankLocation(
-				parseSurface(q.source, envOf(model.local.schemes, model.remote.schemes))
-					.draft,
+				parseSurface(q.source, envIn(model, q.bank)).draft,
 				saving.folder,
 			);
 			if (!where.ok)
@@ -654,7 +653,7 @@ function step(model: Model, msg: Msg): Step {
 			const to = movedPath(q.base.path, moving.folder, q.bank);
 			// A move also saves (owner, 2026-09-29): the working text at the new path,
 			// the old path deleted, and the scheme files it names, as a save would.
-			const env = envOf(model.local.schemes, model.remote.schemes);
+			const env = envIn(model, q.bank);
 			const subject = describeMove(
 				parseSurface(q.base.text, env).draft,
 				parseSurface(q.source, env).draft,
@@ -1006,13 +1005,14 @@ function write(
 			),
 			[],
 		];
-	const env = envOf(model.local.schemes, model.remote.schemes);
+	const env = envIn(model, q.bank);
 	const deps =
 		q.kind === "question"
 			? dependencies(
 					model.local,
 					model.remote,
 					parseSurface(q.source, env).mentions,
+					q.bank,
 				)
 			: { include: [], blocked: [] };
 	const [stuck] = deps.blocked;
@@ -1175,7 +1175,7 @@ const refuse = (model: Model, id: Id, message: string, hint?: string): Model =>
 
 /**
  * The commit message for saving a file: what changed in a question, or which scheme file.
- * `envOf` runs uncached here, re-reading the scheme files (a few milliseconds, only on
+ * `envIn` runs uncached here, re-reading the scheme files (a few milliseconds, only on
  * the save and delete paths). `update` is pure and cannot reach the view's cache; do
  * not thread one in to save those milliseconds.
  */
@@ -1186,7 +1186,7 @@ function messageOf(model: Model, q: Entry): string {
 			q.name,
 			q.base === undefined ? "add" : "update",
 		);
-	const env = envOf(model.local.schemes, model.remote.schemes);
+	const env = envIn(model, q.bank);
 	return describeChange(
 		q.base === undefined ? undefined : parseSurface(q.base.text, env).draft,
 		parseSurface(q.source, env).draft,
@@ -1447,12 +1447,15 @@ export function schemeNameProblem(
 	model: Model,
 	kind: NamedScheme,
 	name: string,
+	/** The bank it is in or goes to: names need be free only there. */
+	bank: string,
 	self?: Id,
 ): string | undefined {
 	if (name === "") return "Give it a name.";
 	if (!NAME_PATTERN.test(name)) return NAME_RULE_TEXT;
 	return Object.values(model.local.schemes).some(
-		(e) => e.kind === kind && e.name === name && e.id !== self,
+		(e) =>
+			e.bank === bank && e.kind === kind && e.name === name && e.id !== self,
 	)
 		? `A ${SCHEME_NAME[kind]} named \`${name}\` already exists.`
 		: undefined;
@@ -1479,18 +1482,20 @@ export function namingProblem(
 	naming: Naming,
 ): string | undefined {
 	const self = naming.purpose.kind === "rename" ? naming.purpose.id : undefined;
-	return schemeNameProblem(model, naming.kind, naming.name, self);
+	return schemeNameProblem(model, naming.kind, naming.name, naming.bank, self);
 }
 
-/** Every question in this tab that names the file by its old name now names the new one. */
+/** Every question of its bank in this tab that names the file by its old name now names the new one. */
 function renameReferences(
 	model: Model,
 	scheme: NamedScheme,
 	from: string,
 	to: string,
+	bank: string,
 ): Model {
 	let next = model;
 	for (const q of Object.values(model.local.questions)) {
+		if (q.bank !== bank) continue;
 		const edits = renameEdits(q.source, scheme, from, to);
 		const text = edits.length === 0 ? undefined : applyEdits(q.source, edits);
 		if (text !== undefined && text !== q.source)

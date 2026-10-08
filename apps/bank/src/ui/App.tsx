@@ -23,6 +23,7 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import {
+	type Index,
 	inBank,
 	indexOf,
 	isRoot,
@@ -31,6 +32,7 @@ import {
 	SCHEME_KINDS,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
+	type Symbols,
 	UNNAMED,
 	usedBy,
 } from "@qretools/core";
@@ -42,7 +44,7 @@ import {
 	ThemeToggle,
 	Wordmark,
 } from "@qretools/shell/ui";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { SOURCE_URL } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
 import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
@@ -58,7 +60,7 @@ import {
 	signOutPlan,
 	writeBlocked,
 } from "../update.js";
-import { SESSION_STATUS, useApp, useEnv, useModel } from "./AppContext.js";
+import { SESSION_STATUS, useApp, useModel } from "./AppContext.js";
 import { BankFilter, Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { FileSkeleton } from "./FileSkeleton.js";
@@ -68,10 +70,21 @@ import { SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";
 import { SignOutDialog } from "./SignOutDialog.js";
 
+/** A bank with no files yet indexes nothing. */
+const NO_INDEX: Index<Id> = indexOf([]);
+
 export function App() {
 	const { dispatch, evaluations, signIn: signInConfig } = useApp();
 	const model = useModel((m) => m);
-	const env = useEnv();
+	// Each bank's environment, memoised per bank in the evaluations (see evaluations.ts).
+	const envFor = useCallback(
+		(bank: string) =>
+			evaluations.env(
+				{ local: model.local, remote: model.remote, banks: model.banks },
+				bank,
+			),
+		[evaluations, model.local, model.remote, model.banks],
+	);
 	const { local, browser, screen, activity } = model;
 	// There is no editor without a bank: signed out is a sign-in page.
 	const signedIn =
@@ -84,28 +97,36 @@ export function App() {
 		[local, browser, screen, activity],
 	);
 	const folders = useMemo(
-		() => treeOf(treeInput, (q) => evaluations.get(q, env)),
-		[treeInput, evaluations, env],
+		() => treeOf(treeInput, (q) => evaluations.get(q, envFor(q.bank))),
+		[treeInput, evaluations, envFor],
 	);
-	// The bank's symbol table: what each file defines, names and writes, questions and
-	// shared files alike. Rebuilt from cached evaluations, so cheap per keystroke.
-	const index = useMemo(
-		() =>
-			indexOf([
-				...Object.values(model.local.questions).map((q) => ({
-					key: q.id,
-					symbols: evaluations.get(q, env).symbols,
-				})),
-				...Object.values(model.local.schemes).map((e) => ({
-					key: e.id,
-					symbols: evaluations.scheme(e, env).symbols,
-				})),
-			]),
-		[model.local, evaluations, env],
+	// Each bank's symbol table: what each file defines, names and writes, questions and
+	// shared files alike, within its bank (one bank's names are not another's). Rebuilt
+	// from cached evaluations, so cheap per keystroke.
+	const indexes = useMemo(() => {
+		const byBank = new Map<string, { key: Id; symbols: Symbols }[]>();
+		const put = (bank: string, key: Id, symbols: Symbols) =>
+			byBank.set(bank, [...(byBank.get(bank) ?? []), { key, symbols }]);
+		for (const q of Object.values(model.local.questions))
+			put(q.bank, q.id, evaluations.get(q, envFor(q.bank)).symbols);
+		for (const e of Object.values(model.local.schemes))
+			put(e.bank, e.id, evaluations.scheme(e, envFor(e.bank)).symbols);
+		return new Map(
+			[...byBank].map(([bank, entries]) => [bank, indexOf(entries)]),
+		);
+	}, [model.local, evaluations, envFor]);
+	const indexFor = useCallback(
+		(bank: string): Index<Id> => indexes.get(bank) ?? NO_INDEX,
+		[indexes],
 	);
 	const sections = useMemo(
-		() => schemeSections(treeInput, (e) => evaluations.scheme(e, env), index),
-		[treeInput, evaluations, env, index],
+		() =>
+			schemeSections(
+				treeInput,
+				(e) => evaluations.scheme(e, envFor(e.bank)),
+				indexFor,
+			),
+		[treeInput, evaluations, envFor, indexFor],
 	);
 	const naming = model.browser.naming;
 	const moving = model.browser.moving;
@@ -135,14 +156,17 @@ export function App() {
 			: confirm.base !== undefined
 				? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
 				: confirm.kind === "question"
-					? evaluations.get(confirm, env).draft.name
+					? evaluations.get(confirm, envFor(confirm.bank)).draft.name
 					: confirm.name;
 	// Deleting a scheme file others name turns each of those names into a hole: say how many.
 	const confirmUsers =
 		confirm === undefined || confirm.kind === "question" || isRoot(confirm.kind)
 			? 0
-			: new Set(usedBy(index, confirm.kind, confirm.name).map((s) => s.key))
-					.size;
+			: new Set(
+					usedBy(indexFor(confirm.bank), confirm.kind, confirm.name).map(
+						(s) => s.key,
+					),
+				).size;
 
 	return (
 		<>
@@ -393,7 +417,10 @@ export function App() {
 									</p>
 								</div>
 							) : (
-								<Editing id={open} index={index} />
+								<Editing
+									id={open}
+									index={indexFor(fileOf(model, open)?.bank ?? "")}
+								/>
 							)}
 						</main>
 					</div>
@@ -415,8 +442,10 @@ export function App() {
 					also={alsoSaves(
 						model.local,
 						model.remote,
-						evaluations.get(movingQuestion, env).symbols.mentions,
-						usersIn(index),
+						evaluations.get(movingQuestion, envFor(movingQuestion.bank)).symbols
+							.mentions,
+						usersIn(indexFor(movingQuestion.bank)),
+						movingQuestion.bank,
 					)}
 					dispatch={dispatch}
 				/>
@@ -430,7 +459,9 @@ export function App() {
 			)}
 			{saving && savingQuestion && (
 				<SaveDialog
-					draft={evaluations.get(savingQuestion, env).draft}
+					draft={
+						evaluations.get(savingQuestion, envFor(savingQuestion.bank)).draft
+					}
 					folder={saving.folder}
 					folders={bankFolders(model, savingQuestion.bank)}
 					taken={(path) =>
@@ -439,8 +470,10 @@ export function App() {
 					also={alsoSaves(
 						model.local,
 						model.remote,
-						evaluations.get(savingQuestion, env).symbols.mentions,
-						usersIn(index),
+						evaluations.get(savingQuestion, envFor(savingQuestion.bank)).symbols
+							.mentions,
+						usersIn(indexFor(savingQuestion.bank)),
+						savingQuestion.bank,
 					)}
 					dispatch={dispatch}
 				/>
@@ -450,11 +483,11 @@ export function App() {
 					questions={signOut.save.filter((f) => f.kind === "question").length}
 					shared={signOut.save.filter((f) => f.kind !== "question").length}
 					discard={signOut.discard.map(
-						(q) => evaluations.get(q, env).draft.name ?? UNNAMED,
+						(q) => evaluations.get(q, envFor(q.bank)).draft.name ?? UNNAMED,
 					)}
 					blocked={signOut.blocked.map((f) =>
 						f.kind === "question"
-							? (evaluations.get(f, env).draft.name ?? UNNAMED)
+							? (evaluations.get(f, envFor(f.bank)).draft.name ?? UNNAMED)
 							: `${SCHEME_NAME[f.kind]} ${f.name}`,
 					)}
 					saving={signingOut.phase === "saving"}

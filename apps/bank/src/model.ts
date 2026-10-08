@@ -8,6 +8,7 @@
  * follows from its text.
  */
 import {
+	bankAt,
 	bankEnv,
 	compact,
 	type Env,
@@ -252,6 +253,8 @@ export type ThemeChoice = "system" | "light" | "dark";
 export interface Naming {
 	readonly kind: NamedScheme;
 	readonly name: string;
+	/** The bank the file is in or goes to, where its name must be free and is read. */
+	readonly bank: string;
 	/** A universe's or instruction's wording; unused for a scale. */
 	readonly text: string;
 	readonly purpose:
@@ -613,41 +616,60 @@ export const isScheme = (e: Entry): e is SchemeEntry => e.kind !== "question";
 export const fileOf = (model: Model, id: Id): Entry | undefined =>
 	model.local.questions[id] ?? model.local.schemes[id];
 
-/** The shared file of this kind and name among the working copies, if any. */
+/** The shared file of this kind and name in a bank, among the working copies, if any. */
 export const schemeFileNamed = (
 	schemes: Readonly<Record<Id, SchemeEntry>>,
 	kind: SchemeKind,
 	name: string,
+	bank: string,
 ): SchemeEntry | undefined =>
-	Object.values(schemes).find((e) => e.kind === kind && e.name === name);
+	Object.values(schemes).find(
+		(e) => e.kind === kind && e.name === name && e.bank === bank,
+	);
 
 export const allFiles = (local: Local): readonly Entry[] => [
 	...Object.values(local.questions),
 	...Object.values(local.schemes),
 ];
 
-/**
- * The environment built from the working scheme files: what questions are shown
- * against, so a scale edit updates its questions live and a new universe is usable at
- * once (owner, step 9). While no bank is known (`remote.schemes` empty), the bundled
- * example scales stand in beneath any local ones, so a first local scale does not
- * turn every question on an example scale into a hole.
- */
-export function envOf(
+/** A bank's own shared files among the working copies. */
+export const schemesOf = (
 	schemes: Local["schemes"],
+	bank: string,
+): readonly SchemeEntry[] =>
+	Object.values(schemes).filter((e) => e.bank === bank);
+
+/** Whether GitHub's copy holds any shared file of this bank yet. */
+export const knownBank = (
 	remoteSchemes: Remote["schemes"],
-): Env {
+	bank: string,
+	banks: readonly string[],
+): boolean => Object.keys(remoteSchemes).some((p) => bankAt(p, banks) === bank);
+
+/**
+ * A bank's environment, built from its working scheme files: what its questions are
+ * shown against, so a scale edit updates its questions live and a new universe is
+ * usable at once (owner, step 9). Every bank has its own: one bank's names mean nothing
+ * in another. While GitHub holds none of the bank's shared files (`known` false), the
+ * bundled example scales stand in beneath any local ones, so a first local scale does
+ * not turn every question on an example scale into a hole.
+ */
+export function envOf(schemes: readonly SchemeEntry[], known: boolean): Env {
 	const env = schemeEnv(
-		Object.values(schemes).map((e) => ({
-			kind: e.kind,
-			name: e.name,
-			text: e.source,
-		})),
+		schemes.map((e) => ({ kind: e.kind, name: e.name, text: e.source })),
 	);
-	return Object.keys(remoteSchemes).length === 0
-		? { ...env, scales: { ...EXAMPLE_SCALES, ...env.scales } }
-		: env;
+	return known ? env : { ...env, scales: { ...EXAMPLE_SCALES, ...env.scales } };
 }
+
+/** The environment of one of the model's banks. */
+export const envIn = (
+	model: Pick<Model, "local" | "remote" | "banks">,
+	bank: string,
+): Env =>
+	envOf(
+		schemesOf(model.local.schemes, bank),
+		knownBank(model.remote.schemes, bank, model.banks),
+	);
 
 /** The environment of a branch as GitHub has it: for reading another author's version. */
 export const envOfRemote = (schemes: Remote["schemes"]): Env =>

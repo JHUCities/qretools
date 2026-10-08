@@ -9,7 +9,7 @@ import { evaluate, evaluateScheme, indexOf, ok } from "@qretools/core";
 import { readBank } from "@qretools/core/node";
 import type { File } from "@qretools/shell";
 import { beforeAll, describe, expect, it } from "vitest";
-import { envOf, init, type Model, type Msg } from "./model.js";
+import { envIn, init, type Model, type Msg } from "./model.js";
 import { schemeSections, treeOf } from "./tree.js";
 import { update } from "./update.js";
 
@@ -44,24 +44,29 @@ const loadedMsg = (loaded: readonly File[]): Msg => ({
 
 /** What the tree shows of a loaded model, and which paths it holds as GitHub's copy. */
 function view(m: Model) {
-	const env = envOf(m.local.schemes, m.remote.schemes);
-	const evaluations = Object.values(m.local.questions).map((q) => ({
-		key: q.id,
-		symbols: evaluate(q.source, env).symbols,
-	}));
+	const envFor = (bank: string) => envIn(m, bank);
+	const indexFor = (bank: string) =>
+		indexOf(
+			Object.values(m.local.questions)
+				.filter((q) => q.bank === bank)
+				.map((q) => ({
+					key: q.id,
+					symbols: evaluate(q.source, envFor(bank)).symbols,
+				})),
+		);
 	return {
 		remote: {
 			questions: Object.keys(m.remote.questions).sort(),
 			schemes: Object.keys(m.remote.schemes).sort(),
 		},
-		tree: treeOf(m, (q) => evaluate(q.source, env)).map((f) => ({
+		tree: treeOf(m, (q) => evaluate(q.source, envFor(q.bank))).map((f) => ({
 			folder: f.name,
 			leaves: f.leaves.map((l) => `${l.name} ${l.status.kind}`),
 		})),
 		shared: schemeSections(
 			m,
-			(e) => evaluateScheme(e.kind, e.source, env, e.name),
-			indexOf(evaluations),
+			(e) => evaluateScheme(e.kind, e.source, envFor(e.bank), e.name),
+			indexFor,
 		).map((s) => ({
 			kind: s.kind,
 			leaves: s.leaves.map(
