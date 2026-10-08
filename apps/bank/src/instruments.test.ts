@@ -90,17 +90,17 @@ const commitOf = (cmds: readonly Cmd[]) =>
 const save = (m: Model, path: string) =>
 	update(m, { kind: "saveRequested", id: at(m, path).id });
 
-const INSTRUMENT = "instruments/households.yaml";
+const HOUSEHOLDS = "instruments/households.yaml";
 const CONSENT = "households/questions/household/consent.yaml";
 const YES_NO = "households/scales/yes_no.yaml";
 const TENURE = "households/questions/household/tenure.yaml";
 
 describe("saving an instrument", () => {
 	it("takes along the questions it asks that have unsaved changes, and their shared files", () => {
-		const m = edit(edit(edit(loaded(), INSTRUMENT), CONSENT), YES_NO);
-		const commit = commitOf(save(m, INSTRUMENT)[1]);
+		const m = edit(edit(edit(loaded(), HOUSEHOLDS), CONSENT), YES_NO);
+		const commit = commitOf(save(m, HOUSEHOLDS)[1]);
 		expect(commit?.changes.map((c) => c.path)).toEqual([
-			INSTRUMENT,
+			HOUSEHOLDS,
 			CONSENT,
 			YES_NO,
 		]);
@@ -110,24 +110,24 @@ describe("saving an instrument", () => {
 	});
 
 	it("takes along an unsaved scale a saved question it asks names", () => {
-		const m = edit(edit(loaded(), INSTRUMENT), YES_NO);
+		const m = edit(edit(loaded(), HOUSEHOLDS), YES_NO);
 		expect(
-			commitOf(save(m, INSTRUMENT)[1])?.changes.map((c) => c.path),
-		).toEqual([INSTRUMENT, YES_NO]);
+			commitOf(save(m, HOUSEHOLDS)[1])?.changes.map((c) => c.path),
+		).toEqual([HOUSEHOLDS, YES_NO]);
 	});
 
 	it("leaves out what it doesn't ask", () => {
 		const m = edit(
-			edit(loaded(), INSTRUMENT),
+			edit(loaded(), HOUSEHOLDS),
 			"bank/questions/examples/library_visits.yaml",
 		);
 		expect(
-			commitOf(save(m, INSTRUMENT)[1])?.changes.map((c) => c.path),
-		).toEqual([INSTRUMENT]);
+			commitOf(save(m, HOUSEHOLDS)[1])?.changes.map((c) => c.path),
+		).toEqual([HOUSEHOLDS]);
 	});
 
 	it("stops before any request when a question it asks changed on GitHub", () => {
-		const m = edit(edit(loaded(), INSTRUMENT), TENURE);
+		const m = edit(edit(loaded(), HOUSEHOLDS), TENURE);
 		const changed: Model = {
 			...m,
 			remote: {
@@ -138,9 +138,9 @@ describe("saving an instrument", () => {
 				},
 			},
 		};
-		const [refused, cmds] = save(changed, INSTRUMENT);
+		const [refused, cmds] = save(changed, HOUSEHOLDS);
 		expect(commitOf(cmds)).toBeUndefined();
-		expect(refused.activity[at(m, INSTRUMENT).id]).toMatchObject({
+		expect(refused.activity[at(m, HOUSEHOLDS).id]).toMatchObject({
 			kind: "failed",
 			failure: {
 				message:
@@ -215,11 +215,11 @@ describe("deleting an instrument", () => {
 
 describe("signing out", () => {
 	it("saves an instrument's unsaved changes with the rest", () => {
-		const m = edit(edit(loaded(), INSTRUMENT), "workspace.yaml");
+		const m = edit(edit(loaded(), HOUSEHOLDS), "workspace.yaml");
 		expect(
 			signOutPlan(m)
 				.save.map((f) => f.base?.path)
 				.sort(),
-		).toEqual([INSTRUMENT, "workspace.yaml"]);
+		).toEqual([HOUSEHOLDS, "workspace.yaml"]);
 	});
 });
