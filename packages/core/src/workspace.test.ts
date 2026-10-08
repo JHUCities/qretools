@@ -27,6 +27,29 @@ describe("the banks in a workspace", () => {
 		expect(Object.keys(banksIn(of("questions/t/q.yaml")).banks)).toEqual([""]);
 	});
 
+	it("knows the root as a bank by its questions or shared files, and only the root", () => {
+		expect(Object.keys(banksIn(of("scales/yn.yaml")).banks)).toEqual([""]);
+		const { banks, outside } = banksIn(of("docs/questions/faq.md"));
+		expect(banks).toEqual({});
+		expect(Object.keys(outside)).toEqual(["docs/questions/faq.md"]);
+		expect(Object.keys(banksIn(of("banks/a/scales/yn.yaml")).banks)).toEqual(
+			[],
+		);
+		// What a bank doesn't read at its root makes no bank of it.
+		expect(
+			Object.keys(banksIn(of("docs/notes.yaml", "workspace.yaml")).banks),
+		).toEqual([]);
+	});
+
+	it("takes any folder holding a bank file for a bank, whatever it's called", () => {
+		expect(
+			Object.keys(
+				banksIn(of("banks/units/bank.yaml", "surveys/concepts/bank.yaml"))
+					.banks,
+			).sort(),
+		).toEqual(["banks/units", "surveys/concepts"]);
+	});
+
 	it("gives each bank folder its files by path within it, and leaves the workspace's own outside", () => {
 		const { banks, outside } = banksIn(
 			of(

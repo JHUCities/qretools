@@ -105,8 +105,9 @@ export function placeOf(
 /**
  * The workspace's files, by bank: each bank folder ("" for the root) with its files by
  * path within it, and the files no bank holds, by path in the workspace. The root is a
- * bank when it holds `bank.yaml` or a `questions/` folder (as banks made before
- * `bank.yaml` do); any other folder when it holds `bank.yaml`, unless that is inside
+ * bank when it holds a file a bank reads there (`bank.yaml`, a shared file, a question)
+ * or a `questions/` folder (as banks made before `bank.yaml` do); any other folder when
+ * it holds `bank.yaml`, unless that is inside
  * another bank's own folders (its `questions/`, `scales/`, …) or the workspace's
  * `instruments/`. A file belongs to the deepest bank folder above it, except the
  * workspace's own (`workspace.yaml`, `instruments/`), which no bank holds. Total, and
@@ -118,7 +119,14 @@ export function banksIn(files: Readonly<Record<string, string>>): {
 } {
 	const candidates = new Set<string>();
 	for (const path of Object.keys(files)) {
-		if (path === ROOT.bank || path.startsWith("questions/")) candidates.add("");
+		// The root is a bank when it holds anything a bank reads there (its `bank.yaml`,
+		// a shared file, a question) or a `questions/` folder, as banks made before
+		// `bank.yaml` did: a folder of only shared files is a bank too.
+		if (
+			!own(path) &&
+			(kindAt(path) !== undefined || path.startsWith("questions/"))
+		)
+			candidates.add("");
 		else if (path.endsWith(`/${ROOT.bank}`) && !own(path))
 			candidates.add(path.slice(0, -`/${ROOT.bank}`.length));
 	}

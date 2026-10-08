@@ -39,7 +39,7 @@ import type {
 	Failure,
 	File,
 	Link,
-	Loaded,
+	LoadedWorkspace,
 	Who,
 } from "@qretools/shell";
 import { bankText, sameBank } from "@qretools/shell";
@@ -348,9 +348,10 @@ export type Msg =
 			readonly kind: "connected";
 			readonly result: Result<Who, Failure>;
 	  }
+	/** The whole workspace as GitHub has it: its banks, and (later) its instruments. */
 	| {
-			readonly kind: "bankLoaded";
-			readonly result: Result<Loaded, Failure>;
+			readonly kind: "workspaceLoaded";
+			readonly result: Result<LoadedWorkspace, Failure>;
 	  }
 	/** Read the bank again, as the same session: a retry after a failed load. */
 	| { readonly kind: "bankReloadRequested" }
@@ -380,7 +381,8 @@ export type Cmd =
 	/** Work leaving this tab (someone else's, or another bank's): kept in the browser, never dropped. */
 	| { readonly kind: "setAside"; readonly work: Work }
 	| { readonly kind: "connect"; readonly repo: BankRef }
-	| { readonly kind: "loadBank"; readonly target: BranchTarget }
+	/** Read every file of the workspace, from the author's branch or, before it exists, the bank's. */
+	| { readonly kind: "loadWorkspace"; readonly target: BranchTarget }
 	| {
 			readonly kind: "readFile";
 			readonly id: Id;
@@ -399,11 +401,16 @@ export type Cmd =
 	| { readonly kind: "signIn"; readonly remember: boolean }
 	/** Put a link in the address bar: a new history entry, or in place. */
 	| { readonly kind: "setLink"; readonly hash: string; readonly push: boolean }
-	/** Read one file from another author's branch, for a link. */
+	/**
+	 * Read one file from another author's branch, for a link, with its bank's shared
+	 * files: `target` is that bank (its folder in the repository), `rel` the file's path
+	 * in it, and `path` its path in the workspace, echoed in the reply.
+	 */
 	| {
 			readonly kind: "readAt";
 			readonly target: BranchTarget;
 			readonly path: Path;
+			readonly rel: string;
 	  };
 
 export type Dispatch = (msg: Msg) => void;

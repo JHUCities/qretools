@@ -32,13 +32,14 @@ beforeAll(async () => {
  * view of a loaded model. Later changes to the app touch only these, never what follows.
  */
 const loadedMsg = (loaded: readonly File[]): Msg => ({
-	kind: "bankLoaded",
+	kind: "workspaceLoaded",
 	result: ok({
 		files: loaded,
 		found: true,
 		from: "branch" as const,
 		aheadBy: 0,
 		behindBy: 0,
+		unread: [],
 	}),
 });
 

@@ -58,7 +58,14 @@ const LOADED = {
 } as const;
 /** A load of these files from the author's branch. */
 const loadOf = (files: readonly File[]) =>
-	ok({ files, found: true, from: "branch" as const, aheadBy: 0, behindBy: 0 });
+	ok({
+		files,
+		found: true,
+		from: "branch" as const,
+		aheadBy: 0,
+		behindBy: 0,
+		unread: [],
+	});
 /** Connected, with this session's load done: the state in which writing is allowed. */
 const connected = (model: Model, canWrite = true): Model => ({
 	...model,
@@ -563,9 +570,9 @@ describe("connecting", () => {
 			}),
 		});
 		expect(m2.loading.kind).toBe("loading");
-		expect(c2[0]?.kind).toBe("loadBank");
+		expect(c2[0]?.kind).toBe("loadWorkspace");
 		const [m3] = update(m2, {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: loadOf([
 				{
 					path: "questions/nhd/nhd_x.yaml",
@@ -604,7 +611,7 @@ describe("connecting", () => {
 
 	it("reads questions against the working scheme files, so an edit shows at once", () => {
 		const [m] = update(connected(fresh()), {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: loadOf([
 				{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
 			]),
@@ -655,7 +662,7 @@ describe("connecting", () => {
 	it("a reply from GitHub after signing out is ignored", () => {
 		const [out] = update(connected(fresh()), { kind: "disconnected" });
 		const [after, cmds] = update(out, {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: loadOf([
 				{ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
 			]),
@@ -823,7 +830,7 @@ describe("scheme files", () => {
 
 describe("the environment's identity", () => {
 	const loaded = update(connected(fresh()), {
-		kind: "bankLoaded",
+		kind: "workspaceLoaded",
 		result: loadOf([
 			{ path: "questions/a/a.yaml", sha: "q", text: "name: a\n" },
 			{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
@@ -856,7 +863,7 @@ describe("the environment's identity", () => {
 
 	it("a load that brings nothing new keeps every slice", () => {
 		const [again] = update(loaded, {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: loadOf([
 				{ path: "questions/a/a.yaml", sha: "q", text: "name: a\n" },
 				{ path: "scales/yn.yaml", sha: "b", text: "labels:\n  1: Yes\n" },
@@ -947,7 +954,7 @@ describe("the author's own branch", () => {
 			defaultBranch: "main",
 		});
 		expect(cmds[0]).toEqual({
-			kind: "loadBank",
+			kind: "loadWorkspace",
 			target: {
 				owner: "JHUCities",
 				repo: "bas-question-bank",
@@ -1295,7 +1302,7 @@ describe("links", () => {
 		});
 		expect(m.pendingLink).toMatchObject({ file: "questions/q/q.yaml" });
 		const [opened] = update(connected(m), {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: loadOf([
 				{ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
 			]),
@@ -1609,7 +1616,7 @@ describe("links while connecting", () => {
 		});
 		expect(c1.some((c) => c.kind === "setLink")).toBe(false);
 		const [, c2] = update(connectedM, {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: loadOf([
 				{ path: "questions/q/q.yaml", sha: "s", text: "name: q\n" },
 			]),
@@ -1671,7 +1678,7 @@ describe("signing in", () => {
 			bankQuestion(1, "questions/q/q.yaml", "name: q\n"),
 		]);
 		const [afterLoad, c1] = update(m, {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: { ok: false, error: ended },
 		});
 		expect(afterLoad.session).toEqual({ kind: "failed", failure: ended });
@@ -1692,7 +1699,7 @@ describe("signing in", () => {
 	it("a network failure leaves the session as it is", () => {
 		const m = connected(fresh());
 		const [after, cmds] = update(m, {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: { ok: false, error: { kind: "network", message: "offline" } },
 		});
 		expect(after.session).toBe(m.session);
@@ -1702,7 +1709,7 @@ describe("signing in", () => {
 	it("a bank that did not load says so, and nothing can be written", () => {
 		const offline = { kind: "network" as const, message: "offline" };
 		const [after] = update(connected(fresh()), {
-			kind: "bankLoaded",
+			kind: "workspaceLoaded",
 			result: { ok: false, error: offline },
 		});
 		expect(after.loading).toEqual({ kind: "failed", failure: offline });
@@ -1723,7 +1730,7 @@ describe("signing in", () => {
 		expect(after.loading).toEqual({ kind: "loading" });
 		expect(cmds).toEqual([
 			{
-				kind: "loadBank",
+				kind: "loadWorkspace",
 				target: {
 					owner: "JHUCities",
 					repo: "bas-question-bank",

@@ -1,11 +1,14 @@
 import {
+	bankAt,
 	bankLocation,
+	banksIn,
 	compact,
 	EMPTY_ENV,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
 	inBank,
 	isRoot,
+	joinFolder,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
 	type NamedScheme,
@@ -266,7 +269,8 @@ function step(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
-			const { file } = msg.result.value;
+			// Read in its bank's folder: in the workspace it is at the path the link names.
+			const file = { ...msg.result.value.file, path: msg.path };
 			// Their version is exactly the one you started from: open your own copy.
 			const own = claimant(model, file.path);
 			if (own?.base?.sha === file.sha)
@@ -867,12 +871,15 @@ function step(model: Model, msg: Msg): Step {
 					},
 					[
 						...aside,
-						{ kind: "loadBank", target: targetOf(model.settings, session) },
+						{
+							kind: "loadWorkspace",
+							target: targetOf(model.settings, session),
+						},
 					],
 				]);
 			}
 
-		case "bankLoaded": {
+		case "workspaceLoaded": {
 			if (!msg.result.ok)
 				return [
 					compact({
@@ -885,10 +892,19 @@ function step(model: Model, msg: Msg): Step {
 			// Before the author's first save their branch does not exist, and `remote` is
 			// the bank they will branch from; the bases stay valid either way, since blob
 			// shas are content addresses.
-			const { files, from, aheadBy, behindBy } = msg.result.value;
+			const { files, from, aheadBy, behindBy, unread } = msg.result.value;
 			const proposable = aheadBy > 0;
-			// The bank in the settings' folder, read on its own: the workspace's root.
-			const banks = [""];
+			// The workspace's banks, as the core finds them (the CLI's rule), and any the
+			// kept work names: a draft in a bank not on GitHub yet stays in it.
+			const banks = [
+				...new Set([
+					...Object.keys(
+						banksIn(Object.fromEntries(files.map((f) => [f.path, f.text])))
+							.banks,
+					),
+					...allFiles(model.local).map((f) => f.bank),
+				]),
+			].sort();
 			const remote = remoteOf(model.remote, files, banks);
 			const { local, nextId } = rebase(
 				model.local,
@@ -904,6 +920,12 @@ function step(model: Model, msg: Msg): Step {
 				nextId,
 				loading: { kind: "loaded", from, proposable, behindBy } as const,
 				pendingLink: undefined,
+				// What GitHub wouldn't give as text is left out, and said once: this load's
+				// notice replaces an earlier load's, and a load with none clears it.
+				failures: [
+					...model.failures.filter((f) => f.hint !== UNREAD_HINT),
+					...(unread.length === 0 ? [] : [unreadNotice(unread)]),
+				],
 			});
 			// A link that waited for the bank opens now.
 			const [opened, cmds] =
@@ -917,7 +939,12 @@ function step(model: Model, msg: Msg): Step {
 			if (model.session.kind !== "connected") return [model, []];
 			return [
 				{ ...model, loading: { kind: "loading" } },
-				[{ kind: "loadBank", target: targetOf(model.settings, model.session) }],
+				[
+					{
+						kind: "loadWorkspace",
+						target: targetOf(model.settings, model.session),
+					},
+				],
 			];
 
 		case "disconnected":
@@ -1200,7 +1227,7 @@ function messageOf(model: Model, q: Entry): string {
 function authFailure(msg: Msg): Failure | undefined {
 	const failure =
 		msg.kind === "connected" ||
-		msg.kind === "bankLoaded" ||
+		msg.kind === "workspaceLoaded" ||
 		msg.kind === "fileReloaded" ||
 		msg.kind === "foreignLoaded"
 			? msg.result.ok
@@ -1235,7 +1262,7 @@ function stale(model: Model, msg: Msg): boolean {
 	const out =
 		model.session.kind === "anonymous" || model.session.kind === "failed";
 	switch (msg.kind) {
-		case "bankLoaded":
+		case "workspaceLoaded":
 		case "committed":
 		case "fileReloaded":
 		case "foreignLoaded":
@@ -1405,6 +1432,9 @@ function openLink(model: Model, link: Link): Step {
 					[],
 				];
 	if (link.file === undefined) return [model, []];
+	// Read through its bank, so their shared files come with it, as that bank has them.
+	const bank = bankAt(link.file, model.banks) ?? "";
+	const target = targetOf(model.settings, session);
 	return [
 		{
 			...model,
@@ -1413,12 +1443,34 @@ function openLink(model: Model, link: Link): Step {
 		[
 			{
 				kind: "readAt",
-				target: { ...targetOf(model.settings, session), branch: link.branch },
+				target: {
+					...target,
+					path: joinFolder(target.path, bank) ?? target.path,
+					branch: link.branch,
+				},
 				path: link.file,
+				rel: relIn(bank, link.file),
 			},
 		],
 	];
 }
+
+/** What marks the unread notice among the failures, so a later load replaces it. */
+const UNREAD_HINT =
+	"GitHub sends a file as text only when it is text and not too large.";
+
+/** Files of the workspace GitHub wouldn't give as text: left out of the load, named. */
+const unreadNotice = (
+	unread: readonly { readonly path: string; readonly reason: string }[],
+): Failure => ({
+	kind: "unreadable",
+	message:
+		unread.length === 1
+			? `\`${unread[0]?.path}\` couldn't be read, so it's left out.`
+			: `${unread.length} files couldn't be read, so they're left out.`,
+	hint: UNREAD_HINT,
+	detail: unread.map((u) => `${u.path}: ${u.reason}`).join("\n"),
+});
 
 /** A link the app declined to open: said once, in the failures. */
 const refused = (model: Model, message: string, hint?: string): Model => ({

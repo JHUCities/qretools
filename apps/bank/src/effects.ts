@@ -128,12 +128,12 @@ export function createEffects(deps: Deps): Effects {
 					s.whoAmI().then((result) => dispatch({ kind: "connected", result }));
 					return;
 				}
-				case "loadBank": {
+				case "loadWorkspace": {
 					const s = storeFor(cmd.target);
 					if (!s)
-						return dispatch({ kind: "bankLoaded", result: err(NO_TOKEN) });
-					s.loadBank(cmd.target).then((result) =>
-						dispatch({ kind: "bankLoaded", result }),
+						return dispatch({ kind: "workspaceLoaded", result: err(NO_TOKEN) });
+					s.loadWorkspace(cmd.target).then((result) =>
+						dispatch({ kind: "workspaceLoaded", result }),
 					);
 					return;
 				}
@@ -211,7 +211,7 @@ export function createEffects(deps: Deps): Effects {
 							result,
 						});
 					if (!s) return reply(err(NO_TOKEN));
-					s.readWithSchemes(cmd.target, cmd.path).then(reply);
+					s.readWithSchemes(cmd.target, cmd.rel).then(reply);
 					return;
 				}
 				default:

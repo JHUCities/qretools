@@ -29,7 +29,7 @@ function renderApp(opts: { token: boolean; who?: Who }) {
 	const store = {
 		whoAmI: () =>
 			opts.who === undefined ? never() : Promise.resolve(ok(opts.who)),
-		loadBank: never,
+		loadWorkspace: never,
 	} as unknown as Store;
 	const app = createApp(
 		{ work: ok(undefined), settings: SETTINGS, hasToken: opts.token },

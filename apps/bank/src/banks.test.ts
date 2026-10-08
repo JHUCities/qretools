@@ -3,6 +3,7 @@
  * another, and editing one bank never re-evaluates another.
  */
 import { type Mention, ok } from "@qretools/core";
+import { formatLink } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
@@ -13,7 +14,7 @@ import {
 	schemeFileNamed,
 } from "./model.js";
 import { dependencies } from "./sync.js";
-import { schemeNameProblem } from "./update.js";
+import { schemeNameProblem, update } from "./update.js";
 
 const scale = (
 	id: number,
@@ -135,5 +136,129 @@ describe("a workspace of banks", () => {
 				"banks/a",
 			).include.map((e) => e.id),
 		).toEqual([1]);
+	});
+});
+
+describe("loading a workspace", () => {
+	const file = (path: string, text = "x: 1\n") => ({
+		path,
+		sha: `sha-${path}`,
+		text,
+	});
+	/** Signed in, with this workspace loaded from the author's branch. */
+	function loaded(
+		files: ReturnType<typeof file>[],
+		unread: { path: string; reason: string }[] = [],
+	): Model {
+		const [start] = init({
+			work: ok(undefined),
+			hasToken: true,
+			settings: { owner: "o", repo: "r", path: "", remember: false },
+		});
+		const [connected] = update(start, {
+			kind: "connected",
+			result: ok({
+				login: "iain",
+				avatarUrl: "https://a/iain",
+				access: { kind: "write" },
+				defaultBranch: "main",
+			}),
+		});
+		return update(connected, {
+			kind: "workspaceLoaded",
+			result: ok({
+				files,
+				found: true,
+				from: "branch" as const,
+				aheadBy: 0,
+				behindBy: 0,
+				unread,
+			}),
+		})[0];
+	}
+	const WORKSPACE = [
+		file("workspace.yaml", "agency: org.example\n"),
+		file("instruments/x.yaml", "name: x\n"),
+		file("banks/a/bank.yaml", "agency: org.example\n"),
+		file("banks/a/questions/t/q.yaml", "name: q\n"),
+		file("banks/b/bank.yaml", "agency: org.example\n"),
+		file("banks/b/scales/yn.yaml", 'labels:\n  "1": Yes\n'),
+	];
+
+	it("holds every bank's files, each in its bank, and nothing of the workspace's own", () => {
+		const m = loaded(WORKSPACE);
+		expect(m.banks).toEqual(["banks/a", "banks/b"]);
+		expect(
+			[...Object.values(m.local.questions), ...Object.values(m.local.schemes)]
+				.map((f) => `${f.bank} ${f.base?.path}`)
+				.sort(),
+		).toEqual([
+			"banks/a banks/a/bank.yaml",
+			"banks/a banks/a/questions/t/q.yaml",
+			"banks/b banks/b/bank.yaml",
+			"banks/b banks/b/scales/yn.yaml",
+		]);
+	});
+
+	it("names the files GitHub wouldn't give as text, once however often it loads", () => {
+		const unread = [
+			{ path: "banks/a/scales/big.yaml", reason: "It's too large." },
+		];
+		const m = loaded(WORKSPACE, unread);
+		expect(m.failures).toEqual([
+			expect.objectContaining({
+				message:
+					"`banks/a/scales/big.yaml` couldn't be read, so it's left out.",
+			}),
+		]);
+		const load = (model: Model, again: typeof unread) =>
+			update(model, {
+				kind: "workspaceLoaded",
+				result: ok({
+					files: WORKSPACE,
+					found: true,
+					from: "branch" as const,
+					aheadBy: 0,
+					behindBy: 0,
+					unread: again,
+				}),
+			})[0];
+		expect(load(m, unread).failures).toHaveLength(1);
+		expect(load(m, []).failures).toEqual([]);
+	});
+
+	it("reads another author's file through its own bank, with that bank's shared files", () => {
+		const m = loaded(WORKSPACE);
+		const path = "banks/b/scales/yn.yaml";
+		const [opened, cmds] = update(m, {
+			kind: "hashChanged",
+			hash: formatLink({ repo: "o/r", branch: "qretools-ann", file: path }),
+		});
+		expect(cmds).toContainEqual(
+			expect.objectContaining({
+				kind: "readAt",
+				target: expect.objectContaining({
+					path: "banks/b",
+					branch: "qretools-ann",
+				}),
+				path,
+				rel: "scales/yn.yaml",
+			}),
+		);
+		// Their reply names the file within the bank; the screen keeps the workspace's path.
+		const [shown] = update(opened, {
+			kind: "foreignLoaded",
+			branch: "qretools-ann",
+			path,
+			result: ok({
+				file: { path: "scales/yn.yaml", sha: "theirs", text: "labels: {}\n" },
+				schemes: [],
+			}),
+		});
+		expect(shown.screen).toMatchObject({
+			kind: "foreign",
+			path,
+			file: { path, sha: "theirs" },
+		});
 	});
 });
