@@ -6,4 +6,10 @@
  */
 
 export { toDiagnostics } from "./diagnostics.ts";
-export { createEditor, type Editor, type EditorInputs } from "./editor.ts";
+export {
+	createEditor,
+	type Editor,
+	type EditorInputs,
+	type EditorOptions,
+} from "./editor.ts";
+export { instrumentSource } from "./instrument.ts";

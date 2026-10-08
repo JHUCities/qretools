@@ -9,7 +9,8 @@ import { createEditor, type Editor, type EditorInputs } from "@qretools/editor";
 import { useLayoutEffect, useRef } from "react";
 import { useApp } from "./AppContext.js";
 
-export function EditorPane(inputs: EditorInputs) {
+/** A question or shared file always has its schema: completion reads it. */
+export function EditorPane(inputs: EditorInputs & { readonly schema: object }) {
 	const host = useRef<HTMLDivElement>(null);
 	const editor = useRef<Editor | null>(null);
 	const { dispatch, effects } = useApp();

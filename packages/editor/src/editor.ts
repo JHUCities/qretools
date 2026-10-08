@@ -8,7 +8,10 @@
  * transaction, and become decorations only here.
  */
 
-import { startCompletion } from "@codemirror/autocomplete";
+import {
+	type CompletionSource,
+	startCompletion,
+} from "@codemirror/autocomplete";
 import { isolateHistory } from "@codemirror/commands";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -52,11 +55,17 @@ export interface EditorInputs {
 	readonly diagnostics: readonly Diagnostic[];
 	/** What the core colours by meaning; drawn as decorations, never decided here. */
 	readonly marks: readonly Mark[];
-	readonly schema: object;
+	/** The JSON Schema that schema completion reads; absent where the editor's own completions serve. */
+	readonly schema?: object;
 	/** Another author's version, from a link: shown, never edited. */
 	readonly readOnly?: boolean;
 	/** The editor's accessible name, e.g. "Question source (YAML)". */
 	readonly label?: string;
+}
+
+export interface EditorOptions {
+	/** Completion sources in place of the schema's: what an instrument offers, say. */
+	readonly completions?: readonly CompletionSource[];
 }
 
 export interface Editor {
@@ -73,6 +82,7 @@ export function createEditor(
 	onCursor: (offset: number) => void,
 	/** Go to definition: the open file's id, and the offset of the name to follow. */
 	onFollow: (id: number, offset: number) => void = () => {},
+	options: EditorOptions = {},
 ): Editor {
 	let schema: object | undefined;
 	let current: number | undefined;
@@ -84,9 +94,11 @@ export function createEditor(
 		basicSetup,
 		yaml(),
 		// We compose the schema features ourselves. The package's bundled extension
-		// adds its own linter, which would double-report and call holes errors.
-		yamlLanguage.data.of({ autocomplete: withoutInfo(yamlCompletion()) }),
-		yamlLanguage.data.of({ autocomplete: schemaCompletion }),
+		// adds its own linter, which would double-report and call holes errors. An
+		// editor given its own completions (an instrument's) offers only those.
+		...(
+			options.completions ?? [withoutInfo(yamlCompletion()), schemaCompletion]
+		).map((source) => yamlLanguage.data.of({ autocomplete: source })),
 		// No schema hover: the cursor inspector shows a field's description, and a
 		// finding's tooltip shows the finding; a third tooltip repeated both.
 		stateExtensions(),
@@ -148,7 +160,7 @@ export function createEditor(
 					effects: readOnly.reconfigure(EditorState.readOnly.of(lock)),
 				});
 			}
-			if (next !== schema) {
+			if (next !== undefined && next !== schema) {
 				schema = next;
 				updateSchema(view, next as never);
 			}
