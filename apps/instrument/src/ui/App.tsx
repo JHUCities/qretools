@@ -18,6 +18,7 @@ import { PROJECT, plainText } from "@qretools/core";
 import { bankText } from "@qretools/shell";
 import {
 	AccountMenu,
+	ExternalLink,
 	failureDescription,
 	ThemeToggle,
 	Wordmark,
@@ -155,6 +156,7 @@ export function App() {
 
 /** The project's instruments as links: opening one is following its address. */
 function Instruments({ model, branch }: { model: Model; branch: string }) {
+	const { template } = useApp();
 	const { project } = model;
 	if (project.kind === "loading")
 		return <p className="quiet">Loading the project…</p>;
@@ -163,9 +165,23 @@ function Instruments({ model, branch }: { model: Model; branch: string }) {
 	if (paths.length === 0)
 		return (
 			<p className="quiet">
-				{project.hasFolder
-					? `No instruments in ${PROJECT.instruments}/ yet.`
-					: `This project has no ${PROJECT.instruments}/ folder.`}
+				{project.hasFolder ? (
+					`No instruments in ${PROJECT.instruments}/ yet.`
+				) : (
+					<>
+						{bankText(model.settings)} has no {PROJECT.instruments}/ folder, so
+						it isn't a project yet.
+						{template !== undefined && (
+							<>
+								{" "}
+								<ExternalLink href={template} icon={false}>
+									Start a project from the template
+								</ExternalLink>
+								.
+							</>
+						)}
+					</>
+				)}
 			</p>
 		);
 	return (

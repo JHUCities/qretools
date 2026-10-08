@@ -10,6 +10,8 @@ interface ImportMetaEnv {
 	readonly VITE_AUTH_URL?: string;
 	/** The GitHub App's slug, for the "install the App" link. */
 	readonly VITE_GITHUB_APP_SLUG?: string;
+	/** The template a new project starts from, as owner/name (the app links it). */
+	readonly VITE_PROJECT_TEMPLATE?: string;
 }
 
 interface ImportMeta {

@@ -2,7 +2,7 @@
 import { ThemeProvider } from "@primer/react/next";
 import { err, ok } from "@qretools/core";
 import type { Store } from "@qretools/shell";
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { createApp } from "../store.ts";
 import { App } from "./App.tsx";
@@ -15,7 +15,14 @@ function renderApp(
 	{
 		instrument = "name: x\n",
 		project = "name: x\n",
-	}: { instrument?: string; project?: string | null } = {},
+		folder = true,
+		template,
+	}: {
+		instrument?: string;
+		project?: string | null;
+		folder?: boolean;
+		template?: string;
+	} = {},
 ) {
 	const file = (path: string, text = "name: x\n") => ({ path, sha: "s", text });
 	const store = {
@@ -29,7 +36,9 @@ function renderApp(
 				}),
 			),
 		readFolder: () =>
-			Promise.resolve(ok([file("instruments/households.yaml", instrument)])),
+			Promise.resolve(
+				ok(folder ? [file("instruments/households.yaml", instrument)] : null),
+			),
 		read: () =>
 			Promise.resolve(
 				project === null
@@ -48,6 +57,7 @@ function renderApp(
 				clear: () => {},
 			},
 		},
+		template === undefined ? {} : { template },
 	);
 	render(
 		<AppContext.Provider value={app}>
@@ -147,5 +157,25 @@ describe("the instrument app", () => {
 		const next = screen.getByRole("link", { name: "Download DDI" });
 		expect(next.getAttribute("href")).not.toBe(first);
 		expect(revoked).toContain(first);
+	});
+
+	it("offers the project template to someone without a project", async () => {
+		const template =
+			"https://github.com/JHUCities/qretools-instrument-template/generate";
+		renderApp(false, { template });
+		expect(
+			screen
+				.getByRole("link", { name: /Start one from the template/ })
+				.getAttribute("href"),
+		).toBe(template);
+		cleanup();
+		renderApp(true, { template, folder: false });
+		await act(async () => {});
+		expect(screen.getByText(/isn't a project yet/)).toBeTruthy();
+		expect(
+			screen
+				.getByRole("link", { name: /Start a project from the template/ })
+				.getAttribute("href"),
+		).toBe(template);
 	});
 });

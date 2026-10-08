@@ -11,6 +11,7 @@ import {
 } from "@qretools/shell";
 import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { projectTemplate } from "./config.ts";
 import { warnOnLeave } from "./model.ts";
 import { readSettings, readTheme } from "./persist.ts";
 import { createApp } from "./store.ts";
@@ -27,6 +28,7 @@ if (root) {
 	} catch {
 		// No storage (a private window, blocked site data): start fresh.
 	}
+	const template = projectTemplate(import.meta.env);
 	const config = signInConfig(
 		import.meta.env,
 		location.origin,
@@ -63,6 +65,7 @@ if (root) {
 				signIn: { config, ...(returned !== undefined && { returned }) },
 			}),
 		},
+		template === undefined ? {} : { template },
 	);
 	// Which instrument is open follows the address. Read when the event is handled,
 	// never taken from the event.

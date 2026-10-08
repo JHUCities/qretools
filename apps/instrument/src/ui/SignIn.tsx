@@ -15,15 +15,15 @@ import {
 	TextInput,
 } from "@primer/react";
 import { plainText } from "@qretools/core";
-import { bankText, parseBank } from "@qretools/shell";
-import { failureDescription } from "@qretools/shell/ui";
+import { bankText, installUrl, parseBank } from "@qretools/shell";
+import { ExternalLink, failureDescription } from "@qretools/shell/ui";
 import { useId, useRef, useState } from "react";
 import { TOKEN_PASTE } from "../flags.ts";
 import type { Model } from "../model.ts";
 import { useApp } from "./AppContext.ts";
 
 export function SignIn({ model }: { model: Model }) {
-	const { dispatch, effects, signIn: config } = useApp();
+	const { dispatch, effects, signIn: config, template } = useApp();
 	const { settings, session } = model;
 	const [text, setText] = useState(
 		model.pendingLink?.repo ?? (settings.repo === "" ? "" : bankText(settings)),
@@ -166,6 +166,25 @@ export function SignIn({ model }: { model: Model }) {
 						)}
 					</Stack>
 				</form>
+				{/* As github.com offers "New to GitHub?" under its form. */}
+				{template !== undefined && (
+					<p className="quiet signin-note">
+						New project?{" "}
+						<ExternalLink href={template} icon={false}>
+							Start one from the template
+						</ExternalLink>
+						: an example instrument and the bank it uses
+						{config?.appSlug !== undefined && (
+							<>
+								. If it's private,{" "}
+								<ExternalLink href={installUrl(config.appSlug)} icon={false}>
+									install the app on it
+								</ExternalLink>
+							</>
+						)}
+						.
+					</p>
+				)}
 			</Stack>
 		</main>
 	);
