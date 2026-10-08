@@ -8,7 +8,7 @@
  * trailing newline, which is kept), and replacing only the value would leave a block
  * map's name on a line of its own.
  */
-import { parseDocument, stringify } from "yaml";
+import { isScalar, parseDocument, stringify, visit } from "yaml";
 import type { Edit } from "../findings.ts";
 import type { NamedScheme } from "./env.ts";
 import { EMPTY_ENV } from "./env.ts";
@@ -93,11 +93,11 @@ export function addSpace(
 
 /**
  * Whether text typed at `pos` belongs after a space: the caret is straight after a key's
- * colon (a field, or a response code), with nothing after it on the line, and the text
- * starts with something other than a space. A key, not words in a block scalar
- * ("Time:"): the parse must have a key starting there. Not covered (neither occurs in
- * the surface; the `missing-space` finding catches them): a key on a list item's line
- * (`- a:`) and a dotted code (`1.5:`).
+ * colon (a field, a response code, or a list item's key such as an instrument's
+ * `- ask:`), with nothing after it on the line, and the text starts with something other
+ * than a space. A key, not words in a block scalar ("Time:"): the parse must have a key
+ * starting there. Not covered: a dotted code (`1.5:`); the `missing-space` finding
+ * catches it.
  */
 export function spaceBefore(
 	source: string,
@@ -107,21 +107,24 @@ export function spaceBefore(
 	if (!/^\S/.test(inserted)) return false;
 	const lineStart = source.lastIndexOf("\n", pos - 1) + 1;
 	const lineEnd = source.indexOf("\n", pos);
-	// A plain key or a quoted one (`"1":`, as codes are written).
-	const before = /^( *)(?:[\w-]+|"[^"\n]*"|'[^'\n]*'):$/.exec(
+	// A plain key or a quoted one (`"1":`, as codes are written), after any list markers.
+	const before = /^( *(?:- +)*)(?:[\w-]+|"[^"\n]*"|'[^'\n]*'):$/.exec(
 		source.slice(lineStart, pos),
 	);
 	if (before === null) return false;
 	if (source.slice(pos, lineEnd === -1 ? undefined : lineEnd).trim() !== "")
 		return false;
 	const keyStart = lineStart + (before[1]?.length ?? 0);
-	const { ranges } = indexDocument(
-		parseDocument(source, { prettyErrors: false }),
-		source.length,
-	);
-	return Object.entries(ranges).some(
-		([path, [from]]) => path !== "" && from === keyStart,
-	);
+	let key = false;
+	visit(parseDocument(source, { prettyErrors: false }), {
+		Pair(_, pair) {
+			if (isScalar(pair.key) && pair.key.range?.[0] === keyStart) {
+				key = true;
+				return visit.BREAK;
+			}
+		},
+	});
+	return key;
 }
 
 /**

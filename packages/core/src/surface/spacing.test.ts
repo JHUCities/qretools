@@ -69,6 +69,14 @@ describe("typing straight after a key's colon", () => {
 		expect(at("responses:\n  1:▮", "Y")).toBe(true);
 	});
 
+	it("puts a space first after a list item's key, as an instrument's steps are written", () => {
+		expect(at("flow:\n  - ask:▮", "h")).toBe(true);
+		expect(at("flow:\n  - ask: hh.a\n  - if:▮\n", "r")).toBe(true);
+		expect(at("flow:\n  - if: r\n    then:▮", "[")).toBe(true);
+		expect(at("flow:\n  - roster: r\n    count:▮\n", "h")).toBe(true);
+		expect(at("flow:\n  - say: |\n      Time:▮", "1")).toBe(false);
+	});
+
 	it("leaves everything else as typed", () => {
 		expect(at("name:▮", " ")).toBe(false); // a space already
 		expect(at("name: ▮", "f")).toBe(false); // after one
