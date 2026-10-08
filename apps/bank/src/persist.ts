@@ -244,7 +244,7 @@ const inBankSchema = { bank: z.string() };
  * repository signed in to); each entry names its bank's folder in it, "" for its root,
  * and paths are the workspace's.
  */
-export const WorkSchema = z.strictObject({
+const V6Schema = z.strictObject({
 	version: z.literal(6),
 	repo: z.string(),
 	login: z.string().optional(),
@@ -253,11 +253,41 @@ export const WorkSchema = z.strictObject({
 	schemes: z.array(SchemeSchema.extend(inBankSchema)),
 });
 
+/** The workspace's own files: its instruments, and `workspace.yaml`, in no bank. */
+const WorkspaceEntrySchema = z.discriminatedUnion("kind", [
+	z.strictObject({
+		kind: z.literal("instrument"),
+		name: z.string(),
+		id: z.int().positive(),
+		source: z.string(),
+		base: BaseSchema.optional(),
+	}),
+	z.strictObject({
+		kind: z.literal("workspaceFile"),
+		id: z.int().positive(),
+		source: z.string(),
+		base: BaseSchema.optional(),
+	}),
+]);
+
+/** Version 7: version 6 with the workspace's own files beside its banks'. */
+export const WorkSchema = V6Schema.extend({
+	version: z.literal(7),
+	workspace: z.array(WorkspaceEntrySchema),
+});
+
+/** Version 6 had no workspace files of its own. */
+const v6ToV7 = (v6: z.infer<typeof V6Schema>): Work => ({
+	...v6,
+	version: 7,
+	workspace: [],
+});
+
 /**
  * Version 5's work was one bank's, at the folder it signed in to: in version 6 that
  * folder is the workspace and the bank is its root, so every path stays as it was.
  */
-const v5ToV6 = (v5: z.infer<typeof V5Schema>): Work => ({
+const v5ToV6 = (v5: z.infer<typeof V5Schema>): z.infer<typeof V6Schema> => ({
 	...v5,
 	version: 6,
 	questions: v5.questions.map((q) => ({ ...q, bank: "" })),
@@ -275,10 +305,18 @@ export const WORK_ASIDE_KEY = "qretools.work.aside";
 export function readWork(
 	raw: string | null,
 ): Result<Work | undefined, Failure> {
-	return parseStored(raw, z.union([WorkSchema, V5Schema.transform(v5ToV6)]), {
-		what: "The work kept in this tab",
-		key: WORK_UNREADABLE_KEY,
-	});
+	return parseStored(
+		raw,
+		z.union([
+			WorkSchema,
+			V6Schema.transform(v6ToV7),
+			V5Schema.transform((v5) => v6ToV7(v5ToV6(v5))),
+		]),
+		{
+			what: "The work kept in this tab",
+			key: WORK_UNREADABLE_KEY,
+		},
+	);
 }
 
 /** Version 1 of the stored settings: the default bank and "remember" for a new tab. */
@@ -385,14 +423,16 @@ export function fromLegacy(p: Persisted): {
 	readonly setAside: boolean;
 } {
 	return {
-		work: v5ToV6({
-			version: 5,
-			repo: p.workOf?.repo ?? `${p.settings.owner}/${p.settings.repo}`,
-			...(p.workOf?.login !== undefined && { login: p.workOf.login }),
-			nextId: p.nextId,
-			questions: p.questions,
-			schemes: p.schemes,
-		}),
+		work: v6ToV7(
+			v5ToV6({
+				version: 5,
+				repo: p.workOf?.repo ?? `${p.settings.owner}/${p.settings.repo}`,
+				...(p.workOf?.login !== undefined && { login: p.workOf.login }),
+				nextId: p.nextId,
+				questions: p.questions,
+				schemes: p.schemes,
+			}),
+		),
 		settings: { ...p.settings, path: "" },
 		setAside: Object.values(p.kept).some(
 			(k) => k.questions.length + k.schemes.length > 0,

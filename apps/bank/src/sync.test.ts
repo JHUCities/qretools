@@ -80,6 +80,7 @@ describe("rebase", () => {
 		base: base(path, sha, text),
 	});
 	const local: Local = {
+		workspace: {},
 		questions: {
 			1: q(1, "questions/a/a.yaml", "old a"),
 			2: q(2, "questions/b/b.yaml", "old b", "edited b"),
@@ -99,7 +100,7 @@ describe("rebase", () => {
 		},
 	};
 	const remote = remoteOf(
-		{ questions: {}, schemes: {} },
+		{ questions: {}, schemes: {}, workspace: {} },
 		[
 			{ path: "questions/a/a.yaml", sha: "A", text: "new a" },
 			{ path: "questions/b/b.yaml", sha: "B", text: "new b" },

@@ -51,7 +51,9 @@ import {
 import {
 	type Activity,
 	allFiles,
+	type BankEntry,
 	type Blob,
+	bankFileOf,
 	type Cmd,
 	EMPTY_LOCAL,
 	EMPTY_REMOTE,
@@ -60,6 +62,7 @@ import {
 	fileOf,
 	hasOwnWork,
 	type Id,
+	isBankEntry,
 	type Model,
 	type Msg,
 	type Naming,
@@ -157,6 +160,8 @@ function step(model: Model, msg: Msg): Step {
 			const { fix } = msg;
 			// A shared entry to create: the name dialog, prefilled, pointed back at this place.
 			if (fix.kind === "create") {
+				// A shared file is made in the bank of the question that names it.
+				if (!isBankEntry(q)) return [model, []];
 				const { scheme, name, text, path } = fix.create;
 				return [
 					{
@@ -478,7 +483,8 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "deleteRequested": {
-			const q = fileOf(model, msg.id);
+			// Instruments and the workspace file save and delete with their own rule (later).
+			const q = bankFileOf(model, msg.id);
 			if (!q) return [model, []];
 			if (model.browser.confirmDelete !== msg.id)
 				return [
@@ -519,7 +525,7 @@ function step(model: Model, msg: Msg): Step {
 			return [{ ...model, browser: withoutConfirm(model.browser) }, []];
 
 		case "saveRequested": {
-			const q = fileOf(model, msg.id);
+			const q = bankFileOf(model, msg.id);
 			const as = writable(model);
 			if (!q || as === undefined) return [model, []];
 			// A bank file goes back to the path it was opened at. A draft's path is chosen
@@ -904,7 +910,9 @@ function step(model: Model, msg: Msg): Step {
 						banksIn(Object.fromEntries(files.map((f) => [f.path, f.text])))
 							.banks,
 					),
-					...allFiles(model.local).map((f) => f.bank),
+					...allFiles(model.local).flatMap((f) =>
+						isBankEntry(f) ? [f.bank] : [],
+					),
 				]),
 			].sort();
 			const remote = remoteOf(model.remote, files, banks);
@@ -1019,7 +1027,7 @@ function write(
 	model: Model,
 	as: Connected,
 	id: Id,
-	q: Entry,
+	q: BankEntry,
 	path: string,
 	subject?: string,
 ): Step {
@@ -1093,7 +1101,7 @@ function commitFiles(
 	model: Model,
 	as: Connected,
 	changes: readonly Change[],
-	files: readonly Entry[],
+	files: readonly BankEntry[],
 	/** The first file's line, when the caller has a better one than `messageOf` (a move). */
 	subject?: string,
 ): Step {
@@ -1126,14 +1134,15 @@ function commitFiles(
  * discarded; anything GitHub also changed or deleted blocks the save until reloaded.
  */
 export function signOutPlan(model: Model): {
-	readonly save: readonly Entry[];
+	readonly save: readonly BankEntry[];
 	readonly discard: readonly Question[];
-	readonly blocked: readonly Entry[];
+	readonly blocked: readonly BankEntry[];
 } {
-	const save: Entry[] = [];
+	const save: BankEntry[] = [];
 	const discard: Question[] = [];
-	const blocked: Entry[] = [];
-	for (const f of allFiles(model.local).filter(ownWork)) {
+	const blocked: BankEntry[] = [];
+	// Bank files only, until instruments save (the next change).
+	for (const f of allFiles(model.local).filter(ownWork).filter(isBankEntry)) {
 		if (f.kind === "question" && f.base === undefined) {
 			discard.push(f);
 			continue;
@@ -1208,7 +1217,7 @@ const refuse = (model: Model, id: Id, message: string, hint?: string): Model =>
  * the save and delete paths). `update` is pure and cannot reach the view's cache; do
  * not thread one in to save those milliseconds.
  */
-function messageOf(model: Model, q: Entry): string {
+function messageOf(model: Model, q: BankEntry): string {
 	if (q.kind !== "question")
 		return describeSchemeChange(
 			q.kind,
@@ -1668,21 +1677,25 @@ const failed = (failure: Failure) => ({ kind: "failed" as const, failure });
  * edited. This and `add`/`without` are the only writers of `local`.
  */
 function withFile(model: Model, f: Entry): Model {
-	return f.kind === "question"
-		? {
+	const local = model.local;
+	switch (f.kind) {
+		case "question":
+			return {
 				...model,
-				local: {
-					...model.local,
-					questions: { ...model.local.questions, [f.id]: f },
-				},
-			}
-		: {
-				...model,
-				local: {
-					...model.local,
-					schemes: { ...model.local.schemes, [f.id]: f },
-				},
+				local: { ...local, questions: { ...local.questions, [f.id]: f } },
 			};
+		case "instrument":
+		case "workspaceFile":
+			return {
+				...model,
+				local: { ...local, workspace: { ...local.workspace, [f.id]: f } },
+			};
+		default:
+			return {
+				...model,
+				local: { ...local, schemes: { ...local.schemes, [f.id]: f } },
+			};
+	}
 }
 
 function withSource(model: Model, id: Id, source: string): Model {
@@ -1739,6 +1752,7 @@ function withBlob(
 function without(model: Model, id: Id): Model {
 	const { [id]: _q, ...questions } = model.local.questions;
 	const { [id]: _s, ...schemes } = model.local.schemes;
+	const { [id]: _w, ...workspace } = model.local.workspace;
 	const { [id]: _a, ...activity } = model.activity;
 	return {
 		...model,
@@ -1746,6 +1760,8 @@ function without(model: Model, id: Id): Model {
 			questions:
 				id in model.local.questions ? questions : model.local.questions,
 			schemes: id in model.local.schemes ? schemes : model.local.schemes,
+			workspace:
+				id in model.local.workspace ? workspace : model.local.workspace,
 		},
 		activity,
 		screen:

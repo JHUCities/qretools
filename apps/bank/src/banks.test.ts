@@ -50,10 +50,12 @@ function twoBanks(): Model {
 		...start,
 		banks: ["banks/a", "banks/b"],
 		local: {
+			workspace: {},
 			questions: { 3: question(3, "banks/a"), 4: question(4, "banks/b") },
 			schemes: { 1: a, 2: b },
 		},
 		remote: {
+			workspace: {},
 			questions: {},
 			schemes: {
 				"banks/a/scales/yn.yaml": { sha: "s1", text: a.source },
@@ -117,7 +119,7 @@ describe("a workspace of banks", () => {
 		// An unsaved scale in another bank is never taken along (GitHub has neither yet).
 		const unsaved: Model = {
 			...m,
-			remote: { questions: {}, schemes: {} },
+			remote: { questions: {}, schemes: {}, workspace: {} },
 			local: {
 				...m.local,
 				schemes: {
@@ -186,7 +188,49 @@ describe("loading a workspace", () => {
 		file("banks/b/scales/yn.yaml", 'labels:\n  "1": Yes\n'),
 	];
 
-	it("holds every bank's files, each in its bank, and nothing of the workspace's own", () => {
+	it("holds the workspace's own files apart from the banks'", () => {
+		const m = loaded(WORKSPACE);
+		expect(
+			Object.values(m.local.workspace)
+				.map((f) => `${f.kind} ${f.base?.path}`)
+				.sort(),
+		).toEqual([
+			"instrument instruments/x.yaml",
+			"workspaceFile workspace.yaml",
+		]);
+		expect(Object.keys(m.remote.workspace).sort()).toEqual([
+			"instruments/x.yaml",
+			"workspace.yaml",
+		]);
+		// GitHub changing an instrument the author hasn't touched brings it forward.
+		const [again] = update(m, {
+			kind: "workspaceLoaded",
+			result: ok({
+				files: WORKSPACE.map((f) =>
+					f.path === "instruments/x.yaml"
+						? { ...f, sha: "newer", text: "name: x\ntitle: X\n" }
+						: f,
+				),
+				found: true,
+				from: "branch" as const,
+				aheadBy: 0,
+				behindBy: 0,
+				unread: [],
+			}),
+		});
+		const x = Object.values(again.local.workspace).find(
+			(f) => f.kind === "instrument",
+		);
+		expect(x).toMatchObject({
+			name: "x",
+			source: "name: x\ntitle: X\n",
+			base: { sha: "newer" },
+		});
+		// Loading again changes nothing else: the banks' slices keep their identity.
+		expect(again.local.questions).toBe(m.local.questions);
+	});
+
+	it("holds every bank's files, each in its bank", () => {
 		const m = loaded(WORKSPACE);
 		expect(m.banks).toEqual(["banks/a", "banks/b"]);
 		expect(

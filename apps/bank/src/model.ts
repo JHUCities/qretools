@@ -97,8 +97,34 @@ export interface SchemeEntry {
 	readonly base?: Base;
 }
 
-/** Everything the bank browser holds. */
-export type Entry = Question | SchemeEntry;
+/** An instrument of the workspace: its name is its filename, chosen when it is created. */
+export interface InstrumentEntry {
+	readonly kind: "instrument";
+	readonly name: string;
+	readonly id: Id;
+	readonly source: string;
+	readonly base?: Base;
+}
+
+/** The workspace's own file, `workspace.yaml`: one per workspace, as `bank.yaml` is per bank. */
+export interface WorkspaceFileEntry {
+	readonly kind: "workspaceFile";
+	readonly id: Id;
+	readonly source: string;
+	readonly base?: Base;
+}
+
+/** A file of the workspace itself, in no bank. */
+export type WorkspaceEntry = InstrumentEntry | WorkspaceFileEntry;
+
+/** A file of one of the workspace's banks. */
+export type BankEntry = Question | SchemeEntry;
+
+/** Everything the browser holds. */
+export type Entry = BankEntry | WorkspaceEntry;
+
+export const isBankEntry = (e: Entry): e is BankEntry =>
+	e.kind !== "instrument" && e.kind !== "workspaceFile";
 
 /**
  * The working copies, split by kind. The split is structural, not cosmetic: the
@@ -108,17 +134,27 @@ export type Entry = Question | SchemeEntry;
 export interface Local {
 	readonly questions: Readonly<Record<Id, Question>>;
 	readonly schemes: Readonly<Record<Id, SchemeEntry>>;
+	/**
+	 * The workspace's own files, apart from every bank's: an instrument keystroke
+	 * replaces only this slice, so no bank's environment can change with it.
+	 */
+	readonly workspace: Readonly<Record<Id, WorkspaceEntry>>;
 }
 
 const sameName = (a: string, b: string): boolean =>
 	a.toLowerCase() === b.toLowerCase();
 
-export const EMPTY_LOCAL: Local = { questions: {}, schemes: {} };
+export const EMPTY_LOCAL: Local = { questions: {}, schemes: {}, workspace: {} };
 
 /** Stored working copies, as read by the persisted schema (optional fields may be undefined). */
-const localOf = (stored: Pick<Work, "questions" | "schemes">): Local => ({
+const localOf = (
+	stored: Pick<Work, "questions" | "schemes" | "workspace">,
+): Local => ({
 	questions: Object.fromEntries(
 		stored.questions.map((q) => [q.id, compact(q) as Question]),
+	),
+	workspace: Object.fromEntries(
+		stored.workspace.map((e) => [e.id, compact(e) as WorkspaceEntry]),
 	),
 	schemes: Object.fromEntries(
 		stored.schemes.map((e) => [e.id, compact(e) as SchemeEntry]),
@@ -132,6 +168,8 @@ const localOf = (stored: Pick<Work, "questions" | "schemes">): Local => ({
 export interface Remote {
 	readonly questions: Readonly<Record<Path, Blob>>;
 	readonly schemes: Readonly<Record<Path, Blob>>;
+	/** The workspace's own files: its instruments and `workspace.yaml`. */
+	readonly workspace: Readonly<Record<Path, Blob>>;
 }
 
 export type Screen =
@@ -484,7 +522,11 @@ export interface Flags {
 	readonly signInFailure?: Failure;
 }
 
-export const EMPTY_REMOTE: Remote = { questions: {}, schemes: {} };
+export const EMPTY_REMOTE: Remote = {
+	questions: {},
+	schemes: {},
+	workspace: {},
+};
 
 export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	const stored = flags.work.ok ? flags.work.value : undefined;
@@ -570,10 +612,13 @@ export function signedOut(model: Model): Model {
 				);
 	const questions = keep(model.local.questions);
 	const schemes = keep(model.local.schemes);
+	const workspace = keep(model.local.workspace);
 	const local =
-		questions === model.local.questions && schemes === model.local.schemes
+		questions === model.local.questions &&
+		schemes === model.local.schemes &&
+		workspace === model.local.workspace
 			? model.local
-			: { questions, schemes };
+			: { questions, schemes, workspace };
 	return compact({
 		...model,
 		local,
@@ -593,7 +638,13 @@ export function signedOut(model: Model): Model {
 
 /** The banks the working copies belong to; the root alone while there are none. */
 export function banksOfLocal(local: Local): readonly string[] {
-	const banks = [...new Set(allFiles(local).map((f) => f.bank))].sort();
+	const banks = [
+		...new Set(
+			[...Object.values(local.questions), ...Object.values(local.schemes)].map(
+				(f) => f.bank,
+			),
+		),
+	].sort();
 	return banks.length === 0 ? [""] : banks;
 }
 
@@ -604,7 +655,7 @@ export function banksOfLocal(local: Local): readonly string[] {
 export function newBank(model: Model): string {
 	const open =
 		model.screen.kind === "editing"
-			? fileOf(model, model.screen.id)
+			? bankFileOf(model, model.screen.id)
 			: undefined;
 	return open?.bank ?? model.banks[0] ?? "";
 }
@@ -621,13 +672,21 @@ export function remoteOfBases(local: Local): Remote {
 	return {
 		questions: blobs(Object.values(local.questions)),
 		schemes: blobs(Object.values(local.schemes)),
+		workspace: blobs(Object.values(local.workspace)),
 	};
 }
 
-export const isScheme = (e: Entry): e is SchemeEntry => e.kind !== "question";
+export const isScheme = (e: Entry): e is SchemeEntry =>
+	isBankEntry(e) && e.kind !== "question";
 
 /** A working file by id, whichever slice holds it. */
 export const fileOf = (model: Model, id: Id): Entry | undefined =>
+	model.local.questions[id] ??
+	model.local.schemes[id] ??
+	model.local.workspace[id];
+
+/** A working file of one of the banks by id: a question or a shared file. */
+export const bankFileOf = (model: Model, id: Id): BankEntry | undefined =>
 	model.local.questions[id] ?? model.local.schemes[id];
 
 /** The shared file of this kind and name in a bank, among the working copies, if any. */
@@ -644,6 +703,7 @@ export const schemeFileNamed = (
 export const allFiles = (local: Local): readonly Entry[] => [
 	...Object.values(local.questions),
 	...Object.values(local.schemes),
+	...Object.values(local.workspace),
 ];
 
 /** A bank's own shared files among the working copies. */
@@ -694,12 +754,13 @@ export const envOfRemote = (schemes: Remote["schemes"]): Env =>
 	);
 
 export const toWork = (model: Model): Work => ({
-	version: 6,
+	version: 7,
 	repo: bankText(model.settings),
 	...(model.author !== undefined && { login: model.author }),
 	nextId: model.nextId,
 	questions: Object.values(model.local.questions),
 	schemes: Object.values(model.local.schemes),
+	workspace: Object.values(model.local.workspace),
 });
 
 /** Whether a login is someone other than the author of the work in hand. GitHub's names ignore case. */

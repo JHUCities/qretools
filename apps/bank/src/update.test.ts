@@ -119,7 +119,7 @@ describe("init", () => {
 
 	it("restores saved work, and starts connecting when a token is on hand", () => {
 		const stored = {
-			version: 6 as const,
+			version: 7 as const,
 			repo: "JHUCities/bas-question-bank",
 			nextId: 9,
 			questions: [
@@ -132,6 +132,7 @@ describe("init", () => {
 				},
 			],
 			schemes: [],
+			workspace: [],
 		};
 		const [model, cmds] = init({ work: ok(stored), hasToken: true });
 		expect(model.local.questions[3]?.base).toEqual(stored.questions[0]?.base);
@@ -911,7 +912,7 @@ describe("writing waits for this session's load", () => {
 		const base = withBank(connected(fresh()), [kept]);
 		const m: Model = {
 			...base,
-			remote: { questions: {}, schemes: {} },
+			remote: { questions: {}, schemes: {}, workspace: {} },
 		};
 		const [made] = update(m, { kind: "questionCreated", text: "name: q\n" });
 		const id = made.nextId - 1;
@@ -1864,12 +1865,13 @@ describe("work belongs to this tab", () => {
 
 	it("starts in its own work's bank, and records who signed in with it", () => {
 		const work = {
-			version: 6 as const,
+			version: 7 as const,
 			repo: "a/bank",
 			login: "iain",
 			nextId: 1,
 			questions: [],
 			schemes: [],
+			workspace: [],
 		};
 		const [m] = init({
 			work: ok(work),
@@ -1969,6 +1971,7 @@ describe("signing out", () => {
 		return {
 			...m,
 			local: {
+				workspace: {},
 				questions: {
 					...m.local.questions,
 					3: { kind: "question", id: 3, bank: "", source: "name: draft\n" },

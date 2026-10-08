@@ -43,6 +43,7 @@ const base = init({ work: ok(undefined), hasToken: false })[0];
 const model: Model = {
 	...base,
 	local: {
+		workspace: {},
 		schemes: {},
 		questions: {
 			1: bank(
@@ -149,6 +150,7 @@ describe("schemeSections", () => {
 	const m: Model = {
 		...model,
 		local: {
+			workspace: {},
 			questions: {
 				...model.local.questions,
 				5: bank(

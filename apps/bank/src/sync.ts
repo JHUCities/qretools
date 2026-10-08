@@ -5,13 +5,16 @@
  * three; nothing about it is stored.
  */
 import {
+	fileAt,
 	type Index,
 	inBank,
+	instrumentPath,
 	isRoot,
 	type Mention,
 	placeOf,
 	schemePath,
 	usedBy,
+	WORKSPACE,
 } from "@qretools/core";
 import type { File } from "@qretools/shell";
 import type {
@@ -23,6 +26,7 @@ import type {
 	Question,
 	Remote,
 	SchemeEntry,
+	WorkspaceEntry,
 } from "./model.js";
 
 export type Sync =
@@ -38,12 +42,32 @@ export type Sync =
 	/** Gone from GitHub while this copy has it. */
 	| "deletedOnGitHub";
 
-/** The path a file lives at, or will: its base, or for a scheme file the one its kind and name give in its bank. */
-export const claimOf = (f: Entry): Path | undefined =>
-	f.base?.path ??
-	(f.kind === "question"
-		? undefined
-		: inBank(f.bank, schemePath(f.kind, f.name)));
+/**
+ * The path a file lives at, or will: its base, or the one its kind and name give (a
+ * shared file in its bank, an instrument in `instruments/`, the workspace's own file).
+ * A question's is chosen when it is first saved.
+ */
+export function claimOf(f: Entry): Path | undefined {
+	if (f.base !== undefined) return f.base.path;
+	switch (f.kind) {
+		case "question":
+			return undefined;
+		case "instrument":
+			return instrumentPath(f.name);
+		case "workspaceFile":
+			return WORKSPACE.file;
+		default:
+			return inBank(f.bank, schemePath(f.kind, f.name));
+	}
+}
+
+/** The slice of `local` and `remote` a working file is in. */
+export const sliceFor = (f: Entry): keyof Remote =>
+	f.kind === "question"
+		? "questions"
+		: f.kind === "instrument" || f.kind === "workspaceFile"
+			? "workspace"
+			: "schemes";
 
 export const isUnsaved = (f: Entry): boolean =>
 	f.base === undefined || f.source !== f.base.text;
@@ -63,25 +87,25 @@ export function syncOf(
 
 /**
  * Which remote slice a workspace path belongs to, among the workspace's `banks`;
- * undefined for a file no bank reads.
+ * undefined for a file the workspace does not read (`fileAt`).
  */
 export function sliceOf(
 	path: Path,
 	banks: readonly string[],
 ): keyof Remote | undefined {
-	const place = placeOf(path, banks);
+	const place = fileAt(path, banks);
 	return place === undefined
 		? undefined
-		: place.at.kind === "question"
-			? "questions"
-			: "schemes";
+		: place.kind !== "bank"
+			? "workspace"
+			: place.at.kind === "question"
+				? "questions"
+				: "schemes";
 }
 
 export const remoteBlob = (remote: Remote, f: Entry): Blob | undefined => {
 	const path = claimOf(f);
-	return path === undefined
-		? undefined
-		: remote[f.kind === "question" ? "questions" : "schemes"][path];
+	return path === undefined ? undefined : remote[sliceFor(f)][path];
 };
 
 /**
@@ -93,9 +117,10 @@ export function remoteOf(
 	files: readonly File[],
 	banks: readonly string[],
 ): Remote {
-	const next: { questions: Record<Path, Blob>; schemes: Record<Path, Blob> } = {
+	const next: Record<keyof Remote, Record<Path, Blob>> = {
 		questions: {},
 		schemes: {},
+		workspace: {},
 	};
 	for (const f of files) {
 		const slice = sliceOf(f.path, banks);
@@ -108,6 +133,9 @@ export function remoteOf(
 		schemes: sameShas(previous.schemes, next.schemes)
 			? previous.schemes
 			: next.schemes,
+		workspace: sameShas(previous.workspace, next.workspace)
+			? previous.workspace
+			: next.workspace,
 	};
 }
 
@@ -142,6 +170,7 @@ export function rebase(
 		[
 			...Object.values(local.questions),
 			...Object.values(local.schemes),
+			...Object.values(local.workspace),
 		].flatMap((f) => claimOf(f) ?? []),
 	);
 	/** Settle each file against GitHub; a slice with no change keeps its reference. */
@@ -168,6 +197,7 @@ export function rebase(
 	};
 	let questions = settle(local.questions);
 	let schemes = settle(local.schemes);
+	let workspace = settle(local.workspace);
 	let id = nextId;
 	const added = <T extends Entry>(
 		slice: Readonly<Record<Id, T>>,
@@ -218,11 +248,32 @@ export function rebase(
 		},
 		remote.schemes,
 	);
+	workspace = added(
+		workspace,
+		(path, blob, fid): WorkspaceEntry | undefined => {
+			const place = fileAt(path, banks);
+			const base = { path, ...blob };
+			return place?.kind === "instrument"
+				? {
+						kind: "instrument",
+						name: place.name,
+						id: fid,
+						source: blob.text,
+						base,
+					}
+				: place?.kind === "workspaceFile"
+					? { kind: "workspaceFile", id: fid, source: blob.text, base }
+					: undefined;
+		},
+		remote.workspace,
+	);
 	return {
 		local:
-			questions === local.questions && schemes === local.schemes
+			questions === local.questions &&
+			schemes === local.schemes &&
+			workspace === local.workspace
 				? local
-				: { questions, schemes },
+				: { questions, schemes, workspace },
 		nextId: id,
 	};
 }

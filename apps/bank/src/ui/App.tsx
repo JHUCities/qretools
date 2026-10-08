@@ -46,6 +46,7 @@ import {
 import { useCallback, useMemo } from "react";
 import { SOURCE_URL } from "../config.js";
 import {
+	bankFileOf,
 	type Dispatch,
 	fileOf,
 	type Id,
@@ -251,7 +252,7 @@ export function App() {
 	const confirm =
 		model.browser.confirmDelete === undefined
 			? undefined
-			: fileOf(model, model.browser.confirmDelete);
+			: bankFileOf(model, model.browser.confirmDelete);
 	// A saved file is named by the path the commit deletes (the filename follows the
 	// name), never by unsaved edits that may have renamed it; a draft by its text.
 	const confirmName =
@@ -487,7 +488,7 @@ export function App() {
 							) : (
 								<Editing
 									id={open}
-									index={indexFor(fileOf(model, open)?.bank ?? "")}
+									index={indexFor(bankFileOf(model, open)?.bank ?? "")}
 								/>
 							)}
 						</main>

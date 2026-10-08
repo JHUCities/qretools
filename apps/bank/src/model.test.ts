@@ -46,6 +46,7 @@ describe("signing out", () => {
 			...start,
 			banks: ["banks/a", "banks/b"],
 			local: {
+				workspace: {},
 				questions: {
 					1: { kind: "question", id: 1, bank: "banks/a", source: "x" },
 				},

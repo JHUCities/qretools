@@ -50,6 +50,7 @@ import {
 } from "@qretools/shell/ui";
 import { memo, type ReactNode, useCallback, useMemo } from "react";
 import {
+	bankFileOf,
 	envOfRemote,
 	fileOf,
 	type Id,
@@ -99,7 +100,7 @@ export const Editing = memo(function Editing({
 	id: Id;
 	index: Index<Id>;
 }) {
-	const entry = useModel((m) => fileOf(m, id));
+	const entry = useModel((m) => bankFileOf(m, id));
 	if (!entry) return null;
 	return entry.kind === "question" ? (
 		<QuestionEditing q={entry} index={index} />
@@ -470,7 +471,7 @@ function useBankFindings(
 	const folder = useModel((m) => m.settings.path);
 	const branch = useModel(linkBranch);
 	// The files a bank finding cites are in this file's bank: the index is that bank's.
-	const bank = useModel((m) => fileOf(m, id)?.bank ?? "");
+	const bank = useModel((m) => bankFileOf(m, id)?.bank ?? "");
 	const env = useEnv(bank);
 	return useMemo(() => {
 		// Another file's name, as a bank-level finding cites it.

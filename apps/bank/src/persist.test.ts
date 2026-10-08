@@ -178,7 +178,7 @@ describe("readPersisted", () => {
 });
 
 const work = {
-	version: 6 as const,
+	version: 7 as const,
 	repo: "o/r",
 	login: "iain",
 	nextId: 3,
@@ -194,14 +194,29 @@ const work = {
 			source: "labels: {}\n",
 		},
 	],
+	workspace: [
+		{
+			kind: "instrument" as const,
+			name: "wave1",
+			id: 4,
+			source: "name: wave1\n",
+			base: { path: "instruments/wave1.yaml", sha: "i", text: "name: wave1\n" },
+		},
+		{ kind: "workspaceFile" as const, id: 5, source: "agency: x\n" },
+	],
 };
-/** The same work as version 5 wrote it: one bank, its paths the bank's own. */
+/** The same work as version 6 wrote it: banks, and no instruments or workspace file. */
+const { workspace: _w, ...v6Rest } = work;
+const v6 = { ...v6Rest, version: 6 as const };
+/** As version 5 wrote it: one bank, its paths the bank's own. */
 const v5 = {
-	...work,
+	...v6,
 	version: 5 as const,
 	questions: work.questions.map(({ bank: _, ...q }) => q),
 	schemes: work.schemes.map(({ bank: _, ...e }) => e),
 };
+/** What version 6's or 5's work reads as: the same, with no workspace files yet. */
+const upgraded = { ...work, workspace: [] };
 
 describe("this tab's work and the default settings", () => {
 	it("keeps them under their own keys", () => {
@@ -210,7 +225,7 @@ describe("this tab's work and the default settings", () => {
 		expect(WORK_UNREADABLE_KEY).toBe("qretools.work.unreadable");
 	});
 
-	it("reads work version 6, and reports anything else as a failure", () => {
+	it("reads work version 7, and reports anything else as a failure", () => {
 		expect(readWork(null)).toEqual({ ok: true, value: undefined });
 		expect(readWork(JSON.stringify(work))).toEqual({ ok: true, value: work });
 		const { login: _, ...nobody } = work;
@@ -222,12 +237,22 @@ describe("this tab's work and the default settings", () => {
 		);
 	});
 
+	it("reads version 6's work with no workspace files", () => {
+		expect(readWork(JSON.stringify(v6))).toEqual({
+			ok: true,
+			value: upgraded,
+		});
+	});
+
 	it("reads version 5's work as the root bank of its workspace, every path as it was", () => {
-		expect(readWork(JSON.stringify(v5))).toEqual({ ok: true, value: work });
+		expect(readWork(JSON.stringify(v5))).toEqual({
+			ok: true,
+			value: upgraded,
+		});
 		const inFolder = { ...v5, repo: "o/r/banks/bas" };
 		expect(readWork(JSON.stringify(inFolder))).toEqual({
 			ok: true,
-			value: { ...work, repo: "o/r/banks/bas" },
+			value: { ...upgraded, repo: "o/r/banks/bas" },
 		});
 	});
 
@@ -305,13 +330,14 @@ describe("migrating an older version's work", () => {
 		expect(readWork(session.getItem(WORK_KEY))).toEqual({
 			ok: true,
 			value: {
-				version: 6,
+				version: 7,
 				repo: "a/bank",
 				login: "iain",
 				nextId: 5,
 				// Version 4's work was one bank's: the root bank of its workspace.
 				questions: v4.questions.map((q) => ({ ...q, bank: "" })),
 				schemes: [],
+				workspace: [],
 			},
 		});
 		expect(readSettings(local.getItem(SETTINGS_KEY))).toEqual(settings);
@@ -367,11 +393,12 @@ describe("migrating an older version's work", () => {
 		);
 		migrate(local, session);
 		expect(JSON.parse(session.getItem(WORK_KEY) ?? "")).toEqual({
-			version: 6,
+			version: 7,
 			repo: "o/r",
 			nextId: 1,
 			questions: [],
 			schemes: [],
+			workspace: [],
 		});
 	});
 
