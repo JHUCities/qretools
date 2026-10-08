@@ -2,8 +2,8 @@
  * The instrument app's Model, its messages and its commands: plain data, as the bank
  * app's are. No token, no DOM: the credentials live in the effects.
  *
- * A toy, read only: it signs in to a project (a repository folder holding
- * `instruments/` and `project.yaml`), reads them from the default branch, and lists
+ * A toy, read only: it signs in to a workspace (a repository folder holding
+ * `instruments/` and `workspace.yaml`), reads them from the default branch, and lists
  * the instruments. Which one is open follows the address, as links do natively.
  */
 import type { Range, Result, Target } from "@qretools/core";
@@ -33,26 +33,26 @@ export type Session =
 			readonly kind: "connected";
 			readonly login: string;
 			readonly avatarUrl: string;
-			/** The project as published: the repository's default branch, the one read. */
+			/** The workspace as published: the repository's default branch, the one read. */
 			readonly defaultBranch: string;
 	  }
 	| { readonly kind: "failed"; readonly failure: Failure };
 
-/** What a project load reads: its instruments' folder (null: none) and its own file (null: none). */
-export interface ProjectFiles {
+/** What a workspace load reads: its instruments' folder (null: none) and its own file (null: none). */
+export interface WorkspaceFiles {
 	readonly instruments: readonly File[] | null;
-	readonly project: File | null;
+	readonly workspace: File | null;
 }
 
-export type Project =
+export type Workspace =
 	| { readonly kind: "idle" }
 	| { readonly kind: "loading" }
 	| { readonly kind: "failed"; readonly failure: Failure }
 	| {
 			readonly kind: "loaded";
-			/** By path in the project (`instruments/x.yaml`), in name order. */
+			/** By path in the workspace (`instruments/x.yaml`), in name order. */
 			readonly instruments: Readonly<Record<string, File>>;
-			/** Whether the project has an instruments folder at all. */
+			/** Whether the workspace has an instruments folder at all. */
 			readonly hasFolder: boolean;
 			readonly file?: File;
 	  };
@@ -68,10 +68,10 @@ export type BankLoad =
 	  };
 
 export interface Model {
-	/** Which project, and whether to remember the sign-in on this device. */
+	/** Which workspace, and whether to remember the sign-in on this device. */
 	readonly settings: BankSettings;
 	readonly session: Session;
-	readonly project: Project;
+	readonly workspace: Workspace;
 	/** The open instrument's path, from the address. */
 	readonly open?: string;
 	/** The banks read so far, by `owner/repo/folder` (`bankText`), kept for the session. */
@@ -81,12 +81,12 @@ export interface Model {
 	 * browser asks before a tab with edits closes.
 	 */
 	readonly working: Readonly<Record<string, string>>;
-	/** A link that arrived before the project loaded: opened once it has. */
+	/** A link that arrived before the workspace loaded: opened once it has. */
 	readonly pendingLink?: Link;
 	readonly theme: ThemeChoice;
 	/** The official DDI schema, loaded lazily; the compiled validator lives in the effects. */
 	readonly ddiSchema: DdiSchema;
-	/** Said once and dismissed: what went wrong that isn't the session's or the project's. */
+	/** Said once and dismissed: what went wrong that isn't the session's or the workspace's. */
 	readonly failures: readonly Failure[];
 }
 
@@ -96,10 +96,10 @@ export type Msg =
 	| { readonly kind: "connectRequested"; readonly settings: BankSettings }
 	| { readonly kind: "connected"; readonly result: Result<Who, Failure> }
 	| {
-			readonly kind: "projectLoaded";
-			readonly result: Result<ProjectFiles, Failure>;
+			readonly kind: "workspaceLoaded";
+			readonly result: Result<WorkspaceFiles, Failure>;
 	  }
-	| { readonly kind: "projectReloadRequested" }
+	| { readonly kind: "workspaceReloadRequested" }
 	/** The open instrument's text, as typed. */
 	| { readonly kind: "edited"; readonly text: string }
 	| {
@@ -120,7 +120,7 @@ export type Msg =
 export type Cmd =
 	| { readonly kind: "signIn"; readonly remember: boolean }
 	| { readonly kind: "connect"; readonly repo: BankRef }
-	| { readonly kind: "loadProject"; readonly target: BranchTarget }
+	| { readonly kind: "loadWorkspace"; readonly target: BranchTarget }
 	/** Read these banks; the latest request replaces one not yet sent (typing an address). */
 	| { readonly kind: "loadBanks"; readonly targets: readonly BranchTarget[] }
 	| {
@@ -158,7 +158,7 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		{
 			settings,
 			session: signingIn ? { kind: "connecting" } : { kind: "anonymous" },
-			project: { kind: "idle" },
+			workspace: { kind: "idle" },
 			banks: {},
 			working: {},
 			theme: flags.theme ?? "system",
@@ -183,7 +183,7 @@ export const repoOf = ({ owner, repo, path }: BankSettings): BankRef => ({
 /**
  * Whether leaving the page would lose something: edits exist only in this tab. Not while
  * leaving for GitHub's sign-in, which comes back (and keeps no edits yet: signing in
- * starts from the project as read).
+ * starts from the workspace as read).
  */
 export const warnOnLeave = (model: Model): boolean =>
 	Object.keys(model.working).length > 0 &&

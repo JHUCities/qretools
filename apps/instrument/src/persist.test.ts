@@ -8,7 +8,7 @@ const storage = (entries: Record<string, string>): Storage =>
 	({ getItem: (k: string) => entries[k] ?? null }) as Storage;
 
 describe("what the app keeps on the device", () => {
-	it("reads the project as a repository, and anything else as nothing kept", () => {
+	it("reads the workspace as a repository, and anything else as nothing kept", () => {
 		const kept = (value: unknown) =>
 			readSettings(storage({ [SETTINGS_KEY]: JSON.stringify(value) }));
 		expect(kept({ owner: "o", repo: "r", path: "p", remember: true })).toEqual({

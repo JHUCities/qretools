@@ -1,6 +1,6 @@
 /**
  * The page, in the bank app's shell (the shared stylesheet's grid): a header, then the
- * project's instruments in the sidebar and the open one in the content. Signed out,
+ * workspace's instruments in the sidebar and the open one in the content. Signed out,
  * the sign-in page.
  */
 import {
@@ -14,7 +14,7 @@ import {
 	VisuallyHidden,
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
-import { PROJECT, plainText } from "@qretools/core";
+import { plainText, WORKSPACE } from "@qretools/core";
 import { bankText } from "@qretools/shell";
 import {
 	AccountMenu,
@@ -33,11 +33,11 @@ import { SignIn } from "./SignIn.tsx";
 export function sessionStatus(model: Model): string | undefined {
 	if (model.session.kind === "connecting") return "Signing in…";
 	if (model.session.kind !== "connected") return undefined;
-	switch (model.project.kind) {
+	switch (model.workspace.kind) {
 		case "loading":
-			return "Loading the project…";
+			return "Loading the workspace…";
 		case "failed":
-			return "The project didn't load";
+			return "The workspace didn't load";
 		default:
 			return undefined;
 	}
@@ -50,7 +50,7 @@ export function App() {
 	const status = sessionStatus(model);
 	const busy =
 		session.kind === "connecting" ||
-		(session.kind === "connected" && model.project.kind === "loading");
+		(session.kind === "connected" && model.workspace.kind === "loading");
 	return (
 		<div className="shell">
 			<Stack
@@ -78,10 +78,10 @@ export function App() {
 							</Truncate>
 						)}
 					</AriaStatus>
-					{model.project.kind === "failed" && (
+					{model.workspace.kind === "failed" && (
 						<Button
 							size="small"
-							onClick={() => dispatch({ kind: "projectReloadRequested" })}
+							onClick={() => dispatch({ kind: "workspaceReloadRequested" })}
 						>
 							Try again
 						</Button>
@@ -119,10 +119,10 @@ export function App() {
 				<SignIn model={model} />
 			) : (
 				<div className="workspace" data-open={model.open !== undefined}>
-					<nav className="sidebar" aria-label="Project">
+					<nav className="sidebar" aria-label="Workspace">
 						<div className="band">
 							<Heading as="h2" variant="small" className="pane-title">
-								<VisuallyHidden>Project: </VisuallyHidden>
+								<VisuallyHidden>Workspace: </VisuallyHidden>
 								<span className="bank">
 									<Link
 										href={`https://github.com/${model.settings.owner}/${model.settings.repo}`}
@@ -154,28 +154,29 @@ export function App() {
 	);
 }
 
-/** The project's instruments as links: opening one is following its address. */
+/** The workspace's instruments as links: opening one is following its address. */
 function Instruments({ model, branch }: { model: Model; branch: string }) {
 	const { template } = useApp();
-	const { project } = model;
-	if (project.kind === "loading")
-		return <p className="quiet">Loading the project…</p>;
-	if (project.kind !== "loaded") return null;
-	const paths = Object.keys(project.instruments);
+	const { workspace } = model;
+	if (workspace.kind === "loading")
+		return <p className="quiet">Loading the workspace…</p>;
+	if (workspace.kind !== "loaded") return null;
+	const paths = Object.keys(workspace.instruments);
 	if (paths.length === 0)
 		return (
 			<p className="quiet">
-				{project.hasFolder ? (
-					`No instruments in ${PROJECT.instruments}/ yet.`
+				{workspace.hasFolder ? (
+					`No instruments in ${WORKSPACE.instruments}/ yet.`
 				) : (
 					<>
-						{bankText(model.settings)} has no {PROJECT.instruments}/ folder, so
-						it isn't a project yet.
+						{bankText(model.settings)} has no {WORKSPACE.instruments}/ folder
+						yet.
 						{template !== undefined && (
 							<>
 								{" "}
 								<ExternalLink href={template} icon={false}>
-									Start a project from the template
+									Start a workspace from the template, with an example
+									instrument
 								</ExternalLink>
 								.
 							</>

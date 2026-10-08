@@ -1,7 +1,7 @@
 /**
  * `@qretools/shell`: what the QREtools apps share at their edge: signing in with GitHub
  * (the App, the Worker, PKCE), the storage port and its GitHub adapter (Octokit), which
- * bank or project a repository folder is, and links in the address. Internal to this
+ * bank or workspace a repository folder is, and links in the address. Internal to this
  * repository. Nothing here decides survey policy; that is the core's.
  */
 export {

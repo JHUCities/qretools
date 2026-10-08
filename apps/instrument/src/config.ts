@@ -6,11 +6,11 @@
 import { parseRepo } from "@qretools/shell";
 
 /**
- * The template a new project starts from (`VITE_PROJECT_TEMPLATE`, as owner/name):
+ * The template a new workspace starts from (`VITE_WORKSPACE_TEMPLATE`, as owner/name):
  * the app links GitHub's "Use this template" for it. Absent or malformed means no link.
  */
-export function projectTemplate(env: ImportMetaEnv): string | undefined {
-	const text = env.VITE_PROJECT_TEMPLATE?.trim();
+export function workspaceTemplate(env: ImportMetaEnv): string | undefined {
+	const text = env.VITE_WORKSPACE_TEMPLATE?.trim();
 	if (!text) return undefined;
 	const parsed = parseRepo(text);
 	if (!parsed.ok) return undefined;

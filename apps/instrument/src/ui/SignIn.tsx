@@ -1,6 +1,6 @@
 /**
- * Signed out, the app is this page: which project, and "Sign in with GitHub", in one
- * narrow column as the bank app's is. A native form: Enter signs in. The project is
+ * Signed out, the app is this page: which workspace, and "Sign in with GitHub", in one
+ * narrow column as the bank app's is. A native form: Enter signs in. The workspace is
  * written as GitHub writes a repository, `owner/name[/folder]`, and parsed once on
  * submit. The text, the checkbox and a pasted development token are transient input,
  * so component state; the token goes to the effects, never a Msg.
@@ -36,10 +36,10 @@ export function SignIn({ model }: { model: Model }) {
 	const input = useRef<HTMLInputElement>(null);
 	const headingId = useId();
 	const parsed = parseBank(text);
-	// The shell's sentence speaks of a bank; this page asks for a project.
+	// The shell's sentence speaks of a bank; this page asks for a workspace.
 	const problem =
 		tried && !parsed.ok
-			? "Write the project as owner/name, or owner/name/folder for a project in a folder."
+			? "Write the workspace as owner/name, or owner/name/folder for a workspace in a folder."
 			: undefined;
 	const chosen = () => {
 		setTried(true);
@@ -59,7 +59,7 @@ export function SignIn({ model }: { model: Model }) {
 		<main className="signin" aria-labelledby={headingId}>
 			<Stack gap="normal" className="signin-column">
 				<h2 id={headingId} className="signin-heading">
-					Sign in to your project
+					Sign in to your workspace
 				</h2>
 				{session.kind === "failed" && (
 					<Banner
@@ -90,7 +90,7 @@ export function SignIn({ model }: { model: Model }) {
 				>
 					<Stack gap="normal">
 						<FormControl>
-							<FormControl.Label>Project</FormControl.Label>
+							<FormControl.Label>Workspace</FormControl.Label>
 							<TextInput
 								ref={input}
 								block
@@ -104,8 +104,8 @@ export function SignIn({ model }: { model: Model }) {
 								onChange={(e) => setText(e.target.value)}
 							/>
 							<FormControl.Caption>
-								The GitHub repository that holds the project's instruments, as
-								owner/name, or owner/name/folder for a project in a folder.
+								The GitHub repository that holds the workspace's instruments, as
+								owner/name, or owner/name/folder for a workspace in a folder.
 							</FormControl.Caption>
 							{problem !== undefined && (
 								<FormControl.Validation variant="error">
@@ -146,7 +146,7 @@ export function SignIn({ model }: { model: Model }) {
 									onChange={(e) => setToken(e.target.value)}
 								/>
 								<FormControl.Caption>
-									A fine-grained token that can read the project's repository.
+									A fine-grained token that can read the workspace's repository.
 								</FormControl.Caption>
 								{tokenTried && token.trim() === "" && (
 									<FormControl.Validation variant="error">
@@ -169,7 +169,7 @@ export function SignIn({ model }: { model: Model }) {
 				{/* As github.com offers "New to GitHub?" under its form. */}
 				{template !== undefined && (
 					<p className="quiet signin-note">
-						New project?{" "}
+						New workspace?{" "}
 						<ExternalLink href={template} icon={false}>
 							Start one from the template
 						</ExternalLink>

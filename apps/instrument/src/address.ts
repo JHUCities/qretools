@@ -12,10 +12,10 @@ export type Resolved =
 
 /**
  * `address` resolved against the folder of the instrument at `file`, a path in the
- * project (`instruments/x.yaml`), in the project's repository.
+ * workspace (`instruments/x.yaml`), in the workspace's repository.
  */
 export function resolveAddress(
-	project: BankRef,
+	workspace: BankRef,
 	file: string,
 	address: string,
 ): Resolved {
@@ -25,7 +25,7 @@ export function resolveAddress(
 			reason: `\`${address}\` isn't a folder beside the instrument; only addresses starting \`./\` or \`../\` are read yet.`,
 		};
 	const parts = [
-		...project.path.split("/"),
+		...workspace.path.split("/"),
 		...file.split("/").slice(0, -1),
 		...address.split("/"),
 	].filter((p) => p !== "" && p !== ".");
@@ -40,6 +40,6 @@ export function resolveAddress(
 	}
 	return {
 		kind: "folder",
-		bank: { owner: project.owner, repo: project.repo, path: out.join("/") },
+		bank: { owner: workspace.owner, repo: workspace.repo, path: out.join("/") },
 	};
 }

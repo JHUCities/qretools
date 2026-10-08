@@ -78,7 +78,6 @@ export {
 	importsOf,
 	instrumentOf,
 } from "./instrument/instrument.ts";
-export { PROJECT, type Project, projectOf } from "./instrument/project.ts";
 export { lint } from "./lint.ts";
 export {
 	type Exportable,
@@ -170,3 +169,8 @@ export {
 	type Symbols,
 	usedBy,
 } from "./symbols.ts";
+export {
+	WORKSPACE,
+	type WorkspaceFile,
+	workspaceFileOf,
+} from "./workspacefile.ts";

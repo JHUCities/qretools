@@ -9,9 +9,9 @@ import {
 	type Finding,
 	makeValidator,
 	ok,
-	PROJECT,
 	type Result,
 	type Validator,
+	WORKSPACE,
 } from "@qretools/core";
 import type { Editor } from "@qretools/editor";
 import {
@@ -26,9 +26,9 @@ import {
 import {
 	type Cmd,
 	type Dispatch,
-	type ProjectFiles,
 	SETTINGS_KEY,
 	THEME_KEY,
+	type WorkspaceFiles,
 } from "./model.ts";
 
 export interface Effects {
@@ -87,18 +87,18 @@ export function createEffects(deps: CredentialsDeps): Effects {
 					s.whoAmI().then((result) => dispatch({ kind: "connected", result }));
 					return;
 				}
-				case "loadProject": {
+				case "loadWorkspace": {
 					const s = credentials.storeFor(cmd.target);
 					if (!s)
-						return dispatch({ kind: "projectLoaded", result: err(NO_TOKEN) });
-					// The instruments' folder and the project's own file, read together.
+						return dispatch({ kind: "workspaceLoaded", result: err(NO_TOKEN) });
+					// The instruments' folder and the workspace's own file, read together.
 					Promise.all([
-						s.readFolder(cmd.target, PROJECT.instruments),
-						s.read(cmd.target, PROJECT.file),
+						s.readFolder(cmd.target, WORKSPACE.instruments),
+						s.read(cmd.target, WORKSPACE.file),
 					]).then(([folder, file]) =>
 						dispatch({
-							kind: "projectLoaded",
-							result: projectFiles(folder, file),
+							kind: "workspaceLoaded",
+							result: workspaceFiles(folder, file),
 						}),
 					);
 					return;
@@ -192,15 +192,15 @@ export function createEffects(deps: CredentialsDeps): Effects {
 	};
 }
 
-/** A project's two reads as one result: a missing project file is none, any other failure is the load's. */
-export function projectFiles(
-	folder: Result<ProjectFiles["instruments"], Failure>,
+/** A workspace's two reads as one result: a missing workspace file is none, any other failure is the load's. */
+export function workspaceFiles(
+	folder: Result<WorkspaceFiles["instruments"], Failure>,
 	file: Result<File, Failure>,
-): Result<ProjectFiles, Failure> {
+): Result<WorkspaceFiles, Failure> {
 	if (!folder.ok) return folder;
 	if (!file.ok && file.error.status !== 404) return file;
 	return ok({
 		instruments: folder.value,
-		project: file.ok ? file.value : null,
+		workspace: file.ok ? file.value : null,
 	});
 }

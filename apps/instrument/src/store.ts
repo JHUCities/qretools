@@ -13,7 +13,7 @@ export interface App extends Loop<Model, Msg> {
 	readonly effects: Effects;
 	/** Sign-in with GitHub for this build, if configured: read once, at startup. */
 	readonly signIn?: SignInConfig;
-	/** "Use this template" for a new project, if configured. */
+	/** "Use this template" for a new workspace, if configured. */
 	readonly template?: string;
 }
 

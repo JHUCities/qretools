@@ -1,7 +1,7 @@
 /**
  * The open instrument: its name, state and download, the banks it uses, the source in
  * the editor, and beside it its findings, its outline and its DDI. Read against its
- * banks and its project's agency on every keystroke (`instrumentOf` is a few
+ * banks and its workspace's agency on every keystroke (`instrumentOf` is a few
  * milliseconds); the banks themselves are evaluated once each, and the DDI is checked
  * against the official schema only when it changes.
  */
@@ -20,14 +20,14 @@ import {
 	type DdiDocument,
 	exportRefusal,
 	instrumentOf,
-	PROJECT,
-	type Project,
 	plainText,
-	projectOf,
 	type Refusal,
 	refusalReason,
 	status,
 	type Target,
+	WORKSPACE,
+	type WorkspaceFile,
+	workspaceFileOf,
 } from "@qretools/core";
 import {
 	type OutlineItem,
@@ -58,19 +58,23 @@ export function Editing({ model, path }: { model: Model; path: string }) {
 	const text = openText(model) ?? "";
 	// Only what reading the instrument depends on: a notice or the DDI schema arriving
 	// leaves the instrument, and so its DDI, as it was.
-	const { banks: loads, settings, working, project } = model;
+	const { banks: loads, settings, working, workspace } = model;
 	const input = useMemo(
-		() => ({ banks: loads, settings, working, project, open: path }),
-		[loads, settings, working, project, path],
+		() => ({ banks: loads, settings, working, workspace, open: path }),
+		[loads, settings, working, workspace, path],
 	);
 	const uses = useMemo(() => usesOf(input), [input]);
 	const banks = useMemo(() => banksOf(input), [input]);
-	const projectFile = project.kind === "loaded" ? project.file : undefined;
+	const workspaceFile =
+		workspace.kind === "loaded" ? workspace.file : undefined;
 	const own = useMemo(
-		() => (projectFile === undefined ? undefined : projectOf(projectFile.text)),
-		[projectFile],
+		() =>
+			workspaceFile === undefined
+				? undefined
+				: workspaceFileOf(workspaceFile.text),
+		[workspaceFile],
 	);
-	// The agency as the project file writes it, valid or not: the instrument's findings
+	// The agency as the workspace file writes it, valid or not: the instrument's findings
 	// then say what's wrong with it, as the CLI's do with `--agency`.
 	const agency = own?.given;
 	const instrument = useMemo(
@@ -93,7 +97,7 @@ export function Editing({ model, path }: { model: Model; path: string }) {
 		() => outlineOf(instrument.draft),
 		[instrument.draft],
 	);
-	const notice = useMemo(() => <ProjectNotice own={own} />, [own]);
+	const notice = useMemo(() => <WorkspaceNotice own={own} />, [own]);
 	const diagnostics = useMemo(
 		() => toDiagnostics(instrument.findings, instrument.ranges),
 		[instrument],
@@ -299,14 +303,14 @@ function Download({
 	);
 }
 
-/** What the project file says, or that there's none: beside the DDI, which it publishes. */
-function ProjectNotice({ own }: { own: Project | undefined }) {
+/** What the workspace file says, or that there's none: beside the DDI, which it publishes. */
+function WorkspaceNotice({ own }: { own: WorkspaceFile | undefined }) {
 	if (own === undefined)
 		return (
 			<InlineMessage variant="warning">
 				<span>
-					This project has no <code className="code">{PROJECT.file}</code>, so
-					there's no DDI agency to publish its instruments under.
+					This workspace has no <code className="code">{WORKSPACE.file}</code>,
+					so there's no DDI agency to publish its instruments under.
 				</span>
 			</InlineMessage>
 		);
@@ -317,7 +321,7 @@ function ProjectNotice({ own }: { own: Project | undefined }) {
 			variant={f.severity === "error" ? "critical" : "warning"}
 		>
 			<span>
-				<code className="code">{PROJECT.file}</code>: {inlineCode(f.message)}
+				<code className="code">{WORKSPACE.file}</code>: {inlineCode(f.message)}
 			</span>
 		</InlineMessage>
 	));

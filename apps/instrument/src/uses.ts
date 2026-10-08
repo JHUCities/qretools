@@ -11,7 +11,7 @@ import type { BankLoad, Model } from "./model.ts";
 /** What the open instrument's uses are read from: the Model's slices, nothing else. */
 export type UsesInput = Pick<
 	Model,
-	"banks" | "settings" | "working" | "project" | "open"
+	"banks" | "settings" | "working" | "workspace" | "open"
 >;
 
 /** The open instrument's text: this tab's edit, or the file as read. */
@@ -19,8 +19,8 @@ export function openText(model: UsesInput): string | undefined {
 	const path = model.open;
 	if (path === undefined) return undefined;
 	const read =
-		model.project.kind === "loaded"
-			? model.project.instruments[path]?.text
+		model.workspace.kind === "loaded"
+			? model.workspace.instruments[path]?.text
 			: undefined;
 	return model.working[path] ?? read;
 }

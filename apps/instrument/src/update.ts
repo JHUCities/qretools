@@ -18,9 +18,9 @@ import {
 	type Cmd,
 	type Model,
 	type Msg,
-	type ProjectFiles,
 	repoOf,
 	type Session,
+	type WorkspaceFiles,
 } from "./model.ts";
 import { openText, wanted } from "./uses.ts";
 
@@ -53,7 +53,7 @@ const keysOf = (targets: readonly BranchTarget[]): string =>
 function authFailure(msg: Msg): Failure | undefined {
 	const failure =
 		(msg.kind === "connected" ||
-			msg.kind === "projectLoaded" ||
+			msg.kind === "workspaceLoaded" ||
 			msg.kind === "bankLoaded") &&
 		!msg.result.ok
 			? msg.result.error
@@ -104,24 +104,24 @@ function step(model: Model, msg: Msg): Step {
 				defaultBranch,
 			};
 			return [
-				{ ...model, session, project: { kind: "loading" } },
-				[{ kind: "loadProject", target: targetOf(model, defaultBranch) }],
+				{ ...model, session, workspace: { kind: "loading" } },
+				[{ kind: "loadWorkspace", target: targetOf(model, defaultBranch) }],
 			];
 		}
-		case "projectLoaded": {
+		case "workspaceLoaded": {
 			if (!msg.result.ok)
 				return [
 					{
 						...model,
-						project: { kind: "failed", failure: msg.result.error },
+						workspace: { kind: "failed", failure: msg.result.error },
 					},
 					[],
 				];
 			const loaded: Model = {
 				...model,
-				project: projectOf(msg.result.value),
+				workspace: workspaceFileOf(msg.result.value),
 			};
-			// A link that waited for the project opens now.
+			// A link that waited for the workspace opens now.
 			return [
 				model.pendingLink === undefined
 					? loaded
@@ -132,14 +132,18 @@ function step(model: Model, msg: Msg): Step {
 				[],
 			];
 		}
-		case "projectReloadRequested":
+		case "workspaceReloadRequested":
 			return model.session.kind === "connected"
 				? [
 						// Its banks too, those that failed or weren't there: they may be now.
-						{ ...model, project: { kind: "loading" }, banks: readBanks(model) },
+						{
+							...model,
+							workspace: { kind: "loading" },
+							banks: readBanks(model),
+						},
 						[
 							{
-								kind: "loadProject",
+								kind: "loadWorkspace",
 								target: targetOf(model, model.session.defaultBranch),
 							},
 						],
@@ -147,9 +151,9 @@ function step(model: Model, msg: Msg): Step {
 				: [model, []];
 		case "edited": {
 			const path = model.open;
-			if (path === undefined || model.project.kind !== "loaded")
+			if (path === undefined || model.workspace.kind !== "loaded")
 				return [model, []];
-			const read = model.project.instruments[path]?.text;
+			const read = model.workspace.instruments[path]?.text;
 			// Back to the text as read: nothing of this tab's own is left.
 			const { [path]: _, ...others } = model.working;
 			return [
@@ -203,8 +207,8 @@ function step(model: Model, msg: Msg): Step {
 			const link = parseLink(msg.hash);
 			if (link === undefined)
 				return [compact({ ...model, open: undefined }), []];
-			// Before the project has loaded, the link waits for it.
-			if (model.project.kind !== "loaded")
+			// Before the workspace has loaded, the link waits for it.
+			if (model.workspace.kind !== "loaded")
 				return [{ ...model, pendingLink: link }, []];
 			return [followLink(model, link), []];
 		}
@@ -235,15 +239,15 @@ function step(model: Model, msg: Msg): Step {
 
 /**
  * A reply that arrives where it no longer belongs: a sign-in answered after a sign-out
- * (or twice), or a project read for a session that has ended.
+ * (or twice), or a workspace read for a session that has ended.
  */
 function stale(model: Model, msg: Msg): boolean {
 	switch (msg.kind) {
 		case "connected":
 			return model.session.kind !== "connecting";
-		case "projectLoaded":
+		case "workspaceLoaded":
 			return (
-				model.session.kind !== "connected" || model.project.kind !== "loading"
+				model.session.kind !== "connected" || model.workspace.kind !== "loading"
 			);
 		case "bankLoaded":
 			return model.session.kind !== "connected";
@@ -260,26 +264,29 @@ const readBanks = (model: Model): Model["banks"] =>
 		),
 	);
 
-/** Signed out or failed: nothing of the project stays (it may be private). */
+/** Signed out or failed: nothing of the workspace stays (it may be private). */
 const signedOut = (model: Model, session: Session): Model =>
 	compact({
 		...model,
 		session,
-		project: { kind: "idle" } as const,
+		workspace: { kind: "idle" } as const,
 		banks: {},
 		working: {},
 		open: undefined,
 		pendingLink: undefined,
 	});
 
-/** The project as published: its default branch, read only. */
+/** The workspace as published: its default branch, read only. */
 const targetOf = (model: Model, defaultBranch: string): BranchTarget => ({
 	...repoOf(model.settings),
 	branch: defaultBranch,
 	defaultBranch,
 });
 
-function projectOf({ instruments, project }: ProjectFiles): Model["project"] {
+function workspaceFileOf({
+	instruments,
+	workspace,
+}: WorkspaceFiles): Model["workspace"] {
 	const sorted = [...(instruments ?? [])].sort((a, b) =>
 		a.path.localeCompare(b.path),
 	);
@@ -287,17 +294,17 @@ function projectOf({ instruments, project }: ProjectFiles): Model["project"] {
 		kind: "loaded",
 		instruments: Object.fromEntries(sorted.map((f) => [f.path, f])),
 		hasFolder: instruments !== null,
-		...(project !== null && { file: project }),
+		...(workspace !== null && { file: workspace }),
 	};
 }
 
 /**
- * Open what a link names, if it names an instrument of this project; otherwise nothing
- * opens, and a link to another project says so.
+ * Open what a link names, if it names an instrument of this workspace; otherwise nothing
+ * opens, and a link to another workspace says so.
  */
 function followLink(model: Model, link: Link): Model {
-	const project = parseBank(link.repo);
-	if (!project.ok || !sameBank(project.value, model.settings))
+	const workspace = parseBank(link.repo);
+	if (!workspace.ok || !sameBank(workspace.value, model.settings))
 		return compact({
 			...model,
 			open: undefined,
@@ -305,7 +312,7 @@ function followLink(model: Model, link: Link): Model {
 				...model.failures,
 				{
 					kind: "refused",
-					message: `That link is to another project, ${link.repo}.`,
+					message: `That link is to another workspace, ${link.repo}.`,
 					hint: `Sign out, then sign in to ${link.repo} to open it.`,
 				},
 			],
@@ -315,14 +322,14 @@ function followLink(model: Model, link: Link): Model {
 		...model,
 		open:
 			file !== undefined &&
-			model.project.kind === "loaded" &&
-			model.project.instruments[file] !== undefined
+			model.workspace.kind === "loaded" &&
+			model.workspace.instruments[file] !== undefined
 				? file
 				: undefined,
 	});
 }
 
-/** The address of an instrument of this project, as its list item links to it. */
+/** The address of an instrument of this workspace, as its list item links to it. */
 export const instrumentHref = (
 	model: Model,
 	defaultBranch: string,

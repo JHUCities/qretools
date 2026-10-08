@@ -686,14 +686,14 @@ describe("GitHub adapter (Octokit)", () => {
 					repository: {
 						dir: {
 							entries: [
-								{ name: "project.yaml", type: "blob", object: blob("x\n") },
+								{ name: "workspace.yaml", type: "blob", object: blob("x\n") },
 							],
 						},
 					},
 				},
 			}),
 		).s.readFolder(target, "");
-		expect(own.ok && own.value?.map((f) => f.path)).toEqual(["project.yaml"]);
+		expect(own.ok && own.value?.map((f) => f.path)).toEqual(["workspace.yaml"]);
 	});
 
 	it("reads a file from the branch it is given, and says so when it is not there", async () => {

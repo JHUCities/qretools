@@ -14,12 +14,12 @@ function renderApp(
 	token: boolean,
 	{
 		instrument = "name: x\n",
-		project = "name: x\n",
+		workspace = "name: x\n",
 		folder = true,
 		template,
 	}: {
 		instrument?: string;
-		project?: string | null;
+		workspace?: string | null;
 		folder?: boolean;
 		template?: string;
 	} = {},
@@ -41,9 +41,9 @@ function renderApp(
 			),
 		read: () =>
 			Promise.resolve(
-				project === null
+				workspace === null
 					? err({ kind: "http", status: 404, message: "Not there." })
-					: ok(file("project.yaml", project)),
+					: ok(file("workspace.yaml", workspace)),
 			),
 	} as unknown as Store;
 	const app = createApp(
@@ -70,15 +70,15 @@ function renderApp(
 }
 
 describe("the instrument app", () => {
-	it("signed out, is the sign-in page for a project", () => {
+	it("signed out, is the sign-in page for a workspace", () => {
 		renderApp(false);
 		expect(
-			screen.getByRole("heading", { name: "Sign in to your project" }),
+			screen.getByRole("heading", { name: "Sign in to your workspace" }),
 		).toBeTruthy();
-		expect(screen.getByRole("textbox", { name: "Project" })).toBeTruthy();
+		expect(screen.getByRole("textbox", { name: "Workspace" })).toBeTruthy();
 	});
 
-	it("signed in, lists the project's instruments as links to their addresses", async () => {
+	it("signed in, lists the workspace's instruments as links to their addresses", async () => {
 		renderApp(true);
 		await act(async () => {});
 		const link = screen.getByRole("link", { name: "households" });
@@ -90,7 +90,7 @@ describe("the instrument app", () => {
 	it("opens an instrument with its findings, outline and DDI, and holds the download back with the reason", async () => {
 		const app = renderApp(true, {
 			instrument: "name: households\nflow:\n  - say: Hello.\n",
-			project: null,
+			workspace: null,
 		});
 		await act(async () => {});
 		await act(async () =>
@@ -104,7 +104,7 @@ describe("the instrument app", () => {
 				screen.getByRole("heading", { name: new RegExp(pane) }),
 			).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Say Hello." })).toBeTruthy();
-		expect(screen.getByText(/This project has no/)).toBeTruthy();
+		expect(screen.getByText(/This workspace has no/)).toBeTruthy();
 		const download = screen.getByRole("button", { name: "Download DDI" });
 		const reason = document.getElementById(
 			download.getAttribute("aria-describedby") ?? "",
@@ -129,7 +129,7 @@ describe("the instrument app", () => {
 		});
 		const app = renderApp(true, {
 			instrument: "name: households\nflow:\n  - say: Hello.\n",
-			project: "agency: org.example\n",
+			workspace: "agency: org.example\n",
 		});
 		await act(async () => {});
 		await act(async () =>
@@ -159,7 +159,7 @@ describe("the instrument app", () => {
 		expect(revoked).toContain(first);
 	});
 
-	it("offers the project template to someone without a project", async () => {
+	it("offers the workspace template to someone without a workspace", async () => {
 		const template =
 			"https://github.com/JHUCities/qretools-instrument-template/generate";
 		renderApp(false, { template });
@@ -171,10 +171,10 @@ describe("the instrument app", () => {
 		cleanup();
 		renderApp(true, { template, folder: false });
 		await act(async () => {});
-		expect(screen.getByText(/isn't a project yet/)).toBeTruthy();
+		expect(screen.getByText(/has no instruments\/ folder yet/)).toBeTruthy();
 		expect(
 			screen
-				.getByRole("link", { name: /Start a project from the template/ })
+				.getByRole("link", { name: /Start a workspace from the template/ })
 				.getAttribute("href"),
 		).toBe(template);
 	});

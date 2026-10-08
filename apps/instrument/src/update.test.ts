@@ -1,7 +1,7 @@
 import { err, ok } from "@qretools/core";
 import type { File, Who } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
-import { projectFiles } from "./effects.ts";
+import { workspaceFiles } from "./effects.ts";
 import { init, type Model, type Msg, warnOnLeave } from "./model.ts";
 import { instrumentHref, update } from "./update.ts";
 
@@ -31,15 +31,15 @@ const signedIn = (): Model =>
 
 const loaded = (): Model =>
 	run(signedIn(), {
-		kind: "projectLoaded",
+		kind: "workspaceLoaded",
 		result: ok({
 			instruments: [file("instruments/b.yaml"), file("instruments/a.yaml")],
-			project: file("project.yaml"),
+			workspace: file("workspace.yaml"),
 		}),
 	}).model;
 
-describe("signing in to a project", () => {
-	it("starts at once with a token on hand, and only with a project chosen", () => {
+describe("signing in to a workspace", () => {
+	it("starts at once with a token on hand, and only with a workspace chosen", () => {
 		expect(init({ settings: SETTINGS, hasToken: true })).toEqual([
 			expect.objectContaining({ session: { kind: "connecting" } }),
 			[
@@ -53,7 +53,7 @@ describe("signing in to a project", () => {
 		});
 	});
 
-	it("once signed in, reads the project from its default branch", () => {
+	it("once signed in, reads the workspace from its default branch", () => {
 		const [model, cmds] = update(
 			init({ settings: SETTINGS, hasToken: true })[0],
 			{
@@ -61,10 +61,10 @@ describe("signing in to a project", () => {
 				result: ok(WHO),
 			},
 		);
-		expect(model.project).toEqual({ kind: "loading" });
+		expect(model.workspace).toEqual({ kind: "loading" });
 		expect(cmds).toEqual([
 			{
-				kind: "loadProject",
+				kind: "loadWorkspace",
 				target: {
 					owner: "o",
 					repo: "r",
@@ -76,7 +76,7 @@ describe("signing in to a project", () => {
 		]);
 	});
 
-	it("saves the chosen project, and leaves for GitHub", () => {
+	it("saves the chosen workspace, and leaves for GitHub", () => {
 		const [model, cmds] = update(init({ hasToken: false })[0], {
 			kind: "signInRequested",
 			settings: SETTINGS,
@@ -95,8 +95,8 @@ describe("signing in to a project", () => {
 			out[0],
 			{ kind: "connected", result: ok(WHO) },
 			{
-				kind: "projectLoaded",
-				result: ok({ instruments: [], project: null }),
+				kind: "workspaceLoaded",
+				result: ok({ instruments: [], workspace: null }),
 			},
 		);
 		expect(late.model).toBe(out[0]);
@@ -104,8 +104,8 @@ describe("signing in to a project", () => {
 		const twice = loaded();
 		expect(
 			update(twice, {
-				kind: "projectLoaded",
-				result: ok({ instruments: [], project: null }),
+				kind: "workspaceLoaded",
+				result: ok({ instruments: [], workspace: null }),
 			})[0],
 		).toBe(twice);
 	});
@@ -114,61 +114,61 @@ describe("signing in to a project", () => {
 describe("a sign-in that has ended", () => {
 	it("ends the session and forgets the credentials, whichever reply noticed", () => {
 		const [model, cmds] = update(signedIn(), {
-			kind: "projectLoaded",
+			kind: "workspaceLoaded",
 			result: err({ kind: "auth", message: "Your GitHub sign-in has ended." }),
 		});
 		expect(model.session).toMatchObject({ kind: "failed" });
-		expect(model.project).toEqual({ kind: "idle" });
+		expect(model.workspace).toEqual({ kind: "idle" });
 		expect(cmds).toEqual([{ kind: "forgetToken" }]);
-		// Any other failure is the project's, with a retry.
+		// Any other failure is the workspace's, with a retry.
 		const [down] = update(signedIn(), {
-			kind: "projectLoaded",
+			kind: "workspaceLoaded",
 			result: err({ kind: "network", message: "down" }),
 		});
-		expect([down.session.kind, down.project.kind]).toEqual([
+		expect([down.session.kind, down.workspace.kind]).toEqual([
 			"connected",
 			"failed",
 		]);
 	});
 });
 
-describe("the project", () => {
+describe("the workspace", () => {
 	it("lists its instruments in name order, with its own file", () => {
-		const { project } = loaded();
+		const { workspace } = loaded();
 		expect(
-			project.kind === "loaded" && Object.keys(project.instruments),
+			workspace.kind === "loaded" && Object.keys(workspace.instruments),
 		).toEqual(["instruments/a.yaml", "instruments/b.yaml"]);
-		expect(project.kind === "loaded" && project.file?.path).toBe(
-			"project.yaml",
+		expect(workspace.kind === "loaded" && workspace.file?.path).toBe(
+			"workspace.yaml",
 		);
 	});
 
 	it("tells a missing instruments folder from an empty one", () => {
 		const none = run(signedIn(), {
-			kind: "projectLoaded",
-			result: ok({ instruments: null, project: null }),
-		}).model.project;
+			kind: "workspaceLoaded",
+			result: ok({ instruments: null, workspace: null }),
+		}).model.workspace;
 		expect(none).toEqual({ kind: "loaded", instruments: {}, hasFolder: false });
 	});
 
-	it("reads a missing project file as none, and any other failure as the load's", () => {
+	it("reads a missing workspace file as none, and any other failure as the load's", () => {
 		const folder = ok([file("instruments/a.yaml")]);
 		const missing = err({
 			kind: "http" as const,
 			status: 404,
 			message: "gone",
 		});
-		expect(projectFiles(folder, missing)).toEqual(
-			ok({ instruments: [file("instruments/a.yaml")], project: null }),
+		expect(workspaceFiles(folder, missing)).toEqual(
+			ok({ instruments: [file("instruments/a.yaml")], workspace: null }),
 		);
 		const down = err({ kind: "network" as const, message: "down" });
-		expect(projectFiles(folder, down)).toEqual(down);
-		expect(projectFiles(down, ok(file("project.yaml")))).toEqual(down);
+		expect(workspaceFiles(folder, down)).toEqual(down);
+		expect(workspaceFiles(down, ok(file("workspace.yaml")))).toEqual(down);
 	});
 });
 
 describe("which instrument is open", () => {
-	it("follows the address, and a link that arrives first waits for the project", () => {
+	it("follows the address, and a link that arrives first waits for the workspace", () => {
 		const href = instrumentHref(loaded(), "main", "instruments/a.yaml");
 		expect(update(loaded(), { kind: "hashChanged", hash: href })[0].open).toBe(
 			"instruments/a.yaml",
@@ -176,8 +176,11 @@ describe("which instrument is open", () => {
 		const waiting = update(signedIn(), { kind: "hashChanged", hash: href })[0];
 		expect(waiting.open).toBeUndefined();
 		const opened = update(waiting, {
-			kind: "projectLoaded",
-			result: ok({ instruments: [file("instruments/a.yaml")], project: null }),
+			kind: "workspaceLoaded",
+			result: ok({
+				instruments: [file("instruments/a.yaml")],
+				workspace: null,
+			}),
 		})[0];
 		expect([opened.open, opened.pendingLink]).toEqual([
 			"instruments/a.yaml",
@@ -185,7 +188,7 @@ describe("which instrument is open", () => {
 		]);
 	});
 
-	it("opens nothing for a file the project lacks, and says so for another project", () => {
+	it("opens nothing for a file the workspace lacks, and says so for another workspace", () => {
 		const model = loaded();
 		const href = instrumentHref(model, "main", "instruments/zz.yaml");
 		expect(update(model, { kind: "hashChanged", hash: href })[0].open).toBe(
@@ -197,7 +200,7 @@ describe("which instrument is open", () => {
 		})[0];
 		expect(other.open).toBeUndefined();
 		expect(other.failures.map((f) => f.message)).toEqual([
-			"That link is to another project, x/y.",
+			"That link is to another workspace, x/y.",
 		]);
 	});
 });
@@ -206,10 +209,10 @@ describe("editing, and the banks an instrument uses", () => {
 	const USES = "uses:\n  hh: ../banks/hh\nflow: []\n";
 	const opened = (text = USES): Model => {
 		const model = run(signedIn(), {
-			kind: "projectLoaded",
+			kind: "workspaceLoaded",
 			result: ok({
 				instruments: [{ path: "instruments/a.yaml", sha: "s", text }],
-				project: null,
+				workspace: null,
 			}),
 		}).model;
 		return update(model, {
@@ -237,10 +240,10 @@ describe("editing, and the banks an instrument uses", () => {
 		).toEqual([]);
 		// Opening an instrument asks for its banks too.
 		const listed = run(signedIn(), {
-			kind: "projectLoaded",
+			kind: "workspaceLoaded",
 			result: ok({
 				instruments: [{ path: "instruments/a.yaml", sha: "s", text: USES }],
-				project: null,
+				workspace: null,
 			}),
 		}).model;
 		const [, onOpen] = update(listed, {
@@ -292,7 +295,7 @@ describe("editing, and the banks an instrument uses", () => {
 		]);
 	});
 
-	it("reads a bank again that failed or wasn't there, on Try again or a project reload", () => {
+	it("reads a bank again that failed or wasn't there, on Try again or a workspace reload", () => {
 		const failed = update(opened(), {
 			kind: "bankLoaded",
 			key: "o/r/p/banks/hh",
@@ -304,14 +307,14 @@ describe("editing, and the banks an instrument uses", () => {
 		expect(
 			update(failed, { kind: "bankRetried", key: "o/r/p/banks/hh" })[1],
 		).toEqual([{ kind: "loadBanks", targets: [HH] }]);
-		// A reload forgets it, and asks for it again once the project is back.
-		const [reloaded] = update(failed, { kind: "projectReloadRequested" });
+		// A reload forgets it, and asks for it again once the workspace is back.
+		const [reloaded] = update(failed, { kind: "workspaceReloadRequested" });
 		expect(reloaded.banks).toEqual({});
 		const [, cmds] = update(reloaded, {
-			kind: "projectLoaded",
+			kind: "workspaceLoaded",
 			result: ok({
 				instruments: [{ path: "instruments/a.yaml", sha: "s", text: USES }],
-				project: null,
+				workspace: null,
 			}),
 		});
 		expect(cmds).toEqual([{ kind: "loadBanks", targets: [HH] }]);

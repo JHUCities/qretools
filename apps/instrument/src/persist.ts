@@ -1,6 +1,6 @@
 /**
  * What this app keeps on the device, read once at startup and parsed at the boundary:
- * which project, and the theme. Anything unreadable is as if nothing were kept.
+ * which workspace, and the theme. Anything unreadable is as if nothing were kept.
  */
 import { type BankSettings, parseBank } from "@qretools/shell";
 import { SETTINGS_KEY, THEME_KEY, type ThemeChoice } from "./model.ts";
@@ -12,13 +12,13 @@ export function readSettings(storage: Storage): BankSettings | undefined {
 		const { owner, repo, path, remember } = raw as Record<string, unknown>;
 		if (typeof owner !== "string" || typeof repo !== "string") return undefined;
 		// Parsed as a repository once, here: a corrupted value never reaches GitHub.
-		const project = parseBank(
+		const workspace = parseBank(
 			[owner, repo, typeof path === "string" ? path : ""]
 				.filter((p) => p !== "")
 				.join("/"),
 		);
-		return project.ok
-			? { ...project.value, remember: remember === true }
+		return workspace.ok
+			? { ...workspace.value, remember: remember === true }
 			: undefined;
 	} catch {
 		return undefined;
