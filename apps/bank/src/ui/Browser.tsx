@@ -48,12 +48,15 @@ export const bankLabel = (bank: string): string =>
 
 export function Browser({
 	banks,
+	workspace = [],
 	filter,
 	open,
 	dispatch,
 	loading = false,
 }: {
 	banks: readonly BankTree[];
+	/** The workspace's own files (`workspaceLeaves`): its instruments and its details. */
+	workspace?: readonly SchemeLeaf[];
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
@@ -72,9 +75,13 @@ export function Browser({
 			</Stack>
 		);
 	const [only] = banks;
+	// What is asked comes first, then what it is asked from.
+	const instruments = workspace.length > 0 && (
+		<Instruments leaves={workspace} open={open} dispatch={dispatch} />
+	);
 	// One bank, as a bank has always been shown: its questions, then its shared files.
-	if (banks.length <= 1)
-		return (
+	if (banks.length <= 1) {
+		const trees = (
 			<BankTrees
 				tree={only ?? { bank: "", folders: [], sections: [] }}
 				level={3}
@@ -83,9 +90,19 @@ export function Browser({
 				dispatch={dispatch}
 			/>
 		);
+		return instruments ? (
+			<Stack gap="normal">
+				{instruments}
+				{trees}
+			</Stack>
+		) : (
+			trees
+		);
+	}
 	// Several: each bank under its own heading, one level down.
 	return (
 		<Stack gap="normal">
+			{instruments}
 			{banks.map((tree) => (
 				<BankSection
 					key={tree.bank}
@@ -95,6 +112,41 @@ export function Browser({
 					dispatch={dispatch}
 				/>
 			))}
+		</Stack>
+	);
+}
+
+/** The workspace's instruments and its details: one flat tree, named by its heading. */
+function Instruments({
+	leaves,
+	open,
+	dispatch,
+}: {
+	leaves: readonly SchemeLeaf[];
+	open: Id | undefined;
+	dispatch: Dispatch;
+}) {
+	const id = useId();
+	return (
+		<Stack gap="condensed">
+			<h3 id={id} className="browser-heading">
+				Instruments
+			</h3>
+			<TreeView aria-labelledby={id}>
+				{leaves.map((leaf) => (
+					<TreeView.Item
+						key={leaf.id}
+						id={`w:${leaf.id}`}
+						current={leaf.id === open}
+						onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
+					>
+						{leaf.name}
+						<TreeView.TrailingVisual label={marksLabel(leaf)}>
+							<Marks leaf={leaf} />
+						</TreeView.TrailingVisual>
+					</TreeView.Item>
+				))}
+			</TreeView>
 		</Stack>
 	);
 }

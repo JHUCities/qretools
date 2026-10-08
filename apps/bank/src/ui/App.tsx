@@ -32,6 +32,7 @@ import {
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 	type Symbols,
+	status as statusOf,
 	UNNAMED,
 	usedBy,
 	WORKSPACE_DETAILS,
@@ -49,6 +50,7 @@ import { SOURCE_URL } from "../config.js";
 import {
 	bankFileOf,
 	type Dispatch,
+	fileOf,
 	type Id,
 	isScheme,
 	type Model,
@@ -56,7 +58,13 @@ import {
 	TEMPLATES,
 } from "../model.js";
 import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
-import { bankFolders, banksShown, schemeSections, treeOf } from "../tree.js";
+import {
+	bankFolders,
+	banksShown,
+	schemeSections,
+	treeOf,
+	workspaceLeaves,
+} from "../tree.js";
 import {
 	bankLoading,
 	folderOfPath,
@@ -234,6 +242,25 @@ export function App() {
 			),
 		[shownBanks, treeInput, evaluations, envFor, indexFor],
 	);
+	// The workspace's own files, read as their author sees them.
+	const workspace = useMemo(
+		() =>
+			workspaceLeaves(treeInput, (e) =>
+				statusOf(
+					e.kind === "instrument"
+						? evaluations.instrument(
+								{ local, remote: model.remote, banks: model.banks },
+								e,
+							).instrument.findings
+						: (evaluations.workspaceFile({
+								local,
+								remote: model.remote,
+								banks: model.banks,
+							})?.findings ?? []),
+				),
+			),
+		[treeInput, evaluations, local, model.remote, model.banks],
+	);
 	const naming = model.browser.naming;
 	const moving = model.browser.moving;
 	const movingQuestion =
@@ -253,20 +280,26 @@ export function App() {
 	const confirm =
 		model.browser.confirmDelete === undefined
 			? undefined
-			: bankFileOf(model, model.browser.confirmDelete);
+			: fileOf(model, model.browser.confirmDelete);
 	// A saved file is named by the path the commit deletes (the filename follows the
 	// name), never by unsaved edits that may have renamed it; a draft by its text.
 	const confirmName =
 		confirm === undefined
 			? undefined
-			: confirm.base !== undefined
-				? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
-				: confirm.kind === "question"
-					? evaluations.get(confirm, envFor(confirm.bank)).draft.name
-					: confirm.name;
+			: // The workspace's own files say what they are: nothing else is named so.
+				confirm.kind === "instrument"
+				? `instrument ${confirm.name}`
+				: confirm.kind === "workspaceFile"
+					? WORKSPACE_DETAILS
+					: confirm.base !== undefined
+						? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
+						: confirm.kind === "question"
+							? evaluations.get(confirm, envFor(confirm.bank)).draft.name
+							: confirm.name;
 	// Deleting a scheme file others name turns each of those names into a hole: say how many.
+	// Nothing names an instrument or the workspace details: no count for them.
 	const confirmUsers =
-		confirm === undefined || confirm.kind === "question" || isRoot(confirm.kind)
+		confirm === undefined || !isScheme(confirm) || isRoot(confirm.kind)
 			? 0
 			: new Set(
 					usedBy(indexFor(confirm.bank), confirm.kind, confirm.name).map(
@@ -452,6 +485,7 @@ export function App() {
 								<div className="trees">
 									<Browser
 										banks={trees}
+										workspace={workspace}
 										loading={loading}
 										filter={model.browser.filter}
 										open={open}

@@ -8,7 +8,7 @@ import type {
 	CompletionContext,
 	CompletionResult,
 } from "@codemirror/autocomplete";
-import type { Bank } from "@qretools/core";
+import type { BankScope } from "@qretools/core";
 import { instrumentCompletion } from "@qretools/core/editor";
 
 /** CodeMirror's icon for each kind of option. */
@@ -19,7 +19,7 @@ const TYPE = {
 } as const;
 
 export function instrumentSource(
-	banks: () => Readonly<Record<string, Bank>>,
+	banks: () => Readonly<Record<string, BankScope>>,
 ): (context: CompletionContext) => CompletionResult | null {
 	return (context: CompletionContext): CompletionResult | null => {
 		const found = instrumentCompletion(

@@ -6,9 +6,12 @@ import {
 	EMPTY_ENV,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
+	type InstrumentIn,
 	inBank,
+	instrumentOf,
 	isRoot,
 	joinFolder,
+	type Mention,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
 	type NamedScheme,
@@ -17,8 +20,8 @@ import {
 	SCHEME_NAME,
 	SHAPE,
 	saveableName,
-	schemePath,
 	UNNAMED,
+	workspaceFileOf,
 } from "@qretools/core";
 import {
 	addSpace,
@@ -56,7 +59,6 @@ import {
 	allFiles,
 	type BankEntry,
 	type Blob,
-	bankFileOf,
 	type Cmd,
 	EMPTY_LOCAL,
 	EMPTY_REMOTE,
@@ -229,7 +231,15 @@ function step(model: Model, msg: Msg): Step {
 			// against the text as it is now.
 			const q = current(model);
 			if (!q) return [model, []];
-			const range = locate(msg.target, rangesOf(q.source));
+			// Each kind of file names its places by its own reading of the YAML; an
+			// instrument's don't depend on its banks.
+			const ranges =
+				q.kind === "instrument"
+					? instrumentOf(q.source, { banks: {} }).ranges
+					: q.kind === "workspaceFile"
+						? workspaceFileOf(q.source).ranges
+						: rangesOf(q.source);
+			const range = locate(msg.target, ranges);
 			// A hole at an empty value is a point where the value goes (its own zero-width
 			// range, from the parser): offer what can go there (completion writes the space
 			// after the colon, never the click). A field not written at all has no range.
@@ -1061,7 +1071,7 @@ function write(
 					q.bank,
 				)
 			: q.kind === "instrument"
-				? instrumentDependencies(model, q)
+				? savedWith(model, q)
 				: { include: [], blocked: [] };
 	const [stuck] = deps.blocked;
 	if (stuck !== undefined) {
@@ -1110,12 +1120,12 @@ const nameOf = (model: Model, f: BankEntry): string =>
  * implicitly, as for a question. Not yet followed: a bank name in a condition, or an
  * input's shared scale (`refs` doesn't hold them).
  */
-function instrumentDependencies(
-	model: Model,
-	e: InstrumentEntry,
+export function instrumentDependencies(
+	model: Pick<Model, "local" | "remote">,
+	read: InstrumentIn,
+	/** The names a question writes: the view passes its kept evaluations', `update` reads afresh. */
+	mentionsOf: (q: Question) => readonly Mention[],
 ): { include: readonly BankEntry[]; blocked: readonly BankEntry[] } {
-	// Read fresh, as the author sees it: pure, and its caches end with this call.
-	const read = createEvaluations().instrument(model, e);
 	const claims = new Map<Path, BankEntry>();
 	for (const f of [
 		...Object.values(model.local.questions),
@@ -1139,17 +1149,40 @@ function instrumentDependencies(
 		if (f === undefined) continue;
 		consider(f);
 		if (f.kind !== "question") continue;
-		const own = dependencies(
-			model.local,
-			model.remote,
-			parseSurface(f.source, envIn(model, f.bank)).mentions,
-			f.bank,
-		);
+		const own = dependencies(model.local, model.remote, mentionsOf(f), f.bank);
 		for (const s of own.include) include.set(s.id, s);
 		for (const s of own.blocked) blocked.set(s.id, s);
 	}
 	return { include: [...include.values()], blocked: [...blocked.values()] };
 }
+
+/**
+ * An instrument's dependencies read afresh, as `update` must (it can't reach the view's
+ * caches): pure, and its caches end with this call. Each bank's environment once.
+ */
+function savedWith(
+	model: Model,
+	e: InstrumentEntry,
+): { include: readonly BankEntry[]; blocked: readonly BankEntry[] } {
+	const evaluations = createEvaluations();
+	return instrumentDependencies(
+		model,
+		evaluations.instrument(model, e),
+		(q) => evaluations.get(q, evaluations.env(model, q.bank)).symbols.mentions,
+	);
+}
+
+/** What saving an instrument also saves, as its header says it: "consent", "shared scale yes_no". */
+export const instrumentAlsoSaves = (
+	deps: { include: readonly BankEntry[] },
+	/** A question's name as the view has it read. */
+	questionName: (q: Question) => string,
+): readonly string[] =>
+	deps.include.map((f) =>
+		f.kind === "question"
+			? questionName(f)
+			: `${SCHEME_NAME[f.kind]} ${f.name}`,
+	);
 
 /** Writing a working file at a path: expected at its base when that is the path, else not there yet. */
 const changeOf = (f: Entry, path: Path): Change => ({

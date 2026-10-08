@@ -5,22 +5,47 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
-import { createEditor, type Editor, type EditorInputs } from "@qretools/editor";
+import {
+	createEditor,
+	type Editor,
+	type EditorInputs,
+	instrumentSource,
+} from "@qretools/editor";
 import { useLayoutEffect, useRef } from "react";
 import { useApp } from "./AppContext.js";
 
-/** A question or shared file always has its schema: completion reads it. */
-export function EditorPane(inputs: EditorInputs & { readonly schema: object }) {
+/**
+ * A question or shared file has its schema, which completion reads. An instrument has
+ * none: completion offers the questions and names of the banks it uses instead
+ * (`instrument`), read from the store when it asks, never as they were at mount.
+ */
+export function EditorPane(
+	inputs: EditorInputs &
+		(
+			| { readonly schema: object; readonly instrument?: undefined }
+			| { readonly schema?: undefined; readonly instrument: true }
+		),
+) {
 	const host = useRef<HTMLDivElement>(null);
 	const editor = useRef<Editor | null>(null);
-	const { dispatch, effects } = useApp();
+	const { dispatch, effects, evaluations, store } = useApp();
+	const instrument = inputs.instrument === true;
+	// The open file's id when completion asks: the editor outlives a change of file.
+	const open = useRef(inputs.id);
+	open.current = inputs.id;
 	useLayoutEffect(() => {
 		if (!host.current) return;
+		const scopes = () => {
+			const { model } = store.getState();
+			const e = model.local.workspace[open.current];
+			return e?.kind === "instrument" ? evaluations.usedScopes(model, e) : {};
+		};
 		const e = createEditor(
 			host.current,
 			(text) => dispatch({ kind: "edited", text }),
 			(offset) => dispatch({ kind: "cursorMoved", offset }),
 			(id, offset) => dispatch({ kind: "definitionRequested", id, offset }),
+			instrument ? { completions: [instrumentSource(scopes)] } : {},
 		);
 		editor.current = e;
 		effects.registerEditor(e);
@@ -29,7 +54,7 @@ export function EditorPane(inputs: EditorInputs & { readonly schema: object }) {
 			e.destroy();
 			editor.current = null;
 		};
-	}, [dispatch, effects]);
+	}, [dispatch, effects, evaluations, store, instrument]);
 	const { id, text, diagnostics, marks, schema, readOnly, label } = inputs;
 	// Before paint: the first frame of a file already shows its text, never an empty
 	// editor that fills a frame later.
@@ -39,7 +64,7 @@ export function EditorPane(inputs: EditorInputs & { readonly schema: object }) {
 			text,
 			diagnostics,
 			marks,
-			schema,
+			...(schema !== undefined && { schema }),
 			...(readOnly !== undefined && { readOnly }),
 			...(label !== undefined && { label }),
 		});

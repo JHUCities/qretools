@@ -1,48 +1,25 @@
-/**
- * The open instrument: its name, state and download, the banks it uses, the source in
- * the editor, and beside it its findings, its outline and its DDI. Read against its
- * banks and its workspace's agency on every keystroke (`instrumentOf` is a few
- * milliseconds); the banks themselves are evaluated once each, and the DDI is checked
- * against the official schema only when it changes.
- */
-import { DownloadIcon } from "@primer/octicons-react";
+import { Heading, Label, Link, Stack } from "@primer/react";
+import { ScrollableRegion } from "@primer/react/experimental";
 import {
-	Button,
-	Heading,
-	Label,
-	Link,
-	LinkButton,
-	Stack,
-	Truncate,
-} from "@primer/react";
-import { InlineMessage, ScrollableRegion } from "@primer/react/experimental";
-import {
-	type DdiDocument,
 	exportRefusal,
 	instrumentOf,
 	plainText,
-	type Refusal,
-	refusalReason,
 	status,
 	type Target,
-	WORKSPACE,
-	type WorkspaceFile,
 	workspaceFileOf,
 } from "@qretools/core";
-import {
-	type OutlineItem,
-	type OutlinePart,
-	outlineOf,
-} from "@qretools/core/editor";
+import { outlineOf } from "@qretools/core/editor";
 import { toDiagnostics } from "@qretools/editor";
 import {
 	Ddi,
+	Download,
 	Findings,
-	inlineCode,
+	Outline,
 	StatusBadge,
 	useSettled,
+	WorkspaceNotice,
 } from "@qretools/shell/ui";
-import { Fragment, useEffect, useId, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { banksOf } from "../evaluations.ts";
 import type { Model } from "../model.ts";
 import { instrumentName } from "../update.ts";
@@ -240,151 +217,5 @@ function stateText(u: Use): string {
 					: `isn't there: no folder ${state.key}`;
 		default:
 			return state satisfies never;
-	}
-}
-
-/**
- * The DDI download: a link to the document as a file while it may be exported, and an
- * inactive button saying why not otherwise (the rule is the core's, the CLI's too).
- */
-function Download({
-	name,
-	ddi,
-	refusal,
-}: {
-	name: string;
-	ddi: DdiDocument;
-	refusal: Refusal | undefined;
-}) {
-	const reason = useId();
-	const allowed = refusal === undefined;
-	// The file, made while it may be downloaded and let go when it changes: made in the
-	// effect whose cleanup lets it go, so each URL pairs with its own revoke (StrictMode
-	// runs an effect twice in development; a memo's URL would be revoked under the link).
-	const [href, setHref] = useState<string>();
-	useEffect(() => {
-		if (!allowed) {
-			setHref(undefined);
-			return;
-		}
-		const url = URL.createObjectURL(
-			new Blob([`${JSON.stringify(ddi, null, 2)}\n`], {
-				type: "application/json",
-			}),
-		);
-		setHref(url);
-		return () => URL.revokeObjectURL(url);
-	}, [ddi, allowed]);
-	if (allowed && href !== undefined)
-		return (
-			<LinkButton
-				size="small"
-				href={href}
-				download={`${name}.ddi.json`}
-				leadingVisual={DownloadIcon}
-			>
-				Download DDI
-			</LinkButton>
-		);
-	return (
-		<>
-			<Button
-				size="small"
-				inactive
-				leadingVisual={DownloadIcon}
-				aria-describedby={reason}
-			>
-				Download DDI
-			</Button>
-			<span id={reason} className="quiet">
-				{refusal === undefined ? "" : refusalReason(refusal)}
-			</span>
-		</>
-	);
-}
-
-/** What the workspace file says, or that there's none: beside the DDI, which it publishes. */
-function WorkspaceNotice({ own }: { own: WorkspaceFile | undefined }) {
-	if (own === undefined)
-		return (
-			<InlineMessage variant="warning">
-				<span>
-					This workspace has no <code className="code">{WORKSPACE.file}</code>,
-					so there's no DDI agency to publish its instruments under.
-				</span>
-			</InlineMessage>
-		);
-	return own.findings.map((f, i) => (
-		<InlineMessage
-			// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and can repeat
-			key={i}
-			variant={f.severity === "error" ? "critical" : "warning"}
-		>
-			<span>
-				<code className="code">{WORKSPACE.file}</code>: {inlineCode(f.message)}
-			</span>
-		</InlineMessage>
-	));
-}
-
-/**
- * The flow as nested lists, each step a way to its place in the source; what is still
- * to be written shows as a hole, as in the previews of a question.
- */
-function Outline({
-	items,
-	onTarget,
-}: {
-	items: readonly OutlineItem[];
-	onTarget: (target: Target) => void;
-}) {
-	return (
-		<ol className="outline">
-			{items.map((item) => (
-				<li key={item.path}>
-					<Link
-						as="button"
-						type="button"
-						onClick={() => onTarget({ path: item.path, severity: "info" })}
-					>
-						{item.label.map((part, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: a label's parts are positional
-							<Fragment key={i}>
-								{/* Heard as words; the flex gap draws the space. */}
-								{i > 0 && " "}
-								<Part part={part} />
-							</Fragment>
-						))}
-					</Link>
-					{item.detail !== undefined && (
-						<Truncate
-							as="span"
-							title={item.detail}
-							className="quiet outline-detail"
-						>
-							{item.detail}
-						</Truncate>
-					)}
-					{item.children.length > 0 && (
-						<Outline items={item.children} onTarget={onTarget} />
-					)}
-				</li>
-			))}
-		</ol>
-	);
-}
-
-function Part({ part }: { part: OutlinePart }) {
-	switch (part.kind) {
-		case "code":
-			return <code className="code">{part.text}</code>;
-		case "hole":
-			return <span className="hole">{part.text}</span>;
-		case "keyword":
-			return <span className="outline-keyword">{part.text}</span>;
-		case "text":
-			return <span>{part.text}</span>;
-		default:
-			return part.kind satisfies never;
 	}
 }

@@ -332,6 +332,17 @@ export const BankFileSchema = z.strictObject({
 export const bankFileJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(BankFileSchema) as Record<string, unknown>;
 
+/** The schema of a workspace's own file, `workspace.yaml`: as a bank's, for its instruments. */
+export const WorkspaceFileSchema = z.strictObject({
+	agency: z
+		.string()
+		.describe(
+			"The DDI agency this workspace's instruments are published under: the registered code of the organization that maintains them, such as `org.example`.",
+		),
+});
+export const workspaceFileJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(WorkspaceFileSchema) as Record<string, unknown>;
+
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";
 

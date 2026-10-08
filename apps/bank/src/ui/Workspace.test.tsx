@@ -9,7 +9,7 @@ import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
 import type { Store } from "@qretools/shell";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
 import { AppContext } from "./AppContext.js";
@@ -28,9 +28,13 @@ const FILES = [
 	file("banks/a/questions/t/alpha.yaml", QUESTION("alpha")),
 	file("banks/b/bank.yaml", "agency: org.example\n"),
 	file("banks/b/questions/u/beta.yaml", QUESTION("beta")),
+	file(
+		"instruments/wave1.yaml",
+		"name: wave1\nuses:\n  a: ../banks/a\nflow:\n  - ask: a.alpha\n  - section: Close\n    flow:\n      - say: Thank you.\n",
+	),
 ];
 
-function renderWorkspace() {
+function renderWorkspace(files = FILES) {
 	const store = {
 		whoAmI: () =>
 			Promise.resolve(
@@ -44,7 +48,7 @@ function renderWorkspace() {
 		loadWorkspace: () =>
 			Promise.resolve(
 				ok({
-					files: FILES,
+					files,
 					found: true,
 					from: "branch",
 					aheadBy: 0,
@@ -123,5 +127,57 @@ describe("a workspace of several banks", () => {
 			(q) => q.base === undefined,
 		);
 		expect(made?.bank).toBe("banks/b");
+	});
+});
+
+describe("a workspace's instruments", () => {
+	it("come first, then each bank, with the workspace details last among them", async () => {
+		renderWorkspace();
+		await act(async () => {});
+		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		const headings = within(nav)
+			.getAllByRole("heading", { level: 3 })
+			.map((h) => h.textContent);
+		expect(headings.slice(0, 2)).toEqual(["Instruments", "banks/a"]);
+		const tree = within(nav).getByRole("tree", { name: "Instruments" });
+		const items = within(tree)
+			.getAllByRole("treeitem")
+			.map((i) => i.textContent ?? "");
+		expect(items).toHaveLength(2);
+		expect(items[0]).toMatch(/^wave1/);
+		expect(items[1]).toMatch(/^workspace details/);
+	});
+
+	it("open as their source, findings, outline and DDI", async () => {
+		// jsdom makes no blob URLs; the download link needs one.
+		const { createObjectURL, revokeObjectURL } = URL;
+		URL.createObjectURL = () => "blob:ddi";
+		URL.revokeObjectURL = () => {};
+		onTestFinished(() => {
+			URL.createObjectURL = createObjectURL;
+			URL.revokeObjectURL = revokeObjectURL;
+		});
+		renderWorkspace();
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
+		await act(async () => {});
+		expect(
+			screen.getByRole("heading", { level: 2, name: /instrument\s*wave1/ }),
+		).toBeTruthy();
+		for (const name of [/^Findings/, /^Outline/, /DDI-Lifecycle/])
+			expect(screen.getByRole("heading", { name })).toBeTruthy();
+		// The outline is the flow, each step a way to its place.
+		expect(screen.getByRole("button", { name: /alpha/ })).toBeTruthy();
+		expect(screen.getByRole("button", { name: /Close/ })).toBeTruthy();
+	});
+
+	it("aren't shown for a workspace that is one bank alone", async () => {
+		renderWorkspace([
+			file("bank.yaml", "agency: org.example\n"),
+			file("questions/t/alpha.yaml", QUESTION("alpha")),
+		]);
+		await act(async () => {});
+		expect(screen.queryByRole("heading", { name: "Instruments" })).toBeNull();
+		expect(screen.queryByRole("tree", { name: "Instruments" })).toBeNull();
 	});
 });

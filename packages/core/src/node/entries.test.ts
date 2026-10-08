@@ -123,6 +123,7 @@ describe("the entry points", () => {
 			    "spaceBefore",
 			    "textEntryJsonSchema",
 			    "textEntrySource",
+			    "workspaceFileJsonSchema",
 			  ],
 			  "node": [
 			    "main",

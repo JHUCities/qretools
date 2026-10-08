@@ -1,6 +1,6 @@
 /**
- * The open file: a question, or a scheme file. Each is its source in the editor and
- * everything derived from it beside it. Bank-level findings (a variable defined
+ * The open file: a question, a scheme file, an instrument or the workspace details.
+ * Each is its source in the editor and everything derived from it beside it. Bank-level findings (a variable defined
  * twice) come from the index and are shown on the file like any other finding.
  */
 
@@ -11,6 +11,7 @@ import {
 	type Evaluation,
 	evaluate,
 	evaluateScheme,
+	exportRefusal,
 	type Finding,
 	type Fix,
 	fileFindings,
@@ -31,39 +32,50 @@ import {
 	type Target,
 	UNNAMED,
 	usedBy,
+	WORKSPACE_DETAILS,
 } from "@qretools/core";
 import {
 	bankFileJsonSchema,
 	inspect,
 	labelledJsonSchema,
 	labelsJsonSchema,
+	outlineOf,
 	textEntryJsonSchema,
+	workspaceFileJsonSchema,
 } from "@qretools/core/editor";
 import { toDiagnostics } from "@qretools/editor";
 import { bankText, formatLink } from "@qretools/shell";
 import {
 	Ddi,
+	Download,
 	Findings,
+	Outline,
 	type Related,
 	StatusBadge,
 	useSettled,
+	WorkspaceNotice,
 } from "@qretools/shell/ui";
 import { memo, type ReactNode, useCallback, useMemo } from "react";
 import {
 	bankFileOf,
+	type Entry,
 	envOfRemote,
 	fileOf,
 	type Id,
+	type InstrumentEntry,
 	type Model,
 	type Question,
 	type SchemeEntry,
 	schemeFileNamed,
+	type WorkspaceFileEntry,
 } from "../model.js";
 import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
 import {
 	bankLoading,
 	branchOwner,
 	hrefOf,
+	instrumentAlsoSaves,
+	instrumentDependencies,
 	linkBranch,
 	writeBlocked,
 } from "../update.js";
@@ -100,17 +112,22 @@ export const Editing = memo(function Editing({
 	id: Id;
 	index: Index<Id>;
 }) {
-	const entry = useModel((m) => bankFileOf(m, id));
+	const entry = useModel((m) => fileOf(m, id));
 	if (!entry) return null;
-	return entry.kind === "question" ? (
-		<QuestionEditing q={entry} index={index} />
-	) : (
-		<SchemeEditing e={entry} index={index} />
-	);
+	switch (entry.kind) {
+		case "question":
+			return <QuestionEditing q={entry} index={index} />;
+		case "instrument":
+			return <InstrumentEditing e={entry} />;
+		case "workspaceFile":
+			return <WorkspaceDetailsEditing e={entry} />;
+		default:
+			return <SchemeEditing e={entry} index={index} />;
+	}
 });
 
 /** Whether GitHub changed a file since its author started; shown only after this session's load. */
-function useStale(f: Question | SchemeEntry): boolean {
+function useStale(f: Entry): boolean {
 	const remote = useModel((m) => m.remote);
 	const loaded = useModel((m) => m.loading.kind === "loaded");
 	if (!loaded) return false;
@@ -255,6 +272,216 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		</>
 	);
 }
+
+/** The slices an instrument is read from: a caret move changes none of them. */
+function useSlices() {
+	const local = useModel((m) => m.local);
+	const remote = useModel((m) => m.remote);
+	const banks = useModel((m) => m.banks);
+	return useMemo(() => ({ local, remote, banks }), [local, remote, banks]);
+}
+
+/**
+ * An instrument: read live against the banks it uses, its findings and outline settling
+ * as a question's findings do, and its DDI with the download, which goes where the DDI
+ * is (its refusal comes and goes as the author types; the header must not move).
+ */
+function InstrumentEditing({ e }: { e: InstrumentEntry }) {
+	const { evaluations, effects } = useApp();
+	const blocked = useModel(writeBlocked);
+	const ddiSchema = useModel((m) => m.ddiSchema);
+	const activity = useModel((m) => m.activity);
+	const slices = useSlices();
+	const { onTarget, onFix, on } = useActions(e.id);
+	const stale = useStale(e);
+	const read = evaluations.instrument(slices, e);
+	const { instrument } = read;
+	const own = evaluations.workspaceFile(slices);
+	const { findings, ranges, draft, ddi } = instrument;
+	const [listed, flushFindings] = useSettled(findings, SETTLE_MS, e.id);
+	const outline = useMemo(() => outlineOf(draft), [draft]);
+	const [outlined, flushOutline] = useSettled(outline, SETTLE_MS, e.id);
+	const flush = () => {
+		flushFindings();
+		flushOutline();
+	};
+	const diagnostics = useMemo(
+		() => toDiagnostics(findings, ranges, onFix),
+		[findings, ranges, onFix],
+	);
+	const also = useMemo(
+		() =>
+			instrumentAlsoSaves(
+				instrumentDependencies(
+					slices,
+					read,
+					(q) =>
+						evaluations.get(q, evaluations.env(slices, q.bank)).symbols
+							.mentions,
+				),
+				(q) =>
+					evaluations.get(q, evaluations.env(slices, q.bank)).draft.name ??
+					UNNAMED,
+			),
+		[slices, read, evaluations],
+	);
+	const problems = useMemo(
+		() =>
+			ddiSchema.kind === "failed"
+				? [ddiSchema.finding]
+				: (effects.validate(ddi) ?? []),
+		[ddi, ddiSchema, effects],
+	);
+	const refusal = exportRefusal(instrument, problems);
+	const notice = useMemo(
+		() => (
+			<>
+				<Download name={e.name} ddi={ddi} refusal={refusal} />
+				<WorkspaceNotice own={own} />
+			</>
+		),
+		[e.name, ddi, refusal, own],
+	);
+	return (
+		<>
+			<FileHeader
+				q={e}
+				name={e.name}
+				kind="instrument"
+				unsaved={isUnsaved(e)}
+				activity={activity[e.id]}
+				blocked={blocked}
+				also={also}
+				stale={stale}
+				on={{
+					...on,
+					save: () => {
+						flush();
+						on.save();
+					},
+				}}
+			/>
+			<div className="split">
+				<section className="left" aria-label="Instrument source" onBlur={flush}>
+					<EditorPane
+						id={e.id}
+						text={e.source}
+						diagnostics={diagnostics}
+						marks={NO_MARKS}
+						instrument
+						label={`Instrument ${e.name}: source (YAML)`}
+					/>
+				</section>
+				<ScrollableRegion key={e.id} className="right" aria-label="Previews">
+					<Panes
+						kind="instrument"
+						readOnly={false}
+						badge={{ findings: <StatusBadge status={status(findings)} /> }}
+						body={(pane) =>
+							pane === "findings" ? (
+								<SettledFindings
+									findings={listed}
+									flush={flush}
+									onTarget={onTarget}
+									onFix={onFix}
+								/>
+							) : pane === "outline" ? (
+								<div onPointerEnter={flush}>
+									{outlined.length === 0 ? (
+										<p className="quiet">The flow has no steps yet.</p>
+									) : (
+										<Outline items={outlined} onTarget={onTarget} />
+									)}
+								</div>
+							) : null
+						}
+					/>
+					<Ddi
+						document={ddi}
+						schema={ddiSchema}
+						problems={problems}
+						notice={notice}
+					/>
+				</ScrollableRegion>
+			</div>
+		</>
+	);
+}
+
+const WORKSPACE_SCHEMA = workspaceFileJsonSchema();
+
+/** The workspace details: the agency its instruments are published under. */
+function WorkspaceDetailsEditing({ e }: { e: WorkspaceFileEntry }) {
+	const { evaluations } = useApp();
+	const blocked = useModel(writeBlocked);
+	const activity = useModel((m) => m.activity);
+	const slices = useSlices();
+	const { onTarget, onFix, on } = useActions(e.id);
+	const stale = useStale(e);
+	const own = evaluations.workspaceFile(slices);
+	const findings = own?.findings ?? NO_FINDINGS;
+	const ranges = own?.ranges ?? NO_RANGES;
+	const [listed, flush] = useSettled(findings, SETTLE_MS, e.id);
+	const diagnostics = useMemo(
+		() => toDiagnostics(findings, ranges, onFix),
+		[findings, ranges, onFix],
+	);
+	return (
+		<>
+			<FileHeader
+				q={e}
+				name={WORKSPACE_DETAILS}
+				unsaved={isUnsaved(e)}
+				activity={activity[e.id]}
+				blocked={blocked}
+				stale={stale}
+				on={{
+					...on,
+					save: () => {
+						flush();
+						on.save();
+					},
+				}}
+			/>
+			<div className="split">
+				<section
+					className="left"
+					aria-label="Workspace details source"
+					onBlur={flush}
+				>
+					<EditorPane
+						id={e.id}
+						text={e.source}
+						diagnostics={diagnostics}
+						marks={NO_MARKS}
+						schema={WORKSPACE_SCHEMA}
+						label="Workspace details: source (YAML)"
+					/>
+				</section>
+				<ScrollableRegion key={e.id} className="right" aria-label="Previews">
+					<Panes
+						kind="workspaceFile"
+						readOnly={false}
+						badge={{ findings: <StatusBadge status={status(findings)} /> }}
+						body={(pane) =>
+							pane === "findings" ? (
+								<SettledFindings
+									findings={listed}
+									flush={flush}
+									onTarget={onTarget}
+									onFix={onFix}
+								/>
+							) : null
+						}
+					/>
+				</ScrollableRegion>
+			</div>
+		</>
+	);
+}
+
+const NO_FINDINGS: readonly Finding[] = [];
+const NO_RANGES: Readonly<Record<string, Range>> = {};
 
 const SINGULAR = SCHEME_SINGULAR;
 

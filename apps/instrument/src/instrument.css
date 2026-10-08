@@ -22,26 +22,3 @@
 	padding: 0;
 	font-size: var(--text-body-size-small);
 }
-/* The outline: nested lists, the flow's own nesting; each step a link to its place. */
-.outline {
-	margin: 0;
-	padding-inline-start: var(--base-size-16);
-	display: grid;
-	gap: var(--base-size-4);
-}
-.outline .outline {
-	margin-block-start: var(--base-size-4);
-}
-.outline button {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: var(--base-size-4);
-	text-align: start;
-}
-.outline-keyword {
-	font-weight: var(--base-text-weight-semibold);
-}
-.outline-detail {
-	display: block;
-	font-size: var(--text-body-size-small);
-}

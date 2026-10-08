@@ -6,6 +6,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ok, remotesOf, workspaceOf } from "@qretools/core";
+import { instrumentCompletion } from "@qretools/core/editor";
 import { readBank, readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
@@ -180,6 +181,28 @@ describe("an instrument read live", () => {
 				.instrument.findings.filter((f) => /consent/.test(f.message)).length;
 		expect(holes(m)).toBe(0);
 		expect(holes(renamed)).toBeGreaterThan(0);
+	});
+
+	it("completes with the questions of its banks as they are now", () => {
+		const ASKING = "uses:\n  hh: ../households\nflow:\n  - ask: hh.";
+		const m = loaded(files);
+		const evaluations = createEvaluations();
+		const e = instrument(m, "households");
+		const offered = (model: Model) =>
+			instrumentCompletion(
+				ASKING,
+				ASKING.length,
+				evaluations.usedScopes(model, e),
+			)?.options.map((o) => o.label) ?? [];
+		expect(offered(m)).toContain("hh.consent");
+		const q = questionAt(m, "households/questions/household/consent.yaml");
+		const renamed = typed(
+			m,
+			q,
+			q.source.replace(/^name: consent$/m, "name: agreed"),
+		);
+		expect(offered(renamed)).toContain("hh.agreed");
+		expect(offered(renamed)).not.toContain("hh.consent");
 	});
 
 	it("takes a few milliseconds per keystroke in a bank it uses", () => {

@@ -61,6 +61,11 @@ export interface Evaluations {
 	workspaceFile(model: Slices): WorkspaceFile | undefined;
 	/** An instrument, read against the banks it uses as they are being edited. */
 	instrument(model: Slices, e: InstrumentEntry): InstrumentIn;
+	/** The banks an instrument uses that are in this workspace, by its alias for each: what completion offers. */
+	usedScopes(
+		model: Slices,
+		e: InstrumentEntry,
+	): Readonly<Record<string, BankScope>>;
 	get(q: Question, env: Env): Evaluation;
 	scheme(e: SchemeEntry, env: Env): SchemeEvaluation;
 	schema(env: Env): Record<string, unknown>;
@@ -240,6 +245,13 @@ export function createEvaluations(): Evaluations {
 				read,
 			});
 			return read;
+		},
+		usedScopes(model, e) {
+			return Object.fromEntries(
+				Object.entries(self.instrument(model, e).uses).flatMap(([alias, r]) =>
+					r.kind === "local" ? [[alias, self.scope(model, r.folder)]] : [],
+				),
+			);
 		},
 	};
 	return self;

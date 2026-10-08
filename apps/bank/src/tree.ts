@@ -19,8 +19,16 @@ import {
 	type Status,
 	status,
 	usedBy,
+	WORKSPACE_DETAILS,
 } from "@qretools/core";
-import type { Entry, Id, Model, Question, SchemeEntry } from "./model.js";
+import type {
+	Entry,
+	Id,
+	Model,
+	Question,
+	SchemeEntry,
+	WorkspaceEntry,
+} from "./model.js";
 
 /** What the tree is drawn from. Not the whole Model: a caret move must not redraw it. */
 export type TreeInput = Pick<
@@ -218,6 +226,30 @@ export function schemeSections(
 			},
 		];
 	});
+}
+
+/**
+ * The workspace's own files, flat: its instruments by name, then its details. Empty
+ * for a workspace that is one bank alone, which then shows no section for them.
+ */
+export function workspaceLeaves(
+	model: TreeInput,
+	evaluate: (e: WorkspaceEntry) => Status,
+): readonly SchemeLeaf[] {
+	const filter = model.browser.filter.trim().toLowerCase();
+	const leaf = (e: WorkspaceEntry): SchemeLeaf => ({
+		...marks(model, e),
+		name: e.kind === "instrument" ? e.name : WORKSPACE_DETAILS,
+		status: evaluate(e),
+	});
+	const all = Object.values(model.local.workspace);
+	return [
+		...all
+			.filter((e) => e.kind === "instrument")
+			.map(leaf)
+			.sort((a, b) => a.name.localeCompare(b.name)),
+		...all.filter((e) => e.kind === "workspaceFile").map(leaf),
+	].filter((l) => filter === "" || l.name.toLowerCase().includes(filter));
 }
 
 /** The folders a bank has, for the save and move dialogs. Drafts do not count: they are not filed yet. */

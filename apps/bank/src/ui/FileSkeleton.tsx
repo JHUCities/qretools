@@ -14,13 +14,14 @@ import { SkeletonText } from "@primer/react/experimental";
 import { SCHEME_SINGULAR, type SchemeKind } from "@qretools/core";
 import type { ReactNode } from "react";
 
-export type FileKind = "question" | SchemeKind;
+export type FileKind = "question" | SchemeKind | "instrument" | "workspaceFile";
 export type PaneId =
 	| "findings"
 	| "respondent"
 	| "codebook"
 	| "value"
-	| "usedBy";
+	| "usedBy"
+	| "outline";
 
 /**
  * The preview panes a file shows, in order. Another author's version (read only) has
@@ -36,6 +37,12 @@ export function panesOf(
 			{ id: "respondent", title: "As the respondent sees it" },
 			{ id: "codebook", title: "As the codebook lists it" },
 		];
+	if (kind === "instrument")
+		return [
+			{ id: "findings", title: "Findings" },
+			{ id: "outline", title: "Outline" },
+		];
+	if (kind === "workspaceFile") return [{ id: "findings", title: "Findings" }];
 	return [
 		{ id: "findings", title: "Findings" },
 		{ id: "value", title: SCHEME_SINGULAR[kind] },

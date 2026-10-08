@@ -7,14 +7,21 @@ import { fileURLToPath } from "node:url";
 import { ok } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
+import { createEvaluations } from "./evaluations.js";
 import {
 	type Cmd,
 	type Entry,
 	type InstrumentEntry,
 	init,
 	type Model,
+	type Question,
 } from "./model.js";
-import { signOutPlan, update } from "./update.js";
+import {
+	instrumentAlsoSaves,
+	instrumentDependencies,
+	signOutPlan,
+	update,
+} from "./update.js";
 
 let files: Record<string, string>;
 beforeAll(async () => {
@@ -221,5 +228,42 @@ describe("signing out", () => {
 				.save.map((f) => f.base?.path)
 				.sort(),
 		).toEqual([HOUSEHOLDS, "workspace.yaml"]);
+	});
+});
+
+describe("an open instrument", () => {
+	it("goes to a place its own reading names", () => {
+		const m = loaded();
+		const e = at(m, HOUSEHOLDS);
+		const [opened] = update(m, { kind: "fileOpened", id: e.id });
+		const [, cmds] = update(opened, {
+			kind: "locationClicked",
+			target: { path: "flow.1", severity: "info" },
+		});
+		const from = e.source.indexOf("- ask: hh.consent") + 2;
+		expect(cmds).toContainEqual(
+			expect.objectContaining({
+				kind: "revealRange",
+				range: [from, expect.any(Number)],
+			}),
+		);
+	});
+
+	it("says what its save takes along, by name", () => {
+		const m = edit(edit(edit(loaded(), HOUSEHOLDS), CONSENT), YES_NO);
+		const evaluations = createEvaluations();
+		const e = at(m, HOUSEHOLDS) as InstrumentEntry;
+		const read = (q: Question) =>
+			evaluations.get(q, evaluations.env(m, q.bank));
+		expect(
+			instrumentAlsoSaves(
+				instrumentDependencies(
+					m,
+					evaluations.instrument(m, e),
+					(q) => read(q).symbols.mentions,
+				),
+				(q) => read(q).draft.name ?? "",
+			),
+		).toEqual(["consent", "shared scale yes_no"]);
 	});
 });

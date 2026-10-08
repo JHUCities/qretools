@@ -36,4 +36,5 @@ export {
 	nameFrom,
 	questionJsonSchema,
 	textEntryJsonSchema,
+	workspaceFileJsonSchema,
 } from "./surface/schema.ts";
