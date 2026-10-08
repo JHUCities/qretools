@@ -34,26 +34,34 @@ import { useId } from "react";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
 
+/** One bank's part of the tree: its questions by folder, and its shared files by kind. */
+export interface BankTree {
+	/** The bank's folder in the workspace, "" for its root. */
+	readonly bank: string;
+	readonly folders: readonly Folder[];
+	readonly sections: readonly SchemeSection[];
+}
+
+/** How a bank is named where several are shown: by its folder; the root by its place. */
+export const bankLabel = (bank: string): string =>
+	bank === "" ? "Workspace root" : bank;
+
 export function Browser({
-	folders,
-	sections,
+	banks,
 	filter,
 	open,
 	dispatch,
 	loading = false,
 }: {
-	folders: readonly Folder[];
-	sections: readonly SchemeSection[];
+	banks: readonly BankTree[];
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
-	/** The bank is being read from GitHub: an empty tree means "not yet", not "none". */
+	/** The workspace is being read from GitHub: an empty tree means "not yet", not "none". */
 	loading?: boolean;
 }) {
-	const questionsId = useId();
-	const sharedId = useId();
-	// Placeholder rows under the real headings while the bank loads, never the stale
-	// files this browser last knew; the top bar announces the load.
+	// Placeholder rows under the real headings while the workspace loads, never the
+	// stale files this browser last knew; the top bar announces the load.
 	if (loading)
 		return (
 			<Stack gap="condensed">
@@ -63,16 +71,90 @@ export function Browser({
 				<SkeletonText lines={3} size="bodyMedium" />
 			</Stack>
 		);
+	const [only] = banks;
+	// One bank, as a bank has always been shown: its questions, then its shared files.
+	if (banks.length <= 1)
+		return (
+			<BankTrees
+				tree={only ?? { bank: "", folders: [], sections: [] }}
+				level={3}
+				filter={filter}
+				open={open}
+				dispatch={dispatch}
+			/>
+		);
+	// Several: each bank under its own heading, one level down.
+	return (
+		<Stack gap="normal">
+			{banks.map((tree) => (
+				<BankSection
+					key={tree.bank}
+					tree={tree}
+					filter={filter}
+					open={open}
+					dispatch={dispatch}
+				/>
+			))}
+		</Stack>
+	);
+}
+
+function BankSection({
+	tree,
+	filter,
+	open,
+	dispatch,
+}: {
+	tree: BankTree;
+	filter: string;
+	open: Id | undefined;
+	dispatch: Dispatch;
+}) {
+	const id = useId();
+	return (
+		<section aria-labelledby={id}>
+			<h3 id={id} className="browser-bank">
+				{bankLabel(tree.bank)}
+			</h3>
+			<BankTrees
+				tree={tree}
+				level={4}
+				filter={filter}
+				open={open}
+				dispatch={dispatch}
+			/>
+		</section>
+	);
+}
+
+/** A bank's two trees, each named by its visible heading. */
+function BankTrees({
+	tree,
+	level,
+	filter,
+	open,
+	dispatch,
+}: {
+	tree: BankTree;
+	level: 3 | 4;
+	filter: string;
+	open: Id | undefined;
+	dispatch: Dispatch;
+}) {
+	const questionsId = useId();
+	const sharedId = useId();
+	const H = level === 3 ? "h3" : "h4";
+	const { folders, sections } = tree;
 	return (
 		<Stack gap="condensed">
-			<h3 id={questionsId} className="browser-heading">
+			<H id={questionsId} className="browser-heading">
 				Questions
-			</h3>
+			</H>
 			{folders.length > 0 ? (
 				<TreeView aria-labelledby={questionsId}>
 					{folders.map((f) => (
 						<FolderItem
-							key={f.name}
+							key={f.key}
 							folder={f}
 							open={open}
 							dispatch={dispatch}
@@ -81,7 +163,7 @@ export function Browser({
 				</TreeView>
 			) : (
 				<Blankslate narrow>
-					<Blankslate.Heading as="h4">
+					<Blankslate.Heading as={level === 3 ? "h4" : "h5"}>
 						{filter === "" ? "No questions yet" : "No questions match"}
 					</Blankslate.Heading>
 					<Blankslate.Description>
@@ -93,9 +175,9 @@ export function Browser({
 			)}
 			{sections.length > 0 && (
 				<>
-					<h3 id={sharedId} className="browser-heading">
+					<H id={sharedId} className="browser-heading">
 						Shared
-					</h3>
+					</H>
 					<TreeView aria-labelledby={sharedId}>
 						{sections.map((s) => (
 							<SectionItem
@@ -130,10 +212,10 @@ function FolderItem({
 }) {
 	return (
 		<TreeView.Item
-			id={`folder:${folder.name}`}
+			id={`folder:${folder.key}`}
 			expanded={folder.expanded}
 			onExpandedChange={() =>
-				dispatch({ kind: "folderToggled", folder: folder.name })
+				dispatch({ kind: "folderToggled", folder: folder.key })
 			}
 			containIntrinsicSize="2rem"
 		>

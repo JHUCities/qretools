@@ -9,6 +9,7 @@
 import { Dialog, FormControl, Stack, Textarea, TextInput } from "@primer/react";
 import {
 	FIELD_OF,
+	inBank,
 	type NamedScheme,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
@@ -105,7 +106,9 @@ export function SchemeNameDialog({
 							{problem === undefined && (
 								<>
 									; it's saved as{" "}
-									<code className="code">{schemePath(kind, name)}</code>
+									<code className="code">
+										{inBank(naming.bank, schemePath(kind, name))}
+									</code>
 								</>
 							)}
 							.

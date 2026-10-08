@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { Folder } from "../tree.js";
-import { BankFilter, Browser } from "./Browser.js";
+import type { Folder, SchemeSection } from "../tree.js";
+import { BankFilter, type BankTree, Browser } from "./Browser.js";
 
 const folders: readonly Folder[] = [
 	{
 		name: "nhd",
+		key: "nhd",
 		expanded: true,
 		leaves: [
 			{
@@ -23,6 +24,7 @@ const folders: readonly Folder[] = [
 	},
 	{
 		name: "svy",
+		key: "svy",
 		expanded: false,
 		leaves: [
 			{
@@ -39,13 +41,18 @@ const folders: readonly Folder[] = [
 	},
 ];
 
+/** A workspace of one bank, at its root, as a bank has always been shown. */
+const oneBank = (
+	f: readonly Folder[],
+	sections: readonly SchemeSection[],
+): readonly BankTree[] => [{ bank: "", folders: f, sections }];
+
 describe("Browser", () => {
 	it("shows folders and leaves, and a click on a leaf opens the question", () => {
 		const dispatch = vi.fn();
 		render(
 			<Browser
-				folders={folders}
-				sections={[]}
+				banks={oneBank(folders, [])}
 				filter=""
 				open={undefined}
 				dispatch={dispatch}
@@ -76,8 +83,7 @@ describe("Browser", () => {
 		const dispatch = vi.fn();
 		render(
 			<Browser
-				folders={folders}
-				sections={[]}
+				banks={oneBank(folders, [])}
 				filter=""
 				open={undefined}
 				dispatch={dispatch}
@@ -96,34 +102,36 @@ describe("Browser", () => {
 		const dispatch = vi.fn();
 		render(
 			<Browser
-				folders={[]}
-				sections={[
-					{
-						kind: "scale",
-						label: "Scales",
-						key: "scheme:scale",
-						expanded: true,
-						leaves: [
-							{
-								id: 7,
-								name: "agree4",
-								usedBy: 12,
-								status: { kind: "complete" },
-								unsaved: false,
-								draft: false,
-								failed: false,
-								busy: false,
-							},
-						],
-					},
-					{
-						kind: "universe",
-						label: "Universes",
-						key: "scheme:universe",
-						expanded: true,
-						leaves: [],
-					},
-				]}
+				banks={oneBank(
+					[],
+					[
+						{
+							kind: "scale",
+							label: "Scales",
+							key: "scheme:scale",
+							expanded: true,
+							leaves: [
+								{
+									id: 7,
+									name: "agree4",
+									usedBy: 12,
+									status: { kind: "complete" },
+									unsaved: false,
+									draft: false,
+									failed: false,
+									busy: false,
+								},
+							],
+						},
+						{
+							kind: "universe",
+							label: "Universes",
+							key: "scheme:universe",
+							expanded: true,
+							leaves: [],
+						},
+					],
+				)}
 				filter=""
 				open={undefined}
 				dispatch={dispatch}

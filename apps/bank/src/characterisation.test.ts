@@ -60,14 +60,16 @@ function view(m: Model) {
 			questions: Object.keys(m.remote.questions).sort(),
 			schemes: Object.keys(m.remote.schemes).sort(),
 		},
-		tree: treeOf(m, (q) => evaluate(q.source, envFor(q.bank))).map((f) => ({
+		// One bank, at the workspace's root.
+		tree: treeOf(m, (q) => evaluate(q.source, envFor(q.bank)), "").map((f) => ({
 			folder: f.name,
 			leaves: f.leaves.map((l) => `${l.name} ${l.status.kind}`),
 		})),
 		shared: schemeSections(
 			m,
 			(e) => evaluateScheme(e.kind, e.source, envFor(e.bank), e.name),
-			indexFor,
+			indexFor(""),
+			"",
 		).map((s) => ({
 			kind: s.kind,
 			leaves: s.leaves.map(

@@ -7,6 +7,7 @@ import { formatLink } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
+	type Cmd,
 	init,
 	type Model,
 	type Question,
@@ -225,6 +226,38 @@ describe("loading a workspace", () => {
 			})[0];
 		expect(load(m, unread).failures).toHaveLength(1);
 		expect(load(m, []).failures).toEqual([]);
+	});
+
+	it("saves a new question and a new shared file under the bank they were made in", () => {
+		const commitOf = (cmds: readonly Cmd[]) =>
+			cmds.find(
+				(c): c is Extract<Cmd, { kind: "commit" }> => c.kind === "commit",
+			);
+		let [m] = update(loaded(WORKSPACE), {
+			kind: "questionCreated",
+			text: "name: brand_new\ntext: New?\nintent: To see.\nopen: {}\n",
+			bank: "banks/a",
+		});
+		const draft = Math.max(...Object.keys(m.local.questions).map(Number));
+		[m] = update(m, { kind: "saveRequested", id: draft });
+		[m] = update(m, { kind: "saveFolderChanged", folder: "fresh" });
+		const [, saved] = update(m, { kind: "saveConfirmed" });
+		expect(commitOf(saved)?.changes.map((c) => c.path)).toEqual([
+			"banks/a/questions/fresh/brand_new.yaml",
+		]);
+		let [n] = update(loaded(WORKSPACE), {
+			kind: "schemeCreateOpened",
+			scheme: "universe",
+			bank: "banks/b",
+		});
+		[n] = update(n, { kind: "schemeNameChanged", name: "renters" });
+		[n] = update(n, { kind: "schemeTextChanged", text: "Renters" });
+		[n] = update(n, { kind: "schemeNamingConfirmed" });
+		const universe = Math.max(...Object.keys(n.local.schemes).map(Number));
+		const [, made] = update(n, { kind: "saveRequested", id: universe });
+		expect(commitOf(made)?.changes.map((c) => c.path)).toEqual([
+			"banks/b/universes/renters.yaml",
+		]);
 	});
 
 	it("reads another author's file through its own bank, with that bank's shared files", () => {

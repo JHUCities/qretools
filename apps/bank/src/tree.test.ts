@@ -13,7 +13,13 @@ import {
 	type Question,
 	type SchemeEntry,
 } from "./model.js";
-import { openFolder, schemeSections, treeOf, UNFILED } from "./tree.js";
+import {
+	folderKey,
+	openFolder,
+	schemeSections,
+	treeOf,
+	UNFILED,
+} from "./tree.js";
 
 const bank = (
 	id: number,
@@ -50,7 +56,8 @@ const model: Model = {
 		},
 	},
 };
-const tree = (m: Model) => treeOf(m, (q) => evaluate(q.source, envIn(m, "")));
+const tree = (m: Model) =>
+	treeOf(m, (q) => evaluate(q.source, envIn(m, "")), "");
 
 describe("treeOf", () => {
 	it("files bank questions by their path, and every draft, named or not, under unfiled", () => {
@@ -174,7 +181,8 @@ describe("schemeSections", () => {
 		schemeSections(
 			mm,
 			(e) => evaluateScheme(e.kind, e.source, envIn(mm, ""), e.name),
-			() => index(mm),
+			index(mm),
+			"",
 		);
 
 	it("shows every kind, even empty, with how many questions name each file", () => {
@@ -213,5 +221,16 @@ describe("schemeSections", () => {
 		expect(openFolder({ ...m, screen: { kind: "editing", id: 12 } })).toBe(
 			"scheme:missing",
 		);
+	});
+});
+
+describe("folder keys", () => {
+	it("keep a root bank's as they were, and never collide with another bank's", () => {
+		expect(folderKey("", "nhd")).toBe("nhd");
+		// A topic folder is one segment (FOLDER_PATTERN has no "/"), so a root folder
+		// named like a bank can't meet that bank's folders.
+		expect(folderKey("", "x")).not.toBe(folderKey("x", "nhd"));
+		expect(folderKey("x", "nhd")).toBe("x/nhd");
+		expect(folderKey("banks/a", "nhd")).not.toBe(folderKey("banks/b", "nhd"));
 	});
 });

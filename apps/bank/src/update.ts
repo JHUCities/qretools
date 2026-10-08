@@ -338,7 +338,7 @@ function step(model: Model, msg: Msg): Step {
 		case "questionCreated": {
 			const [next, id] = add(model, {
 				kind: "question",
-				bank: newBank(model),
+				bank: msg.bank ?? newBank(model),
 				source: msg.text,
 			});
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
@@ -355,8 +355,10 @@ function step(model: Model, msg: Msg): Step {
 								kind: msg.scheme,
 								name: msg.name ?? "",
 								text: "",
-								// The bank of the question that named it, where the name is read.
+								// The bank chosen, or that of the question that named it, where
+								// the name is read.
 								bank:
+									msg.bank ??
 									(msg.use === undefined
 										? undefined
 										: model.local.questions[msg.use.id]?.bank) ??
@@ -372,7 +374,7 @@ function step(model: Model, msg: Msg): Step {
 				];
 			// One file per bank: open it if it exists, else start it.
 			const root = msg.scheme;
-			const bank = newBank(model);
+			const bank = msg.bank ?? newBank(model);
 			const existing = Object.values(model.local.schemes).find(
 				(e) => e.kind === root && e.bank === bank,
 			);

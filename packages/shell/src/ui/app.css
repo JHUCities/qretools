@@ -383,6 +383,13 @@ code,
 	font-weight: var(--base-text-weight-semibold);
 	color: var(--fgColor-muted);
 }
+/* Where a workspace has several banks: each bank's own heading, above its two trees. */
+.browser-bank {
+	margin: 0;
+	font-size: var(--text-body-size-medium);
+	font-weight: var(--base-text-weight-semibold);
+	overflow-wrap: anywhere;
+}
 .used-by {
 	margin: 0;
 	padding-left: var(--base-size-20);

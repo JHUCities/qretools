@@ -24,7 +24,6 @@ import {
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import {
 	type Index,
-	inBank,
 	indexOf,
 	isRoot,
 	placeOf,
@@ -46,9 +45,16 @@ import {
 } from "@qretools/shell/ui";
 import { useCallback, useMemo } from "react";
 import { SOURCE_URL } from "../config.js";
-import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
+import {
+	type Dispatch,
+	fileOf,
+	type Id,
+	type Model,
+	newBank,
+	TEMPLATES,
+} from "../model.js";
 import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
-import { bankFolders, schemeSections, treeOf } from "../tree.js";
+import { bankFolders, banksShown, schemeSections, treeOf } from "../tree.js";
 import {
 	bankLoading,
 	folderOfPath,
@@ -61,7 +67,7 @@ import {
 	writeBlocked,
 } from "../update.js";
 import { SESSION_STATUS, useApp, useModel } from "./AppContext.js";
-import { BankFilter, Browser } from "./Browser.js";
+import { BankFilter, type BankTree, Browser, bankLabel } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { FileSkeleton } from "./FileSkeleton.js";
 import { MoveDialog } from "./MoveDialog.js";
@@ -69,6 +75,92 @@ import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";
 import { SignOutDialog } from "./SignOutDialog.js";
+
+/**
+ * New: a question, from a template or blank, or a shared file. In a workspace of several
+ * banks, first which bank (the open file's first), as a submenu each.
+ */
+function NewMenu({
+	banks,
+	first,
+	dispatch,
+}: {
+	banks: readonly string[];
+	first: string;
+	dispatch: Dispatch;
+}) {
+	const ordered = [first, ...banks.filter((b) => b !== first)];
+	return (
+		<ActionMenu>
+			<ActionMenu.Anchor>
+				<Button leadingVisual={PlusIcon}>New</Button>
+			</ActionMenu.Anchor>
+			<ActionMenu.Overlay>
+				<ActionList>
+					{banks.length <= 1 ? (
+						<NewItems dispatch={dispatch} />
+					) : (
+						<>
+							<ActionList.GroupHeading>In bank</ActionList.GroupHeading>
+							{ordered.map((bank) => (
+								<ActionMenu key={bank}>
+									<ActionMenu.Anchor>
+										<ActionList.Item>{bankLabel(bank)}</ActionList.Item>
+									</ActionMenu.Anchor>
+									<ActionMenu.Overlay>
+										<ActionList>
+											<NewItems bank={bank} dispatch={dispatch} />
+										</ActionList>
+									</ActionMenu.Overlay>
+								</ActionMenu>
+							))}
+						</>
+					)}
+				</ActionList>
+			</ActionMenu.Overlay>
+		</ActionMenu>
+	);
+}
+
+/** What New makes, in `bank` when one was chosen. */
+function NewItems({ bank, dispatch }: { bank?: string; dispatch: Dispatch }) {
+	const inBank = bank === undefined ? {} : { bank };
+	return (
+		<>
+			<ActionList.Item
+				onSelect={() =>
+					dispatch({ kind: "questionCreated", text: "", ...inBank })
+				}
+			>
+				Blank question
+			</ActionList.Item>
+			<ActionList.Divider />
+			<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
+			{TEMPLATES.map((t) => (
+				<ActionList.Item
+					key={t.label}
+					onSelect={() =>
+						dispatch({ kind: "questionCreated", text: t.text, ...inBank })
+					}
+				>
+					{t.label}
+				</ActionList.Item>
+			))}
+			<ActionList.Divider />
+			<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
+			{SCHEME_KINDS.map((k) => (
+				<ActionList.Item
+					key={k}
+					onSelect={() =>
+						dispatch({ kind: "schemeCreateOpened", scheme: k, ...inBank })
+					}
+				>
+					{capitalise(SCHEME_SINGULAR[k])}
+				</ActionList.Item>
+			))}
+		</>
+	);
+}
 
 /** A bank with no files yet indexes nothing. */
 const NO_INDEX: Index<Id> = indexOf([]);
@@ -96,10 +188,6 @@ export function App() {
 		() => ({ local, browser, screen, activity }),
 		[local, browser, screen, activity],
 	);
-	const folders = useMemo(
-		() => treeOf(treeInput, (q) => evaluations.get(q, envFor(q.bank))),
-		[treeInput, evaluations, envFor],
-	);
 	// Each bank's symbol table: what each file defines, names and writes, questions and
 	// shared files alike, within its bank (one bank's names are not another's). Rebuilt
 	// from cached evaluations, so cheap per keystroke.
@@ -119,14 +207,30 @@ export function App() {
 		(bank: string): Index<Id> => indexes.get(bank) ?? NO_INDEX,
 		[indexes],
 	);
-	const sections = useMemo(
+	// The banks the tree shows, each with its questions and its shared files.
+	const shownBanks = useMemo(
+		() => banksShown({ banks: model.banks, local }),
+		[model.banks, local],
+	);
+	const trees = useMemo(
 		() =>
-			schemeSections(
-				treeInput,
-				(e) => evaluations.scheme(e, envFor(e.bank)),
-				indexFor,
+			shownBanks.map(
+				(bank): BankTree => ({
+					bank,
+					folders: treeOf(
+						treeInput,
+						(q) => evaluations.get(q, envFor(q.bank)),
+						bank,
+					),
+					sections: schemeSections(
+						treeInput,
+						(e) => evaluations.scheme(e, envFor(e.bank)),
+						indexFor(bank),
+						bank,
+					),
+				}),
 			),
-		[treeInput, evaluations, envFor, indexFor],
+		[shownBanks, treeInput, evaluations, envFor, indexFor],
 	);
 	const naming = model.browser.naming;
 	const moving = model.browser.moving;
@@ -270,46 +374,11 @@ export function App() {
 						</Button>
 					)}
 					{model.session.kind === "connected" && (
-						<ActionMenu>
-							<ActionMenu.Anchor>
-								<Button leadingVisual={PlusIcon}>New</Button>
-							</ActionMenu.Anchor>
-							<ActionMenu.Overlay>
-								<ActionList>
-									<ActionList.Item
-										onSelect={() =>
-											dispatch({ kind: "questionCreated", text: "" })
-										}
-									>
-										Blank question
-									</ActionList.Item>
-									<ActionList.Divider />
-									<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
-									{TEMPLATES.map((t) => (
-										<ActionList.Item
-											key={t.label}
-											onSelect={() =>
-												dispatch({ kind: "questionCreated", text: t.text })
-											}
-										>
-											{t.label}
-										</ActionList.Item>
-									))}
-									<ActionList.Divider />
-									<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
-									{SCHEME_KINDS.map((k) => (
-										<ActionList.Item
-											key={k}
-											onSelect={() =>
-												dispatch({ kind: "schemeCreateOpened", scheme: k })
-											}
-										>
-											{capitalise(SCHEME_SINGULAR[k])}
-										</ActionList.Item>
-									))}
-								</ActionList>
-							</ActionMenu.Overlay>
-						</ActionMenu>
+						<NewMenu
+							banks={shownBanks}
+							first={newBank(model)}
+							dispatch={dispatch}
+						/>
 					)}
 					<ThemeToggle
 						onChoose={(theme) => dispatch({ kind: "themeChosen", theme })}
@@ -380,8 +449,7 @@ export function App() {
 								</div>
 								<div className="trees">
 									<Browser
-										folders={folders}
-										sections={sections}
+										banks={trees}
 										loading={loading}
 										filter={model.browser.filter}
 										open={open}
@@ -464,9 +532,8 @@ export function App() {
 					}
 					folder={saving.folder}
 					folders={bankFolders(model, savingQuestion.bank)}
-					taken={(path) =>
-						inBank(savingQuestion.bank, path) in model.remote.questions
-					}
+					bank={savingQuestion.bank}
+					taken={(path) => path in model.remote.questions}
 					also={alsoSaves(
 						model.local,
 						model.remote,

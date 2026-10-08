@@ -299,11 +299,18 @@ export type Msg =
 			readonly text: string;
 	  }
 	| { readonly kind: "folderToggled"; readonly folder: string }
-	| { readonly kind: "questionCreated"; readonly text: string }
+	/** A new question; in `bank` when chosen (a workspace of several), else `newBank`'s. */
+	| {
+			readonly kind: "questionCreated";
+			readonly text: string;
+			readonly bank?: string;
+	  }
 	/** New scheme file: `missing` is created at once (it has one name); the others ask for a name. */
 	| {
 			readonly kind: "schemeCreateOpened";
 			readonly scheme: SchemeKind;
+			/** The bank it goes to, when chosen; else the naming question's, else `newBank`'s. */
+			readonly bank?: string;
 			/** Prefilled, as when the inspector offers to create a name a question already uses. */
 			readonly name?: string;
 			/** The question and place that named it, to be pointed at the name chosen. */
