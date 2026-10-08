@@ -4,7 +4,10 @@
  * through `dispatch` as a message; the token never enters the Model or a Msg.
  */
 import { err, ok, PROJECT, type Result } from "@qretools/core";
+import type { Editor } from "@qretools/editor";
 import {
+	type BranchTarget,
+	bankText,
 	type CredentialsDeps,
 	createCredentials,
 	type Failure,
@@ -21,14 +24,46 @@ import {
 
 export interface Effects {
 	exec(cmd: Cmd, dispatch: Dispatch): void;
+	/** The open editor, which `revealRange` reaches; a DOM object, so never in the Model. */
+	registerEditor(editor: Editor | undefined): void;
 	/** Set the token the next sign-in uses (development); remembered per the setting. */
 	setToken(token: string, remember: boolean): void;
 	hasToken(): boolean;
 }
 
+/** How long an address must stay as typed before its bank is read. */
+const BANK_DELAY_MS = 500;
+
 export function createEffects(deps: CredentialsDeps): Effects {
 	const credentials = createCredentials(deps);
+	let editor: Editor | undefined;
+	/** Banks being read now, by key: never asked for twice at once. */
+	const inFlight = new Set<string>();
+	/** The latest batch not yet sent: typing an address replaces it. */
+	let waiting: ReturnType<typeof setTimeout> | undefined;
+	const loadBanks = (
+		targets: readonly BranchTarget[],
+		dispatch: Dispatch,
+	): void => {
+		for (const target of targets) {
+			const key = bankText(target);
+			if (inFlight.has(key)) continue;
+			const s = credentials.storeFor(target);
+			if (!s) {
+				dispatch({ kind: "bankLoaded", key, result: err(NO_TOKEN) });
+				continue;
+			}
+			inFlight.add(key);
+			s.loadBank(target).then((result) => {
+				inFlight.delete(key);
+				dispatch({ kind: "bankLoaded", key, result });
+			});
+		}
+	};
 	return {
+		registerEditor: (e) => {
+			editor = e;
+		},
 		setToken: credentials.setToken,
 		hasToken: credentials.hasToken,
 		exec(cmd, dispatch) {
@@ -55,6 +90,16 @@ export function createEffects(deps: CredentialsDeps): Effects {
 					);
 					return;
 				}
+				case "loadBanks":
+					if (waiting !== undefined) clearTimeout(waiting);
+					waiting = setTimeout(() => {
+						waiting = undefined;
+						loadBanks(cmd.targets, dispatch);
+					}, BANK_DELAY_MS);
+					return;
+				case "revealRange":
+					editor?.reveal(cmd.range, cmd.complete);
+					return;
 				case "signIn":
 					if (!credentials.canSignIn)
 						return dispatch({
@@ -93,6 +138,8 @@ export function createEffects(deps: CredentialsDeps): Effects {
 					}
 					return;
 				case "forgetToken":
+					if (waiting !== undefined) clearTimeout(waiting);
+					waiting = undefined;
 					credentials.forget();
 					return;
 				default:

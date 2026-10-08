@@ -73,4 +73,25 @@ describe("an editor given its own completions", () => {
 		expect(view.state.languageDataAt("autocomplete", 0)).toEqual([mine]);
 		editor.destroy();
 	});
+
+	it("puts a space after a step's colon when typing straight after it", () => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+			() => {},
+			{ completions: [] },
+		);
+		const text = "flow:\n  - ask:";
+		editor.sync({ id: 1, text, diagnostics: [], marks: [] });
+		const view = EditorView.findFromDOM(parent) as EditorView;
+		view.dispatch({
+			changes: { from: text.length, insert: "h" },
+			userEvent: "input.type",
+		});
+		expect(view.state.doc.toString()).toBe("flow:\n  - ask: h");
+		editor.destroy();
+	});
 });

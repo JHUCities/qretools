@@ -2,7 +2,8 @@
  * Every change to the Model and every effect, decided here and only here. Pure: the
  * shell runs the commands it returns and feeds their results back as messages.
  */
-import { compact } from "@qretools/core";
+import { compact, instrumentOf } from "@qretools/core";
+import { locate } from "@qretools/core/editor";
 import {
 	type BranchTarget,
 	bankText,
@@ -21,6 +22,7 @@ import {
 	repoOf,
 	type Session,
 } from "./model.ts";
+import { openText, wanted } from "./uses.ts";
 
 type Step = readonly [Model, readonly Cmd[]];
 
@@ -35,12 +37,25 @@ export function update(model: Model, msg: Msg): Step {
 			signedOut(model, { kind: "failed", failure: lapsed }),
 			[{ kind: "forgetToken" }],
 		];
-	return step(model, msg);
+	const [next, cmds] = step(model, msg);
+	// The banks the open instrument needs, asked for only when that set changes: an edit
+	// that leaves the addresses alone asks for nothing.
+	const before = wanted(model);
+	const after = wanted(next);
+	return after.length > 0 && keysOf(after) !== keysOf(before)
+		? [next, [...cmds, { kind: "loadBanks", targets: after }]]
+		: [next, cmds];
 }
+
+const keysOf = (targets: readonly BranchTarget[]): string =>
+	targets.map(bankText).join("\n");
 
 function authFailure(msg: Msg): Failure | undefined {
 	const failure =
-		(msg.kind === "connected" || msg.kind === "projectLoaded") && !msg.result.ok
+		(msg.kind === "connected" ||
+			msg.kind === "projectLoaded" ||
+			msg.kind === "bankLoaded") &&
+		!msg.result.ok
 			? msg.result.error
 			: undefined;
 	return failure?.kind === "auth" ? failure : undefined;
@@ -120,7 +135,8 @@ function step(model: Model, msg: Msg): Step {
 		case "projectReloadRequested":
 			return model.session.kind === "connected"
 				? [
-						{ ...model, project: { kind: "loading" } },
+						// Its banks too, those that failed or weren't there: they may be now.
+						{ ...model, project: { kind: "loading" }, banks: readBanks(model) },
 						[
 							{
 								kind: "loadProject",
@@ -129,6 +145,60 @@ function step(model: Model, msg: Msg): Step {
 						],
 					]
 				: [model, []];
+		case "edited": {
+			const path = model.open;
+			if (path === undefined || model.project.kind !== "loaded")
+				return [model, []];
+			const read = model.project.instruments[path]?.text;
+			// Back to the text as read: nothing of this tab's own is left.
+			const { [path]: _, ...others } = model.working;
+			return [
+				{
+					...model,
+					working: msg.text === read ? others : { ...others, [path]: msg.text },
+				},
+				[],
+			];
+		}
+		case "bankLoaded":
+			return [
+				{
+					...model,
+					banks: {
+						...model.banks,
+						[msg.key]: msg.result.ok
+							? {
+									kind: "loaded",
+									files: msg.result.value.files,
+									found: msg.result.value.found,
+								}
+							: { kind: "failed", failure: msg.result.error },
+					},
+				},
+				[],
+			];
+		case "bankRetried": {
+			// Forgotten, so the banks wanted are asked for again (the wrapper's rule).
+			const { [msg.key]: _, ...others } = model.banks;
+			return [{ ...model, banks: others }, []];
+		}
+		case "locationClicked": {
+			// The place, resolved against the text as it is now: a range taken when the
+			// list was drawn may have moved since.
+			const text = openText(model);
+			if (text === undefined) return [model, []];
+			const { ranges } = instrumentOf(text, { banks: {} });
+			return [
+				model,
+				[
+					{
+						kind: "revealRange",
+						range: locate(msg.target, ranges),
+						...(msg.target.severity === "hole" && { complete: true }),
+					},
+				],
+			];
+		}
 		case "hashChanged": {
 			const link = parseLink(msg.hash);
 			if (link === undefined)
@@ -173,10 +243,20 @@ function stale(model: Model, msg: Msg): boolean {
 			return (
 				model.session.kind !== "connected" || model.project.kind !== "loading"
 			);
+		case "bankLoaded":
+			return model.session.kind !== "connected";
 		default:
 			return false;
 	}
 }
+
+/** The banks that were read and found: kept across a reload; the rest are read again. */
+const readBanks = (model: Model): Model["banks"] =>
+	Object.fromEntries(
+		Object.entries(model.banks).filter(
+			([, b]) => b.kind === "loaded" && b.found,
+		),
+	);
 
 /** Signed out or failed: nothing of the project stays (it may be private). */
 const signedOut = (model: Model, session: Session): Model =>
@@ -184,6 +264,8 @@ const signedOut = (model: Model, session: Session): Model =>
 		...model,
 		session,
 		project: { kind: "idle" } as const,
+		banks: {},
+		working: {},
 		open: undefined,
 		pendingLink: undefined,
 	});

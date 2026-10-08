@@ -2,7 +2,7 @@ import { err, ok } from "@qretools/core";
 import type { File, Who } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
 import { projectFiles } from "./effects.ts";
-import { init, type Model, type Msg } from "./model.ts";
+import { init, type Model, type Msg, warnOnLeave } from "./model.ts";
 import { instrumentHref, update } from "./update.ts";
 
 const SETTINGS = { owner: "o", repo: "r", path: "p", remember: false };
@@ -195,6 +195,132 @@ describe("which instrument is open", () => {
 		expect(other.open).toBeUndefined();
 		expect(other.failures.map((f) => f.message)).toEqual([
 			"That link is to another project, x/y.",
+		]);
+	});
+});
+
+describe("editing, and the banks an instrument uses", () => {
+	const USES = "uses:\n  hh: ../banks/hh\nflow: []\n";
+	const opened = (text = USES): Model => {
+		const model = run(signedIn(), {
+			kind: "projectLoaded",
+			result: ok({
+				instruments: [{ path: "instruments/a.yaml", sha: "s", text }],
+				project: null,
+			}),
+		}).model;
+		return update(model, {
+			kind: "hashChanged",
+			hash: instrumentHref(model, "main", "instruments/a.yaml"),
+		})[0];
+	};
+	const HH = {
+		owner: "o",
+		repo: "r",
+		path: "p/banks/hh",
+		branch: "main",
+		defaultBranch: "main",
+	};
+
+	it("asks for a bank once its address is written, and not again while it stays", () => {
+		const [model, cmds] = update(opened("flow: []\n"), {
+			kind: "edited",
+			text: USES,
+		});
+		expect(cmds).toEqual([{ kind: "loadBanks", targets: [HH] }]);
+		expect(model.working).toEqual({ "instruments/a.yaml": USES });
+		expect(
+			update(model, { kind: "edited", text: `${USES}# more\n` })[1],
+		).toEqual([]);
+		// Opening an instrument asks for its banks too.
+		const listed = run(signedIn(), {
+			kind: "projectLoaded",
+			result: ok({
+				instruments: [{ path: "instruments/a.yaml", sha: "s", text: USES }],
+				project: null,
+			}),
+		}).model;
+		const [, onOpen] = update(listed, {
+			kind: "hashChanged",
+			hash: instrumentHref(listed, "main", "instruments/a.yaml"),
+		});
+		expect(onOpen).toEqual([{ kind: "loadBanks", targets: [HH] }]);
+	});
+
+	it("keeps no edit once the text is back as read, and asks before leaving one", () => {
+		const edited = update(opened(), { kind: "edited", text: "x: 1\n" })[0];
+		expect([warnOnLeave(opened()), warnOnLeave(edited)]).toEqual([false, true]);
+		expect(update(edited, { kind: "edited", text: USES })[0].working).toEqual(
+			{},
+		);
+	});
+
+	it("keeps each bank as read, ignores one read after a sign-out, and ends a lapsed sign-in", () => {
+		const loaded = {
+			files: [],
+			found: true,
+			from: "default" as const,
+			aheadBy: 0,
+			behindBy: 0,
+		};
+		const [model] = update(opened(), {
+			kind: "bankLoaded",
+			key: "o/r/p/banks/hh",
+			result: ok(loaded),
+		});
+		expect(model.banks["o/r/p/banks/hh"]).toEqual({
+			kind: "loaded",
+			files: [],
+			found: true,
+		});
+		const out = update(model, { kind: "signOutRequested" })[0];
+		expect(out.banks).toEqual({});
+		expect(
+			update(out, { kind: "bankLoaded", key: "k", result: ok(loaded) })[0],
+		).toBe(out);
+		const [lapsed, cmds] = update(opened(), {
+			kind: "bankLoaded",
+			key: "k",
+			result: err({ kind: "auth", message: "ended" }),
+		});
+		expect([lapsed.session.kind, cmds]).toEqual([
+			"failed",
+			[{ kind: "forgetToken" }],
+		]);
+	});
+
+	it("reads a bank again that failed or wasn't there, on Try again or a project reload", () => {
+		const failed = update(opened(), {
+			kind: "bankLoaded",
+			key: "o/r/p/banks/hh",
+			result: err({ kind: "network", message: "down" }),
+		})[0];
+		expect(update(failed, { kind: "edited", text: `${USES}#\n` })[1]).toEqual(
+			[],
+		);
+		expect(
+			update(failed, { kind: "bankRetried", key: "o/r/p/banks/hh" })[1],
+		).toEqual([{ kind: "loadBanks", targets: [HH] }]);
+		// A reload forgets it, and asks for it again once the project is back.
+		const [reloaded] = update(failed, { kind: "projectReloadRequested" });
+		expect(reloaded.banks).toEqual({});
+		const [, cmds] = update(reloaded, {
+			kind: "projectLoaded",
+			result: ok({
+				instruments: [{ path: "instruments/a.yaml", sha: "s", text: USES }],
+				project: null,
+			}),
+		});
+		expect(cmds).toEqual([{ kind: "loadBanks", targets: [HH] }]);
+	});
+
+	it("goes to a finding's place in the text as it is now", () => {
+		const [, cmds] = update(opened(), {
+			kind: "locationClicked",
+			target: { path: "uses.hh", severity: "error" },
+		});
+		expect(cmds).toEqual([
+			{ kind: "revealRange", range: [USES.indexOf("hh"), expect.any(Number)] },
 		]);
 	});
 });

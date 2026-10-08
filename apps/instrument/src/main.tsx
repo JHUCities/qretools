@@ -11,6 +11,7 @@ import {
 } from "@qretools/shell";
 import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { warnOnLeave } from "./model.ts";
 import { readSettings, readTheme } from "./persist.ts";
 import { createApp } from "./store.ts";
 import { App } from "./ui/App.tsx";
@@ -69,6 +70,13 @@ if (root) {
 		app.dispatch({ kind: "hashChanged", hash: location.hash });
 	window.addEventListener("hashchange", followLink);
 	followLink();
+	// Edits live only in this tab: closing it, or going elsewhere, asks first. The Model
+	// is read when the event fires; the rule is `warnOnLeave`'s.
+	window.addEventListener("beforeunload", (event) => {
+		if (!warnOnLeave(app.store.getState().model)) return;
+		event.preventDefault();
+		event.returnValue = "";
+	});
 	createRoot(root).render(
 		<StrictMode>
 			<AppContext.Provider value={app}>

@@ -25,6 +25,7 @@ import {
 import type { Model } from "../model.ts";
 import { instrumentHref, instrumentName } from "../update.ts";
 import { SESSION_STATUS, useApp, useModel } from "./AppContext.ts";
+import { Editing } from "./Editing.tsx";
 import { SignIn } from "./SignIn.tsx";
 
 /** What the session is doing, said once in the header; undefined at rest. */
@@ -143,7 +144,7 @@ export function App() {
 								<p className="quiet">Pick an instrument.</p>
 							</div>
 						) : (
-							<Opened model={model} path={model.open} />
+							<Editing model={model} path={model.open} />
 						)}
 					</main>
 				</div>
@@ -184,26 +185,6 @@ function Instruments({ model, branch }: { model: Model; branch: string }) {
 					</li>
 				))}
 			</ul>
-		</>
-	);
-}
-
-/** The open instrument: its name and source, read only, until the editor arrives. */
-function Opened({ model, path }: { model: Model; path: string }) {
-	const file =
-		model.project.kind === "loaded"
-			? model.project.instruments[path]
-			: undefined;
-	return (
-		<>
-			<div className="qhead">
-				<Heading as="h2" variant="small">
-					{instrumentName(path)}
-				</Heading>
-			</div>
-			<div className="split">
-				<pre className="json">{file?.text}</pre>
-			</div>
 		</>
 	);
 }

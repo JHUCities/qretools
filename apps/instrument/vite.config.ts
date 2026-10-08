@@ -21,8 +21,9 @@ export default defineConfig({
 		include: ["src/**/*.test.{ts,tsx}"],
 		setupFiles: ["@qretools/shell/test-setup"],
 		server: {
-			// Primer components import their CSS modules; Node cannot load .css unless Vite transforms them.
-			deps: { inline: [/@primer\//] },
+			// Primer components import their CSS modules; Node cannot load .css unless Vite
+			// transforms them. The editor's schema package imports without extensions.
+			deps: { inline: [/@primer\//, "codemirror-json-schema"] },
 		},
 	},
 });

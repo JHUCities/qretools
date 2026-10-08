@@ -6,7 +6,7 @@
  * `instruments/` and `project.yaml`), reads them from the default branch, and lists
  * the instruments. Which one is open follows the address, as links do natively.
  */
-import type { Result } from "@qretools/core";
+import type { Range, Result, Target } from "@qretools/core";
 import type {
 	BankRef,
 	BankSettings,
@@ -14,6 +14,7 @@ import type {
 	Failure,
 	File,
 	Link,
+	Loaded,
 	Who,
 } from "@qretools/shell";
 
@@ -55,6 +56,16 @@ export type Project =
 			readonly file?: File;
 	  };
 
+/** A bank an instrument uses, as read: its files, or why it couldn't be. */
+export type BankLoad =
+	| { readonly kind: "failed"; readonly failure: Failure }
+	| {
+			readonly kind: "loaded";
+			readonly files: readonly File[];
+			/** Whether its folder is there at all: one that isn't is no bank. */
+			readonly found: boolean;
+	  };
+
 export interface Model {
 	/** Which project, and whether to remember the sign-in on this device. */
 	readonly settings: BankSettings;
@@ -62,6 +73,13 @@ export interface Model {
 	readonly project: Project;
 	/** The open instrument's path, from the address. */
 	readonly open?: string;
+	/** The banks read so far, by `owner/repo/folder` (`bankText`), kept for the session. */
+	readonly banks: Readonly<Record<string, BankLoad>>;
+	/**
+	 * Edits, by instrument path, kept in this tab only: the toy doesn't save, and the
+	 * browser asks before a tab with edits closes.
+	 */
+	readonly working: Readonly<Record<string, string>>;
 	/** A link that arrived before the project loaded: opened once it has. */
 	readonly pendingLink?: Link;
 	readonly theme: ThemeChoice;
@@ -79,6 +97,17 @@ export type Msg =
 			readonly result: Result<ProjectFiles, Failure>;
 	  }
 	| { readonly kind: "projectReloadRequested" }
+	/** The open instrument's text, as typed. */
+	| { readonly kind: "edited"; readonly text: string }
+	| {
+			readonly kind: "bankLoaded";
+			readonly key: string;
+			readonly result: Result<Loaded, Failure>;
+	  }
+	/** Read a bank again that couldn't be read or wasn't there. */
+	| { readonly kind: "bankRetried"; readonly key: string }
+	/** A finding chosen: go to its place in the source. */
+	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "hashChanged"; readonly hash: string }
 	| { readonly kind: "themeChosen"; readonly theme: ThemeChoice }
 	| { readonly kind: "signOutRequested" }
@@ -88,6 +117,13 @@ export type Cmd =
 	| { readonly kind: "signIn"; readonly remember: boolean }
 	| { readonly kind: "connect"; readonly repo: BankRef }
 	| { readonly kind: "loadProject"; readonly target: BranchTarget }
+	/** Read these banks; the latest request replaces one not yet sent (typing an address). */
+	| { readonly kind: "loadBanks"; readonly targets: readonly BranchTarget[] }
+	| {
+			readonly kind: "revealRange";
+			readonly range: Range;
+			readonly complete?: boolean;
+	  }
 	| { readonly kind: "saveSettings"; readonly settings: BankSettings }
 	| { readonly kind: "applyTheme"; readonly theme: ThemeChoice }
 	| { readonly kind: "forgetToken" };
@@ -118,6 +154,8 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 			settings,
 			session: signingIn ? { kind: "connecting" } : { kind: "anonymous" },
 			project: { kind: "idle" },
+			banks: {},
+			working: {},
 			theme: flags.theme ?? "system",
 			failures: flags.signInFailure === undefined ? [] : [flags.signInFailure],
 		},
@@ -130,3 +168,12 @@ export const repoOf = ({ owner, repo, path }: BankSettings): BankRef => ({
 	repo,
 	path,
 });
+
+/**
+ * Whether leaving the page would lose something: edits exist only in this tab. Not while
+ * leaving for GitHub's sign-in, which comes back (and keeps no edits yet: signing in
+ * starts from the project as read).
+ */
+export const warnOnLeave = (model: Model): boolean =>
+	Object.keys(model.working).length > 0 &&
+	!(model.session.kind === "connecting" && model.session.toGitHub === true);
