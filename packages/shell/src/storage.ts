@@ -175,6 +175,8 @@ export interface Who {
 
 export interface Loaded {
 	readonly files: readonly File[];
+	/** Whether the bank's folder is on the branch read: one that isn't is no bank, never an empty one. */
+	readonly found: boolean;
 	/** Whether the author's branch exists yet, or the bank was read instead. */
 	readonly from: "branch" | "default";
 	/** Commits on the author's branch not in the bank, and the reverse. */
@@ -187,6 +189,16 @@ export interface Store {
 	/** Every file the tool reads, from the target branch, or the default branch while it does not exist. */
 	loadBank(target: BranchTarget): Promise<Result<Loaded, Failure>>;
 	read(target: BranchTarget, path: string): Promise<Result<File, Failure>>;
+	/**
+	 * The `.yaml` files directly in a folder (a path like any other here, under the
+	 * store's own folder; `""` is that folder itself), or null when there is no such
+	 * folder on the target branch, or no such branch: unlike `loadBank`, it never falls
+	 * back to the default branch.
+	 */
+	readFolder(
+		target: BranchTarget,
+		dir: string,
+	): Promise<Result<readonly File[] | null, Failure>>;
 	/**
 	 * Another author's file with the scheme files of their branch, in one request, so
 	 * their question reads as it does for them, never against the viewer's own edits.

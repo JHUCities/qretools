@@ -58,7 +58,7 @@ const LOADED = {
 } as const;
 /** A load of these files from the author's branch. */
 const loadOf = (files: readonly File[]) =>
-	ok({ files, from: "branch" as const, aheadBy: 0, behindBy: 0 });
+	ok({ files, found: true, from: "branch" as const, aheadBy: 0, behindBy: 0 });
 /** Connected, with this session's load done: the state in which writing is allowed. */
 const connected = (model: Model, canWrite = true): Model => ({
 	...model,

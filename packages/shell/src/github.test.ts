@@ -617,6 +617,85 @@ describe("GitHub adapter (Octokit)", () => {
 		expect(!r.ok && r.error.kind).toBe("unreadable");
 	});
 
+	it("says whether the bank's folder is there: a missing one is no bank, never an empty one", async () => {
+		const { s, seen } = store(
+			() =>
+				json({
+					data: {
+						repository: {
+							...repository(true),
+							bankFolder: { __typename: "Tree" },
+						},
+					},
+				}),
+			false,
+			"banks/bas",
+		);
+		const there = await s.loadBank(target);
+		expect(there.ok && there.value.found).toBe(true);
+		const body = seen[0]?.body as { variables: Record<string, string> };
+		expect(body.variables.bankFolder).toBe("qretools-iain:banks/bas");
+		const missing = await store(
+			() =>
+				json({
+					data: { repository: { ...repository(true), bankFolder: null } },
+				}),
+			false,
+			"banks/typo",
+		).s.loadBank(target);
+		expect(missing.ok && missing.value.found).toBe(false);
+	});
+
+	it("reads one folder's YAML files, or null when there is no folder", async () => {
+		const { s, seen } = store(
+			() =>
+				json({
+					data: {
+						repository: {
+							dir: {
+								entries: [
+									{ name: "a.yaml", type: "blob", object: blob("name: a\n") },
+									{ name: "notes.md", type: "blob", object: blob("# x\n") },
+									{ name: "old", type: "tree", object: { entries: [] } },
+								],
+							},
+						},
+					},
+				}),
+			false,
+			"projects/p",
+		);
+		const r = await s.readFolder(target, "instruments");
+		expect(r.ok && r.value?.map((f) => [f.path, f.text])).toEqual([
+			["instruments/a.yaml", "name: a\n"],
+		]);
+		const variables = seen[0]?.body.variables as Record<string, string>;
+		expect(variables.dir).toBe("qretools-iain:projects/p/instruments");
+		const none = await store(() =>
+			json({ data: { repository: { dir: null } } }),
+		).s.readFolder(target, "instruments");
+		expect(none).toEqual({ ok: true, value: null });
+		const empty = await store(() =>
+			json({ data: { repository: { dir: { entries: [] } } } }),
+		).s.readFolder(target, "instruments");
+		expect(empty).toEqual({ ok: true, value: [] });
+		// The store's own folder: paths without a leading slash.
+		const own = await store(() =>
+			json({
+				data: {
+					repository: {
+						dir: {
+							entries: [
+								{ name: "project.yaml", type: "blob", object: blob("x\n") },
+							],
+						},
+					},
+				},
+			}),
+		).s.readFolder(target, "");
+		expect(own.ok && own.value?.map((f) => f.path)).toEqual(["project.yaml"]);
+	});
+
 	it("reads a file from the branch it is given, and says so when it is not there", async () => {
 		const { s, seen } = store(() =>
 			json({ data: { repository: { file: null } } }),

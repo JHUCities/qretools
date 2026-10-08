@@ -390,7 +390,13 @@ export const makeGitHubStore = (
 		target: BranchTarget,
 	): Promise<
 		Result<
-			{ files: File[]; exists: boolean; aheadBy: number; behindBy: number },
+			{
+				files: File[];
+				exists: boolean;
+				found: boolean;
+				aheadBy: number;
+				behindBy: number;
+			},
 			Failure
 		>
 	> {
@@ -403,6 +409,7 @@ export const makeGitHubStore = (
 				bank: `refs/heads/${target.defaultBranch}`,
 				head: ref,
 				questions: `${ref}:${at("questions")}`,
+				bankFolder: `${ref}:${folder}`,
 				...folderVariables(ref, at),
 				...rootVariables(ref, at),
 			},
@@ -426,6 +433,8 @@ export const makeGitHubStore = (
 		return ok({
 			files: [...questions, ...schemeFiles(data), ...rootFiles(data)],
 			exists: data.mine !== null && data.mine !== undefined,
+			// A folder that isn't there is no bank, never an empty one.
+			found: data.bankFolder !== null && data.bankFolder !== undefined,
 			aheadBy: compare?.aheadBy ?? 0,
 			behindBy: compare?.behindBy ?? 0,
 		});
@@ -489,6 +498,7 @@ export const makeGitHubStore = (
 			if (first.value.exists)
 				return ok({
 					files: first.value.files,
+					found: first.value.found,
 					from: "branch",
 					aheadBy: first.value.aheadBy,
 					behindBy: first.value.behindBy,
@@ -498,6 +508,7 @@ export const makeGitHubStore = (
 			return bank.ok
 				? ok({
 						files: bank.value.files,
+						found: bank.value.found,
 						from: "default",
 						aheadBy: 0,
 						behindBy: 0,
@@ -533,6 +544,32 @@ export const makeGitHubStore = (
 				file: { path, sha: file.oid, text: file.text },
 				schemes: [...schemeFiles(data), ...rootFiles(data)],
 			});
+		},
+
+		async readFolder(target, dir) {
+			const r = await graphql<{
+				repository: { dir: Entry["object"] | null } | null;
+			}>(
+				`query Folder($owner: String!, $repo: String!, $dir: String!) {
+  repository(owner: $owner, name: $repo) { dir: object(expression: $dir) { ${FLAT} } }
+}`,
+				{
+					owner,
+					repo,
+					dir: `${target.branch}:${dir === "" ? folder : at(dir)}`,
+				},
+			);
+			if (!r.ok) return r;
+			const tree = r.value.data?.repository?.dir;
+			// No folder there: null, which the caller tells apart from an empty one.
+			if (tree === null || tree === undefined) return ok(null);
+			return ok(
+				(tree.entries ?? []).flatMap((e) =>
+					e.type === "blob"
+						? blobFile(dir === "" ? e.name : `${dir}/${e.name}`, e)
+						: [],
+				),
+			);
 		},
 
 		async read(target, path) {
@@ -773,9 +810,10 @@ const FOREIGN_QUERY = `query Foreign($owner: String!, $repo: String!, $at: Strin
     ${ROOT_FIELDS}
   }
 }`;
-const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, ${FOLDER_PARAMS}, ${ROOT_PARAMS}) {
+const BANK_QUERY = `query Bank($owner: String!, $repo: String!, $ref: String!, $bank: String!, $head: String!, $questions: String!, $bankFolder: String!, ${FOLDER_PARAMS}, ${ROOT_PARAMS}) {
   repository(owner: $owner, name: $repo) {
     mine: ref(qualifiedName: $ref) { name }
+    bankFolder: object(expression: $bankFolder) { __typename }
     bankRef: ref(qualifiedName: $bank) { compare(headRef: $head) { aheadBy behindBy } }
     questions: object(expression: $questions) { ... on Tree { entries { name type object {
       ... on Tree { entries { name type object { ... on Blob { oid text isBinary isTruncated } } } } } } } }
