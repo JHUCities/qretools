@@ -6,7 +6,7 @@
  */
 import { glob, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { FOLDERS, ROOT } from "../index.ts";
+import { FOLDERS, ROOT, readsInWorkspace, skippedFolder } from "../index.ts";
 
 /** Where a bank keeps its files, as the GitHub loader reads them: nothing else is walked. */
 const PATTERNS: readonly string[] = [
@@ -37,23 +37,22 @@ export async function readBank(
 }
 
 /**
- * Every YAML file under `dir`, at any depth, by its path relative to `dir`, as
- * `readBank` gives a bank's: a workspace's banks, its instruments and its own file, for
- * `workspaceOf` to sort. Folders starting `.` (a clone's `.git`) and `node_modules` are
- * never walked. Rejects, as `readBank` does, if `dir` isn't a directory.
+ * Every file of the workspace in `dir` (`readsInWorkspace`), by its path relative to
+ * `dir`, as `readBank` gives a bank's: its banks, its instruments and its own file, for
+ * `workspaceOf` to sort. Rejects, as `readBank` does, if `dir` isn't a directory.
  */
 export async function readWorkspace(
 	dir: string,
 ): Promise<Readonly<Record<string, string>>> {
 	if (!(await stat(dir)).isDirectory())
 		throw new Error(`${dir} isn't a directory.`);
-	const skipped = (entry: string | { readonly name: string }): boolean => {
-		const name = typeof entry === "string" ? entry : entry.name;
-		return name.startsWith(".") || name === "node_modules";
-	};
+	// Skipped folders aren't walked at all (a clone's `.git` is large); the rule decides.
+	const skipped = (entry: string | { readonly name: string }): boolean =>
+		skippedFolder(typeof entry === "string" ? entry : entry.name);
 	const files: Record<string, string> = {};
 	for await (const found of glob("**/*.yaml", { cwd: dir, exclude: skipped })) {
 		const path = found.replaceAll("\\", "/");
+		if (!readsInWorkspace(path)) continue;
 		const text = await readFile(join(dir, found), "utf8");
 		files[path] = text.replaceAll("\r\n", "\n");
 	}

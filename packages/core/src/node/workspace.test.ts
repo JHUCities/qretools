@@ -147,11 +147,7 @@ describe("a workspace", () => {
 			".github/workflows/check.yml": "",
 			"README.md": "",
 		});
-		expect(ws.ignored).toEqual([
-			"instruments/deeper/x.yaml",
-			"notes.yml",
-			"stray.yaml",
-		]);
+		expect(ws.ignored).toEqual(["instruments/deeper/x.yaml", "stray.yaml"]);
 	});
 });
 

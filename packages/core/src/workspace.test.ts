@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { banksIn } from "./workspace.ts";
+import { banksIn, readsInWorkspace } from "./workspace.ts";
 
 const of = (...paths: string[]) =>
 	Object.fromEntries(paths.map((p) => [p, `# ${p}\n`]));
@@ -99,5 +99,26 @@ describe("the banks in a workspace", () => {
 			"banks/bas/bank.yaml",
 		];
 		expect(banksIn(of(...[...paths].reverse()))).toEqual(banksIn(of(...paths)));
+	});
+});
+
+describe("the files a workspace holds", () => {
+	it("are its YAML files, wherever they are, outside hidden folders and installed packages", () => {
+		for (const path of [
+			"workspace.yaml",
+			"instruments/x.yaml",
+			"banks/hh/questions/t/q.yaml",
+			"archive/v1/old.yaml",
+		])
+			expect(readsInWorkspace(path), path).toBe(true);
+		for (const path of [
+			"README.md",
+			"notes.yml",
+			".github/workflows/x.yaml",
+			"banks/.git/config.yaml",
+			"migration/node_modules/p/package.yaml",
+			".hidden.yaml",
+		])
+			expect(readsInWorkspace(path), path).toBe(false);
 	});
 });

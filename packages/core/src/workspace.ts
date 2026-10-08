@@ -25,6 +25,21 @@ import {
 	workspaceFileOf,
 } from "./workspacefile.ts";
 
+/**
+ * Whether a folder is never walked for a workspace's files, by its name: hidden ones
+ * (a clone's `.git`, GitHub's `.github`) and installed packages (`node_modules`).
+ */
+export const skippedFolder = (name: string): boolean =>
+	name.startsWith(".") || name === "node_modules";
+
+/**
+ * Whether a path in a workspace is one of its files: YAML, not hidden, outside any
+ * skipped folder.
+ * The one rule for what a workspace holds, wherever it's read from (a directory, GitHub).
+ */
+export const readsInWorkspace = (path: string): boolean =>
+	path.endsWith(".yaml") && !path.split("/").some(skippedFolder);
+
 /** The folders a bank lays out by name: a bank never sits in one of another bank's. */
 const LAYOUT: ReadonlySet<string> = new Set([
 	"questions",
@@ -175,14 +190,6 @@ const isInstrument = (path: string): boolean =>
 	/^[^/]+\/[^/]+\.yaml$/.test(path) &&
 	path.startsWith(`${WORKSPACE.instruments}/`);
 
-/**
- * Whether a file no bank holds is worth saying it's read nowhere: YAML, the language a
- * misfiled question or instrument is written in. Anything else (a licence, docs,
- * images), and GitHub's own YAML in `.github/`, isn't ours to judge.
- */
-const isStray = (path: string): boolean =>
-	/\.ya?ml$/.test(path) && !path.startsWith(".github/");
-
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
 
 /** The banks in other repositories the workspace's instruments use, each once, in key order. */
@@ -304,7 +311,8 @@ export function workspaceOf(
 	for (const [path, source] of Object.entries(outside)) {
 		if (path === WORKSPACE.file) continue;
 		if (!isInstrument(path)) {
-			if (isStray(path)) ignored.push(path);
+			// Only the workspace's own kind of file is worth saying it's read nowhere.
+			if (readsInWorkspace(path)) ignored.push(path);
 			continue;
 		}
 		instruments[path] = instrumentIn(path, source, {

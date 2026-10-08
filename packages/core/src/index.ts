@@ -184,8 +184,10 @@ export {
 	instrumentIn,
 	type RemoteBank,
 	type Resolution,
+	readsInWorkspace,
 	remotesOf,
 	resolveUses,
+	skippedFolder,
 	type Workspace,
 	workspaceOf,
 } from "./workspace.ts";
