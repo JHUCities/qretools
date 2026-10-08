@@ -149,8 +149,11 @@ export function createCredentials(deps: CredentialsDeps): CredentialsHolder {
 	let remember = loaded?.remember ?? false;
 	/** A redemption or renewal in flight; every request waits for it. */
 	let pending: Promise<Result<Credentials, Failure>> | undefined;
-	let store: Store | undefined;
-	let repoInUse: string | undefined;
+	/**
+	 * One store per bank (folder included) and kind of token, kept: an app reading several
+	 * folders keeps each store's pacing and rate-limit state rather than rebuilding it.
+	 */
+	const stores = new Map<string, Store>();
 
 	const keep = (c: Credentials, r: boolean) => {
 		credentials = c;
@@ -218,11 +221,11 @@ export function createCredentials(deps: CredentialsDeps): CredentialsHolder {
 			const appToken = credentials?.pasted !== true;
 			// The folder too: two banks in one repository are two stores.
 			const key = `${bankText(repo)}:${appToken}`;
-			if (!store || key !== repoInUse) {
-				store = deps.makeStore(repo, token, { appToken });
-				repoInUse = key;
-			}
-			return store;
+			const kept = stores.get(key);
+			if (kept !== undefined) return kept;
+			const made = deps.makeStore(repo, token, { appToken });
+			stores.set(key, made);
+			return made;
 		},
 		setToken: (t, r) => keep({ access: t, pasted: true }, r),
 		hasToken: () => credentials !== null || pending !== undefined,
@@ -231,7 +234,7 @@ export function createCredentials(deps: CredentialsDeps): CredentialsHolder {
 			deps.credentialStore.clear();
 			credentials = null;
 			pending = undefined;
-			store = undefined;
+			stores.clear();
 		},
 		startSignIn: (r) => {
 			const config = deps.signIn?.config;

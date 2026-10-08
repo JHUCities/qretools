@@ -219,6 +219,13 @@ describe("the store", () => {
 			{ appToken: true },
 			{ appToken: false },
 		]);
+		// Alternating banks keep their stores: back to the first, nothing is built.
+		h.holder.setToken("a", false);
+		const before = h.built.length;
+		const x = h.holder.storeFor({ ...REPO, path: "x" });
+		h.holder.storeFor({ ...REPO, path: "y" });
+		expect(h.holder.storeFor({ ...REPO, path: "x" })).toBe(x);
+		expect(h.built.length - before).toBe(2);
 		h.holder.forget();
 		expect(h.saved()).toBeNull();
 		expect(h.holder.storeFor(REPO)).toBeUndefined();
