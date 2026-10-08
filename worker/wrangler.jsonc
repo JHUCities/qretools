@@ -10,8 +10,7 @@
 		// The GitHub App's client id (public): fill in after creating the App.
 		"CLIENT_ID": "Iv23liuH12sNU6DhRz15",
 		// Exact origins the apps are served from, comma separated: the bank app (5199) and
-		// the instrument app (5201) in development, and the bank app's site. github.io stays
-		// until tabs opened there before the move to bank.qretools.com have gone (they renew tokens).
-		"ALLOWED_ORIGINS": "http://localhost:5199,http://localhost:5201,https://bank.qretools.com,https://jhucities.github.io"
+		// the instrument app (5201) in development, and the bank app's site.
+		"ALLOWED_ORIGINS": "http://localhost:5199,http://localhost:5201,https://bank.qretools.com"
 	}
 }
