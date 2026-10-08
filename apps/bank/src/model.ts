@@ -11,7 +11,6 @@ import {
 	bankEnv,
 	compact,
 	type Env,
-	type Finding,
 	type Fix,
 	type NamedScheme,
 	parseScale,
@@ -43,6 +42,7 @@ import type {
 	Who,
 } from "@qretools/shell";
 import { bankText, sameBank } from "@qretools/shell";
+import type { DdiSchema } from "@qretools/shell/ui";
 import { startingSettings, type Work } from "./persist.js";
 
 export type Id = number;
@@ -195,12 +195,6 @@ export type Bank =
 			/** Commits on the bank not in the author's branch, as GitHub counted them. */
 			readonly behindBy: number;
 	  };
-
-/** The official DDI schema is 900KB and loads lazily. The compiled validator lives in the shell. */
-export type DdiSchema =
-	| { readonly kind: "loading" }
-	| { readonly kind: "ready" }
-	| { readonly kind: "failed"; readonly finding: Finding };
 
 export interface Model {
 	readonly local: Local;

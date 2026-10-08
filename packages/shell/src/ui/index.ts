@@ -2,6 +2,7 @@
  * `@qretools/shell/ui`: the React pieces the QREtools apps share, on Primer. Kept apart
  * from the shell's main entry, which imports no React.
  */
+export { Ddi, type DdiSchema } from "./Ddi.tsx";
 export { ExternalLink } from "./ExternalLink.tsx";
 export {
 	Findings,

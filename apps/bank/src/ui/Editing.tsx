@@ -42,6 +42,7 @@ import {
 import { toDiagnostics } from "@qretools/editor";
 import { bankText, formatLink } from "@qretools/shell";
 import {
+	Ddi,
 	Findings,
 	type Related,
 	StatusBadge,
@@ -69,7 +70,7 @@ import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
 import { FileSkeleton, Panes } from "./FileSkeleton.js";
-import { Codebook, Ddi, Respondent } from "./Previews.js";
+import { AgencyNotice, Codebook, Respondent } from "./Previews.js";
 
 /**
  * How long typing must pause before the findings list catches up with the text. The
@@ -151,6 +152,15 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const declare = useCallback(
 		() => dispatch({ kind: "schemeCreateOpened", scheme: "bank" }),
 		[dispatch],
+	);
+	// One element while nothing changes: the DDI pane is memoised, and a new notice per
+	// render would stringify the document on every caret move.
+	const notice = useMemo(
+		() =>
+			env.agency === undefined && !loading ? (
+				<AgencyNotice declare={declare} />
+			) : undefined,
+		[env.agency, loading, declare],
 	);
 	const { findings, related } = useBankFindings(
 		q.id,
@@ -237,7 +247,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						document={ev.ddi}
 						schema={ddiSchema}
 						problems={problems}
-						{...(env.agency === undefined && !loading && { declare })}
+						{...(notice !== undefined && { notice })}
 					/>
 				</ScrollableRegion>
 			</div>
