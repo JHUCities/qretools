@@ -16,6 +16,14 @@ export {
 	refresh,
 	stale,
 } from "./auth.ts";
+export {
+	browserCredentialStore,
+	type CredentialsDeps,
+	type CredentialsHolder,
+	cameBackFromGitHub,
+	createCredentials,
+	NO_TOKEN,
+} from "./credentials.ts";
 export { makeGitHubStore } from "./github.ts";
 export { formatLink, type Link, parseLink } from "./link.ts";
 export { createLoop, type Loop } from "./loop.ts";

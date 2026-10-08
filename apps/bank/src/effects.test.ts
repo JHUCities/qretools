@@ -1,9 +1,8 @@
-import type { Credentials } from "@qretools/shell";
-import {
-	AuthError,
-	type CredentialStore,
-	type MakeStore,
-	type Store,
+import type {
+	CredentialStore,
+	Credentials,
+	MakeStore,
+	Store,
 } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
 import { createEffects } from "./effects.js";
@@ -74,16 +73,9 @@ function harness(opts: {
 	};
 }
 
-describe("the token getter", () => {
-	it("returns a fresh token without asking the Worker", async () => {
-		const h = harness({
-			credentials: { access: "a", expiresAt: 12 * HOUR, refresh: "r" },
-			worker: () => ({ status: 500, body: {} }),
-		});
-		expect(await h.token()).toBe("a");
-		expect(h.calls).toEqual([]);
-	});
-
+// The token getter's own cases are the shell's (credentials.test.ts); these check that
+// the effects reach it: a connect builds the store on the shell's credentials.
+describe("the token getter, through the effects", () => {
 	it("renews a token about to expire once, however many requests ask at the same time", async () => {
 		const h = harness({
 			credentials: {
@@ -103,35 +95,6 @@ describe("the token getter", () => {
 		]);
 		expect(h.calls).toEqual(["r1"]);
 		expect(h.saved()).toMatchObject({ access: "new", refresh: "r2" });
-	});
-
-	it("takes another tab's renewal instead of spending the single-use refresh token again", async () => {
-		const h = harness({
-			credentials: {
-				access: "old",
-				expiresAt: 10 * HOUR + 60_000,
-				refresh: "r1",
-			},
-			theirs: { access: "theirs", expiresAt: 18 * HOUR, refresh: "r9" },
-			worker: () => ({ status: 500, body: {} }),
-		});
-		expect(await h.token()).toBe("theirs");
-		expect(h.calls).toEqual([]);
-	});
-
-	it("a refused renewal ends the sign-in; a network blip keeps the credentials", async () => {
-		const refused = harness({
-			credentials: { access: "old", expiresAt: 10 * HOUR, refresh: "r1" },
-			worker: () => ({ status: 400, body: { error: "bad_refresh_token" } }),
-		});
-		await expect(refused.token()).rejects.toBeInstanceOf(AuthError);
-		const flaky = harness({
-			credentials: { access: "old", expiresAt: 10 * HOUR, refresh: "r1" },
-			worker: () => ({ status: 502, body: { error: "upstream" } }),
-		});
-		const e = await flaky.token().catch((x: unknown) => x);
-		expect(e instanceof AuthError && e.failure.kind).toBe("http");
-		expect(flaky.saved()).toMatchObject({ access: "old", refresh: "r1" });
 	});
 
 	it("with no one signed in, there is no store and no token", () => {

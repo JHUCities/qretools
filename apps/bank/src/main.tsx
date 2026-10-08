@@ -1,7 +1,7 @@
 // GitHub's typefaces, served with the app: Mona Sans for the interface, Monaspace Neon
 // for code (app.css points Primer's font stacks at them), and the header's wordmark:
 // Radon for "QRE", Krypton for "tools", one weight each.
-import { ok, type Result } from "@qretools/core";
+import { ok } from "@qretools/core";
 import "@fontsource-variable/mona-sans";
 import "@fontsource/monaspace-neon/400.css";
 import "@fontsource/monaspace-radon/latin-700.css";
@@ -12,20 +12,17 @@ import "@primer/primitives/dist/css/functional/themes/dark.css";
 import "./app.css";
 import { BaseStyles } from "@primer/react";
 import { ThemeProvider } from "@primer/react/next";
-import type { Failure } from "@qretools/shell";
 import {
-	type Callback,
-	callbackOf,
+	browserCredentialStore,
+	cameBackFromGitHub,
 	makeGitHubStore,
-	PendingSchema,
 	signInConfig,
 } from "@qretools/shell";
 import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { bankTemplate, defaultBank } from "./config.js";
-import { PENDING_KEY } from "./effects.js";
 import { warnOnLeave } from "./model.js";
-import { browserCredentialStore, readStartup } from "./persist.js";
+import { readStartup } from "./persist.js";
 import { createApp } from "./store.js";
 import { App } from "./ui/App.js";
 import { AppContext, useModel } from "./ui/AppContext.js";
@@ -108,39 +105,6 @@ if (root) {
 			</AppContext.Provider>
 		</StrictMode>,
 	);
-}
-
-/**
- * Back from GitHub's sign-in page (`?code&state`, or `?error&state`)? Check the state
- * against the one this tab stored when it left (used once), then take the code out of
- * the address with the one `history.replaceState` (a `location.replace` would reload),
- * restoring the link that was open before the round trip.
- */
-function cameBackFromGitHub(): Result<Callback, Failure> | undefined {
-	if (!/[?&](code|error)=/.test(location.search)) return undefined;
-	let raw: string | null = null;
-	try {
-		raw = sessionStorage.getItem(PENDING_KEY);
-		sessionStorage.removeItem(PENDING_KEY);
-	} catch {
-		// no storage: the state cannot be checked, so the sign-in is refused below
-	}
-	let pending: ReturnType<typeof PendingSchema.parse> | undefined;
-	try {
-		const parsed = PendingSchema.safeParse(
-			raw === null ? undefined : JSON.parse(raw),
-		);
-		if (parsed.success) pending = parsed.data;
-	} catch {
-		pending = undefined;
-	}
-	const returned = callbackOf(location.search, pending, Date.now());
-	history.replaceState(
-		null,
-		"",
-		`${location.pathname}${pending?.hash ?? location.hash}`,
-	);
-	return returned;
 }
 
 /**

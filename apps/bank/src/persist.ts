@@ -10,20 +10,13 @@
  */
 
 import {
-	compact,
 	err,
 	ok,
 	type Result,
 	SCHEME_KINDS,
 	type SchemeKind,
 } from "@qretools/core";
-import type { Credentials } from "@qretools/shell";
-import {
-	type BankSettings,
-	type CredentialStore,
-	type Failure,
-	parseBank,
-} from "@qretools/shell";
+import { type BankSettings, type Failure, parseBank } from "@qretools/shell";
 import { z } from "zod";
 
 const OriginSchema = z.discriminatedUnion("kind", [
@@ -454,69 +447,6 @@ export function setAsideWork(local: Storage, work: Work): void {
 	}
 	local.setItem(WORK_ASIDE_KEY, JSON.stringify([...list, work]));
 }
-
-const safe = <T>(f: () => T, fallback: T): T => {
-	try {
-		return f();
-	} catch {
-		return fallback;
-	}
-};
-
-const AUTH_KEY = "qretools.auth";
-/** Before sign-in, a pasted token was kept as a bare string under this key; read once. */
-const OLD_TOKEN_KEY = "qretools.token";
-
-const CredentialsSchema = z.strictObject({
-	access: z.string(),
-	expiresAt: z.number().optional(),
-	refresh: z.string().optional(),
-	refreshExpiresAt: z.number().optional(),
-	pasted: z.literal(true).optional(),
-});
-
-function readCredentials(storage: Storage): Credentials | null {
-	const raw = storage.getItem(AUTH_KEY);
-	if (raw !== null) {
-		try {
-			const parsed = CredentialsSchema.safeParse(JSON.parse(raw));
-			if (parsed.success) return compact(parsed.data) as Credentials;
-		} catch {
-			// unreadable: treat as none
-		}
-		return null;
-	}
-	const old = storage.getItem(OLD_TOKEN_KEY);
-	return old === null ? null : { access: old, pasted: true };
-}
-
-/** Session storage by default: gone when the tab closes. Local storage only when asked to remember. */
-export const browserCredentialStore: CredentialStore = {
-	load: () =>
-		safe(() => {
-			const session = readCredentials(sessionStorage);
-			if (session !== null) return { credentials: session, remember: false };
-			const local = readCredentials(localStorage);
-			return local === null ? null : { credentials: local, remember: true };
-		}, null),
-	save: (credentials, remember) =>
-		safe(() => {
-			(remember ? localStorage : sessionStorage).setItem(
-				AUTH_KEY,
-				JSON.stringify(credentials),
-			);
-			for (const s of [sessionStorage, localStorage])
-				s.removeItem(OLD_TOKEN_KEY);
-			(remember ? sessionStorage : localStorage).removeItem(AUTH_KEY);
-		}, undefined),
-	clear: () =>
-		safe(() => {
-			for (const s of [sessionStorage, localStorage]) {
-				s.removeItem(AUTH_KEY);
-				s.removeItem(OLD_TOKEN_KEY);
-			}
-		}, undefined),
-};
 
 /** `base`, or `base.2`, `base.3`… : the first key not already holding something. */
 function freeKey(storage: Storage, base: string): string {
