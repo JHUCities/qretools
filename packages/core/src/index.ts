@@ -7,6 +7,12 @@
  */
 
 export {
+	type Address,
+	type AddressKey,
+	addressOf,
+	joinFolder,
+} from "./address.ts";
+export {
 	type BankLocation,
 	bankLocation,
 	FOLDER_PATTERN,

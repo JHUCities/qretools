@@ -6,6 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
+import { addressOf } from "../address.ts";
 import {
 	collisions,
 	type DdiDocument,
@@ -326,10 +327,12 @@ async function instrument(
 		}
 	const banks: Record<string, Bank> = {};
 	for (const use of uses) {
+		const address =
+			use.address === undefined ? undefined : addressOf(use.address);
 		const dir =
 			given.get(use.alias) ??
-			(use.address !== undefined && /^\.\.?\//.test(use.address)
-				? join(dirname(file), use.address)
+			(address?.kind === "local"
+				? join(dirname(file), address.path)
 				: undefined);
 		if (dir === undefined) {
 			io.err(
