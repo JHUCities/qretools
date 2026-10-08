@@ -10,6 +10,7 @@ import {
 	inBank,
 	instrumentOf,
 	instrumentPath,
+	instrumentRefAt,
 	isRoot,
 	joinFolder,
 	type Mention,
@@ -327,7 +328,22 @@ function step(model: Model, msg: Msg): Step {
 			// Only the author's own open question: another author's names resolve against
 			// their environment, never this one's.
 			const q = current(model);
-			if (!q || q.id !== msg.id || q.kind !== "question") return [model, []];
+			if (!q || q.id !== msg.id) return [model, []];
+			// An instrument names its banks' files: a question it asks, a universe. Only one
+			// that resolves to a bank of this workspace can be followed.
+			if (q.kind === "instrument") {
+				const read = createEvaluations().instrument(model, q);
+				const ref = instrumentRefAt(read.instrument.refs, msg.offset);
+				const use = ref === undefined ? undefined : read.uses[ref.alias];
+				const target =
+					ref === undefined || use?.kind !== "local"
+						? undefined
+						: bankFileClaiming(model, inBank(use.folder, ref.path));
+				return target === undefined
+					? [model, []]
+					: step(model, { kind: "fileOpened", id: target.id });
+			}
+			if (q.kind !== "question") return [model, []];
 			// The names written, resolved or not; the file decides whether there is one.
 			const parsed = parseSurface(q.source, EMPTY_ENV);
 			const m = mentionAt(parsed.ranges, parsed.mentions, q.source, msg.offset);
@@ -1255,6 +1271,17 @@ export const instrumentAlsoSaves = (
 			? questionName(f)
 			: `${SCHEME_NAME[f.kind]} ${f.name}`,
 	);
+
+/** The working bank file that claims a workspace path, if any. */
+function bankFileClaiming(
+	model: Pick<Model, "local">,
+	path: Path,
+): BankEntry | undefined {
+	return [
+		...Object.values(model.local.questions),
+		...Object.values(model.local.schemes),
+	].find((f) => claimOf(f) === path);
+}
 
 /** Writing a working file at a path: expected at its base when that is the path, else not there yet. */
 const changeOf = (f: Entry, path: Path): Change => ({

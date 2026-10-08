@@ -353,3 +353,83 @@ describe("the workspace details", () => {
 		expect(again.screen).toEqual({ kind: "editing", id: e?.id });
 	});
 });
+
+describe("go to definition in an instrument", () => {
+	/** The open instrument, with `universe: hh.renters` added, and F12 at a word of it. */
+	const follow = (word: string) => {
+		const loadedModel = loaded();
+		const e = at(loadedModel, HOUSEHOLDS) as InstrumentEntry;
+		const source = e.source.replace(/^uses:/m, "universe: hh.renters\nuses:");
+		const m: Model = {
+			...loadedModel,
+			local: {
+				...loadedModel.local,
+				workspace: {
+					...loadedModel.local.workspace,
+					[e.id]: { ...e, source },
+				},
+			},
+		};
+		const [opened] = update(m, { kind: "fileOpened", id: e.id });
+		return update(opened, {
+			kind: "definitionRequested",
+			id: e.id,
+			offset: source.indexOf(word) + 3,
+		});
+	};
+
+	it("opens the question an ask names, as a link would", () => {
+		const [m, cmds] = follow("hh.consent");
+		expect(m.screen).toEqual({ kind: "editing", id: at(m, CONSENT).id });
+		expect(cmds).toContainEqual(
+			expect.objectContaining({ kind: "setLink", push: true }),
+		);
+	});
+
+	it("opens the universe it names", () => {
+		const [m] = follow("hh.renters");
+		expect(m.screen).toEqual({
+			kind: "editing",
+			id: at(m, "households/universes/renters.yaml").id,
+		});
+	});
+
+	it("does nothing on an ask its bank doesn't resolve, or a bank in another repository", () => {
+		const m = loaded();
+		const press = (path: string, source: string, word: string) => {
+			const e = at(m, path) as InstrumentEntry;
+			const edited: Model = {
+				...m,
+				local: {
+					...m.local,
+					workspace: { ...m.local.workspace, [e.id]: { ...e, source } },
+				},
+			};
+			const [opened] = update(edited, { kind: "fileOpened", id: e.id });
+			return update(opened, {
+				kind: "definitionRequested",
+				id: e.id,
+				offset: source.indexOf(word) + 3,
+			});
+		};
+		const nope = press(
+			HOUSEHOLDS,
+			"name: households\nuses:\n  hh: ../households\nflow:\n  - ask: hh.nope\n",
+			"hh.nope",
+		);
+		expect(nope[1]).toEqual([]);
+		const remote = at(m, "instruments/remote.yaml") as InstrumentEntry;
+		const far = press("instruments/remote.yaml", remote.source, "bas.consent");
+		expect(far[0].screen).toEqual({ kind: "editing", id: remote.id });
+		expect(far[1]).toEqual([]);
+	});
+
+	it("does nothing on a name that isn't followable", () => {
+		const [m, cmds] = follow("households");
+		expect(m.screen).toEqual({
+			kind: "editing",
+			id: at(m, HOUSEHOLDS).id,
+		});
+		expect(cmds).toEqual([]);
+	});
+});

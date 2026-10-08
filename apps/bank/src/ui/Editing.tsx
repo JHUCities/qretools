@@ -296,6 +296,12 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const stale = useStale(e);
 	const read = evaluations.instrument(slices, e);
 	const { instrument } = read;
+	// A name is green exactly where it can be followed: where its bank resolves it.
+	const marks = useMemo(
+		(): readonly Mark[] =>
+			instrument.refs.map((r) => ({ kind: "ref", range: r.range })),
+		[instrument.refs],
+	);
 	const own = evaluations.workspaceFile(slices);
 	const { findings, ranges, draft, ddi } = instrument;
 	const [listed, flushFindings] = useSettled(findings, SETTLE_MS, e.id);
@@ -367,7 +373,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 						id={e.id}
 						text={e.source}
 						diagnostics={diagnostics}
-						marks={NO_MARKS}
+						marks={marks}
 						instrument
 						label={`Instrument ${e.name}: source (YAML)`}
 					/>
