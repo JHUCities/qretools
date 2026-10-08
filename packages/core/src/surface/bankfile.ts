@@ -1,7 +1,7 @@
 /**
  * The bank's own file, `bank.yaml`: what the bank says about itself, so that whoever
  * reads or imports it reads the same. Today one field, the DDI agency every item it
- * defines is published under.
+ * defines is published under. A project's `project.yaml` is read by the same rule.
  */
 import { isMap, isScalar, parseDocument } from "yaml";
 import type { Finding } from "../findings.ts";
@@ -22,8 +22,21 @@ export interface ParsedBankFile {
 	readonly findings: readonly Finding[];
 }
 
+/** What each kind of file publishes under its agency, as the hole for a missing one says it. */
+const PUBLISHES: Readonly<Record<"bank" | "project", string>> = {
+	bank: "this bank's items are",
+	project: "this project's instruments are",
+};
+
 /** The bank file, read. Total: an empty or broken file is findings, never a throw. */
-export function parseBankFile(source: string): ParsedBankFile {
+export const parseBankFile = (source: string): ParsedBankFile =>
+	parseAgencyFile(source, "bank");
+
+/** A file whose one field is a DDI agency: a bank's `bank.yaml` or a project's `project.yaml`. */
+export function parseAgencyFile(
+	source: string,
+	owner: "bank" | "project",
+): ParsedBankFile {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const syntax: Finding[] = yamlErrors(doc.errors, source.length);
 	let js: unknown;
@@ -67,7 +80,7 @@ export function parseBankFile(source: string): ParsedBankFile {
 				...unknown,
 				hole(
 					"agency",
-					"Add an `agency:` line: the DDI agency this bank's items are published under.",
+					`Add an \`agency:\` line: the DDI agency ${PUBLISHES[owner]} published under.`,
 				),
 			],
 		};

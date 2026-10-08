@@ -22,6 +22,7 @@ import {
 	status,
 } from "../findings.ts";
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
+import { exportRefusal, type Refusal } from "../refusal.ts";
 import { readBank } from "./index.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
@@ -186,12 +187,6 @@ async function exportBank(
 	output: string | undefined,
 	io: Io,
 ): Promise<number> {
-	if (bank.agency === undefined) {
-		io.err(
-			"Not exported: the bank declares no DDI agency (bank.yaml, agency:).\n",
-		);
-		return PROBLEMS;
-	}
 	// Each question's items as `bankOf` elaborated them (its versions included).
 	const sources = Object.keys(bank.questions)
 		.sort()
@@ -199,6 +194,20 @@ async function exportBank(
 			path,
 			bank.questions[path]?.items ?? [],
 		]);
+	const document = documentOf(sources.flatMap(([, items]) => items));
+	const refusal = exportRefusal(
+		{
+			...(bank.agency !== undefined && { agency: bank.agency }),
+			collisions: collisions(sources),
+		},
+		await validate(document),
+	);
+	if (refusal?.kind === "noAgency") {
+		io.err(
+			"Not exported: the bank declares no DDI agency (bank.yaml, agency:).\n",
+		);
+		return PROBLEMS;
+	}
 	const incomplete = Object.entries(bank.findings).filter(
 		([, findings]) => status(findings).kind === "incomplete",
 	).length;
@@ -206,25 +215,46 @@ async function exportBank(
 		io.err(
 			`${incomplete} files have something to fill in or fix; what they lack is left out of the DDI (\`qretools check\` lists it).\n`,
 		);
-	const clashes = collisions(sources);
-	if (clashes.length > 0) {
-		for (const c of clashes)
-			io.err(`${c.urn} names different items in ${c.keys.join(", ")}\n`);
-		io.err("Not exported: items would share an identity.\n");
-		return PROBLEMS;
-	}
-	const document = documentOf(sources.flatMap(([, items]) => items));
-	const problems = await validate(document);
-	if (problems.length > 0) {
-		for (const p of problems)
-			io.err(`${p.message}${p.detail ? ` (${p.detail})` : ""}\n`);
-		io.err("Not exported: the DDI doesn't match the official schema.\n");
-		return PROBLEMS;
-	}
+	if (refusal !== undefined) return refused(refusal, io);
 	const text = `${JSON.stringify(document, null, 2)}\n`;
 	if (output === undefined) io.out(text);
 	else await io.writeFile(output, text);
 	return OK;
+}
+
+/**
+ * Why an export was refused, on stderr: the details, then one line. The core decides
+ * (`exportRefusal`); these are the CLI's words for it.
+ */
+function refused(r: Refusal, io: Io): number {
+	switch (r.kind) {
+		case "noAgency":
+			// The instrument's words: the bank export says its own before it gets here.
+			io.err(
+				"Not exported: give the DDI agency the instrument is published under, with --agency.\n",
+			);
+			break;
+		case "invalidAgency":
+			for (const f of r.findings) io.err(`${f.message}\n`);
+			io.err("Not exported: every item needs a real DDI agency.\n");
+			break;
+		case "collisions":
+			for (const c of r.collisions)
+				io.err(`${c.urn} names different items in ${c.keys.join(", ")}\n`);
+			io.err("Not exported: items would share an identity.\n");
+			break;
+		// The CLI always runs the schema first, so `unchecked` can't arrive; were it to,
+		// it isn't exported for the schema's sake.
+		case "unchecked":
+		case "schema":
+			for (const p of r.kind === "schema" ? r.problems : [])
+				io.err(`${p.message}${p.detail ? ` (${p.detail})` : ""}\n`);
+			io.err("Not exported: the DDI doesn't match the official schema.\n");
+			break;
+		default:
+			return r satisfies never;
+	}
+	return PROBLEMS;
 }
 
 /** The official DDI schema's problems with a document, the schema read beside this module. */
@@ -332,31 +362,8 @@ async function instrument(
 			? PROBLEMS
 			: OK;
 	}
-	if (args.values.agency === undefined) {
-		io.err(
-			"Not exported: give the DDI agency the instrument is published under, with --agency.\n",
-		);
-		return PROBLEMS;
-	}
-	const agencies = result.findings.filter((f) => f.code === "invalid-agency");
-	if (agencies.length > 0) {
-		for (const f of agencies) io.err(`${f.message}\n`);
-		io.err("Not exported: every item needs a real DDI agency.\n");
-		return PROBLEMS;
-	}
-	if (result.collisions.length > 0) {
-		for (const c of result.collisions)
-			io.err(`${c.urn} names different items in ${c.keys.join(", ")}\n`);
-		io.err("Not exported: items would share an identity.\n");
-		return PROBLEMS;
-	}
-	const problems = await validate(result.ddi);
-	if (problems.length > 0) {
-		for (const p of problems)
-			io.err(`${p.message}${p.detail ? ` (${p.detail})` : ""}\n`);
-		io.err("Not exported: the DDI doesn't match the official schema.\n");
-		return PROBLEMS;
-	}
+	const refusal = exportRefusal(result, await validate(result.ddi));
+	if (refusal !== undefined) return refused(refusal, io);
 	if (status(result.findings).kind === "incomplete")
 		io.err(
 			"The instrument has something to fill in or fix; what it lacks is left out of the DDI (`qretools instrument check` lists it).\n",

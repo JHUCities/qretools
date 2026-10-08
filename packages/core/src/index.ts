@@ -78,7 +78,14 @@ export {
 	importsOf,
 	instrumentOf,
 } from "./instrument/instrument.ts";
+export { PROJECT, type Project, projectOf } from "./instrument/project.ts";
 export { lint } from "./lint.ts";
+export {
+	type Exportable,
+	exportRefusal,
+	type Refusal,
+	refusalReason,
+} from "./refusal.ts";
 export {
 	type CodebookView,
 	codebookView,

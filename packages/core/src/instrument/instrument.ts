@@ -28,6 +28,8 @@ export interface InstrumentContext {
 
 export interface Instrument {
 	readonly draft: InstrumentDraft;
+	/** The agency it was given, valid or not; absent when none was. */
+	readonly agency?: string;
 	/** The parse's and the checks' findings, in document order. */
 	readonly findings: readonly Finding[];
 	readonly ranges: Readonly<Record<string, Range>>;
@@ -92,6 +94,7 @@ export function instrumentOf(
 	);
 	return {
 		draft: parsed.draft,
+		...(context.agency !== undefined && { agency: context.agency }),
 		findings: inDocumentOrder(
 			[
 				...parsed.findings,
