@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	bankAt,
 	banksIn,
+	fileAt,
 	inBank,
 	placeOf,
 	readsInWorkspace,
@@ -207,5 +208,30 @@ describe("where a workspace path is", () => {
 				expect(placeOf(inBank(folder, rel), Object.keys(found))?.bank).toBe(
 					folder,
 				);
+	});
+});
+
+describe("what a workspace reads a file as", () => {
+	const banks = ["", "banks/hh"];
+	it("is a bank's file, an instrument, or the workspace's own file", () => {
+		expect(fileAt("banks/hh/questions/t/q.yaml", banks)).toMatchObject({
+			kind: "bank",
+			bank: "banks/hh",
+			rel: "questions/t/q.yaml",
+		});
+		expect(fileAt("instruments/households.yaml", banks)).toEqual({
+			kind: "instrument",
+			name: "households",
+		});
+		expect(fileAt("workspace.yaml", banks)).toEqual({ kind: "workspaceFile" });
+	});
+
+	it("is nothing for what the workspace doesn't read", () => {
+		for (const path of [
+			"instruments/deeper/x.yaml",
+			"instruments/x.yml",
+			"notes/x.yaml",
+		])
+			expect(fileAt(path, ["banks/hh"]), path).toBeUndefined();
 	});
 });

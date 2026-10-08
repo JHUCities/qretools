@@ -102,6 +102,35 @@ export function placeOf(
 	return at === undefined ? undefined : { bank, rel, at };
 }
 
+/** What a workspace reads a file as: a bank's, an instrument, or the workspace's own file. */
+export type WorkspacePlace =
+	| ({ readonly kind: "bank" } & NonNullable<ReturnType<typeof placeOf>>)
+	| { readonly kind: "instrument"; readonly name: string }
+	| { readonly kind: "workspaceFile" };
+
+/** The path an instrument of this name is saved at. */
+export const instrumentPath = (name: string): string =>
+	`${WORKSPACE.instruments}/${name}.yaml`;
+
+/**
+ * Where a workspace path is, among the workspace's `banks`: in a bank (`placeOf`), an
+ * instrument (`instruments/<name>.yaml`), or the workspace's own file. None for a path
+ * the workspace doesn't read.
+ */
+export function fileAt(
+	path: string,
+	banks: Iterable<string>,
+): WorkspacePlace | undefined {
+	if (path === WORKSPACE.file) return { kind: "workspaceFile" };
+	if (isInstrument(path))
+		return {
+			kind: "instrument",
+			name: path.slice(WORKSPACE.instruments.length + 1, -".yaml".length),
+		};
+	const place = placeOf(path, banks);
+	return place === undefined ? undefined : { kind: "bank", ...place };
+}
+
 /**
  * The workspace's files, by bank: each bank folder ("" for the root) with its files by
  * path within it, and the files no bank holds, by path in the workspace. The root is a

@@ -13,6 +13,7 @@ import { checkInstrument } from "./check.ts";
 import type { InstrumentDraft, Use } from "./draft.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
 import { parseInstrument, type Unread } from "./parse.ts";
+import { type InstrumentRef, instrumentRefs } from "./refs.ts";
 
 export interface InstrumentContext {
 	/** The banks it uses, each already evaluated (`bankOf`), by the alias `uses` gives it. */
@@ -42,6 +43,8 @@ export interface Instrument {
 	readonly ddi: DdiDocument;
 	/** Identities two different items would share: an export must refuse while any exist. */
 	readonly collisions: readonly Collision<string>[];
+	/** Where it names its banks' files, for go to definition (`instrumentRefs`). */
+	readonly refs: readonly InstrumentRef[];
 }
 
 export function instrumentOf(
@@ -114,6 +117,7 @@ export function instrumentOf(
 		ranges: parsed.ranges,
 		ddi: document,
 		collisions,
+		refs: instrumentRefs(parsed, source),
 	};
 }
 

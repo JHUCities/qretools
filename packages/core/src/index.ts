@@ -87,6 +87,11 @@ export {
 	instrumentOf,
 } from "./instrument/instrument.ts";
 export type { Unread } from "./instrument/parse.ts";
+export {
+	type InstrumentRef,
+	instrumentRefAt,
+	instrumentRefs,
+} from "./instrument/refs.ts";
 export { lint } from "./lint.ts";
 export {
 	type Exportable,
@@ -182,9 +187,11 @@ export {
 export {
 	bankAt,
 	banksIn,
+	fileAt,
 	type InstrumentIn,
 	inBank,
 	instrumentIn,
+	instrumentPath,
 	placeOf,
 	type RemoteBank,
 	type Resolution,
@@ -194,6 +201,7 @@ export {
 	resolveUses,
 	skippedFolder,
 	type Workspace,
+	type WorkspacePlace,
 	workspaceOf,
 } from "./workspace.ts";
 export {
