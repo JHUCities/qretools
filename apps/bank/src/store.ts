@@ -1,13 +1,10 @@
 /**
- * The Elm loop on a Zustand store. The store holds the Model and nothing else;
- * `dispatch` is the only way it changes: run `update`, set the new Model (named
- * for Redux DevTools by the message's kind), then run the returned commands.
- * `dispatch` is not store state and is never wrapped in a thunk.
+ * The bank app: its Elm loop (the shell's `createLoop`), its effects and its
+ * evaluation cache, made once at startup.
  */
 
-import type { SignInConfig } from "@qretools/shell";
-import { devtools } from "zustand/middleware";
-import { createStore, type StoreApi } from "zustand/vanilla";
+import { createLoop, type SignInConfig } from "@qretools/shell";
+import type { StoreApi } from "zustand/vanilla";
 import { createEffects, type Deps, type Effects } from "./effects.js";
 import { createEvaluations, type Evaluations } from "./evaluations.js";
 import { type Dispatch, type Flags, init, type Model } from "./model.js";
@@ -35,16 +32,12 @@ export function createApp(
 	view: ViewConfig = {},
 ): App {
 	const effects = createEffects(deps);
-	const [model, first] = init(flags);
-	const store = createStore<{ model: Model }>()(
-		devtools(() => ({ model }), { name: "qretools" }),
+	const { store, dispatch } = createLoop(
+		init(flags),
+		update,
+		effects.exec,
+		"qretools",
 	);
-	const dispatch: Dispatch = (msg) => {
-		const [next, cmds] = update(store.getState().model, msg);
-		store.setState({ model: next }, false, msg.kind);
-		for (const c of cmds) effects.exec(c, dispatch);
-	};
-	for (const c of first) effects.exec(c, dispatch);
 	return {
 		store,
 		dispatch,

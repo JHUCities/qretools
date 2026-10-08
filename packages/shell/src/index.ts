@@ -18,6 +18,7 @@ export {
 } from "./auth.ts";
 export { makeGitHubStore } from "./github.ts";
 export { formatLink, type Link, parseLink } from "./link.ts";
+export { createLoop, type Loop } from "./loop.ts";
 export {
 	installUrl,
 	type SignInConfig,

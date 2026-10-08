@@ -18,7 +18,8 @@
 		"@octokit/plugin-throttling": "^11.0.5",
 		"@octokit/request-error": "^7.1.2",
 		"@qretools/core": "workspace:*",
-		"zod": "^4.6.5"
+		"zod": "^4.6.5",
+		"zustand": "^5.0.15"
 	},
 	"devDependencies": {
 		"typescript": "^7.0.2",
