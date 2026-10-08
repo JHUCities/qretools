@@ -35,6 +35,7 @@ import {
 	type File,
 	type LoadedWorkspace,
 	type Store,
+	type TaggedBank,
 } from "./storage.ts";
 
 const GitHub = Octokit.plugin(retry, throttling);
@@ -443,6 +444,17 @@ export const makeGitHubStore = (
 		// A folder that isn't there is no workspace, never an empty one.
 		if (tree === undefined)
 			return ok({ ...loaded, found: false, files: [], unread: [] });
+		const read = await treeFiles(tree);
+		return read.ok ? ok({ ...loaded, found: true, ...read.value }) : read;
+	}
+
+	/**
+	 * Every file a workspace reads under a tree, by path within it, with their texts by
+	 * oid (from this one tree, a batch at a time), and those GitHub wouldn't give as text.
+	 */
+	async function treeFiles(
+		tree: string,
+	): Promise<Result<Pick<LoadedWorkspace, "files" | "unread">, Failure>> {
 		const listed = await run(() =>
 			octokit.request("GET /repos/{owner}/{repo}/git/trees/{tree_sha}", {
 				owner,
@@ -492,7 +504,54 @@ export const makeGitHubStore = (
 					reason: reasons.get(b.sha) ?? "GitHub has no such file.",
 				});
 		}
-		return ok({ ...loaded, found: true, files, unread });
+		return ok({ files, unread });
+	}
+
+	/**
+	 * The store's folder at a tag, read only: `refs/tags/<tag>`, never a branch of that
+	 * name and never another version. Absent tag or folder: found false, with why.
+	 */
+	async function bankAt(tag: string): Promise<Result<TaggedBank, Failure>> {
+		const r = await graphql<{
+			repository: {
+				tag: { name: string } | null;
+				dir: { __typename: string; oid: string } | null;
+			} | null;
+		}>(
+			`query Tagged($owner: String!, $repo: String!, $tag: String!, $dir: String!) {
+  repository(owner: $owner, name: $repo) {
+    tag: ref(qualifiedName: $tag) { name }
+    dir: object(expression: $dir) { __typename oid }
+  }
+}`,
+			{
+				owner,
+				repo,
+				tag: `refs/tags/${tag}`,
+				dir: `refs/tags/${tag}:${folder}`,
+			},
+		);
+		if (!r.ok) return r;
+		const data = r.value.data?.repository;
+		const where = `${owner}/${repo}${folder === "" ? "" : `/${folder}`}@${tag}`;
+		if (!data)
+			return err({
+				kind: "unreadable",
+				message: `GitHub has no repository ${owner}/${repo} that you can open.`,
+				hint: "Check the address, and that you can open the repository on GitHub.",
+			});
+		if (data.tag === null)
+			return ok({
+				found: false,
+				reason: `\`${where}\`: ${owner}/${repo} has no tag \`${tag}\`.`,
+			});
+		if (data.dir?.__typename !== "Tree")
+			return ok({
+				found: false,
+				reason: `\`${where}\`: there's no folder \`${folder}\` at \`${tag}\`.`,
+			});
+		const read = await treeFiles(data.dir.oid);
+		return read.ok ? ok({ found: true, ...read.value }) : read;
 	}
 
 	/** Blobs by oid, in one request: each one's text, or null for an oid GitHub lacks. */
@@ -574,6 +633,8 @@ export const makeGitHubStore = (
 		},
 
 		loadWorkspace: workspaceOn,
+
+		loadBankAt: bankAt,
 
 		async readWithSchemes(target, path) {
 			const ref = target.branch;

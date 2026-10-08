@@ -635,6 +635,22 @@ describe("loading a workspace", () => {
 			}
 			const query = String(req.body.query);
 			const v = req.body.variables as Record<string, string>;
+			if (query.startsWith("query Tagged")) {
+				// A tag reads like a branch here: the same trees, by its name.
+				const tag = (v.tag ?? "").replace("refs/tags/", "");
+				const tree = branches[tag];
+				return json({
+					data: {
+						repository: {
+							tag: tag in branches ? { name: tag } : null,
+							dir:
+								tree === null || tree === undefined
+									? null
+									: { __typename: "Tree", oid: `tree-${tag}` },
+						},
+					},
+				});
+			}
 			if (query.startsWith("query Head")) {
 				// A folder on a branch, as `branch:folder` names it: its tree, if there.
 				const folderOn = (expression = "") => {
@@ -720,6 +736,40 @@ describe("loading a workspace", () => {
 		expect(Object.keys(blobQueries(seen)[0]?.body.variables as object)).toEqual(
 			["owner", "repo", "b0", "b1"],
 		);
+	});
+
+	it("reads a bank at a tag, pinned to it, and says why when it isn't there", async () => {
+		const { s, seen } = store(
+			workspaceRepo({
+				branches: { v1: { "bank.yaml": "agency: org.example\n" }, v2: null },
+			}),
+		);
+		expect(await s.loadBankAt("v1")).toEqual({
+			ok: true,
+			value: {
+				found: true,
+				files: [
+					{
+						path: "bank.yaml",
+						sha: "t:agency: org.example\n",
+						text: "agency: org.example\n",
+					},
+				],
+				unread: [],
+			},
+		});
+		expect(seen[0]?.body.variables).toMatchObject({
+			tag: "refs/tags/v1",
+			dir: "refs/tags/v1:",
+		});
+		expect(await s.loadBankAt("v3")).toMatchObject({
+			ok: true,
+			value: { found: false, reason: expect.stringMatching(/no tag `v3`/) },
+		});
+		expect(await s.loadBankAt("v2")).toMatchObject({
+			ok: true,
+			value: { found: false, reason: expect.stringMatching(/no folder/) },
+		});
 	});
 
 	it("reports a missing repository as unreadable", async () => {

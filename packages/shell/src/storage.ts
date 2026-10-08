@@ -193,6 +193,11 @@ export interface LoadedWorkspace extends Loaded {
 	}[];
 }
 
+/** A bank in another repository, read at a tag: its files by path in its folder, or why not. */
+export type TaggedBank =
+	| ({ readonly found: true } & Pick<LoadedWorkspace, "files" | "unread">)
+	| { readonly found: false; readonly reason: string };
+
 export interface Store {
 	whoAmI(): Promise<Result<Who, Failure>>;
 	/**
@@ -204,6 +209,11 @@ export interface Store {
 		target: BranchTarget,
 	): Promise<Result<LoadedWorkspace, Failure>>;
 	read(target: BranchTarget, path: string): Promise<Result<File, Failure>>;
+	/**
+	 * The store's bank at a tag, read only and pinned to it (`refs/tags/<tag>`): never a
+	 * branch of the same name, never the default branch.
+	 */
+	loadBankAt(tag: string): Promise<Result<TaggedBank, Failure>>;
 	/**
 	 * The `.yaml` files directly in a folder (a path like any other here, under the
 	 * store's own folder; `""` is that folder itself), or null when there is no such

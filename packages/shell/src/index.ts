@@ -53,5 +53,6 @@ export {
 	parseRepo,
 	type Store,
 	sameBank,
+	type TaggedBank,
 	type Who,
 } from "./storage.ts";
