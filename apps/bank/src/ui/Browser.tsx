@@ -49,6 +49,7 @@ export const bankLabel = (bank: string): string =>
 export function Browser({
 	banks,
 	workspace = [],
+	workspaceOnly = false,
 	filter,
 	open,
 	dispatch,
@@ -57,6 +58,8 @@ export function Browser({
 	banks: readonly BankTree[];
 	/** The workspace's own files (`workspaceLeaves`): its instruments and its details. */
 	workspace?: readonly SchemeLeaf[];
+	/** The workspace has no bank of its own: only its instruments and details are shown. */
+	workspaceOnly?: boolean;
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
@@ -79,6 +82,8 @@ export function Browser({
 	const instruments = workspace.length > 0 && (
 		<Instruments leaves={workspace} open={open} dispatch={dispatch} />
 	);
+	if (workspaceOnly)
+		return <Instruments leaves={workspace} open={open} dispatch={dispatch} />;
 	// One bank, as a bank has always been shown: its questions, then its shared files.
 	if (banks.length <= 1) {
 		const trees = (

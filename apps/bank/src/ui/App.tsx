@@ -95,10 +95,13 @@ import { SignOutDialog } from "./SignOutDialog.js";
 function NewMenu({
 	banks,
 	first,
+	workspaceOnly,
 	dispatch,
 }: {
 	banks: readonly string[];
 	first: string;
+	/** A workspace with no bank of its own: nothing here makes one (`workspaceOnly`). */
+	workspaceOnly: boolean;
 	dispatch: Dispatch;
 }) {
 	const ordered = [first, ...banks.filter((b) => b !== first)];
@@ -121,11 +124,14 @@ function NewMenu({
 					>
 						Workspace details
 					</ActionList.Item>
-					<ActionList.Divider />
-					{banks.length <= 1 ? (
-						<NewItems dispatch={dispatch} />
+					{workspaceOnly ? null : banks.length <= 1 ? (
+						<>
+							<ActionList.Divider />
+							<NewItems dispatch={dispatch} />
+						</>
 					) : (
 						<>
+							<ActionList.Divider />
 							<ActionList.GroupHeading>In bank</ActionList.GroupHeading>
 							{ordered.map((bank) => (
 								<ActionMenu key={bank}>
@@ -290,6 +296,10 @@ export function App() {
 		model.banks,
 		model.remoteBanks,
 	]);
+	// A workspace whose files are all its own (instruments, details) has no bank to show
+	// or to make questions in: an empty repository still starts as one bank at its root.
+	const workspaceOnly =
+		shownBanks.length === 0 && Object.keys(local.workspace).length > 0;
 	const naming = model.browser.naming;
 	const namingInstrument = model.browser.namingInstrument;
 	const moving = model.browser.moving;
@@ -442,6 +452,7 @@ export function App() {
 						<NewMenu
 							banks={shownBanks}
 							first={newBank(model)}
+							workspaceOnly={workspaceOnly}
 							dispatch={dispatch}
 						/>
 					)}
@@ -516,6 +527,7 @@ export function App() {
 									<Browser
 										banks={trees}
 										workspace={workspace}
+										workspaceOnly={workspaceOnly}
 										loading={loading}
 										filter={model.browser.filter}
 										open={open}

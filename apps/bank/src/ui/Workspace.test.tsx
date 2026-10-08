@@ -45,6 +45,9 @@ function renderWorkspace(files = FILES) {
 					defaultBranch: "main",
 				}),
 			),
+		// A bank in another repository an instrument names: not there in these tests.
+		loadBankAt: () =>
+			Promise.resolve(ok({ found: false, reason: "Not in these tests." })),
 		loadWorkspace: () =>
 			Promise.resolve(
 				ok({
@@ -198,6 +201,41 @@ describe("a workspace's instruments", () => {
 				e.kind === "instrument" ? e.name : e.kind,
 			),
 		).toContain("wave2");
+	});
+
+	it("are all a workspace with no bank of its own shows, and New makes only them", async () => {
+		renderWorkspace([
+			file("workspace.yaml", "agency: org.example\n"),
+			file(
+				"instruments/w.yaml",
+				"name: w\nuses:\n  tpl: JHUCities/qretools-bank-template@v1\nflow:\n  - ask: tpl.q\n",
+			),
+		]);
+		await act(async () => {});
+		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		expect(within(nav).getByRole("tree", { name: "Instruments" })).toBeTruthy();
+		expect(
+			within(nav).queryByRole("heading", { name: "Questions" }),
+		).toBeNull();
+		expect(within(nav).queryByRole("heading", { name: "Shared" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+			"Instrument…",
+			"Workspace details",
+		]);
+	});
+
+	it("leave an empty repository as it was: one bank to start, at its root", async () => {
+		renderWorkspace([]);
+		await act(async () => {});
+		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		expect(
+			within(nav).getByRole("heading", { name: "Questions" }),
+		).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		expect(
+			screen.getByRole("menuitem", { name: "Blank question" }),
+		).toBeTruthy();
 	});
 
 	it("aren't shown for a workspace that is one bank alone", async () => {
