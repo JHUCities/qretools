@@ -1241,6 +1241,9 @@ function resolveQuestion(
 	}
 	const [, alias = "", name = ""] = named;
 	const bank = ctx.banks[alias];
+	// A bank `uses` names but that isn't given is said once, on its `uses` entry.
+	if (bank === undefined && ctx.uses.some((u) => u.alias === alias))
+		return undefined;
 	if (bank === undefined) {
 		ctx.say(
 			problem(

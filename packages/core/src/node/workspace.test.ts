@@ -89,6 +89,10 @@ describe("a workspace", () => {
 			bas: { kind: "pending", key: "owner/bank@v1" },
 		});
 		expect(codes(pending?.instrument.findings ?? [], "uses.bas")).toEqual([]);
+		// Nor does the question it asks from it: the bank isn't there yet, not unknown.
+		expect(
+			codes(pending?.instrument.findings ?? [], "flow.0.ask"),
+		).not.toContain("unknown-bank");
 		const given = workspaceOf(files, {
 			remote: { "owner/bank@v1": { kind: "files", files: hh } },
 		});
