@@ -64,12 +64,12 @@ export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 };
 
 /** What a bank path holds, or undefined for a file the tool does not read. */
-export function kindAt(
-	path: string,
-):
+/** What a bank reads a file as: a question, or a shared file of a kind, named by its filename. */
+export type BankFile =
 	| { readonly kind: "question" }
-	| { readonly kind: SchemeKind; readonly name: string }
-	| undefined {
+	| { readonly kind: SchemeKind; readonly name: string };
+
+export function kindAt(path: string): BankFile | undefined {
 	if (!path.endsWith(".yaml")) return undefined;
 	const root = (Object.keys(ROOT) as RootKind[]).find((k) => ROOT[k] === path);
 	if (root !== undefined) return { kind: root, name: root };

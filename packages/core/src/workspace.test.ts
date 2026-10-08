@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { banksIn, readsInWorkspace } from "./workspace.ts";
+import {
+	bankAt,
+	banksIn,
+	inBank,
+	placeOf,
+	readsInWorkspace,
+	relIn,
+} from "./workspace.ts";
 
 const of = (...paths: string[]) =>
 	Object.fromEntries(paths.map((p) => [p, `# ${p}\n`]));
@@ -120,5 +127,62 @@ describe("the files a workspace holds", () => {
 			".hidden.yaml",
 		])
 			expect(readsInWorkspace(path), path).toBe(false);
+	});
+});
+
+describe("where a workspace path is", () => {
+	const banks = ["", "banks/hh", "banks/hh/sub"];
+
+	it("is in the deepest bank above it, as a path in that bank", () => {
+		expect(placeOf("banks/hh/questions/t/q.yaml", banks)).toEqual({
+			bank: "banks/hh",
+			rel: "questions/t/q.yaml",
+			at: { kind: "question" },
+		});
+		expect(placeOf("banks/hh/sub/scales/agree.yaml", banks)).toEqual({
+			bank: "banks/hh/sub",
+			rel: "scales/agree.yaml",
+			at: { kind: "scale", name: "agree" },
+		});
+		expect(placeOf("missing.yaml", banks)).toEqual({
+			bank: "",
+			rel: "missing.yaml",
+			at: { kind: "missing", name: "missing" },
+		});
+	});
+
+	it("is nowhere when no bank holds or reads it, or it's the workspace's own", () => {
+		expect(placeOf("banks/hh/notes/x.yaml", banks)).toBeUndefined();
+		expect(placeOf("instruments/x.yaml", banks)).toBeUndefined();
+		expect(placeOf("workspace.yaml", banks)).toBeUndefined();
+		expect(placeOf("other/questions/t/q.yaml", ["banks/hh"])).toBeUndefined();
+		expect(bankAt("banks/hhh/bank.yaml", ["banks/hh"])).toBeUndefined();
+	});
+
+	it("goes there and back by one pair of rules", () => {
+		for (const bank of ["", "banks/hh"])
+			expect(relIn(bank, inBank(bank, "questions/t/q.yaml"))).toBe(
+				"questions/t/q.yaml",
+			);
+		expect(inBank("", "bank.yaml")).toBe("bank.yaml");
+		expect(inBank("banks/hh", "bank.yaml")).toBe("banks/hh/bank.yaml");
+	});
+
+	it("agrees with how banksIn partitions the same files", () => {
+		const files = Object.fromEntries(
+			[
+				"bank.yaml",
+				"questions/t/q.yaml",
+				"banks/hh/bank.yaml",
+				"banks/hh/scales/a.yaml",
+				"instruments/x.yaml",
+			].map((p) => [p, ""]),
+		);
+		const { banks: found } = banksIn(files);
+		for (const [folder, held] of Object.entries(found))
+			for (const rel of Object.keys(held))
+				expect(placeOf(inBank(folder, rel), Object.keys(found))?.bank).toBe(
+					folder,
+				);
 	});
 });

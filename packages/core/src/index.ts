@@ -108,6 +108,7 @@ export {
 export { err, ok, type Result } from "./result.ts";
 export {
 	absentRoot,
+	type BankFile,
 	bankEnv,
 	evaluateScheme,
 	FOLDERS,
@@ -179,12 +180,16 @@ export {
 	usedBy,
 } from "./symbols.ts";
 export {
+	bankAt,
 	banksIn,
 	type InstrumentIn,
+	inBank,
 	instrumentIn,
+	placeOf,
 	type RemoteBank,
 	type Resolution,
 	readsInWorkspace,
+	relIn,
 	remotesOf,
 	resolveUses,
 	skippedFolder,

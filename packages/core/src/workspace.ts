@@ -19,6 +19,7 @@ import {
 } from "./instrument/instrument.ts";
 import type { Unread } from "./instrument/parse.ts";
 import { FOLDERS, ROOT } from "./kinds.ts";
+import { type BankFile, kindAt } from "./schemes.ts";
 import {
 	WORKSPACE,
 	type WorkspaceFile,
@@ -50,6 +51,57 @@ const LAYOUT: ReadonlySet<string> = new Set([
 const own = (path: string): boolean =>
 	path === WORKSPACE.file || path.startsWith(`${WORKSPACE.instruments}/`);
 
+/** A path in a bank's folder ("" for the workspace's root), as a path in the workspace. */
+export const inBank = (bank: string, path: string): string =>
+	bank === "" ? path : `${bank}/${path}`;
+
+/**
+ * A path in the workspace, as a path in the bank folder `bank` holding it. The path must
+ * lie in that bank (as `bankAt` finds it, or as an entry's own bank says).
+ */
+export const relIn = (bank: string, path: string): string =>
+	bank === "" ? path : path.slice(bank.length + 1);
+
+/**
+ * The bank folder among `banks` a workspace path belongs to: the deepest one above it.
+ * None for the workspace's own files, whatever banks there are.
+ */
+export function bankAt(
+	path: string,
+	banks: Iterable<string>,
+): string | undefined {
+	if (own(path)) return undefined;
+	let found: string | undefined;
+	for (const b of banks)
+		if (
+			(b === "" || path.startsWith(`${b}/`)) &&
+			(found === undefined || b.length > found.length)
+		)
+			found = b;
+	return found;
+}
+
+/**
+ * Where a workspace path is: the bank among `banks` holding it, the path within that
+ * bank, and what the bank reads it as (`kindAt`). None for a path no bank holds or reads.
+ */
+export function placeOf(
+	path: string,
+	banks: Iterable<string>,
+):
+	| {
+			readonly bank: string;
+			readonly rel: string;
+			readonly at: BankFile;
+	  }
+	| undefined {
+	const bank = bankAt(path, banks);
+	if (bank === undefined) return undefined;
+	const rel = relIn(bank, path);
+	const at = kindAt(rel);
+	return at === undefined ? undefined : { bank, rel, at };
+}
+
 /**
  * The workspace's files, by bank: each bank folder ("" for the root) with its files by
  * path within it, and the files no bank holds, by path in the workspace. The root is a
@@ -79,22 +131,15 @@ export function banksIn(files: Readonly<Record<string, string>>): {
 			return next !== undefined && LAYOUT.has(next);
 		});
 	const folders = [...candidates].filter((f) => f === "" || !inLayout(f));
-	// Deepest first, so a file finds the nearest bank above it.
-	const depth = (f: string): number => (f === "" ? 0 : f.split("/").length);
-	const deepest = [...folders].sort(
-		(a, b) => depth(b) - depth(a) || (a < b ? -1 : 1),
-	);
 	const banks: Record<string, Record<string, string>> = {};
 	for (const folder of folders) banks[folder] = {};
 	const outside: Record<string, string> = {};
 	for (const path of Object.keys(files).sort()) {
 		const text = files[path] ?? "";
-		const folder = own(path)
-			? undefined
-			: deepest.find((f) => f === "" || path.startsWith(`${f}/`));
+		const folder = bankAt(path, folders);
 		const bank = folder === undefined ? undefined : banks[folder];
 		if (folder === undefined || bank === undefined) outside[path] = text;
-		else bank[folder === "" ? path : path.slice(folder.length + 1)] = text;
+		else bank[relIn(folder, path)] = text;
 	}
 	return { banks, outside };
 }
