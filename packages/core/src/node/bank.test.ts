@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
 	type Bank,
+	bankFrom,
 	bankOf,
 	makeValidator,
 	ROOT,
@@ -44,6 +45,17 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 		expect(bank.ignored).toEqual([]);
 		for (const path of Object.values(ROOT))
 			expect(Object.keys(bank.schemes)).toContain(path);
+	});
+
+	it("is, put together from its evaluations, what an instrument reads of it", () => {
+		const scope = bankFrom(bank);
+		expect(scope.env).toBe(bank.env);
+		expect(scope.questions).toBe(bank.questions);
+		expect(scope.index).toEqual(bank.index);
+		expect(scope.agency).toBe(bank.agency);
+		expect("versions" in scope).toBe(false);
+		const versions = { "questions/x.yaml": { number: "2" } };
+		expect(bankFrom({ ...bank, versions }).versions).toBe(versions);
 	});
 
 	it("publishes its items under the agency it declares", () => {

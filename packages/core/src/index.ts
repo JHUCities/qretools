@@ -46,6 +46,8 @@ export {
 } from "./ddi/version.ts";
 export {
 	type Bank,
+	type BankScope,
+	bankFrom,
 	bankOf,
 	type Evaluation,
 	evaluate,

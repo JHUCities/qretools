@@ -5,7 +5,7 @@
  */
 import { isMap, isScalar, parseDocument } from "yaml";
 import type { Collision, DdiDocument } from "../ddi/document.ts";
-import type { Bank } from "../evaluate.ts";
+import type { BankScope } from "../evaluate.ts";
 import { type Finding, inDocumentOrder, type Range } from "../findings.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
@@ -16,7 +16,7 @@ import { parseInstrument } from "./parse.ts";
 
 export interface InstrumentContext {
 	/** The banks it uses, each already evaluated (`bankOf`), by the alias `uses` gives it. */
-	readonly banks: Readonly<Record<string, Bank>>;
+	readonly banks: Readonly<Record<string, BankScope>>;
 	/**
 	 * The DDI agency the instrument is published under: its maker's, not necessarily its
 	 * banks'. Absent, it is published under `invalid`, and a finding says so.

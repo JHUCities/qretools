@@ -20,7 +20,7 @@ import { holesOf, moveRanges, namesOf, type Problem } from "../cond/ast.ts";
 import { KEYWORDS } from "../cond/lex.ts";
 import { parseCondition } from "../cond/parse.ts";
 import { type Type, typeCondition, typeOf } from "../cond/type.ts";
-import type { Bank } from "../evaluate.ts";
+import type { BankScope } from "../evaluate.ts";
 import type { Finding, Range } from "../findings.ts";
 import { readCodeMap } from "../surface/codes.ts";
 import { type Code, definedVariables } from "../surface/draft.ts";
@@ -58,7 +58,7 @@ export interface ParsedInstrument {
 	/** Every name its conditions, fills and placeholders read, with what it resolved to. */
 	readonly names: ReadonlyMap<string, Named>;
 	/** The banks in reach (those `uses` names), by alias. */
-	readonly banks: Readonly<Record<string, Bank>>;
+	readonly banks: Readonly<Record<string, BankScope>>;
 }
 
 const TOP = [
@@ -116,7 +116,7 @@ const ORDERS: readonly Order[] = ["random", "rotate"];
  */
 export function parseInstrument(
 	source: string,
-	banks: Readonly<Record<string, Bank>>,
+	banks: Readonly<Record<string, BankScope>>,
 ): ParsedInstrument {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexInstrument(doc, source.length);
@@ -173,7 +173,7 @@ export function parseInstrument(
 
 	const uses = readUses(top.get("uses", true), banks, say);
 	// Only the banks `uses` names are in reach, whatever else was given.
-	const available: Readonly<Record<string, Bank>> = Object.fromEntries(
+	const available: Readonly<Record<string, BankScope>> = Object.fromEntries(
 		uses.flatMap((u) => {
 			const bank = banks[u.alias];
 			return bank === undefined ? [] : [[u.alias, bank]];
@@ -269,7 +269,7 @@ export function parseInstrument(
 interface Context {
 	readonly source: string;
 	readonly doc: Document;
-	readonly banks: Readonly<Record<string, Bank>>;
+	readonly banks: Readonly<Record<string, BankScope>>;
 	readonly uses: readonly Use[];
 	readonly scope: Map<string, Named>;
 	readonly say: (f: Finding) => void;
@@ -364,7 +364,7 @@ function readText(
 
 function readUses(
 	node: unknown,
-	banks: Readonly<Record<string, Bank>>,
+	banks: Readonly<Record<string, BankScope>>,
 	say: (f: Finding) => void,
 ): readonly Use[] {
 	if (node === undefined) return [];
@@ -428,7 +428,7 @@ function readUses(
 function readInputs(
 	doc: Document,
 	node: unknown,
-	banks: Readonly<Record<string, Bank>>,
+	banks: Readonly<Record<string, BankScope>>,
 	say: (f: Finding) => void,
 ): readonly Input[] {
 	if (node === undefined) return [];
@@ -540,7 +540,7 @@ function readDomain(
 	node: unknown,
 	kind: string,
 	path: string,
-	banks: Readonly<Record<string, Bank>>,
+	banks: Readonly<Record<string, BankScope>>,
 	say: (f: Finding) => void,
 ): ValueDomain | undefined {
 	if (kind === "responses") {

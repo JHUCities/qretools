@@ -21,7 +21,7 @@ import {
 } from "yaml";
 import { tokenize } from "../cond/lex.ts";
 import { NAME_KIND } from "../copy.ts";
-import type { Bank } from "../evaluate.ts";
+import type { BankScope } from "../evaluate.ts";
 import type { Node } from "./draft.ts";
 import { CONSTRUCTS, EXPRESSIONS, parseInstrument } from "./parse.ts";
 import { scalarMap } from "./scalar.ts";
@@ -52,7 +52,7 @@ interface At {
 export function instrumentCompletion(
 	source: string,
 	offset: number,
-	banks: Readonly<Record<string, Bank>>,
+	banks: Readonly<Record<string, BankScope>>,
 ): InstrumentCompletion | undefined {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const at = pairAt(source, doc.contents, offset, []);
@@ -181,7 +181,7 @@ function wordIn(
 
 /** Every bank question, `alias.name`, with its title or text. */
 function questions(
-	banks: Readonly<Record<string, Bank>>,
+	banks: Readonly<Record<string, BankScope>>,
 ): readonly CompletionOption[] {
 	return Object.entries(banks).flatMap(([alias, bank]) =>
 		[...bank.index.names.entries()].flatMap(([name, paths]) => {
@@ -206,7 +206,7 @@ function questions(
  */
 function names(
 	source: string,
-	banks: Readonly<Record<string, Bank>>,
+	banks: Readonly<Record<string, BankScope>>,
 ): readonly CompletionOption[] {
 	const parsed = parseInstrument(source, banks);
 	const own = [...parsed.scope.entries()].map(

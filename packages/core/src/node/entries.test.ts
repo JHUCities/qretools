@@ -36,6 +36,7 @@ describe("the entry points", () => {
 			    "absentRoot",
 			    "bankEnv",
 			    "bankFindings",
+			    "bankFrom",
 			    "bankLocation",
 			    "bankOf",
 			    "codeSpans",

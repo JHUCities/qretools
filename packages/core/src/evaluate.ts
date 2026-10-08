@@ -93,22 +93,74 @@ export interface SchemeFileEvaluation extends SchemeEvaluation {
 	readonly name: string;
 }
 
-/** A whole bank, evaluated: each file by its path. */
-export interface Bank {
+/**
+ * What an instrument reads of a bank: the environment its questions were read against,
+ * the questions, and the symbol table that finds them by name. A whole evaluated bank
+ * is one (`Bank`); so is a bank put together from evaluations kept elsewhere
+ * (`bankFrom`), as an editor keeps them while one question is typed.
+ */
+export interface BankScope {
 	/** The shared files' environment the questions were read against. */
 	readonly env: Env;
 	readonly questions: Readonly<Record<string, Evaluation>>;
-	readonly schemes: Readonly<Record<string, SchemeFileEvaluation>>;
-	/** Every file's findings, its own and the bank's about it (`fileFindings`). */
-	readonly findings: Readonly<Record<string, readonly Finding[]>>;
 	/** The bank's symbol table, keyed by path. */
 	readonly index: Index<string>;
-	/** Paths given that aren't bank files (`kindAt`): a wrong folder shows here. */
-	readonly ignored: readonly string[];
 	/** The DDI agency the bank declares; absent while it declares none (see `evaluate`). */
 	readonly agency?: string;
 	/** The versions the bank was evaluated at, by path, when they were given. */
 	readonly versions?: Versions;
+}
+
+/** A whole bank, evaluated: each file by its path. */
+export interface Bank extends BankScope {
+	readonly schemes: Readonly<Record<string, SchemeFileEvaluation>>;
+	/** Every file's findings, its own and the bank's about it (`fileFindings`). */
+	readonly findings: Readonly<Record<string, readonly Finding[]>>;
+	/** Paths given that aren't bank files (`kindAt`): a wrong folder shows here. */
+	readonly ignored: readonly string[];
+}
+
+/** Every evaluated file, questions and shared files together, in path order. */
+function byPath(
+	questions: Readonly<Record<string, Evaluation>>,
+	schemes: Readonly<Record<string, SchemeFileEvaluation>>,
+): readonly (readonly [string, Evaluation | SchemeFileEvaluation])[] {
+	return [...Object.entries(questions), ...Object.entries(schemes)].sort(
+		([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+	);
+}
+
+/**
+ * A bank from its files' evaluations, by path: the index built from their symbols and
+ * the agency from the environment. A new object every call: memoise on the inputs.
+ * Every evaluation given must have been made against `env` (and `versions`): a cache of
+ * evaluations is keyed on the environment, or names resolve against one and codes read
+ * from another, with no finding anywhere.
+ */
+export function bankFrom({
+	env,
+	questions,
+	schemes,
+	versions,
+}: {
+	readonly env: Env;
+	readonly questions: Readonly<Record<string, Evaluation>>;
+	readonly schemes: Readonly<Record<string, SchemeFileEvaluation>>;
+	readonly versions?: Versions | undefined;
+}): BankScope {
+	const index = indexOf(
+		byPath(questions, schemes).map(([key, ev]) => ({
+			key,
+			symbols: ev.symbols,
+		})),
+	);
+	return {
+		env,
+		questions,
+		index,
+		...(env.agency !== undefined && { agency: env.agency }),
+		...(versions !== undefined && { versions }),
+	};
 }
 
 /**
@@ -145,21 +197,13 @@ export function bankOf(
 				name: at.name,
 			};
 	}
-	const read: readonly (readonly [
-		string,
-		Evaluation | SchemeFileEvaluation,
-	])[] = [...Object.entries(questions), ...Object.entries(schemes)].sort(
-		([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
-	);
-	const index = indexOf(
-		read.map(([key, ev]) => ({ key, symbols: ev.symbols })),
-	);
+	const scope = bankFrom({ env, questions, schemes, versions });
 	// Another file, as a bank finding cites it: its name, else its path.
 	const label = (path: string): string =>
 		questions[path]?.draft.name ?? schemes[path]?.name ?? path;
 	const findings: Record<string, readonly Finding[]> = {};
-	for (const [path, ev] of read)
-		findings[path] = fileFindings(path, ev, index, label);
+	for (const [path, ev] of byPath(questions, schemes))
+		findings[path] = fileFindings(path, ev, scope.index, label);
 	// A required root file that's absent is said once, about the bank (`absentRoot`).
 	for (const kind of REQUIRED_ROOTS)
 		if (findings[ROOT[kind]] === undefined)
@@ -169,9 +213,9 @@ export function bankOf(
 		questions,
 		schemes,
 		findings,
-		index,
+		index: scope.index,
 		ignored,
-		...(env.agency !== undefined && { agency: env.agency }),
+		...(scope.agency !== undefined && { agency: scope.agency }),
 		...(versions !== undefined && { versions }),
 	};
 }
