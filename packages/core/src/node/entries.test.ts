@@ -116,6 +116,7 @@ describe("the entry points", () => {
 			  "node": [
 			    "main",
 			    "readBank",
+			    "readWorkspace",
 			  ],
 			}
 		`);

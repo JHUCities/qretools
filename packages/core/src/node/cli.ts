@@ -1,6 +1,6 @@
 /**
- * The `qretools` command: `check` a bank directory's findings, as compilers report
- * them, or `export` its DDI. `main` takes its output as values (`Io`), so it runs in a
+ * The `qretools` command: `check` a workspace directory's findings (its banks', its
+ * instruments' and its own file's), as compilers report them, or `export` a bank's DDI. `main` takes its output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { readFile } from "node:fs/promises";
@@ -24,7 +24,9 @@ import {
 } from "../findings.ts";
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
-import { readBank } from "./index.ts";
+import { type RemoteBank, remotesOf, workspaceOf } from "../workspace.ts";
+import { WORKSPACE } from "../workspacefile.ts";
+import { readBank, readWorkspace } from "./index.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
 export interface Io {
@@ -34,12 +36,13 @@ export interface Io {
 }
 
 const USAGE = `Usage:
-  qretools check [dir] [--strict]   Report a bank's findings; fail on anything to fill in or fix
+  qretools check [dir] [--strict]   Report a bank's or workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write the bank's DDI-Lifecycle 4.0 JSON
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> --agency <agency> [--bank alias=dir]... [-o file]
 
-dir is the bank's folder (default: the current directory).
+dir is the bank's or workspace's folder (default: the current directory). A workspace
+holds banks (each a folder with bank.yaml, or its root), instruments/ and workspace.yaml.
 An instrument's banks are read from the folders its \`uses\` names by relative path
 (\`./banks/x\`), or from --bank for an alias.
 --strict  also fail on warnings.
@@ -81,6 +84,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
+	if (command === "check")
+		return checkWorkspace(dir, args.values.strict === true, io);
 	let files: Readonly<Record<string, string>>;
 	try {
 		files = await readBank(dir);
@@ -96,10 +101,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		);
 		return USAGE_ERROR;
 	}
-	const bank = bankOf(files);
-	return command === "check"
-		? check(bank, files, dir, args.values.strict === true, io)
-		: exportBank(bank, args.values.output, io);
+	return exportBank(bankOf(files), args.values.output, io);
 }
 
 function parse(argv: readonly string[]) {
@@ -147,19 +149,69 @@ export function findingLine(
 	return `${path}:${line}:${col}: ${LEVEL[f.severity]}: ${f.message} [${what}]`;
 }
 
-function check(
-	bank: Bank,
-	files: Readonly<Record<string, string>>,
+/** The workspace in `dir`, checked: every file's findings in path order, then a count. */
+async function checkWorkspace(
 	dir: string,
 	strict: boolean,
 	io: Io,
-): number {
+): Promise<number> {
+	let files: Readonly<Record<string, string>>;
+	try {
+		files = await readWorkspace(dir);
+	} catch (e) {
+		io.err(
+			`Can't read the bank at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	// Banks in other repositories aren't fetched here yet: each says so on its use.
+	const remote = Object.fromEntries(
+		remotesOf(files).map((a): [string, RemoteBank] => [
+			a.key,
+			{
+				kind: "unavailable",
+				reason: `\`${a.owner}/${a.repo}${a.path === "" ? "" : `/${a.path}`}@${a.ref}\` is in another repository, which \`qretools check\` doesn't read yet.`,
+			},
+		]),
+	);
+	const ws = workspaceOf(files, { remote });
+	// Each file as the workspace has it: its findings, its text, and its ranges.
+	const checked: {
+		readonly path: string;
+		readonly findings: readonly Finding[];
+		readonly ranges: Readonly<Record<string, Range>>;
+	}[] = [];
+	for (const [folder, bank] of Object.entries(ws.banks))
+		for (const [path, findings] of Object.entries(bank.findings))
+			checked.push({
+				path: folder === "" ? path : `${folder}/${path}`,
+				findings,
+				ranges:
+					bank.questions[path]?.ranges ?? bank.schemes[path]?.ranges ?? {},
+			});
+	for (const [path, { instrument }] of Object.entries(ws.instruments))
+		checked.push({
+			path,
+			findings: instrument.findings,
+			ranges: instrument.ranges,
+		});
+	if (ws.file !== undefined)
+		checked.push({
+			path: WORKSPACE.file,
+			findings: ws.file.findings,
+			ranges: ws.file.ranges,
+		});
+	if (checked.length === 0) {
+		io.err(
+			`No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
+		);
+		return USAGE_ERROR;
+	}
 	const counts = { incomplete: 0, warnings: 0, findings: 0 };
-	for (const path of Object.keys(bank.findings).sort()) {
-		const findings = bank.findings[path] ?? [];
-		const ranges =
-			bank.questions[path]?.ranges ?? bank.schemes[path]?.ranges ?? {};
-		// As the user named the bank, so a problem matcher finds the file from here.
+	for (const { path, findings, ranges } of checked.sort((a, b) =>
+		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+	)) {
+		// As the user named the folder, so a problem matcher finds the file from here.
 		for (const f of findings)
 			io.out(`${findingLine(join(dir, path), files[path] ?? "", ranges, f)}\n`);
 		const s = status(findings);
@@ -167,8 +219,21 @@ function check(
 		if (s.kind === "incomplete") counts.incomplete += 1;
 		else if (s.kind === "advice" && s.worst === "warning") counts.warnings += 1;
 	}
+	// A YAML file read as nothing, said as compilers note it, at its start.
+	for (const path of ws.ignored) {
+		io.out(
+			`${join(dir, path)}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]\n`,
+		);
+		counts.findings += 1;
+	}
 	const read =
-		Object.keys(bank.questions).length + Object.keys(bank.schemes).length;
+		Object.values(ws.banks).reduce(
+			(n, b) =>
+				n + Object.keys(b.questions).length + Object.keys(b.schemes).length,
+			0,
+		) +
+		Object.keys(ws.instruments).length +
+		(ws.file === undefined ? 0 : 1);
 	io.err(
 		`${read} files, ${counts.findings} findings: ${counts.incomplete} with something to fill in or fix, ${counts.warnings} with warnings.\n`,
 	);

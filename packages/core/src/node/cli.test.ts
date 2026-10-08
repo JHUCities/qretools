@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
-import { glob, readFile } from "node:fs/promises";
+import { cp, glob, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
@@ -61,6 +63,35 @@ describe("qretools check", () => {
 		expect((await run("check", SAMPLE, "-o", "x")).code).toBe(2);
 		expect((await run("export", SAMPLE, "--strict")).code).toBe(2);
 		expect((await run("--help")).code).toBe(0);
+	});
+
+	it("checks a workspace: its banks, its instruments and its own file", async () => {
+		const ws = await mkdtemp(join(tmpdir(), "qretools-ws-"));
+		await cp(here("../../fixtures/households"), join(ws, "households"), {
+			recursive: true,
+		});
+		await cp(here("../../fixtures/instruments"), join(ws, "instruments"), {
+			recursive: true,
+		});
+		await writeFile(join(ws, "workspace.yaml"), "agency: org.example\n");
+		await writeFile(join(ws, "stray.yaml"), "x: 1\n");
+		const r = await run("check", ws);
+		const lines = r.out.trimEnd().split("\n");
+		// The households instrument reads its bank beside it; remote's bank isn't read here.
+		expect(
+			lines.filter(
+				(l) => l.includes("households.yaml:") && !l.includes(": note: "),
+			),
+		).toEqual([]);
+		expect(lines.find((l) => l.includes("remote.yaml:3:3:"))).toMatch(
+			/error: `owner\/bank@v1` is in another repository, which `qretools check` doesn't read yet\./,
+		);
+		expect(lines.at(-1)).toBe(
+			`${join(ws, "stray.yaml")}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]`,
+		);
+		// 16 bank files, 2 instruments, the workspace file.
+		expect(r.err).toMatch(/^19 files, /);
+		expect(r.code).toBe(1);
 	});
 
 	it("names files as the user named the bank, so editors find them from here", async () => {

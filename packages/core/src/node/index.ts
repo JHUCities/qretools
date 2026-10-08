@@ -1,7 +1,8 @@
 /**
  * `@qretools/core/node`: a bank read from a directory, for programs and CI. The only
  * part of the library that does I/O; everything it returns is a plain value for the
- * pure entry (`bankOf(await readBank(dir))`). `main` is the `qretools` command.
+ * pure entry (`bankOf(await readBank(dir))`, `workspaceOf(await readWorkspace(dir))`).
+ * `main` is the `qretools` command.
  */
 import { glob, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -28,6 +29,30 @@ export async function readBank(
 		throw new Error(`${dir} isn't a directory.`);
 	const files: Record<string, string> = {};
 	for await (const found of glob(PATTERNS, { cwd: dir })) {
+		const path = found.replaceAll("\\", "/");
+		const text = await readFile(join(dir, found), "utf8");
+		files[path] = text.replaceAll("\r\n", "\n");
+	}
+	return files;
+}
+
+/**
+ * Every YAML file under `dir`, at any depth, by its path relative to `dir`, as
+ * `readBank` gives a bank's: a workspace's banks, its instruments and its own file, for
+ * `workspaceOf` to sort. Folders starting `.` (a clone's `.git`) and `node_modules` are
+ * never walked. Rejects, as `readBank` does, if `dir` isn't a directory.
+ */
+export async function readWorkspace(
+	dir: string,
+): Promise<Readonly<Record<string, string>>> {
+	if (!(await stat(dir)).isDirectory())
+		throw new Error(`${dir} isn't a directory.`);
+	const skipped = (entry: string | { readonly name: string }): boolean => {
+		const name = typeof entry === "string" ? entry : entry.name;
+		return name.startsWith(".") || name === "node_modules";
+	};
+	const files: Record<string, string> = {};
+	for await (const found of glob("**/*.yaml", { cwd: dir, exclude: skipped })) {
 		const path = found.replaceAll("\\", "/");
 		const text = await readFile(join(dir, found), "utf8");
 		files[path] = text.replaceAll("\r\n", "\n");

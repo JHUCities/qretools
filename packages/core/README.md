@@ -52,7 +52,13 @@ qretools check path/to/bank --strict   # warnings fail too
 qretools export path/to/bank -o bank.json   # the bank's DDI, validated
 ```
 
-For an instrument, `qretools instrument check <file>` and `qretools instrument export
+`check` also reads a workspace: a folder holding banks (each a folder with
+`bank.yaml`, or its root), `instruments/` and `workspace.yaml`. It reports every bank's
+findings, every instrument's (read against the banks beside it, under the agency
+`workspace.yaml` gives), and notes YAML files it reads as nothing. A bank in another
+repository (`owner/repo@v1`) isn't fetched yet, and its use says so.
+
+For one instrument, `qretools instrument check <file>` and `qretools instrument export
 <file> --agency <agency>`; its banks are read from the folders `uses` names by relative
 path, or from `--bank alias=dir`.
 
