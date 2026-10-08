@@ -47,7 +47,11 @@ import { startingSettings, type Work } from "./persist.js";
 
 export type Id = number;
 
-/** A repository path: GitHub's identity for a file. */
+/**
+ * A path in the workspace (the settings' folder of the repository): GitHub's identity
+ * for a file, as the store reads and writes it. Built and split only by the core's
+ * `inBank` and `relIn`.
+ */
 export type Path = string;
 
 /** A file as GitHub has it: its blob sha and its text. */
@@ -75,6 +79,8 @@ export type Activity =
 export interface Question {
 	readonly kind: "question";
 	readonly id: Id;
+	/** The bank it belongs to: its folder in the workspace, "" for the root. A draft's too. */
+	readonly bank: string;
 	readonly source: string;
 	readonly base?: Base;
 }
@@ -84,6 +90,8 @@ export interface SchemeEntry {
 	readonly kind: SchemeKind;
 	readonly name: string;
 	readonly id: Id;
+	/** The bank it belongs to: its folder in the workspace, "" for the root. */
+	readonly bank: string;
 	readonly source: string;
 	readonly base?: Base;
 }
@@ -198,6 +206,14 @@ export type Bank =
 
 export interface Model {
 	readonly local: Local;
+	/**
+	 * The workspace's bank folders ("" for its root), as last loaded, or as this tab's
+	 * work names them before then: what a path is classified against (`placeOf`). Set
+	 * wherever `remote` is replaced whole (at start, on a load, on signing out), never
+	 * on its own, so the two can't disagree. Not derived from `remote`: a path is in
+	 * `remote` only once a bank holds it.
+	 */
+	readonly banks: readonly string[];
 	/**
 	 * The author's branch as last loaded or saved (before its first save, the bank's
 	 * default branch, which it will be created from): bases, sync states, conflicts and
@@ -470,6 +486,7 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	};
 	const opened: Model = {
 		local,
+		banks: banksOfLocal(local),
 		...(stored?.login !== undefined && { author: stored.login }),
 		// The last GitHub state this browser knew is exactly what its bases record.
 		remote: remoteOfBases(local),
@@ -543,6 +560,7 @@ export function signedOut(model: Model): Model {
 	return compact({
 		...model,
 		local,
+		banks: banksOfLocal(local),
 		remote: remoteOfBases(local),
 		activity: {},
 		loading: { kind: "bundled" } as const,
@@ -554,6 +572,24 @@ export function signedOut(model: Model): Model {
 			expanded: model.browser.expanded,
 		},
 	});
+}
+
+/** The banks the working copies belong to; the root alone while there are none. */
+export function banksOfLocal(local: Local): readonly string[] {
+	const banks = [...new Set(allFiles(local).map((f) => f.bank))].sort();
+	return banks.length === 0 ? [""] : banks;
+}
+
+/**
+ * The bank a new file goes to: the open file's, else the workspace's first. A choice of
+ * bank, where there are several, comes with the workspace's tree.
+ */
+export function newBank(model: Model): string {
+	const open =
+		model.screen.kind === "editing"
+			? fileOf(model, model.screen.id)
+			: undefined;
+	return open?.bank ?? model.banks[0] ?? "";
 }
 
 export function remoteOfBases(local: Local): Remote {
@@ -622,7 +658,7 @@ export const envOfRemote = (schemes: Remote["schemes"]): Env =>
 	);
 
 export const toWork = (model: Model): Work => ({
-	version: 5,
+	version: 6,
 	repo: bankText(model.settings),
 	...(model.author !== undefined && { login: model.author }),
 	nextId: model.nextId,

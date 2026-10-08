@@ -23,9 +23,10 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import {
+	inBank,
 	indexOf,
 	isRoot,
-	kindAt,
+	placeOf,
 	plainText,
 	SCHEME_KINDS,
 	SCHEME_NAME,
@@ -377,7 +378,8 @@ export function App() {
 							) : open === undefined && waiting && model.pendingLink ? (
 								<FileSkeleton
 									kind={
-										kindAt(model.pendingLink.file ?? "")?.kind ?? "question"
+										placeOf(model.pendingLink.file ?? "", model.banks)?.at
+											.kind ?? "question"
 									}
 									onBack={() => dispatch({ kind: "listOpened" })}
 								/>
@@ -400,10 +402,14 @@ export function App() {
 			{moving && movingQuestion?.base && (
 				<MoveDialog
 					from={movingQuestion.base.path}
-					current={folderOfPath(movingQuestion.base.path)}
-					to={movedPath(movingQuestion.base.path, moving.folder)}
+					current={folderOfPath(movingQuestion.base.path, movingQuestion.bank)}
+					to={movedPath(
+						movingQuestion.base.path,
+						moving.folder,
+						movingQuestion.bank,
+					)}
 					folder={moving.folder}
-					folders={bankFolders(model)}
+					folders={bankFolders(model, movingQuestion.bank)}
 					problem={moveProblem(model, movingQuestion, moving.folder)}
 					blocked={writeBlocked(model)}
 					also={alsoSaves(
@@ -426,8 +432,10 @@ export function App() {
 				<SaveDialog
 					draft={evaluations.get(savingQuestion, env).draft}
 					folder={saving.folder}
-					folders={bankFolders(model)}
-					taken={(path) => path in model.remote.questions}
+					folders={bankFolders(model, savingQuestion.bank)}
+					taken={(path) =>
+						inBank(savingQuestion.bank, path) in model.remote.questions
+					}
 					also={alsoSaves(
 						model.local,
 						model.remote,

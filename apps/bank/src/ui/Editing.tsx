@@ -17,9 +17,9 @@ import {
 	type Index,
 	inScope,
 	isRoot,
-	kindAt,
 	type Mark,
 	othersOf,
+	placeOf,
 	type Range,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
@@ -727,7 +727,11 @@ export function ForeignView({
 	);
 	const file = screen.file;
 	// One value per path, so the evaluations below keep theirs between renders.
-	const at = useMemo(() => kindAt(screen.path), [screen.path]);
+	const banks = useModel((m) => m.banks);
+	const at = useMemo(
+		() => placeOf(screen.path, banks)?.at,
+		[screen.path, banks],
+	);
 	const kind = at?.kind;
 	const ev = useMemo(
 		() =>

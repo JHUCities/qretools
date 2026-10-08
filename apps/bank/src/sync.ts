@@ -6,9 +6,10 @@
  */
 import {
 	type Index,
+	inBank,
 	isRoot,
-	kindAt,
 	type Mention,
+	placeOf,
 	schemePath,
 	usedBy,
 } from "@qretools/core";
@@ -37,10 +38,12 @@ export type Sync =
 	/** Gone from GitHub while this copy has it. */
 	| "deletedOnGitHub";
 
-/** The path a file lives at, or will: its base, or for a scheme file the one its kind and name give. */
+/** The path a file lives at, or will: its base, or for a scheme file the one its kind and name give in its bank. */
 export const claimOf = (f: Entry): Path | undefined =>
 	f.base?.path ??
-	(f.kind === "question" ? undefined : schemePath(f.kind, f.name));
+	(f.kind === "question"
+		? undefined
+		: inBank(f.bank, schemePath(f.kind, f.name)));
 
 export const isUnsaved = (f: Entry): boolean =>
 	f.base === undefined || f.source !== f.base.text;
@@ -58,12 +61,18 @@ export function syncOf(
 	return source === base.text || source === remote.text ? "behind" : "conflict";
 }
 
-/** Which remote slice a path belongs to; undefined for a file the tool does not read. */
-export function sliceOf(path: Path): keyof Remote | undefined {
-	const at = kindAt(path);
-	return at === undefined
+/**
+ * Which remote slice a workspace path belongs to, among the workspace's `banks`;
+ * undefined for a file no bank reads.
+ */
+export function sliceOf(
+	path: Path,
+	banks: readonly string[],
+): keyof Remote | undefined {
+	const place = placeOf(path, banks);
+	return place === undefined
 		? undefined
-		: at.kind === "question"
+		: place.at.kind === "question"
 			? "questions"
 			: "schemes";
 }
@@ -79,13 +88,17 @@ export const remoteBlob = (remote: Remote, f: Entry): Blob | undefined => {
  * GitHub's state after a full load. A slice whose shas all match keeps its old
  * reference, so a reload that brings nothing new does not rebuild the environment.
  */
-export function remoteOf(previous: Remote, files: readonly File[]): Remote {
+export function remoteOf(
+	previous: Remote,
+	files: readonly File[],
+	banks: readonly string[],
+): Remote {
 	const next: { questions: Record<Path, Blob>; schemes: Record<Path, Blob> } = {
 		questions: {},
 		schemes: {},
 	};
 	for (const f of files) {
-		const slice = sliceOf(f.path);
+		const slice = sliceOf(f.path, banks);
 		if (slice !== undefined) next[slice][f.path] = { sha: f.sha, text: f.text };
 	}
 	return {
@@ -121,6 +134,7 @@ export function rebase(
 	local: Local,
 	remote: Remote,
 	nextId: Id,
+	banks: readonly string[],
 ): { local: Local; nextId: Id } {
 	// Every path a working file holds or will hold, computed first as a value. A file
 	// dropped below as a clean deletion still counts; its path is not on GitHub anyway.
@@ -173,24 +187,31 @@ export function rebase(
 	};
 	questions = added(
 		questions,
-		(path, blob, fid): Question => ({
-			kind: "question",
-			id: fid,
-			source: blob.text,
-			base: { path, ...blob },
-		}),
+		(path, blob, fid): Question | undefined => {
+			const place = placeOf(path, banks);
+			return place === undefined
+				? undefined
+				: {
+						kind: "question",
+						id: fid,
+						bank: place.bank,
+						source: blob.text,
+						base: { path, ...blob },
+					};
+		},
 		remote.questions,
 	);
 	schemes = added(
 		schemes,
 		(path, blob, fid): SchemeEntry | undefined => {
-			const at = kindAt(path);
-			return at === undefined || at.kind === "question"
+			const place = placeOf(path, banks);
+			return place === undefined || place.at.kind === "question"
 				? undefined
 				: {
-						kind: at.kind,
-						name: at.name,
+						kind: place.at.kind,
+						name: place.at.name,
 						id: fid,
+						bank: place.bank,
 						source: blob.text,
 						base: { path, ...blob },
 					};

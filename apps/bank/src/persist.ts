@@ -227,13 +227,41 @@ export function readPersisted(
  * points this tab's work at another bank; `login` is whose it is, once someone has
  * signed in with it.
  */
-export const WorkSchema = z.strictObject({
+const V5Schema = z.strictObject({
 	version: z.literal(5),
 	repo: z.string(),
 	login: z.string().optional(),
 	nextId: z.int().positive(),
 	questions: z.array(QuestionSchema),
 	schemes: z.array(SchemeSchema),
+});
+
+/** Every entry of version 6 says which bank of the workspace it belongs to. */
+const inBankSchema = { bank: z.string() };
+
+/**
+ * Version 6: version 5 in a workspace. `repo` is the workspace (the folder of the
+ * repository signed in to); each entry names its bank's folder in it, "" for its root,
+ * and paths are the workspace's.
+ */
+export const WorkSchema = z.strictObject({
+	version: z.literal(6),
+	repo: z.string(),
+	login: z.string().optional(),
+	nextId: z.int().positive(),
+	questions: z.array(QuestionSchema.extend(inBankSchema)),
+	schemes: z.array(SchemeSchema.extend(inBankSchema)),
+});
+
+/**
+ * Version 5's work was one bank's, at the folder it signed in to: in version 6 that
+ * folder is the workspace and the bank is its root, so every path stays as it was.
+ */
+const v5ToV6 = (v5: z.infer<typeof V5Schema>): Work => ({
+	...v5,
+	version: 6,
+	questions: v5.questions.map((q) => ({ ...q, bank: "" })),
+	schemes: v5.schemes.map((e) => ({ ...e, bank: "" })),
 });
 
 export type Work = z.infer<typeof WorkSchema>;
@@ -247,7 +275,7 @@ export const WORK_ASIDE_KEY = "qretools.work.aside";
 export function readWork(
 	raw: string | null,
 ): Result<Work | undefined, Failure> {
-	return parseStored(raw, WorkSchema, {
+	return parseStored(raw, z.union([WorkSchema, V5Schema.transform(v5ToV6)]), {
 		what: "The work kept in this tab",
 		key: WORK_UNREADABLE_KEY,
 	});
@@ -357,14 +385,14 @@ export function fromLegacy(p: Persisted): {
 	readonly setAside: boolean;
 } {
 	return {
-		work: {
+		work: v5ToV6({
 			version: 5,
 			repo: p.workOf?.repo ?? `${p.settings.owner}/${p.settings.repo}`,
 			...(p.workOf?.login !== undefined && { login: p.workOf.login }),
 			nextId: p.nextId,
 			questions: p.questions,
 			schemes: p.schemes,
-		},
+		}),
 		settings: { ...p.settings, path: "" },
 		setAside: Object.values(p.kept).some(
 			(k) => k.questions.length + k.schemes.length > 0,

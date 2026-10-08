@@ -4,11 +4,13 @@ import {
 	EMPTY_ENV,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
+	inBank,
 	isRoot,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
 	type NamedScheme,
 	parseSurface,
+	relIn,
 	SCHEME_NAME,
 	SHAPE,
 	saveableName,
@@ -58,6 +60,7 @@ import {
 	type Model,
 	type Msg,
 	type Naming,
+	newBank,
 	otherAuthor,
 	otherBank,
 	ownWork,
@@ -328,7 +331,11 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "questionCreated": {
-			const [next, id] = add(model, { kind: "question", source: msg.text });
+			const [next, id] = add(model, {
+				kind: "question",
+				bank: newBank(model),
+				source: msg.text,
+			});
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
 		}
 
@@ -354,14 +361,16 @@ function step(model: Model, msg: Msg): Step {
 				];
 			// One file per bank: open it if it exists, else start it.
 			const root = msg.scheme;
+			const bank = newBank(model);
 			const existing = Object.values(model.local.schemes).find(
-				(e) => e.kind === root,
+				(e) => e.kind === root && e.bank === bank,
 			);
 			if (existing)
 				return [{ ...model, screen: { kind: "editing", id: existing.id } }, []];
 			const [next, id] = add(model, {
 				kind: root,
 				name: root,
+				bank,
 				source: SCHEME_TEMPLATES[root],
 			});
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
@@ -426,13 +435,18 @@ function step(model: Model, msg: Msg): Step {
 					: shape === "text"
 						? textEntrySource(naming.text)
 						: SCHEME_TEMPLATES[naming.kind];
+			// The question that named it now names the file, whatever name was chosen.
+			const { use } = naming.purpose;
+			// In the bank of the question that named it, where its name is read.
+			const bank =
+				(use === undefined ? undefined : model.local.questions[use.id]?.bank) ??
+				newBank(model);
 			const [added, id] = add(closed, {
 				kind: naming.kind,
 				name: naming.name,
+				bank,
 				source,
 			});
-			// The question that named it now names the file, whatever name was chosen.
-			const { use } = naming.purpose;
 			const q = use === undefined ? undefined : added.local.questions[use.id];
 			const used =
 				use === undefined || q === undefined
@@ -507,7 +521,7 @@ function step(model: Model, msg: Msg): Step {
 			// and the name it was given at creation.
 			if (q.base !== undefined) return write(model, as, msg.id, q, q.base.path);
 			if (q.kind !== "question") {
-				const path = schemePath(q.kind, q.name);
+				const path = inBank(q.bank, schemePath(q.kind, q.name));
 				return taken(model, path, msg.id)
 					? [
 							refuse(
@@ -572,18 +586,18 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				];
 			// A new draft must not silently overwrite a bank file at that path.
-			if (taken(model, where.value.path, saving.id)) {
+			if (taken(model, inBank(q.bank, where.value.path), saving.id)) {
 				return [
 					refuse(
 						closed,
 						saving.id,
-						`A question already exists at \`${where.value.path}\`.`,
+						`A question already exists at \`${inBank(q.bank, where.value.path)}\`.`,
 						"Open the bank's copy to change it, or choose another name or folder.",
 					),
 					[],
 				];
 			}
-			return write(closed, as, saving.id, q, where.value.path);
+			return write(closed, as, saving.id, q, inBank(q.bank, where.value.path));
 		}
 
 		case "moveRequested": {
@@ -596,7 +610,7 @@ function step(model: Model, msg: Msg): Step {
 						...model.browser,
 						moving: {
 							id: msg.id,
-							folder: msg.folder ?? folderOfPath(q.base.path),
+							folder: msg.folder ?? folderOfPath(q.base.path, q.bank),
 						},
 					},
 				},
@@ -637,7 +651,7 @@ function step(model: Model, msg: Msg): Step {
 			};
 			const problem = moveProblem(model, q, moving.folder);
 			if (problem !== undefined) return [refuse(closed, q.id, problem), []];
-			const to = movedPath(q.base.path, moving.folder);
+			const to = movedPath(q.base.path, moving.folder, q.bank);
 			// A move also saves (owner, 2026-09-29): the working text at the new path,
 			// the old path deleted, and the scheme files it names, as a save would.
 			const env = envOf(model.local.schemes, model.remote.schemes);
@@ -704,6 +718,7 @@ function step(model: Model, msg: Msg): Step {
 					absorbed.local,
 					absorbed.remote,
 					absorbed.nextId,
+					absorbed.banks,
 				);
 				const failedAt =
 					primary === undefined
@@ -873,10 +888,18 @@ function step(model: Model, msg: Msg): Step {
 			// shas are content addresses.
 			const { files, from, aheadBy, behindBy } = msg.result.value;
 			const proposable = aheadBy > 0;
-			const remote = remoteOf(model.remote, files);
-			const { local, nextId } = rebase(model.local, remote, model.nextId);
+			// The bank in the settings' folder, read on its own: the workspace's root.
+			const banks = [""];
+			const remote = remoteOf(model.remote, files, banks);
+			const { local, nextId } = rebase(
+				model.local,
+				remote,
+				model.nextId,
+				banks,
+			);
 			const loaded: Model = compact({
 				...model,
+				banks,
 				local,
 				remote,
 				nextId,
@@ -1224,13 +1247,14 @@ function stale(model: Model, msg: Msg): boolean {
 	}
 }
 
-/** The folder of a question path: `questions/<folder>/<name>.yaml`. */
-export const folderOfPath = (path: Path): string => path.split("/")[1] ?? "";
+/** The folder of a question's path in its bank: `questions/<folder>/<name>.yaml`. */
+export const folderOfPath = (path: Path, bank: string): string =>
+	relIn(bank, path).split("/")[1] ?? "";
 const fileName = (path: Path): string =>
 	(path.split("/").at(-1) ?? path).replace(/\.yaml$/, "");
-/** Only the folder changes; the filename stays, whatever unsaved edits say the name is. */
-export const movedPath = (path: Path, folder: string): Path =>
-	`questions/${folder}/${path.split("/").at(-1) ?? ""}`;
+/** Only the folder changes, within its bank; the filename stays, whatever unsaved edits say the name is. */
+export const movedPath = (path: Path, folder: string, bank: string): Path =>
+	inBank(bank, `questions/${folder}/${path.split("/").at(-1) ?? ""}`);
 
 /** Why a bank question cannot move to `folder`, or undefined when it can. */
 export function moveProblem(
@@ -1240,7 +1264,7 @@ export function moveProblem(
 ): string | undefined {
 	if (q.base === undefined) return "Only a question in the bank can move.";
 	if (!FOLDER_PATTERN.test(folder)) return FOLDER_RULE_TEXT;
-	const to = movedPath(q.base.path, folder);
+	const to = movedPath(q.base.path, folder, q.bank);
 	if (to === q.base.path) return "It's already in that folder.";
 	const sync = syncOf(q, remoteBlob(model.remote, q));
 	if (sync === "conflict" || sync === "deletedOnGitHub")
@@ -1624,7 +1648,7 @@ function withActivity(
 
 /** Record what a write, delete or reload told us about the author's branch. */
 function withGitHub(model: Model, path: Path, blob: Blob | undefined): Model {
-	return { ...model, remote: withBlob(model.remote, path, blob) };
+	return { ...model, remote: withBlob(model.remote, path, blob, model.banks) };
 }
 
 /** A save made a commit on the author's branch: it exists now, with something to propose. */
@@ -1638,8 +1662,13 @@ function committed(model: Model): Model {
 }
 
 /** GitHub's copy at one path, set or removed, in the slice the path belongs to. */
-function withBlob(remote: Remote, path: Path, blob: Blob | undefined): Remote {
-	const slice = sliceOf(path);
+function withBlob(
+	remote: Remote,
+	path: Path,
+	blob: Blob | undefined,
+	banks: readonly string[],
+): Remote {
+	const slice = sliceOf(path, banks);
 	if (slice === undefined) return remote;
 	const { [path]: _, ...rest } = remote[slice];
 	return {
@@ -1668,8 +1697,8 @@ function without(model: Model, id: Id): Model {
 }
 
 type NewFile =
-	| { readonly kind: "question"; readonly source: string }
-	| Pick<SchemeEntry, "kind" | "name" | "source">;
+	| Pick<Question, "kind" | "bank" | "source">
+	| Pick<SchemeEntry, "kind" | "name" | "bank" | "source">;
 
 function add(model: Model, file: NewFile): [Model, Id] {
 	const id = model.nextId;

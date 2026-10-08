@@ -23,12 +23,14 @@ const bank = (
 ): Question => ({
 	id,
 	kind: "question",
+	bank: "",
 	source,
 	base: { path, sha: "s", text },
 });
 const draft = (id: number, source: string): Question => ({
 	id,
 	kind: "question",
+	bank: "",
 	source,
 });
 const base = init({ work: ok(undefined), hasToken: false })[0];
@@ -135,6 +137,7 @@ describe("schemeSections", () => {
 	): SchemeEntry => ({
 		id,
 		kind,
+		bank: "",
 		name,
 		source: text,
 		base: { path: schemePath(kind, name), sha: "s", text },

@@ -75,6 +75,7 @@ describe("rebase", () => {
 	): Question => ({
 		kind: "question",
 		id,
+		bank: "",
 		source,
 		base: base(path, sha, text),
 	});
@@ -84,22 +85,32 @@ describe("rebase", () => {
 			2: q(2, "questions/b/b.yaml", "old b", "edited b"),
 			3: q(3, "questions/c/c.yaml", "old c"),
 			4: q(4, "questions/d/d.yaml", "old d", "edited d"),
-			5: { kind: "question", id: 5, source: "a draft" },
+			5: { kind: "question", id: 5, bank: "", source: "a draft" },
 		},
 		schemes: {
 			// A scale drafted here under a name someone else has since pushed.
-			6: { kind: "scale", id: 6, name: "yn", source: "labels:\n  1: Mine\n" },
+			6: {
+				kind: "scale",
+				id: 6,
+				name: "yn",
+				bank: "",
+				source: "labels:\n  1: Mine\n",
+			},
 		},
 	};
-	const remote = remoteOf({ questions: {}, schemes: {} }, [
-		{ path: "questions/a/a.yaml", sha: "A", text: "new a" },
-		{ path: "questions/b/b.yaml", sha: "B", text: "new b" },
-		{ path: "questions/e/e.yaml", sha: "E", text: "new e" },
-		{ path: "scales/yn.yaml", sha: "Y", text: "labels:\n  1: Theirs\n" },
-		{ path: "universes/renters.yaml", sha: "R", text: "text: Renters\n" },
-		{ path: "migration/README.md", sha: "M", text: "ignored" },
-	]);
-	const { local: out, nextId } = rebase(local, remote, 7);
+	const remote = remoteOf(
+		{ questions: {}, schemes: {} },
+		[
+			{ path: "questions/a/a.yaml", sha: "A", text: "new a" },
+			{ path: "questions/b/b.yaml", sha: "B", text: "new b" },
+			{ path: "questions/e/e.yaml", sha: "E", text: "new e" },
+			{ path: "scales/yn.yaml", sha: "Y", text: "labels:\n  1: Theirs\n" },
+			{ path: "universes/renters.yaml", sha: "R", text: "text: Renters\n" },
+			{ path: "migration/README.md", sha: "M", text: "ignored" },
+		],
+		[""],
+	);
+	const { local: out, nextId } = rebase(local, remote, 7, [""]);
 
 	it("fast-forwards what only GitHub changed, and keeps what the author changed", () => {
 		expect(out.questions[1]).toEqual(
@@ -141,15 +152,19 @@ describe("rebase", () => {
 	});
 
 	it("keeps every reference when nothing changed", () => {
-		const settled = rebase(out, remote, nextId);
+		const settled = rebase(out, remote, nextId, [""]);
 		expect(settled.local).toBe(out);
-		const again: Remote = remoteOf(remote, [
-			{ path: "questions/a/a.yaml", sha: "A", text: "new a" },
-			{ path: "questions/b/b.yaml", sha: "B", text: "new b" },
-			{ path: "questions/e/e.yaml", sha: "E", text: "new e" },
-			{ path: "scales/yn.yaml", sha: "Y", text: "labels:\n  1: Theirs\n" },
-			{ path: "universes/renters.yaml", sha: "R", text: "text: Renters\n" },
-		]);
+		const again: Remote = remoteOf(
+			remote,
+			[
+				{ path: "questions/a/a.yaml", sha: "A", text: "new a" },
+				{ path: "questions/b/b.yaml", sha: "B", text: "new b" },
+				{ path: "questions/e/e.yaml", sha: "E", text: "new e" },
+				{ path: "scales/yn.yaml", sha: "Y", text: "labels:\n  1: Theirs\n" },
+				{ path: "universes/renters.yaml", sha: "R", text: "text: Renters\n" },
+			],
+			[""],
+		);
 		expect(again.questions).toBe(remote.questions);
 		expect(again.schemes).toBe(remote.schemes);
 	});
@@ -174,6 +189,7 @@ describe("usersIn", () => {
 		const scale = {
 			kind: "scale",
 			id: 9,
+			bank: "",
 			name: "agree4",
 			source: "",
 		} as SchemeEntry;

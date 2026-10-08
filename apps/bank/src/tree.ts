@@ -6,10 +6,12 @@
  * `update` (`openFolder`), so the user can still close it.
  */
 import {
+	bankAt,
 	type Evaluation,
 	type Index,
 	isRoot,
 	labelOf,
+	relIn,
 	SCHEME_KINDS,
 	SCHEME_LABELS,
 	type SchemeEvaluation,
@@ -50,7 +52,9 @@ export interface Folder {
 export const folderOfQuestion = (q: Question): string =>
 	// A saved question is where its path puts it; a draft is nowhere yet, whatever
 	// its name (no convention of one bank, such as a topic prefix, is read into it).
-	q.base !== undefined ? (q.base.path.split("/")[1] ?? UNFILED) : UNFILED;
+	q.base !== undefined
+		? (relIn(q.bank, q.base.path).split("/")[1] ?? UNFILED)
+		: UNFILED;
 
 export function treeOf(
 	model: TreeInput,
@@ -181,11 +185,15 @@ export function schemeSections(
 	});
 }
 
-/** The folders the bank has, for the save dialog. Drafts do not count: they are not filed yet. */
-export const bankFolders = (model: Model): readonly string[] =>
+/** The folders a bank has, for the save and move dialogs. Drafts do not count: they are not filed yet. */
+export const bankFolders = (model: Model, bank: string): readonly string[] =>
 	[
 		...new Set(
-			Object.keys(model.remote.questions).map((p) => p.split("/")[1] ?? ""),
+			Object.keys(model.remote.questions).flatMap((p) =>
+				bankAt(p, model.banks) === bank
+					? [relIn(bank, p).split("/")[1] ?? ""]
+					: [],
+			),
 		),
 	]
 		.filter((f) => f !== "")

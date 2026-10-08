@@ -85,6 +85,7 @@ const bankQuestion = (
 ): Question => ({
 	kind: "question",
 	id,
+	bank: "",
 	source,
 	base: { path, sha, text },
 });
@@ -111,13 +112,14 @@ describe("init", () => {
 
 	it("restores saved work, and starts connecting when a token is on hand", () => {
 		const stored = {
-			version: 5 as const,
+			version: 6 as const,
 			repo: "JHUCities/bas-question-bank",
 			nextId: 9,
 			questions: [
 				{
 					id: 3,
 					kind: "question" as const,
+					bank: "",
 					source: "name: q\n",
 					base: { path: "questions/q/q.yaml", sha: "abc", text: "name: q\n" },
 				},
@@ -1042,6 +1044,7 @@ describe("change sets", () => {
 	): SchemeEntry => ({
 		kind: "scale",
 		id,
+		bank: "",
 		name,
 		source: text,
 		...(base !== undefined && {
@@ -1447,6 +1450,7 @@ describe("moving a question", () => {
 		const yn: SchemeEntry = {
 			kind: "scale",
 			id: 10,
+			bank: "",
 			name: "yn",
 			source: "labels:\n  1: Yes\n  2: No\n",
 			base: {
@@ -1581,7 +1585,7 @@ describe("moving a question", () => {
 	});
 
 	it("only the folder changes, never the filename", () => {
-		expect(movedPath("questions/svy/dem_latx.yaml", "dem")).toBe(
+		expect(movedPath("questions/svy/dem_latx.yaml", "dem", "")).toBe(
 			"questions/dem/dem_latx.yaml",
 		);
 	});
@@ -1856,7 +1860,7 @@ describe("work belongs to this tab", () => {
 
 	it("starts in its own work's bank, and records who signed in with it", () => {
 		const work = {
-			version: 5 as const,
+			version: 6 as const,
 			repo: "a/bank",
 			login: "iain",
 			nextId: 1,
@@ -1963,10 +1967,16 @@ describe("signing out", () => {
 			local: {
 				questions: {
 					...m.local.questions,
-					3: { kind: "question", id: 3, source: "name: draft\n" },
+					3: { kind: "question", id: 3, bank: "", source: "name: draft\n" },
 				},
 				schemes: {
-					4: { kind: "scale", name: "yn", id: 4, source: "labels:\n  1: Y\n" },
+					4: {
+						kind: "scale",
+						name: "yn",
+						id: 4,
+						bank: "",
+						source: "labels:\n  1: Y\n",
+					},
 				},
 			},
 			nextId: 5,
