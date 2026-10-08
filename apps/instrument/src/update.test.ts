@@ -42,9 +42,12 @@ describe("signing in to a project", () => {
 	it("starts at once with a token on hand, and only with a project chosen", () => {
 		expect(init({ settings: SETTINGS, hasToken: true })).toEqual([
 			expect.objectContaining({ session: { kind: "connecting" } }),
-			[{ kind: "connect", repo: { owner: "o", repo: "r", path: "p" } }],
+			[
+				{ kind: "loadDdiSchema" },
+				{ kind: "connect", repo: { owner: "o", repo: "r", path: "p" } },
+			],
 		]);
-		expect(init({ hasToken: true })[1]).toEqual([]);
+		expect(init({ hasToken: true })[1]).toEqual([{ kind: "loadDdiSchema" }]);
 		expect(init({ settings: SETTINGS, hasToken: false })[0].session).toEqual({
 			kind: "anonymous",
 		});

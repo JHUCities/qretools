@@ -17,6 +17,7 @@ import type {
 	Loaded,
 	Who,
 } from "@qretools/shell";
+import type { DdiSchema } from "@qretools/shell/ui";
 
 /** This app's keys in the browser's storage: its own, beside the bank app's. */
 export const THEME_KEY = "qretools.instrument.theme";
@@ -83,6 +84,8 @@ export interface Model {
 	/** A link that arrived before the project loaded: opened once it has. */
 	readonly pendingLink?: Link;
 	readonly theme: ThemeChoice;
+	/** The official DDI schema, loaded lazily; the compiled validator lives in the effects. */
+	readonly ddiSchema: DdiSchema;
 	/** Said once and dismissed: what went wrong that isn't the session's or the project's. */
 	readonly failures: readonly Failure[];
 }
@@ -110,6 +113,7 @@ export type Msg =
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "hashChanged"; readonly hash: string }
 	| { readonly kind: "themeChosen"; readonly theme: ThemeChoice }
+	| { readonly kind: "ddiSchemaLoaded"; readonly result: DdiSchema }
 	| { readonly kind: "signOutRequested" }
 	| { readonly kind: "failureDismissed"; readonly index: number };
 
@@ -126,7 +130,8 @@ export type Cmd =
 	  }
 	| { readonly kind: "saveSettings"; readonly settings: BankSettings }
 	| { readonly kind: "applyTheme"; readonly theme: ThemeChoice }
-	| { readonly kind: "forgetToken" };
+	| { readonly kind: "forgetToken" }
+	| { readonly kind: "loadDdiSchema" };
 
 export type Dispatch = (msg: Msg) => void;
 
@@ -157,9 +162,15 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 			banks: {},
 			working: {},
 			theme: flags.theme ?? "system",
+			ddiSchema: { kind: "loading" },
 			failures: flags.signInFailure === undefined ? [] : [flags.signInFailure],
 		},
-		signingIn ? [{ kind: "connect", repo: repoOf(settings) }] : [],
+		[
+			{ kind: "loadDdiSchema" },
+			...(signingIn
+				? [{ kind: "connect" as const, repo: repoOf(settings) }]
+				: []),
+		],
 	];
 }
 

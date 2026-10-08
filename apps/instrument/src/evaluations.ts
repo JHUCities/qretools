@@ -4,8 +4,8 @@
  * Model keeps until a reload or a sign-out. A view concern; pure apart from the cache.
  */
 import { type Bank, bankOf } from "@qretools/core";
-import type { BankLoad, Model } from "./model.ts";
-import { usesOf } from "./uses.ts";
+import type { BankLoad } from "./model.ts";
+import { type UsesInput, usesOf } from "./uses.ts";
 
 type Read = Extract<BankLoad, { kind: "loaded" }>;
 
@@ -22,7 +22,7 @@ function bankFor(load: Read): Bank {
 }
 
 /** Each bank the open instrument uses that has been read and found, by its alias. */
-export function banksOf(model: Model): Readonly<Record<string, Bank>> {
+export function banksOf(model: UsesInput): Readonly<Record<string, Bank>> {
 	return Object.fromEntries(
 		usesOf(model).flatMap((u) =>
 			u.state.kind === "loaded" &&

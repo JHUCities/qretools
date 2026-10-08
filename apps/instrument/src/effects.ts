@@ -3,7 +3,16 @@
  * shell's `createCredentials` with their renewal and stores. Every result goes back
  * through `dispatch` as a message; the token never enters the Model or a Msg.
  */
-import { err, ok, PROJECT, type Result } from "@qretools/core";
+import {
+	type DdiDocument,
+	err,
+	type Finding,
+	makeValidator,
+	ok,
+	PROJECT,
+	type Result,
+	type Validator,
+} from "@qretools/core";
 import type { Editor } from "@qretools/editor";
 import {
 	type BranchTarget,
@@ -29,6 +38,8 @@ export interface Effects {
 	/** Set the token the next sign-in uses (development); remembered per the setting. */
 	setToken(token: string, remember: boolean): void;
 	hasToken(): boolean;
+	/** The official schema's problems with a document, or undefined until it has loaded. */
+	validate(ddi: DdiDocument): readonly Finding[] | undefined;
 }
 
 /** How long an address must stay as typed before its bank is read. */
@@ -37,6 +48,7 @@ const BANK_DELAY_MS = 500;
 export function createEffects(deps: CredentialsDeps): Effects {
 	const credentials = createCredentials(deps);
 	let editor: Editor | undefined;
+	let validator: Validator | undefined;
 	/** Banks being read now, by key: never asked for twice at once. */
 	const inFlight = new Set<string>();
 	/** The latest batch not yet sent: typing an address replaces it. */
@@ -64,6 +76,7 @@ export function createEffects(deps: CredentialsDeps): Effects {
 		registerEditor: (e) => {
 			editor = e;
 		},
+		validate: (ddi) => validator?.(ddi),
 		setToken: credentials.setToken,
 		hasToken: credentials.hasToken,
 		exec(cmd, dispatch) {
@@ -96,6 +109,36 @@ export function createEffects(deps: CredentialsDeps): Effects {
 						waiting = undefined;
 						loadBanks(cmd.targets, dispatch);
 					}, BANK_DELAY_MS);
+					return;
+				case "loadDdiSchema":
+					// 900KB: loaded once, apart from the app's own code.
+					import("@qretools/core/schema.json?raw")
+						.then((m) => makeValidator(JSON.parse(m.default)))
+						.then((compiled) => {
+							if (compiled.ok) validator = compiled.value;
+							dispatch({
+								kind: "ddiSchemaLoaded",
+								result: compiled.ok
+									? { kind: "ready" }
+									: { kind: "failed", finding: compiled.error },
+							});
+						})
+						.catch((e: unknown) =>
+							dispatch({
+								kind: "ddiSchemaLoaded",
+								result: {
+									kind: "failed",
+									finding: {
+										code: "ddi-invalid",
+										severity: "error",
+										path: "",
+										message:
+											"The DDI schema couldn't be loaded, so the export can't be checked.",
+										detail: e instanceof Error ? e.message : String(e),
+									},
+								},
+							}),
+						);
 					return;
 				case "revealRange":
 					editor?.reveal(cmd.range, cmd.complete);

@@ -8,8 +8,14 @@ import { type BankRef, type BranchTarget, bankText } from "@qretools/shell";
 import { resolveAddress } from "./address.ts";
 import type { BankLoad, Model } from "./model.ts";
 
+/** What the open instrument's uses are read from: the Model's slices, nothing else. */
+export type UsesInput = Pick<
+	Model,
+	"banks" | "settings" | "working" | "project" | "open"
+>;
+
 /** The open instrument's text: this tab's edit, or the file as read. */
-export function openText(model: Model): string | undefined {
+export function openText(model: UsesInput): string | undefined {
 	const path = model.open;
 	if (path === undefined) return undefined;
 	const read =
@@ -31,7 +37,7 @@ export interface Use {
 }
 
 /** Each bank the open instrument's `uses` names, in the order written. */
-export function usesOf(model: Model): readonly Use[] {
+export function usesOf(model: UsesInput): readonly Use[] {
 	const text = openText(model);
 	const path = model.open;
 	if (text === undefined || path === undefined) return [];
@@ -46,7 +52,7 @@ export function usesOf(model: Model): readonly Use[] {
 }
 
 function stateOf(
-	model: Model,
+	model: UsesInput,
 	path: string,
 	address: string | undefined,
 ): UseState {

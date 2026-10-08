@@ -20,6 +20,10 @@ describe("the project file", () => {
 		expect(codes("agency:\n")).toEqual([["hole", "hole", "agency"]]);
 		const bad = projectOf("agency: my org\n");
 		expect(bad.agency).toBeUndefined();
+		// As written, for the instrument to say what's wrong with it.
+		expect(bad.given).toBe("my org");
+		expect(projectOf("agency: org.example\n").given).toBe("org.example");
+		expect(projectOf("agency:\n").given).toBeUndefined();
 		expect(bad.findings.map((f) => f.code)).toEqual(["invalid-agency"]);
 		expect(bad.ranges.agency).toBeDefined();
 		expect(codes("agency: a\nname: x\n")).toEqual([

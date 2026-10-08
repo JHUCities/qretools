@@ -10,39 +10,10 @@ import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
 import type { Store, Who } from "@qretools/shell";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
 import { AppContext } from "./AppContext.js";
-
-// Primer's Spinner asks for the reduced-motion preference; jsdom has no matchMedia.
-// Primer's AriaStatus announces through a `live-region` element, which its Node build
-// (what Vitest resolves) never defines: a silent one stands in.
-beforeAll(() => {
-	if (!customElements.get("live-region"))
-		customElements.define(
-			"live-region",
-			class extends HTMLElement {
-				announce() {
-					return { cancel: () => {} };
-				}
-				announceFromElement() {
-					return { cancel: () => {} };
-				}
-			},
-		);
-	window.matchMedia ??= (query: string) =>
-		({
-			matches: false,
-			media: query,
-			onchange: null,
-			addEventListener: () => {},
-			removeEventListener: () => {},
-			addListener: () => {},
-			removeListener: () => {},
-			dispatchEvent: () => false,
-		}) as MediaQueryList;
-});
 
 const SETTINGS = { owner: "o", repo: "r", path: "", remember: false };
 const WHO: Who = {

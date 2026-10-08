@@ -213,6 +213,8 @@ function step(model: Model, msg: Msg): Step {
 				{ ...model, theme: msg.theme },
 				[{ kind: "applyTheme", theme: msg.theme }],
 			];
+		case "ddiSchemaLoaded":
+			return [{ ...model, ddiSchema: msg.result }, []];
 		case "signOutRequested":
 			return [
 				signedOut(model, { kind: "anonymous" }),

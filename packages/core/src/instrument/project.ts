@@ -19,6 +19,11 @@ export const PROJECT = {
 export interface Project {
 	/** Absent until the file gives a valid one. */
 	readonly agency?: string;
+	/**
+	 * The agency as written, valid or not: what an instrument is published under, so its
+	 * own findings say `invalid-agency` where the file's is wrong (as the CLI's `--agency`).
+	 */
+	readonly given?: string;
 	readonly findings: readonly Finding[];
 	readonly ranges: Readonly<Record<string, Range>>;
 }
@@ -28,8 +33,15 @@ export function projectOf(source: string): Project {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
 	const { agency, findings } = parseAgencyFile(source, "project");
+	const written = doc.get("agency");
+	const given =
+		agency ??
+		(typeof written === "string" && written.trim() !== ""
+			? written
+			: undefined);
 	return {
 		...(agency !== undefined && { agency }),
+		...(given !== undefined && { given }),
 		findings: withSpacing(doc, source, findings.map(pointAt(empties))),
 		ranges,
 	};
