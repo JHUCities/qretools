@@ -40,6 +40,7 @@ describe("the entry points", () => {
 			    "bankFrom",
 			    "bankLocation",
 			    "bankOf",
+			    "banksIn",
 			    "codeSpans",
 			    "codebookView",
 			    "collisions",

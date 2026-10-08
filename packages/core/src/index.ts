@@ -177,6 +177,7 @@ export {
 	type Symbols,
 	usedBy,
 } from "./symbols.ts";
+export { banksIn } from "./workspace.ts";
 export {
 	WORKSPACE,
 	type WorkspaceFile,
