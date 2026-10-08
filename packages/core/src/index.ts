@@ -28,6 +28,7 @@ export {
 	SCHEME_SINGULAR,
 	toFillIn,
 	UNNAMED,
+	WORKSPACE_DETAILS,
 } from "./copy.ts";
 export type {
 	Collision,

@@ -18,6 +18,7 @@ import {
 	SHAPE,
 	saveableName,
 	schemePath,
+	UNNAMED,
 } from "@qretools/core";
 import {
 	addSpace,
@@ -47,7 +48,9 @@ import {
 	describeChangeSet,
 	describeMove,
 	describeSchemeChange,
+	describeWorkspaceChange,
 } from "./commits.js";
+import { createEvaluations } from "./evaluations.js";
 import {
 	type Activity,
 	allFiles,
@@ -62,6 +65,7 @@ import {
 	fileOf,
 	hasOwnWork,
 	type Id,
+	type InstrumentEntry,
 	isBankEntry,
 	type Model,
 	type Msg,
@@ -483,8 +487,7 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "deleteRequested": {
-			// Instruments and the workspace file save and delete with their own rule (later).
-			const q = bankFileOf(model, msg.id);
+			const q = fileOf(model, msg.id);
 			if (!q) return [model, []];
 			if (model.browser.confirmDelete !== msg.id)
 				return [
@@ -515,7 +518,9 @@ function step(model: Model, msg: Msg): Step {
 										parseSurface(q.base.text, envIn(model, q.bank)).draft,
 										undefined,
 									)
-								: describeSchemeChange(q.kind, q.name, "delete"),
+								: isBankEntry(q)
+									? describeSchemeChange(q.kind, q.name, "delete")
+									: describeWorkspaceChange(q, "delete"),
 					},
 				],
 			];
@@ -525,7 +530,7 @@ function step(model: Model, msg: Msg): Step {
 			return [{ ...model, browser: withoutConfirm(model.browser) }, []];
 
 		case "saveRequested": {
-			const q = bankFileOf(model, msg.id);
+			const q = fileOf(model, msg.id);
 			const as = writable(model);
 			if (!q || as === undefined) return [model, []];
 			// A bank file goes back to the path it was opened at. A draft's path is chosen
@@ -533,14 +538,16 @@ function step(model: Model, msg: Msg): Step {
 			// unseen folder without a word. A scheme file's path follows from its kind
 			// and the name it was given at creation.
 			if (q.base !== undefined) return write(model, as, msg.id, q, q.base.path);
+			// So does an instrument's (its name) and the workspace's own file's.
 			if (q.kind !== "question") {
-				const path = inBank(q.bank, schemePath(q.kind, q.name));
+				const path = claimOf(q);
+				if (path === undefined) return [model, []];
 				return taken(model, path, msg.id)
 					? [
 							refuse(
 								model,
 								msg.id,
-								`\`${path}\` already exists in the bank.`,
+								`\`${path}\` already exists${isBankEntry(q) ? " in the bank" : ""}.`,
 								"Open the bank's copy to change it.",
 							),
 							[],
@@ -1027,7 +1034,7 @@ function write(
 	model: Model,
 	as: Connected,
 	id: Id,
-	q: BankEntry,
+	q: Entry,
 	path: string,
 	subject?: string,
 ): Step {
@@ -1042,27 +1049,35 @@ function write(
 			),
 			[],
 		];
-	const env = envIn(model, q.bank);
-	const deps =
+	const deps: {
+		include: readonly BankEntry[];
+		blocked: readonly BankEntry[];
+	} =
 		q.kind === "question"
 			? dependencies(
 					model.local,
 					model.remote,
-					parseSurface(q.source, env).mentions,
+					parseSurface(q.source, envIn(model, q.bank)).mentions,
 					q.bank,
 				)
-			: { include: [], blocked: [] };
+			: q.kind === "instrument"
+				? instrumentDependencies(model, q)
+				: { include: [], blocked: [] };
 	const [stuck] = deps.blocked;
-	if (stuck !== undefined)
+	if (stuck !== undefined) {
+		const name = nameOf(model, stuck);
 		return [
 			refuse(
 				model,
 				id,
-				`The ${stuck.kind} \`${stuck.name}\` this question names changed on GitHub since you started.`,
-				`Open \`${stuck.name}\` and reload it from GitHub, then save again.`,
+				stuck.kind === "question"
+					? `The question \`${name}\` this instrument asks changed on GitHub since you started.`
+					: `The ${SCHEME_NAME[stuck.kind]} \`${name}\` this ${q.kind === "question" ? "question names" : "instrument reads"} changed on GitHub since you started.`,
+				`Open \`${name}\` and reload it from GitHub, then save again.`,
 			),
 			[],
 		];
+	}
 	// Saved somewhere else than its base (a move): the old path goes in the same commit.
 	const moved: Change[] =
 		q.base !== undefined && q.base.path !== path
@@ -1076,6 +1091,64 @@ function write(
 		[q, ...deps.include],
 		subject,
 	);
+}
+
+/** A bank file's name as its author wrote it: a question's own, or the shared file's. */
+const nameOf = (model: Model, f: BankEntry): string =>
+	f.kind === "question"
+		? (parseSurface(f.source, envIn(model, f.bank)).draft.name ?? UNNAMED)
+		: f.name;
+
+/**
+ * What saving an instrument takes along, so it never lands on the branch reading
+ * differently from how it reads here: each bank file it names (an asked question, a
+ * universe) that is a draft or has unsaved changes, and each asked question's own
+ * unsaved shared files. The second step goes beyond a question's save because the
+ * instrument's DDI elaborates its questions through their banks' shared files: an
+ * unsaved scale changes what the instrument means. Only what is named is taken, never
+ * every unsaved file of a bank, and never the missing values or the binary scale
+ * implicitly, as for a question. Not yet followed: a bank name in a condition, or an
+ * input's shared scale (`refs` doesn't hold them).
+ */
+function instrumentDependencies(
+	model: Model,
+	e: InstrumentEntry,
+): { include: readonly BankEntry[]; blocked: readonly BankEntry[] } {
+	// Read fresh, as the author sees it: pure, and its caches end with this call.
+	const read = createEvaluations().instrument(model, e);
+	const claims = new Map<Path, BankEntry>();
+	for (const f of [
+		...Object.values(model.local.questions),
+		...Object.values(model.local.schemes),
+	]) {
+		const at = claimOf(f);
+		if (at !== undefined) claims.set(at, f);
+	}
+	const include = new Map<Id, BankEntry>();
+	const blocked = new Map<Id, BankEntry>();
+	const consider = (f: BankEntry): void => {
+		const sync = syncOf(f, remoteBlob(model.remote, f));
+		if (sync === "draft" || sync === "unsaved") include.set(f.id, f);
+		else if (sync === "conflict" || sync === "deletedOnGitHub")
+			blocked.set(f.id, f);
+	};
+	for (const ref of read.instrument.refs) {
+		const use = read.uses[ref.alias];
+		if (use?.kind !== "local") continue;
+		const f = claims.get(inBank(use.folder, ref.path));
+		if (f === undefined) continue;
+		consider(f);
+		if (f.kind !== "question") continue;
+		const own = dependencies(
+			model.local,
+			model.remote,
+			parseSurface(f.source, envIn(model, f.bank)).mentions,
+			f.bank,
+		);
+		for (const s of own.include) include.set(s.id, s);
+		for (const s of own.blocked) blocked.set(s.id, s);
+	}
+	return { include: [...include.values()], blocked: [...blocked.values()] };
 }
 
 /** Writing a working file at a path: expected at its base when that is the path, else not there yet. */
@@ -1101,7 +1174,7 @@ function commitFiles(
 	model: Model,
 	as: Connected,
 	changes: readonly Change[],
-	files: readonly BankEntry[],
+	files: readonly Entry[],
 	/** The first file's line, when the caller has a better one than `messageOf` (a move). */
 	subject?: string,
 ): Step {
@@ -1134,15 +1207,14 @@ function commitFiles(
  * discarded; anything GitHub also changed or deleted blocks the save until reloaded.
  */
 export function signOutPlan(model: Model): {
-	readonly save: readonly BankEntry[];
+	readonly save: readonly Entry[];
 	readonly discard: readonly Question[];
-	readonly blocked: readonly BankEntry[];
+	readonly blocked: readonly Entry[];
 } {
-	const save: BankEntry[] = [];
+	const save: Entry[] = [];
 	const discard: Question[] = [];
-	const blocked: BankEntry[] = [];
-	// Bank files only, until instruments save (the next change).
-	for (const f of allFiles(model.local).filter(ownWork).filter(isBankEntry)) {
+	const blocked: Entry[] = [];
+	for (const f of allFiles(model.local).filter(ownWork)) {
 		if (f.kind === "question" && f.base === undefined) {
 			discard.push(f);
 			continue;
@@ -1217,7 +1289,9 @@ const refuse = (model: Model, id: Id, message: string, hint?: string): Model =>
  * the save and delete paths). `update` is pure and cannot reach the view's cache; do
  * not thread one in to save those milliseconds.
  */
-function messageOf(model: Model, q: BankEntry): string {
+function messageOf(model: Model, q: Entry): string {
+	if (!isBankEntry(q))
+		return describeWorkspaceChange(q, q.base === undefined ? "add" : "update");
 	if (q.kind !== "question")
 		return describeSchemeChange(
 			q.kind,

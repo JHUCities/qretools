@@ -50,6 +50,9 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 	bank: "bank details",
 };
 
+/** The workspace's own file, `workspace.yaml`, in running text: as "bank details" is a bank's. */
+export const WORKSPACE_DETAILS = "workspace details";
+
 /** A quick fix's label: what the click will write. */
 export const fixLabel = (value: string): string => `Use \`${value}\``;
 

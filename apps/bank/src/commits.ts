@@ -4,7 +4,8 @@
  */
 
 import type { Draft, SchemeKind } from "@qretools/core";
-import { isRoot, SCHEME_NAME } from "@qretools/core";
+import { isRoot, SCHEME_NAME, WORKSPACE_DETAILS } from "@qretools/core";
+import type { WorkspaceEntry } from "./model.js";
 
 const FIELDS = [
 	"name",
@@ -72,6 +73,13 @@ export const describeSchemeChange = (
 	op: "add" | "update" | "delete",
 ): string =>
 	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${isRoot(kind) ? SCHEME_NAME[kind] : `${SCHEME_NAME[kind]} ${name}`}`;
+
+/** A workspace file's commit message: `Add instrument wave1`, `Update workspace details`. */
+export const describeWorkspaceChange = (
+	e: WorkspaceEntry,
+	op: "add" | "update" | "delete",
+): string =>
+	`${op === "add" ? "Add" : op === "update" ? "Update" : "Delete"} ${e.kind === "instrument" ? `instrument ${e.name}` : WORKSPACE_DETAILS}`;
 
 /**
  * The message for a commit of several files: the main file's line as the subject, the

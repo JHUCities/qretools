@@ -33,6 +33,7 @@ describe("the entry points", () => {
 			    "UNNAMED",
 			    "UNVERSIONED",
 			    "WORKSPACE",
+			    "WORKSPACE_DETAILS",
 			    "absentRoot",
 			    "addressOf",
 			    "bankAt",

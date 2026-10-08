@@ -6,10 +6,12 @@
  */
 
 import { Banner, Dialog } from "@primer/react";
-import { plainText } from "@qretools/core";
+import { plainText, WORKSPACE_DETAILS } from "@qretools/core";
 import type { Failure } from "@qretools/shell";
 import { failureDescription } from "@qretools/shell/ui";
 import type { Dispatch } from "../model.js";
+
+const LIST = new Intl.ListFormat("en", { type: "conjunction" });
 
 const plural = (n: number, noun: string): string =>
 	`${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -17,6 +19,8 @@ const plural = (n: number, noun: string): string =>
 export function SignOutDialog({
 	questions,
 	shared,
+	instruments,
+	workspaceDetails,
 	discard,
 	blocked,
 	saving,
@@ -28,6 +32,10 @@ export function SignOutDialog({
 	readonly questions: number;
 	/** How many shared scales, universes, instructions or missing values it takes. */
 	readonly shared: number;
+	/** How many instruments it takes. */
+	readonly instruments: number;
+	/** Whether it takes the workspace details (`workspace.yaml`). */
+	readonly workspaceDetails: boolean;
 	/** The drafts that can't be saved without a folder, by name. */
 	readonly discard: readonly string[];
 	/** What changed on GitHub since it was started, by name: reload these first. */
@@ -38,16 +46,18 @@ export function SignOutDialog({
 	readonly reason: string | undefined;
 	readonly dispatch: Dispatch;
 }) {
-	const saveable = questions + shared > 0;
+	const saveable = questions + shared + instruments > 0 || workspaceDetails;
 	const close = () => {
 		if (!saving) dispatch({ kind: "signOutCancelled" });
 	};
-	const what = [
-		questions > 0 ? plural(questions, "question") : undefined,
-		shared > 0 ? plural(shared, "shared item") : undefined,
-	]
-		.filter((x) => x !== undefined)
-		.join(" and ");
+	const what = LIST.format(
+		[
+			questions > 0 ? plural(questions, "question") : undefined,
+			shared > 0 ? plural(shared, "shared item") : undefined,
+			instruments > 0 ? plural(instruments, "instrument") : undefined,
+			workspaceDetails ? `the ${WORKSPACE_DETAILS}` : undefined,
+		].filter((x) => x !== undefined),
+	);
 	const cannotSave =
 		blocked.length > 0 || (reason !== undefined && !saving) || !saveable;
 	return (

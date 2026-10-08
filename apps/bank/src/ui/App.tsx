@@ -34,6 +34,7 @@ import {
 	type Symbols,
 	UNNAMED,
 	usedBy,
+	WORKSPACE_DETAILS,
 } from "@qretools/core";
 import { installUrl } from "@qretools/shell";
 import {
@@ -49,6 +50,7 @@ import {
 	bankFileOf,
 	type Dispatch,
 	type Id,
+	isScheme,
 	type Model,
 	newBank,
 	TEMPLATES,
@@ -548,14 +550,24 @@ export function App() {
 			{signingOut && signOut && (
 				<SignOutDialog
 					questions={signOut.save.filter((f) => f.kind === "question").length}
-					shared={signOut.save.filter((f) => f.kind !== "question").length}
+					shared={signOut.save.filter(isScheme).length}
+					instruments={
+						signOut.save.filter((f) => f.kind === "instrument").length
+					}
+					workspaceDetails={signOut.save.some(
+						(f) => f.kind === "workspaceFile",
+					)}
 					discard={signOut.discard.map(
 						(q) => evaluations.get(q, envFor(q.bank)).draft.name ?? UNNAMED,
 					)}
 					blocked={signOut.blocked.map((f) =>
 						f.kind === "question"
 							? (evaluations.get(f, envFor(f.bank)).draft.name ?? UNNAMED)
-							: `${SCHEME_NAME[f.kind]} ${f.name}`,
+							: f.kind === "instrument"
+								? `instrument ${f.name}`
+								: f.kind === "workspaceFile"
+									? WORKSPACE_DETAILS
+									: `${SCHEME_NAME[f.kind]} ${f.name}`,
 					)}
 					saving={signingOut.phase === "saving"}
 					failure={signingOut.failure}
