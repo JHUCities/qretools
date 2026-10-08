@@ -7,6 +7,7 @@ import {
 	bankOf,
 	makeValidator,
 	ROOT,
+	scopeOf,
 	status,
 	UNDECLARED_AGENCY,
 } from "@qretools/core";
@@ -31,6 +32,20 @@ async function validator() {
 	if (!v.ok) throw new Error(v.error.message);
 	return v.value;
 }
+
+describe("a bank only read (scopeOf)", () => {
+	it("is what a whole check of it gives an instrument, without the check's findings", async () => {
+		const files = await readBank(here("../../fixtures/households"));
+		const whole = bankOf(files);
+		const scope = scopeOf(files);
+		expect(scope).toEqual({
+			env: whole.env,
+			questions: whole.questions,
+			index: whole.index,
+			...(whole.agency !== undefined && { agency: whole.agency }),
+		});
+	});
+});
 
 describe("the sample bank (fixtures/bank, our own)", () => {
 	let files: Readonly<Record<string, string>>;

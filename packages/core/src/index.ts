@@ -59,6 +59,7 @@ export {
 	type Evaluation,
 	evaluate,
 	type SchemeFileEvaluation,
+	scopeOf,
 	UNDECLARED_AGENCY,
 } from "./evaluate.ts";
 export {

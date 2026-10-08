@@ -163,17 +163,11 @@ export function bankFrom({
 	};
 }
 
-/**
- * A bank from its files: path (relative to the bank's root, `/`-separated) to text.
- * The agency comes from the bank's own file. Total, and independent of the order the
- * files are given in. It compares every question's wording with every other's, so
- * it's for checking a bank whole, not for every keystroke.
- */
-export function bankOf(
+/** Each file of a bank evaluated against the bank's environment, and those no kind reads. */
+function evaluateFiles(
 	files: Readonly<Record<string, string>>,
-	/** Each file's DDI version, by path, when history is known. */
-	versions?: Versions,
-): Bank {
+	versions: Versions | undefined,
+) {
 	const env = bankEnv(files);
 	const questions: Record<string, Evaluation> = {};
 	const schemes: Record<string, SchemeFileEvaluation> = {};
@@ -197,6 +191,34 @@ export function bankOf(
 				name: at.name,
 			};
 	}
+	return { env, questions, schemes, ignored };
+}
+
+/**
+ * What an instrument reads of a bank, from its files: each file evaluated and the index
+ * built, without the findings a whole bank's check adds (similar wording across every
+ * question). For a bank only read, as one in another repository is.
+ */
+export function scopeOf(
+	files: Readonly<Record<string, string>>,
+	versions?: Versions,
+): BankScope {
+	const { env, questions, schemes } = evaluateFiles(files, versions);
+	return bankFrom({ env, questions, schemes, versions });
+}
+
+/**
+ * A bank from its files: path (relative to the bank's root, `/`-separated) to text.
+ * The agency comes from the bank's own file. Total, and independent of the order the
+ * files are given in. It compares every question's wording with every other's, so
+ * it's for checking a bank whole, not for every keystroke.
+ */
+export function bankOf(
+	files: Readonly<Record<string, string>>,
+	/** Each file's DDI version, by path, when history is known. */
+	versions?: Versions,
+): Bank {
+	const { env, questions, schemes, ignored } = evaluateFiles(files, versions);
 	const scope = bankFrom({ env, questions, schemes, versions });
 	// Another file, as a bank finding cites it: its name, else its path.
 	const label = (path: string): string =>

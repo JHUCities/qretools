@@ -92,6 +92,7 @@ describe("the entry points", () => {
 			    "saveableName",
 			    "schemeEnv",
 			    "schemePath",
+			    "scopeOf",
 			    "skippedFolder",
 			    "status",
 			    "textOf",

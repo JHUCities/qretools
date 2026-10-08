@@ -10,7 +10,7 @@ import {
 	joinFolder,
 } from "./address.ts";
 import type { Versions } from "./ddi/version.ts";
-import { type Bank, type BankScope, bankOf } from "./evaluate.ts";
+import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
 import type { Use } from "./instrument/draft.ts";
 import {
 	type Instrument,
@@ -353,7 +353,7 @@ export interface Workspace {
 	/** Its banks by folder ("" for the root), each whole (`bankOf`). */
 	readonly banks: Readonly<Record<string, Bank>>;
 	/** The banks in other repositories its instruments use, read and given, by key. */
-	readonly remote: Readonly<Record<AddressKey, Bank>>;
+	readonly remote: Readonly<Record<AddressKey, BankScope>>;
 	/** Its instruments by path, each with where its banks were found. */
 	readonly instruments: Readonly<Record<string, InstrumentIn>>;
 	/** `workspace.yaml`, read; absent when there's none. */
@@ -383,9 +383,10 @@ export function workspaceOf(
 	const banks: Record<string, Bank> = {};
 	for (const [folder, bankFiles] of Object.entries(byFolder))
 		banks[folder] = bankOf(bankFiles, versions[folder]);
-	const remoteBanks: Record<AddressKey, Bank> = {};
+	// Read only: what instruments read of them, never the findings a check of them adds.
+	const remoteBanks: Record<AddressKey, BankScope> = {};
 	for (const [key, read] of Object.entries(remote))
-		if (read.kind === "files") remoteBanks[key] = bankOf(read.files);
+		if (read.kind === "files") remoteBanks[key] = scopeOf(read.files);
 	const text = outside[WORKSPACE.file];
 	const file = text === undefined ? undefined : workspaceFileOf(text);
 	const instruments: Record<string, InstrumentIn> = {};
