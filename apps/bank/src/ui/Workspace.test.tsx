@@ -9,7 +9,7 @@ import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
 import type { Store } from "@qretools/shell";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
 import { AppContext } from "./AppContext.js";
@@ -237,6 +237,54 @@ describe("a workspace's instruments", () => {
 			screen.getByRole("menuitem", { name: "Blank question" }),
 		).toBeTruthy();
 	});
+
+	it("hold the download back, with the reason, while the workspace gives no agency", async () => {
+		renderWorkspace(FILES.filter((f) => f.path !== "workspace.yaml"));
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
+		await act(async () => {});
+		expect(screen.getByText(/This workspace has no/)).toBeTruthy();
+		const download = screen.getByRole("button", { name: "Download DDI" });
+		const reason = document.getElementById(
+			download.getAttribute("aria-describedby") ?? "",
+		);
+		expect(reason?.textContent).toBe(
+			"There's no DDI agency to publish it under yet.",
+		);
+	});
+
+	it("offer the DDI as a file once it may be exported, a new one as it changes", async () => {
+		let made = 0;
+		const revoked: string[] = [];
+		URL.createObjectURL = () => `blob:${++made}`;
+		URL.revokeObjectURL = (u: string) => {
+			revoked.push(u);
+		};
+		const app = renderWorkspace();
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
+		// The official schema loads on its own; then the export may be written.
+		await vi.waitFor(
+			() => expect(app.store.getState().model.ddiSchema.kind).toBe("ready"),
+			{ timeout: 10_000 },
+		);
+		await act(async () => {});
+		const link = screen.getByRole("link", { name: "Download DDI" });
+		expect(link.getAttribute("download")).toBe("wave1.ddi.json");
+		const first = link.getAttribute("href");
+		expect(first).toMatch(/^blob:/);
+		const { model } = app.store.getState();
+		const e = Object.values(model.local.workspace).find(
+			(f) => f.kind === "instrument",
+		);
+		await act(async () =>
+			app.dispatch({ kind: "edited", text: `${e?.source ?? ""}# again\n` }),
+		);
+		expect(
+			screen.getByRole("link", { name: "Download DDI" }).getAttribute("href"),
+		).not.toBe(first);
+		expect(revoked).toContain(first);
+	}, 15_000);
 
 	it("aren't shown for a workspace that is one bank alone", async () => {
 		renderWorkspace([

@@ -6,6 +6,7 @@
 import { fileURLToPath } from "node:url";
 import { NAME_RULE_TEXT, ok } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
+import { parseLink } from "@qretools/shell";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
@@ -551,5 +552,28 @@ describe("a bank in another repository an instrument uses", () => {
 		expect(Object.keys(reloading.remoteBanks)).toEqual([KEY]);
 		const [out] = update(m, { kind: "disconnected" });
 		expect(out.remoteBanks).toEqual({});
+	});
+});
+
+describe("a link to an instrument", () => {
+	it("is the instrument's address once it's open, and opens it when followed", () => {
+		const m = loaded();
+		const e = at(m, HOUSEHOLDS);
+		const [opened, cmds] = update(m, { kind: "fileOpened", id: e.id });
+		const link = cmds.find(
+			(c): c is Extract<Cmd, { kind: "setLink" }> => c.kind === "setLink",
+		);
+		expect(link?.push).toBe(true);
+		expect(parseLink(link?.hash ?? "")).toMatchObject({
+			repo: "o/r",
+			file: HOUSEHOLDS,
+		});
+		// Followed from elsewhere: the same instrument opens.
+		const [away] = update(opened, { kind: "listOpened" });
+		const [back] = update(away, {
+			kind: "hashChanged",
+			hash: link?.hash ?? "",
+		});
+		expect(back.screen).toEqual({ kind: "editing", id: e.id });
 	});
 });
