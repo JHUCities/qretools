@@ -1,11 +1,13 @@
+import { ok } from "@qretools/core";
 import type {
 	CredentialStore,
 	Credentials,
 	MakeStore,
 	Store,
 } from "@qretools/shell";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEffects } from "./effects.js";
+import type { Msg, RemoteAddress } from "./model.js";
 
 const config = {
 	clientId: "id",
@@ -103,5 +105,69 @@ describe("the token getter, through the effects", () => {
 			credentialStore: { load: () => null, save: () => {}, clear: () => {} },
 		});
 		expect(effects.hasToken()).toBe(false);
+	});
+});
+
+describe("reading the banks in other repositories that instruments use", () => {
+	beforeEach(() => vi.useFakeTimers());
+	afterEach(() => vi.useRealTimers());
+
+	const at = (repo: string): RemoteAddress => ({
+		kind: "remote",
+		owner: "o",
+		repo,
+		path: "",
+		ref: "v1",
+		key: `o/${repo}@v1`,
+	});
+	function reading() {
+		const read: string[] = [];
+		const effects = createEffects({
+			makeStore: (bank) =>
+				({
+					loadBankAt: (tag: string) => {
+						read.push(`${bank.repo}@${tag}`);
+						return Promise.resolve(ok({ found: true, files: [], unread: [] }));
+					},
+				}) as unknown as Store,
+			credentialStore: {
+				load: () => ({ credentials: { access: "t" }, remember: false }),
+				save: () => {},
+				clear: () => {},
+			},
+		});
+		const got: Msg[] = [];
+		return { effects, read, got, dispatch: (m: Msg) => got.push(m) };
+	}
+
+	it("waits while an address is typed, reads only the latest, and marks it read only then", async () => {
+		const { effects, read, got, dispatch } = reading();
+		for (const repo of ["b", "ba", "bank"])
+			effects.exec(
+				{ kind: "loadRemoteBanks", addresses: [at(repo)], now: false },
+				dispatch,
+			);
+		await vi.advanceTimersByTimeAsync(499);
+		expect(read).toEqual([]);
+		expect(got).toEqual([]);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(read).toEqual(["bank@v1"]);
+		expect(got.map((m) => `${m.kind} ${"key" in m ? m.key : ""}`)).toEqual([
+			"remoteBankStarted o/bank@v1",
+			"remoteBankLoaded o/bank@v1",
+		]);
+	});
+
+	it("reads at once when nothing is being typed, and never one twice at once", async () => {
+		const { effects, read, dispatch } = reading();
+		effects.exec(
+			{ kind: "loadRemoteBanks", addresses: [at("bank")], now: true },
+			dispatch,
+		);
+		effects.exec(
+			{ kind: "loadRemoteBanks", addresses: [at("bank")], now: true },
+			dispatch,
+		);
+		expect(read).toEqual(["bank@v1"]);
 	});
 });

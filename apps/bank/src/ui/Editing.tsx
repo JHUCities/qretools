@@ -278,7 +278,11 @@ function useSlices() {
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
 	const banks = useModel((m) => m.banks);
-	return useMemo(() => ({ local, remote, banks }), [local, remote, banks]);
+	const remoteBanks = useModel((m) => m.remoteBanks);
+	return useMemo(
+		() => ({ local, remote, banks, remoteBanks }),
+		[local, remote, banks, remoteBanks],
+	);
 }
 
 /**

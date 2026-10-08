@@ -18,7 +18,10 @@ import {
 	NAME_RULE_TEXT,
 	type NamedScheme,
 	parseSurface,
+	type RemoteBank,
+	type Result,
 	relIn,
+	remotesOf,
 	SCHEME_NAME,
 	SHAPE,
 	saveableName,
@@ -47,6 +50,7 @@ import {
 	parseBank,
 	parseLink,
 	sameBank,
+	type TaggedBank,
 } from "@qretools/shell";
 import {
 	describeChange,
@@ -82,6 +86,7 @@ import {
 	type Path,
 	type Question,
 	type Remote,
+	type RemoteAddress,
 	SCHEME_TEMPLATES,
 	type SchemeEntry,
 	sameName,
@@ -118,12 +123,84 @@ export function update(model: Model, msg: Msg): Step {
 	const next = revealOpen(model, stepped);
 	const before = linkOf(model);
 	const after = linkOf(next);
-	if (after === undefined || after === before) return [next, cmds];
+	const linked: Step =
+		after === undefined || after === before
+			? [next, cmds]
+			: [
+					next,
+					[
+						...cmds,
+						{ kind: "setLink", hash: after, push: openChanged(model, next) },
+					],
+				];
+	return withRemoteReads(model, msg, linked);
+}
+
+/**
+ * The banks in other repositories the instruments use and that haven't been asked for,
+ * asked for only when that set changes: an edit that leaves the addresses alone asks for
+ * nothing. Typing an address waits for a pause; anything else reads at once.
+ */
+function withRemoteReads(before: Model, msg: Msg, [next, cmds]: Step): Step {
+	const wanted = wantedRemote(next);
+	if (wanted.length === 0 || keysOf(wanted) === keysOf(wantedRemote(before)))
+		return [next, cmds];
 	return [
 		next,
-		[...cmds, { kind: "setLink", hash: after, push: openChanged(model, next) }],
+		[
+			...cmds,
+			{
+				kind: "loadRemoteBanks",
+				addresses: wanted,
+				now: msg.kind !== "edited",
+			},
+		],
 	];
 }
+
+const keysOf = (addresses: readonly RemoteAddress[]): string =>
+	addresses.map((a) => a.key).join("\n");
+
+/** The banks in other repositories the workspace's instruments use, not yet asked for. */
+function wantedRemote(model: Model): readonly RemoteAddress[] {
+	if (model.session.kind !== "connected") return [];
+	const sources = Object.fromEntries(
+		Object.values(model.local.workspace).flatMap((e) =>
+			e.kind === "instrument" ? [[instrumentPath(e.name), e.source]] : [],
+		),
+	);
+	return remotesOf(sources).filter(
+		(a) => model.remoteBanks[a.key] === undefined,
+	);
+}
+
+/** What a read of a bank at its tag gives an instrument: its files, or why it can't. */
+function remoteRead(result: Result<TaggedBank, Failure>): RemoteBank {
+	// Each failure in its own words: the adapter's hint says what to check (the name,
+	// and that the GitHub App is installed there) where that's the likely cause.
+	if (!result.ok)
+		return {
+			kind: "unavailable",
+			reason:
+				result.error.hint === undefined
+					? result.error.message
+					: `${result.error.message} ${result.error.hint}`,
+		};
+	return result.value.found
+		? {
+				kind: "files",
+				files: Object.fromEntries(
+					result.value.files.map((f) => [f.path, f.text]),
+				),
+			}
+		: { kind: "unavailable", reason: result.value.reason };
+}
+
+/** Banks read and found, or being read, are kept across a reload; the rest are read again. */
+const keptRemote = (banks: Model["remoteBanks"]): Model["remoteBanks"] =>
+	Object.fromEntries(
+		Object.entries(banks).filter(([, b]) => b.kind !== "unavailable"),
+	);
 
 /**
  * When the open file changes, or moves to another folder (a draft saved, a question
@@ -1030,6 +1107,7 @@ function step(model: Model, msg: Msg): Step {
 			const loaded: Model = compact({
 				...model,
 				banks,
+				remoteBanks: keptRemote(model.remoteBanks),
 				local,
 				remote,
 				nextId,
@@ -1053,7 +1131,11 @@ function step(model: Model, msg: Msg): Step {
 		case "bankReloadRequested":
 			if (model.session.kind !== "connected") return [model, []];
 			return [
-				{ ...model, loading: { kind: "loading" } },
+				{
+					...model,
+					loading: { kind: "loading" },
+					remoteBanks: keptRemote(model.remoteBanks),
+				},
 				[
 					{
 						kind: "loadWorkspace",
@@ -1116,6 +1198,30 @@ function step(model: Model, msg: Msg): Step {
 				},
 				[],
 			];
+
+		case "remoteBankStarted":
+			return [
+				{
+					...model,
+					remoteBanks: { ...model.remoteBanks, [msg.key]: { kind: "loading" } },
+				},
+				[],
+			];
+
+		case "remoteBankLoaded":
+			// Only an answer still awaited: one from before a sign-out or reload is dropped.
+			return model.remoteBanks[msg.key]?.kind !== "loading"
+				? [model, []]
+				: [
+						{
+							...model,
+							remoteBanks: {
+								...model.remoteBanks,
+								[msg.key]: remoteRead(msg.result),
+							},
+						},
+						[],
+					];
 
 		default:
 			return msg satisfies never;
@@ -1375,6 +1481,7 @@ function setAside(model: Model, message: string): Step {
 		...model,
 		local: EMPTY_LOCAL,
 		remote: EMPTY_REMOTE,
+		remoteBanks: {},
 		activity: {},
 		screen: { kind: "blank" } as const,
 		cursor: undefined,
@@ -1446,7 +1553,8 @@ function authFailure(msg: Msg): Failure | undefined {
 		msg.kind === "connected" ||
 		msg.kind === "workspaceLoaded" ||
 		msg.kind === "fileReloaded" ||
-		msg.kind === "foreignLoaded"
+		msg.kind === "foreignLoaded" ||
+		msg.kind === "remoteBankLoaded"
 			? msg.result.ok
 				? undefined
 				: msg.result.error
@@ -1483,6 +1591,8 @@ function stale(model: Model, msg: Msg): boolean {
 		case "committed":
 		case "fileReloaded":
 		case "foreignLoaded":
+		case "remoteBankStarted":
+		case "remoteBankLoaded":
 			return out;
 		case "connected":
 			return model.session.kind !== "connecting";

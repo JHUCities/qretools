@@ -8,6 +8,8 @@
  * follows from its text.
  */
 import {
+	type Address,
+	type AddressKey,
 	bankAt,
 	bankEnv,
 	compact,
@@ -16,6 +18,7 @@ import {
 	type NamedScheme,
 	parseScale,
 	type Range,
+	type RemoteBank,
 	type Result,
 	type Scales,
 	type SchemeKind,
@@ -41,6 +44,7 @@ import type {
 	File,
 	Link,
 	LoadedWorkspace,
+	TaggedBank,
 	Who,
 } from "@qretools/shell";
 import { bankText, sameBank } from "@qretools/shell";
@@ -257,6 +261,13 @@ export interface Model {
 	 */
 	readonly banks: readonly string[];
 	/**
+	 * The banks in other repositories the workspace's instruments use, by address, as
+	 * read at their tags this session: being read, or read (files, or why not). Absent
+	 * means not asked for yet, which an instrument reads as pending. Never persisted, and
+	 * forgotten on sign-out: such a bank may be private.
+	 */
+	readonly remoteBanks: Readonly<Record<AddressKey, RemoteRead>>;
+	/**
 	 * The author's branch as last loaded or saved (before its first save, the bank's
 	 * default branch, which it will be created from): bases, sync states, conflicts and
 	 * commits are against it. Before this session's load it is only "last known, as of
@@ -370,6 +381,13 @@ export type Msg =
 	| { readonly kind: "instrumentNamingConfirmed" }
 	/** The workspace details: opened if they exist, else started. One per workspace. */
 	| { readonly kind: "workspaceDetailsOpened" }
+	/** A read of a bank in another repository has started: now it is being read. */
+	| { readonly kind: "remoteBankStarted"; readonly key: AddressKey }
+	| {
+			readonly kind: "remoteBankLoaded";
+			readonly key: AddressKey;
+			readonly result: Result<TaggedBank, Failure>;
+	  }
 	| { readonly kind: "deleteRequested"; readonly id: Id }
 	| { readonly kind: "deleteCancelled" }
 	| { readonly kind: "saveRequested"; readonly id: Id }
@@ -419,7 +437,23 @@ export type Msg =
 	| { readonly kind: "signOutCancelled" }
 	| { readonly kind: "failureDismissed"; readonly index: number };
 
+/** A bank in another repository, as an instrument's `uses` gives it. */
+export type RemoteAddress = Extract<Address, { readonly kind: "remote" }>;
+
+/** A bank in another repository, this session: being read, or read. */
+export type RemoteRead = { readonly kind: "loading" } | RemoteBank;
+
 export type Cmd =
+	/**
+	 * Read these banks in other repositories, each at its tag. While an address is being
+	 * typed its read waits for a pause (`now` false), the latest batch replacing one not
+	 * sent yet; an open reads at once.
+	 */
+	| {
+			readonly kind: "loadRemoteBanks";
+			readonly addresses: readonly RemoteAddress[];
+			readonly now: boolean;
+	  }
 	| {
 			readonly kind: "revealRange";
 			readonly range: Range;
@@ -566,6 +600,7 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	const opened: Model = {
 		local,
 		banks: banksOfLocal(local),
+		remoteBanks: {},
 		...(stored?.login !== undefined && { author: stored.login }),
 		// The last GitHub state this browser knew is exactly what its bases record.
 		remote: remoteOfBases(local),
@@ -643,6 +678,7 @@ export function signedOut(model: Model): Model {
 		...model,
 		local,
 		banks: banksOfLocal(local),
+		remoteBanks: {},
 		remote: remoteOfBases(local),
 		activity: {},
 		loading: { kind: "bundled" } as const,

@@ -38,6 +38,11 @@ beforeAll(async () => {
 
 /** Signed in, with the fixture workspace loaded from the author's branch. */
 function loaded(): Model {
+	return loading()[0];
+}
+
+/** The same, with what the load asked for. */
+function loading(): ReturnType<typeof update> {
 	const [start] = init({
 		work: ok(undefined),
 		hasToken: true,
@@ -66,7 +71,7 @@ function loaded(): Model {
 			behindBy: 0,
 			unread: [],
 		}),
-	})[0];
+	});
 }
 
 const at = (m: Model, path: string): Entry => {
@@ -431,5 +436,120 @@ describe("go to definition in an instrument", () => {
 			id: at(m, HOUSEHOLDS).id,
 		});
 		expect(cmds).toEqual([]);
+	});
+});
+
+describe("a bank in another repository an instrument uses", () => {
+	const KEY = "owner/bank@v1";
+	const reads = (cmds: readonly Cmd[]) =>
+		cmds.flatMap((c) =>
+			c.kind === "loadRemoteBanks"
+				? [{ keys: c.addresses.map((a) => a.key), now: c.now }]
+				: [],
+		);
+	const typedIn = (m: Model, path: string, source: string) => {
+		const e = at(m, path) as InstrumentEntry;
+		const [opened] = update(m, { kind: "fileOpened", id: e.id });
+		return update(opened, { kind: "edited", text: source });
+	};
+
+	it("is read at once when the workspace loads", () => {
+		expect(reads(loading()[1])).toEqual([{ keys: [KEY], now: true }]);
+	});
+
+	it("is asked for after a pause while its address is typed, and only when the addresses change", () => {
+		const m = loaded();
+		const remote = at(m, "instruments/remote.yaml");
+		const [, retyped] = typedIn(
+			m,
+			"instruments/remote.yaml",
+			remote.source.replace("owner/bank@v1", "owner/bank@v2"),
+		);
+		// The address now names v2 alone: that is what's wanted, after a pause.
+		expect(reads(retyped)).toEqual([{ keys: ["owner/bank@v2"], now: false }]);
+		const [, other] = typedIn(
+			m,
+			HOUSEHOLDS,
+			`${at(m, HOUSEHOLDS).source}# x\n`,
+		);
+		expect(reads(other)).toEqual([]);
+	});
+
+	it("is being read only once a read starts, so a batch replaced before it went leaves nothing waiting", () => {
+		const m = loaded();
+		expect(m.remoteBanks).toEqual({});
+		const [started] = update(m, { kind: "remoteBankStarted", key: KEY });
+		expect(started.remoteBanks).toEqual({ [KEY]: { kind: "loading" } });
+		// Being read, it isn't wanted again.
+		const [, again] = typedIn(
+			started,
+			"instruments/remote.yaml",
+			`${at(started, "instruments/remote.yaml").source}# x\n`,
+		);
+		expect(reads(again)).toEqual([]);
+	});
+
+	it("takes its files, or why not, and only while awaited", () => {
+		const [started] = update(loaded(), { kind: "remoteBankStarted", key: KEY });
+		const [read] = update(started, {
+			kind: "remoteBankLoaded",
+			key: KEY,
+			result: ok({
+				found: true,
+				files: [{ path: "bank.yaml", sha: "b", text: "agency: x\n" }],
+				unread: [],
+			}),
+		});
+		expect(read.remoteBanks[KEY]).toEqual({
+			kind: "files",
+			files: { "bank.yaml": "agency: x\n" },
+		});
+		const [missing] = update(started, {
+			kind: "remoteBankLoaded",
+			key: KEY,
+			result: ok({ found: false, reason: "No tag `v1`." }),
+		});
+		expect(missing.remoteBanks[KEY]).toEqual({
+			kind: "unavailable",
+			reason: "No tag `v1`.",
+		});
+		const [privately] = update(started, {
+			kind: "remoteBankLoaded",
+			key: KEY,
+			result: {
+				ok: false,
+				error: {
+					kind: "unreadable",
+					message: "No repository.",
+					hint: "Check the name, and that the app is installed on it.",
+				},
+			},
+		});
+		expect(privately.remoteBanks[KEY]).toEqual({
+			kind: "unavailable",
+			reason:
+				"No repository. Check the name, and that the app is installed on it.",
+		});
+		// Not awaited (signed out since, or never asked): dropped.
+		const [late] = update(loaded(), {
+			kind: "remoteBankLoaded",
+			key: KEY,
+			result: ok({ found: false, reason: "x" }),
+		});
+		expect(late.remoteBanks).toEqual({});
+	});
+
+	it("is read again on a reload only if it couldn't be, and forgotten on sign-out", () => {
+		const m: Model = {
+			...loaded(),
+			remoteBanks: {
+				[KEY]: { kind: "files", files: {} },
+				"owner/gone@v1": { kind: "unavailable", reason: "x" },
+			},
+		};
+		const [reloading] = update(m, { kind: "bankReloadRequested" });
+		expect(Object.keys(reloading.remoteBanks)).toEqual([KEY]);
+		const [out] = update(m, { kind: "disconnected" });
+		expect(out.remoteBanks).toEqual({});
 	});
 });

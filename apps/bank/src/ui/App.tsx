@@ -268,24 +268,28 @@ export function App() {
 		[shownBanks, treeInput, evaluations, envFor, indexFor],
 	);
 	// The workspace's own files, read as their author sees them.
-	const workspace = useMemo(
-		() =>
-			workspaceLeaves(treeInput, (e) =>
-				statusOf(
-					e.kind === "instrument"
-						? evaluations.instrument(
-								{ local, remote: model.remote, banks: model.banks },
-								e,
-							).instrument.findings
-						: (evaluations.workspaceFile({
-								local,
-								remote: model.remote,
-								banks: model.banks,
-							})?.findings ?? []),
-				),
+	const workspace = useMemo(() => {
+		const slices = {
+			local,
+			remote: model.remote,
+			banks: model.banks,
+			remoteBanks: model.remoteBanks,
+		};
+		return workspaceLeaves(treeInput, (e) =>
+			statusOf(
+				e.kind === "instrument"
+					? evaluations.instrument(slices, e).instrument.findings
+					: (evaluations.workspaceFile(slices)?.findings ?? []),
 			),
-		[treeInput, evaluations, local, model.remote, model.banks],
-	);
+		);
+	}, [
+		treeInput,
+		evaluations,
+		local,
+		model.remote,
+		model.banks,
+		model.remoteBanks,
+	]);
 	const naming = model.browser.naming;
 	const namingInstrument = model.browser.namingInstrument;
 	const moving = model.browser.moving;

@@ -14,7 +14,6 @@
  */
 import {
 	type AddressKey,
-	addressOf,
 	type BankScope,
 	bankFrom,
 	type Env,
@@ -30,6 +29,7 @@ import {
 	resolveUses,
 	type SchemeEvaluation,
 	type SchemeFileEvaluation,
+	scopeOf,
 	type WorkspaceFile,
 	workspaceFileOf,
 } from "@qretools/core";
@@ -48,6 +48,8 @@ import { claimOf } from "./sync.js";
 
 /** The slices of the Model a bank's or an instrument's evaluation reads. */
 type Slices = Pick<Model, "local" | "remote" | "banks">;
+/** An instrument also reads the banks in other repositories read so far. */
+type WorkspaceSlices = Slices & Pick<Model, "remoteBanks">;
 
 export interface Evaluations {
 	/** A bank's environment, from the model's slices it is built from. */
@@ -59,11 +61,17 @@ export interface Evaluations {
 	scope(model: Slices, bank: string): BankScope;
 	/** `workspace.yaml` as it is being edited; absent while the workspace has none. */
 	workspaceFile(model: Slices): WorkspaceFile | undefined;
+	/**
+	 * The banks in other repositories as an instrument is given them: each read one's
+	 * files or why not (one still being read is left out, so it reads as pending), and
+	 * the read ones' scopes, each evaluated once per read.
+	 */
+	remote(model: Pick<Model, "remoteBanks">): RemoteGiven;
 	/** An instrument, read against the banks it uses as they are being edited. */
-	instrument(model: Slices, e: InstrumentEntry): InstrumentIn;
+	instrument(model: WorkspaceSlices, e: InstrumentEntry): InstrumentIn;
 	/** The banks an instrument uses that are in this workspace, by its alias for each: what completion offers. */
 	usedScopes(
-		model: Slices,
+		model: WorkspaceSlices,
 		e: InstrumentEntry,
 	): Readonly<Record<string, BankScope>>;
 	get(q: Question, env: Env): Evaluation;
@@ -79,22 +87,20 @@ const sameEntries = (
 const sameList = <T>(a: readonly T[], b: readonly T[]): boolean =>
 	a.length === b.length && a.every((x, i) => x === b[i]);
 
-/**
- * The banks in other repositories an instrument uses, each said to be unavailable:
- * the app doesn't read them yet.
- */
-function remoteOf(source: string): Readonly<Record<AddressKey, RemoteBank>> {
-	const out: Record<AddressKey, RemoteBank> = {};
-	for (const u of importsOf(source)) {
-		const a = u.address === undefined ? undefined : addressOf(u.address);
-		if (a?.kind === "remote")
-			out[a.key] = {
-				kind: "unavailable",
-				reason: `\`${u.address}\` is in another repository, which isn't read here yet.`,
-			};
-	}
-	return out;
+export interface RemoteGiven {
+	readonly reads: Readonly<Record<AddressKey, RemoteBank>>;
+	readonly scopes: Readonly<Record<AddressKey, BankScope>>;
 }
+
+/** A remote bank's files, read: one evaluation per read, never per keystroke. */
+const remoteScopes = new WeakMap<object, BankScope>();
+const scopeOfRead = (files: Readonly<Record<string, string>>): BankScope => {
+	const kept = remoteScopes.get(files);
+	if (kept !== undefined) return kept;
+	const scope = scopeOf(files);
+	remoteScopes.set(files, scope);
+	return scope;
+};
 
 export function createEvaluations(): Evaluations {
 	const cache = new Map<Id, { source: string; env: Env; ev: Evaluation }>();
@@ -128,7 +134,20 @@ export function createEvaluations(): Evaluations {
 			read: InstrumentIn;
 		}
 	>();
+	let given: { banks: Model["remoteBanks"]; given: RemoteGiven } | undefined;
 	const self: Evaluations = {
+		remote({ remoteBanks }) {
+			if (given?.banks === remoteBanks) return given.given;
+			const reads: Record<AddressKey, RemoteBank> = {};
+			const scopes: Record<AddressKey, BankScope> = {};
+			for (const [key, read] of Object.entries(remoteBanks)) {
+				if (read.kind === "loading") continue;
+				reads[key] = read;
+				if (read.kind === "files") scopes[key] = scopeOfRead(read.files);
+			}
+			given = { banks: remoteBanks, given: { reads, scopes } };
+			return given.given;
+		},
 		env(model, bank) {
 			const entries = schemesOf(model.local.schemes, bank);
 			const known = knownBank(model.remote.schemes, bank, model.banks);
@@ -208,7 +227,7 @@ export function createEvaluations(): Evaluations {
 		instrument(model, e) {
 			const path = instrumentPath(e.name);
 			const hit = instruments.get(e.id);
-			const remote = hit?.source === e.source ? hit.remote : remoteOf(e.source);
+			const { reads: remote, scopes: remoteBanks } = self.remote(model);
 			// Only the banks its uses name are built, so editing another leaves it alone.
 			const used: Record<string, BankScope> = {};
 			const uses = resolveUses(
@@ -226,6 +245,7 @@ export function createEvaluations(): Evaluations {
 				hit &&
 				hit.source === e.source &&
 				hit.file === ws &&
+				hit.remote === remote &&
 				sameList(hit.banks, model.banks) &&
 				sameList(hit.used, scopes)
 			)
@@ -233,7 +253,7 @@ export function createEvaluations(): Evaluations {
 			const read = instrumentIn(path, e.source, {
 				banks: used,
 				remote,
-				remoteBanks: {},
+				remoteBanks,
 				...(ws !== undefined && { file: ws }),
 			});
 			instruments.set(e.id, {
@@ -247,9 +267,15 @@ export function createEvaluations(): Evaluations {
 			return read;
 		},
 		usedScopes(model, e) {
+			const { scopes } = self.remote(model);
 			return Object.fromEntries(
-				Object.entries(self.instrument(model, e).uses).flatMap(([alias, r]) =>
-					r.kind === "local" ? [[alias, self.scope(model, r.folder)]] : [],
+				Object.entries(self.instrument(model, e).uses).flatMap(
+					([alias, r]): [string, BankScope][] => {
+						if (r.kind === "local")
+							return [[alias, self.scope(model, r.folder)]];
+						const scope = r.kind === "remote" ? scopes[r.key] : undefined;
+						return scope === undefined ? [] : [[alias, scope]];
+					},
 				),
 			);
 		},

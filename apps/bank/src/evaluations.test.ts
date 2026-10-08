@@ -5,7 +5,7 @@
  */
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ok, remotesOf, workspaceOf } from "@qretools/core";
+import { ok, workspaceOf } from "@qretools/core";
 import { instrumentCompletion } from "@qretools/core/editor";
 import { readBank, readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -107,38 +107,66 @@ const typed = (m: Model, f: Question | InstrumentEntry, text: string): Model =>
 			};
 
 describe("an instrument read live", () => {
-	it("reads as the core reads the same files, a bank in another repository unavailable", () => {
+	it("reads as the core reads the same files, whatever has come of a bank in another repository", () => {
 		const m = loaded(files);
-		const whole = workspaceOf(files, {
-			remote: Object.fromEntries(
-				remotesOf(files).map((a) => [
-					a.key,
-					{
-						kind: "unavailable" as const,
-						reason: `\`${a.key}\` is in another repository, which isn't read here yet.`,
-					},
-				]),
+		const key = "owner/bank@v1";
+		const hh = Object.fromEntries(
+			Object.entries(files).flatMap(([path, text]) =>
+				path.startsWith("households/")
+					? [[path.slice("households/".length), text]]
+					: [],
 			),
-		});
-		const evaluations = createEvaluations();
-		const names = Object.values(m.local.workspace).flatMap((f) =>
-			f.kind === "instrument" ? [f.name] : [],
 		);
-		expect(names.sort()).toEqual(["both", "households", "remote"]);
-		for (const name of names)
-			expect(evaluations.instrument(m, instrument(m, name))).toEqual(
-				whole.instruments[`instruments/${name}.yaml`],
+		const cases: [Model["remoteBanks"], Parameters<typeof workspaceOf>[1]][] = [
+			// Not asked for yet, and being read: both pending.
+			[{}, {}],
+			[{ [key]: { kind: "loading" } }, {}],
+			[
+				{ [key]: { kind: "files", files: hh } },
+				{ remote: { [key]: { kind: "files", files: hh } } },
+			],
+			[
+				{ [key]: { kind: "unavailable", reason: "It's gone." } },
+				{ remote: { [key]: { kind: "unavailable", reason: "It's gone." } } },
+			],
+		];
+		for (const [remoteBanks, options] of cases) {
+			const model = { ...m, remoteBanks };
+			const whole = workspaceOf(files, options);
+			const evaluations = createEvaluations();
+			const names = Object.values(model.local.workspace).flatMap((f) =>
+				f.kind === "instrument" ? [f.name] : [],
 			);
+			expect(names.sort()).toEqual(["both", "households", "remote"]);
+			for (const name of names)
+				expect(evaluations.instrument(model, instrument(model, name))).toEqual(
+					whole.instruments[`instruments/${name}.yaml`],
+				);
+		}
 	});
 
-	it("says a bank in another repository isn't read here yet", () => {
+	it("reads a bank in another repository once per read, and completes from it", () => {
 		const m = loaded(files);
-		const read = createEvaluations().instrument(m, instrument(m, "remote"));
-		expect(read.uses.bas).toEqual({
-			kind: "unreadable",
-			reason:
-				"`owner/bank@v1` is in another repository, which isn't read here yet.",
-		});
+		const hh = Object.fromEntries(
+			Object.entries(files).flatMap(([path, text]) =>
+				path.startsWith("households/")
+					? [[path.slice("households/".length), text]]
+					: [],
+			),
+		);
+		const read = {
+			...m,
+			remoteBanks: { "owner/bank@v1": { kind: "files" as const, files: hh } },
+		};
+		const evaluations = createEvaluations();
+		const e = instrument(read, "remote");
+		const scopes = evaluations.usedScopes(read, e);
+		expect(Object.keys(scopes)).toEqual(["bas"]);
+		// Typing in the instrument re-reads it, never the bank it reads from.
+		const typing = typed(read, e, `${e.source}# edited\n`);
+		expect(
+			evaluations.usedScopes(typing, instrument(typing, "remote")).bas,
+		).toBe(scopes.bas);
 	});
 
 	it("re-reads only the instruments that use a bank being edited", () => {

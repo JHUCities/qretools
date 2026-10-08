@@ -23,7 +23,7 @@ import {
 	type File,
 	NO_TOKEN,
 } from "@qretools/shell";
-import type { Cmd, Dispatch } from "./model.js";
+import type { Cmd, Dispatch, RemoteAddress } from "./model.js";
 import {
 	SETTINGS_KEY,
 	setAsideWork,
@@ -44,12 +44,43 @@ export interface Effects {
 	validate(ddi: DdiDocument): readonly Finding[] | undefined;
 }
 
+/** How long an address must stay as typed before its bank is read. */
+const REMOTE_DELAY_MS = 500;
+
 export function createEffects(deps: Deps): Effects {
 	const credentials = createCredentials(deps);
 	const storeFor = credentials.storeFor;
 	let validator: Validator | undefined;
 	let editor: Editor | undefined;
 	const persist = debouncedPersist();
+	/** Banks in other repositories being read now, by address: never asked for twice at once. */
+	const inFlight = new Set<string>();
+	/** The latest batch not yet sent: typing an address replaces it. */
+	let waiting: ReturnType<typeof setTimeout> | undefined;
+	const loadRemote = (
+		addresses: readonly RemoteAddress[],
+		dispatch: Dispatch,
+	): void => {
+		for (const a of addresses) {
+			if (inFlight.has(a.key)) continue;
+			const s = storeFor({ owner: a.owner, repo: a.repo, path: a.path });
+			if (!s) {
+				dispatch({
+					kind: "remoteBankLoaded",
+					key: a.key,
+					result: err(NO_TOKEN),
+				});
+				continue;
+			}
+			inFlight.add(a.key);
+			// Marked as being read only now: a batch replaced before it went never is.
+			dispatch({ kind: "remoteBankStarted", key: a.key });
+			s.loadBankAt(a.ref).then((result) => {
+				inFlight.delete(a.key);
+				dispatch({ kind: "remoteBankLoaded", key: a.key, result });
+			});
+		}
+	};
 
 	return {
 		registerEditor: (e) => {
@@ -128,6 +159,16 @@ export function createEffects(deps: Deps): Effects {
 					s.whoAmI().then((result) => dispatch({ kind: "connected", result }));
 					return;
 				}
+				case "loadRemoteBanks":
+					if (waiting !== undefined) clearTimeout(waiting);
+					waiting = undefined;
+					if (cmd.now) loadRemote(cmd.addresses, dispatch);
+					else
+						waiting = setTimeout(() => {
+							waiting = undefined;
+							loadRemote(cmd.addresses, dispatch);
+						}, REMOTE_DELAY_MS);
+					return;
 				case "loadWorkspace": {
 					const s = storeFor(cmd.target);
 					if (!s)
