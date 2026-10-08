@@ -86,6 +86,7 @@ export {
 	importsOf,
 	instrumentOf,
 } from "./instrument/instrument.ts";
+export type { Unread } from "./instrument/parse.ts";
 export { lint } from "./lint.ts";
 export {
 	type Exportable,
@@ -177,7 +178,17 @@ export {
 	type Symbols,
 	usedBy,
 } from "./symbols.ts";
-export { banksIn } from "./workspace.ts";
+export {
+	banksIn,
+	type InstrumentIn,
+	instrumentIn,
+	type RemoteBank,
+	type Resolution,
+	remotesOf,
+	resolveUses,
+	type Workspace,
+	workspaceOf,
+} from "./workspace.ts";
 export {
 	WORKSPACE,
 	type WorkspaceFile,

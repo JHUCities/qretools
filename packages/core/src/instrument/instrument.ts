@@ -12,11 +12,17 @@ import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
 import { checkInstrument } from "./check.ts";
 import type { InstrumentDraft, Use } from "./draft.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
-import { parseInstrument } from "./parse.ts";
+import { parseInstrument, type Unread } from "./parse.ts";
 
 export interface InstrumentContext {
 	/** The banks it uses, each already evaluated (`bankOf`), by the alias `uses` gives it. */
 	readonly banks: Readonly<Record<string, BankScope>>;
+	/**
+	 * Why a bank `uses` names isn't in `banks`, by alias, when the caller knows: said on
+	 * its `uses` entry, or nothing while it's still being read. Absent, a bank not given
+	 * is said to be missing.
+	 */
+	readonly unresolved?: Readonly<Record<string, Unread>>;
 	/**
 	 * The DDI agency the instrument is published under: its maker's, not necessarily its
 	 * banks'. Absent, it is published under `invalid`, and a finding says so.
@@ -42,7 +48,7 @@ export function instrumentOf(
 	source: string,
 	context: InstrumentContext,
 ): Instrument {
-	const parsed = parseInstrument(source, context.banks);
+	const parsed = parseInstrument(source, context.banks, context.unresolved);
 	const { document, collisions } = instrumentDocument(
 		elaborateInstrument(parsed, {
 			agency: context.agency ?? UNDECLARED_AGENCY,

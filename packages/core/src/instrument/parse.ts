@@ -117,6 +117,7 @@ const ORDERS: readonly Order[] = ["random", "rotate"];
 export function parseInstrument(
 	source: string,
 	banks: Readonly<Record<string, BankScope>>,
+	unresolved: Readonly<Record<string, Unread>> = {},
 ): ParsedInstrument {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexInstrument(doc, source.length);
@@ -171,7 +172,7 @@ export function parseInstrument(
 	const title = text(top.get("title", true), "title", false);
 	const description = text(top.get("description", true), "description", false);
 
-	const uses = readUses(top.get("uses", true), banks, say);
+	const uses = readUses(top.get("uses", true), banks, unresolved, say);
 	// Only the banks `uses` names are in reach, whatever else was given.
 	const available: Readonly<Record<string, BankScope>> = Object.fromEntries(
 		uses.flatMap((u) => {
@@ -362,9 +363,18 @@ function readText(
 	return String(value);
 }
 
+/**
+ * Why a bank `uses` names isn't among those given, by its alias: still being read (said
+ * nowhere: it will be given), or a reason, said once, on its `uses` entry.
+ */
+export type Unread =
+	| { readonly kind: "pending" }
+	| { readonly kind: "unreadable"; readonly reason: string };
+
 function readUses(
 	node: unknown,
 	banks: Readonly<Record<string, BankScope>>,
+	unresolved: Readonly<Record<string, Unread>>,
 	say: (f: Finding) => void,
 ): readonly Use[] {
 	if (node === undefined) return [];
@@ -410,16 +420,21 @@ function readUses(
 					"A repository and version, such as `owner/bank@v1`, or a folder beside this instrument.",
 				),
 			);
-		else if (banks[alias] === undefined)
-			say(
-				problem(
-					"unknown-bank",
-					"error",
-					path,
-					`No bank was given for \`${alias}\`.`,
-					address === undefined ? undefined : `It names ${address}.`,
-				),
-			);
+		else if (banks[alias] === undefined) {
+			const unread = unresolved[alias];
+			if (unread?.kind === "unreadable")
+				say(problem("unknown-bank", "error", path, unread.reason));
+			else if (unread === undefined)
+				say(
+					problem(
+						"unknown-bank",
+						"error",
+						path,
+						`No bank was given for \`${alias}\`.`,
+						`It names ${address}.`,
+					),
+				);
+		}
 		uses.push({ alias, ...(address !== undefined && { address }) });
 	}
 	return uses;
