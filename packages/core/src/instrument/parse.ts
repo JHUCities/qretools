@@ -26,7 +26,7 @@ import { readCodeMap } from "../surface/codes.ts";
 import { type Code, definedVariables } from "../surface/draft.ts";
 import { EMPTY_ENV } from "../surface/env.ts";
 import { placeholderSpans } from "../surface/fills.ts";
-import { readNumber, readOpen } from "../surface/parse.ts";
+import { pointAt, readNumber, readOpen } from "../surface/parse.ts";
 import { clampRange, yamlErrors } from "../surface/read.ts";
 import { NAME_PATTERN } from "../surface/schema.ts";
 import type {
@@ -119,7 +119,7 @@ export function parseInstrument(
 	banks: Readonly<Record<string, Bank>>,
 ): ParsedInstrument {
 	const doc = parseDocument(source, { prettyErrors: false });
-	const ranges = indexInstrument(doc, source.length);
+	const { ranges, empties } = indexInstrument(doc, source.length);
 	const findings: Finding[] = [...yamlErrors(doc.errors, source.length)];
 	const empty: InstrumentDraft = { uses: [], inputs: [], flow: [] };
 	const top = doc.contents;
@@ -254,7 +254,16 @@ export function parseInstrument(
 		inputs,
 		flow,
 	};
-	return { draft, findings, ranges, scope, names: ctx.names, banks: available };
+	return {
+		draft,
+		// A hole at a key written with nothing after it is drawn at that point, as a
+		// question's is: one marker where the author types.
+		findings: findings.map(pointAt(empties)),
+		ranges,
+		scope,
+		names: ctx.names,
+		banks: available,
+	};
 }
 
 interface Context {
@@ -1759,8 +1768,19 @@ function placeholdersIn(
 }
 
 /** Every path's range, list items included, so a finding in a flow points at its step. */
-function indexInstrument(doc: Document, length: number): Record<string, Range> {
+/**
+ * Every path's range, list items included, and where each value written empty starts
+ * (as a question's `indexDocument` records it), for holes to be drawn at that point.
+ */
+function indexInstrument(
+	doc: Document,
+	length: number,
+): {
+	ranges: Record<string, Range>;
+	empties: Record<string, number>;
+} {
 	const ranges: Record<string, Range> = { "": [0, length] };
+	const empties: Record<string, number> = {};
 	const walk = (node: unknown, prefix: string): void => {
 		if (isMap(node))
 			for (const pair of node.items) {
@@ -1771,6 +1791,8 @@ function indexInstrument(doc: Document, length: number): Record<string, Range> {
 				const v = pair.value as YamlNode | null;
 				const to = v?.range ? v.range[1] : pair.key.range[1];
 				ranges[path] = clampRange(pair.key.range[0], to, length);
+				if (isScalar(v) && v.value === null && v.source === "" && v.range)
+					empties[path] = clampRange(v.range[0], v.range[0], length)[0];
 				walk(v, path);
 			}
 		else if (isSeq(node))
@@ -1782,7 +1804,7 @@ function indexInstrument(doc: Document, length: number): Record<string, Range> {
 			});
 	};
 	walk(doc.contents, "");
-	return ranges;
+	return { ranges, empties };
 }
 
 /** `index` in an expression, read as the innermost enclosing roster's row number. */

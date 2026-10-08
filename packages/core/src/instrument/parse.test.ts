@@ -401,3 +401,21 @@ describe("where a scalar's characters are", () => {
 		}
 	});
 });
+
+describe("a field written with nothing after it", () => {
+	it("is a hole at the point just after its colon, as a question's is", () => {
+		const source = "name: x\ntitle:\nflow:\n  - ask:\n";
+		const holes = parseInstrument(source, {})
+			.findings.filter((f) => f.severity === "hole")
+			.map((f) => [f.path, f.range]);
+		const pastColon = (key: string) => source.indexOf(key) + key.length;
+		expect(holes).toContainEqual([
+			"title",
+			[pastColon("title:"), pastColon("title:")],
+		]);
+		expect(holes).toContainEqual([
+			"flow.0.ask",
+			[pastColon("- ask:"), pastColon("- ask:")],
+		]);
+	});
+});
