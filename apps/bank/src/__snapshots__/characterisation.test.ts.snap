@@ -1,0 +1,253 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`one bank, as the app has always held it > at the repository's root 1`] = `
+{
+  "acts": [
+    {
+      "effects": [
+        {
+          "link": "#repo=octo-org%2Fsurvey&branch=qretools-iain&file=questions%2Fexamples%2Flibrary_visits.yaml",
+          "push": true,
+        },
+      ],
+      "msg": "fileOpened",
+    },
+    {
+      "effects": [],
+      "msg": "edited",
+    },
+    {
+      "effects": [
+        {
+          "bank": "",
+          "branch": "qretools-iain",
+          "changes": [
+            {
+              "deletes": false,
+              "expected": "sha-questions/examples/library_visits.yaml",
+              "path": "questions/examples/library_visits.yaml",
+            },
+          ],
+          "commit": "Update library_visits",
+        },
+      ],
+      "msg": "saveRequested",
+    },
+    {
+      "effects": [],
+      "msg": "moveRequested",
+    },
+    {
+      "effects": [
+        {
+          "bank": "",
+          "branch": "qretools-iain",
+          "changes": [
+            {
+              "deletes": false,
+              "expected": null,
+              "path": "questions/moved/library_visits.yaml",
+            },
+            {
+              "deletes": true,
+              "expected": "new-questions/examples/library_visits.yaml",
+              "path": "questions/examples/library_visits.yaml",
+            },
+          ],
+          "commit": "Move library_visits to moved",
+        },
+      ],
+      "msg": "moveConfirmed",
+    },
+    {
+      "effects": [
+        {
+          "link": "#repo=octo-org%2Fsurvey&branch=qretools-iain",
+          "push": true,
+        },
+      ],
+      "msg": "questionCreated",
+    },
+    {
+      "effects": [],
+      "msg": "saveRequested",
+    },
+    {
+      "effects": [],
+      "msg": "saveFolderChanged",
+    },
+    {
+      "effects": [
+        {
+          "bank": "",
+          "branch": "qretools-iain",
+          "changes": [
+            {
+              "deletes": false,
+              "expected": null,
+              "path": "questions/fresh/brand_new.yaml",
+            },
+          ],
+          "commit": "Add brand_new",
+        },
+      ],
+      "msg": "saveConfirmed",
+    },
+    {
+      "effects": [],
+      "msg": "schemeCreateOpened",
+    },
+    {
+      "effects": [],
+      "msg": "schemeNameChanged",
+    },
+    {
+      "effects": [],
+      "msg": "schemeTextChanged",
+    },
+    {
+      "effects": [
+        {
+          "link": "#repo=octo-org%2Fsurvey&branch=qretools-iain",
+          "push": true,
+        },
+      ],
+      "msg": "schemeNamingConfirmed",
+    },
+    {
+      "effects": [
+        {
+          "bank": "",
+          "branch": "qretools-iain",
+          "changes": [
+            {
+              "deletes": false,
+              "expected": null,
+              "path": "universes/renters.yaml",
+            },
+          ],
+          "commit": "Add shared universe renters",
+        },
+      ],
+      "msg": "saveRequested",
+    },
+    {
+      "effects": [],
+      "msg": "deleteRequested",
+    },
+    {
+      "effects": [
+        {
+          "bank": "",
+          "branch": "qretools-iain",
+          "changes": [
+            {
+              "deletes": true,
+              "expected": "sha-questions/examples/news_sources.yaml",
+              "path": "questions/examples/news_sources.yaml",
+            },
+          ],
+          "commit": "Delete news_sources",
+        },
+      ],
+      "msg": "deleteRequested",
+    },
+  ],
+  "shown": {
+    "remote": {
+      "questions": [
+        "questions/examples/library_visits.yaml",
+        "questions/examples/news_sources.yaml",
+        "questions/examples/parks_spending.yaml",
+        "questions/examples/parks_spending_reversed.yaml",
+        "questions/examples/service_comments.yaml",
+        "questions/examples/service_satisfaction.yaml",
+      ],
+      "schemes": [
+        "bank.yaml",
+        "concepts/library_use.yaml",
+        "concepts/news_consumption.yaml",
+        "concepts/parks_spending_support.yaml",
+        "concepts/service_satisfaction.yaml",
+        "instructions/select_all.yaml",
+        "instructions/select_one.yaml",
+        "missing.yaml",
+        "scales/satisfied5.yaml",
+        "scales/support4.yaml",
+        "scales/support4_reversed.yaml",
+        "scales/yesno01.yaml",
+        "units/days.yaml",
+        "units/dollars.yaml",
+        "units/years.yaml",
+        "universes/all_respondents.yaml",
+      ],
+    },
+    "shared": [
+      {
+        "kind": "concept",
+        "leaves": [
+          "library_use complete used by 1",
+          "news_consumption complete used by 1",
+          "parks_spending_support complete used by 2",
+          "service_satisfaction complete used by 2",
+        ],
+      },
+      {
+        "kind": "scale",
+        "leaves": [
+          "satisfied5 complete used by 1",
+          "support4 complete used by 1",
+          "support4_reversed complete used by 1",
+          "yesno01 complete used by 0",
+        ],
+      },
+      {
+        "kind": "unit",
+        "leaves": [
+          "days complete used by 1",
+          "dollars complete used by 0",
+          "years complete used by 0",
+        ],
+      },
+      {
+        "kind": "universe",
+        "leaves": [
+          "all_respondents complete used by 6",
+        ],
+      },
+      {
+        "kind": "instruction",
+        "leaves": [
+          "select_all complete used by 1",
+          "select_one complete used by 3",
+        ],
+      },
+      {
+        "kind": "missing",
+        "leaves": [
+          "missing complete used by -",
+        ],
+      },
+      {
+        "kind": "bank",
+        "leaves": [
+          "bank complete used by -",
+        ],
+      },
+    ],
+    "tree": [
+      {
+        "folder": "examples",
+        "leaves": [
+          "library_visits complete",
+          "news_sources complete",
+          "parks_spending complete",
+          "parks_spending_reversed complete",
+          "service_comments complete",
+          "service_satisfaction complete",
+        ],
+      },
+    ],
+  },
+}
+`;
