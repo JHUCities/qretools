@@ -4,15 +4,11 @@ import {
 	GitBranchIcon,
 	GitPullRequestIcon,
 	LinkExternalIcon,
-	MoonIcon,
 	PlusIcon,
-	SignOutIcon,
-	SunIcon,
 } from "@primer/octicons-react";
 import {
 	ActionList,
 	ActionMenu,
-	Avatar,
 	Banner,
 	Button,
 	ConfirmationDialog,
@@ -26,7 +22,6 @@ import {
 	VisuallyHidden,
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
-import { useTheme } from "@primer/react/next";
 import {
 	indexOf,
 	isRoot,
@@ -39,7 +34,13 @@ import {
 	usedBy,
 } from "@qretools/core";
 import { installUrl } from "@qretools/shell";
-import { ExternalLink, failureDescription } from "@qretools/shell/ui";
+import {
+	AccountMenu,
+	ExternalLink,
+	failureDescription,
+	ThemeToggle,
+	Wordmark,
+} from "@qretools/shell/ui";
 import { useMemo } from "react";
 import { SOURCE_URL } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
@@ -167,9 +168,7 @@ export function App() {
 					 * The wordmark: real text in two typefaces (the shell's app.css), read as one word.
 					 * Which bank is open is the sidebar's title, not the header's.
 					 */}
-					<h1 className="brand">
-						<span className="wordmark-qre">QRE</span>tools
-					</h1>
+					<Wordmark />
 					{/*
 					 * A live region, always mounted so that what it says is announced: what
 					 * the session is doing, or why nothing can be written. A file's inactive
@@ -287,7 +286,9 @@ export function App() {
 							</ActionMenu.Overlay>
 						</ActionMenu>
 					)}
-					<ThemeToggle />
+					<ThemeToggle
+						onChoose={(theme) => dispatch({ kind: "themeChosen", theme })}
+					/>
 					{model.session.kind === "connecting" ? (
 						<SkeletonAvatar size={32} />
 					) : (
@@ -537,63 +538,19 @@ function Bank({ model }: { model: Model }) {
 }
 
 /**
- * Light or dark, as primer.style offers it: one button naming the theme it switches to.
- * It starts from the system's; a choice is remembered on this device (applyTheme).
- */
-function ThemeToggle() {
-	const { dispatch } = useApp();
-	const { resolvedColorMode } = useTheme();
-	// Following the system, Primer resolves to "night" or "day", not "dark" or "light".
-	const dark = resolvedColorMode === "dark" || resolvedColorMode === "night";
-	const next = dark ? "light" : "dark";
-	return (
-		<IconButton
-			icon={next === "dark" ? MoonIcon : SunIcon}
-			aria-label={`Switch to ${next} theme`}
-			onClick={() => dispatch({ kind: "themeChosen", theme: next })}
-		/>
-	);
-}
-
-/**
- * The account, as github.com shows it: the avatar opens a menu with who is signed in,
- * the bank, and signing out.
+ * The account menu once signed in. Signed out, the page itself is the way in; while
+ * connecting, nothing yet.
  */
 function Account({ model }: { model: Model }) {
 	const { dispatch } = useApp();
 	const { session } = model;
-	// Signed out, the page itself is the way in; while connecting, nothing yet.
 	if (session.kind !== "connected") return null;
 	return (
-		<ActionMenu>
-			<ActionMenu.Anchor>
-				<Button
-					variant="invisible"
-					className="account"
-					aria-label={`Account: ${session.login}`}
-				>
-					<Avatar src={session.avatarUrl} size={32} alt="" />
-				</Button>
-			</ActionMenu.Anchor>
-			<ActionMenu.Overlay align="end">
-				<ActionList>
-					<ActionList.Group>
-						<ActionList.GroupHeading>
-							Signed in as {session.login}
-						</ActionList.GroupHeading>
-					</ActionList.Group>
-					<ActionList.Divider />
-					<ActionList.Item
-						onSelect={() => dispatch({ kind: "signOutRequested" })}
-					>
-						<ActionList.LeadingVisual>
-							<SignOutIcon />
-						</ActionList.LeadingVisual>
-						Sign out
-					</ActionList.Item>
-				</ActionList>
-			</ActionMenu.Overlay>
-		</ActionMenu>
+		<AccountMenu
+			login={session.login}
+			avatarUrl={session.avatarUrl}
+			onSignOut={() => dispatch({ kind: "signOutRequested" })}
+		/>
 	);
 }
 

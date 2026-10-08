@@ -14,4 +14,5 @@ export {
 	StatusBadge,
 	StatusIcon,
 } from "./findings.tsx";
+export { AccountMenu, ThemeToggle, Wordmark } from "./header.tsx";
 export { useSettled } from "./useSettled.ts";
