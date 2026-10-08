@@ -24,7 +24,12 @@ import {
 } from "../findings.ts";
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
-import { type RemoteBank, remotesOf, workspaceOf } from "../workspace.ts";
+import {
+	banksIn,
+	type RemoteBank,
+	remotesOf,
+	workspaceOf,
+} from "../workspace.ts";
 import { WORKSPACE } from "../workspacefile.ts";
 import { readBank, readWorkspace } from "./index.ts";
 
@@ -96,8 +101,12 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		return USAGE_ERROR;
 	}
 	if (Object.keys(files).length === 0) {
+		// A workspace whose banks are in folders: say which to export.
+		const folders = Object.keys(banksIn(await readWorkspace(dir)).banks).sort();
 		io.err(
-			`No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
+			folders.length > 0
+				? `${dir} is a workspace with banks at ${folders.join(", ")}; export one: qretools export ${join(dir, folders[0] ?? "")}\n`
+				: `No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
 		);
 		return USAGE_ERROR;
 	}
@@ -180,6 +189,8 @@ async function checkWorkspace(
 		readonly path: string;
 		readonly findings: readonly Finding[];
 		readonly ranges: Readonly<Record<string, Range>>;
+		/** A YAML file read as nothing: noted, in its place among the others. */
+		readonly ignored?: true;
 	}[] = [];
 	for (const [folder, bank] of Object.entries(ws.banks))
 		for (const [path, findings] of Object.entries(bank.findings))
@@ -201,16 +212,27 @@ async function checkWorkspace(
 			findings: ws.file.findings,
 			ranges: ws.file.ranges,
 		});
+	// Nothing the tool reads, whatever else is there: the wrong folder, most likely.
 	if (checked.length === 0) {
 		io.err(
 			`No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
 		);
 		return USAGE_ERROR;
 	}
+	for (const path of ws.ignored)
+		checked.push({ path, findings: [], ranges: {}, ignored: true });
 	const counts = { incomplete: 0, warnings: 0, findings: 0 };
-	for (const { path, findings, ranges } of checked.sort((a, b) =>
+	for (const { path, findings, ranges, ignored } of checked.sort((a, b) =>
 		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
 	)) {
+		// Said as compilers note it, at the file's start.
+		if (ignored) {
+			io.out(
+				`${join(dir, path)}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]\n`,
+			);
+			counts.findings += 1;
+			continue;
+		}
 		// As the user named the folder, so a problem matcher finds the file from here.
 		for (const f of findings)
 			io.out(`${findingLine(join(dir, path), files[path] ?? "", ranges, f)}\n`);
@@ -218,13 +240,6 @@ async function checkWorkspace(
 		counts.findings += findings.length;
 		if (s.kind === "incomplete") counts.incomplete += 1;
 		else if (s.kind === "advice" && s.worst === "warning") counts.warnings += 1;
-	}
-	// A YAML file read as nothing, said as compilers note it, at its start.
-	for (const path of ws.ignored) {
-		io.out(
-			`${join(dir, path)}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]\n`,
-		);
-		counts.findings += 1;
 	}
 	const read =
 		Object.values(ws.banks).reduce(

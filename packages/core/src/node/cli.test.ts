@@ -75,6 +75,7 @@ describe("qretools check", () => {
 		});
 		await writeFile(join(ws, "workspace.yaml"), "agency: org.example\n");
 		await writeFile(join(ws, "stray.yaml"), "x: 1\n");
+		await writeFile(join(ws, "a-stray.yaml"), "x: 1\n");
 		const r = await run("check", ws);
 		const lines = r.out.trimEnd().split("\n");
 		// The households instrument reads its bank beside it; remote's bank isn't read here.
@@ -86,12 +87,22 @@ describe("qretools check", () => {
 		expect(lines.find((l) => l.includes("remote.yaml:3:3:"))).toMatch(
 			/error: `owner\/bank@v1` is in another repository, which `qretools check` doesn't read yet\./,
 		);
-		expect(lines.at(-1)).toBe(
-			`${join(ws, "stray.yaml")}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]`,
+		// Noted in its place among the others, by path, as compilers report per file.
+		expect(lines[0]).toBe(
+			`${join(ws, "a-stray.yaml")}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]`,
 		);
+		expect(lines.at(-1)).toMatch(/stray\.yaml:1:1: note: .* \[ignored\]$/);
 		// 16 bank files, 2 instruments, the workspace file.
 		expect(r.err).toMatch(/^19 files, /);
 		expect(r.code).toBe(1);
+	});
+
+	it("says a folder of nothing it reads holds no bank, whatever YAML is there", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-none-"));
+		await writeFile(join(dir, "stray.yaml"), "x: 1\n");
+		const r = await run("check", dir);
+		expect(r).toMatchObject({ code: 2, out: "" });
+		expect(r.err).toMatch(/^No bank files in /);
 	});
 
 	it("names files as the user named the bank, so editors find them from here", async () => {
@@ -104,6 +115,17 @@ describe("qretools check", () => {
 });
 
 describe("qretools export", () => {
+	it("says which bank to export from a workspace whose banks are in folders", async () => {
+		const ws = await mkdtemp(join(tmpdir(), "qretools-ws-"));
+		for (const bank of ["banks/b", "banks/a"])
+			await cp(SAMPLE, join(ws, bank), { recursive: true });
+		const r = await run("export", ws);
+		expect(r.code).toBe(2);
+		expect(r.err).toBe(
+			`${ws} is a workspace with banks at banks/a, banks/b; export one: qretools export ${join(ws, "banks/a")}\n`,
+		);
+	});
+
 	it("writes the bank's DDI, valid, with every question's items once", async () => {
 		const r = await run("export", SAMPLE, "-o", "out.json");
 		expect(r.code).toBe(0);
