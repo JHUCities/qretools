@@ -48,7 +48,6 @@ import { SOURCE_URL } from "../config.js";
 import {
 	bankFileOf,
 	type Dispatch,
-	fileOf,
 	type Id,
 	type Model,
 	newBank,
