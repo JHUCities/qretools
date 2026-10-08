@@ -82,6 +82,64 @@ describe("a workspace", () => {
 		).toContain("invalid-agency");
 	});
 
+	it("says nothing anywhere a bank still being read is named", () => {
+		const everywhere = `name: x
+universe: bas.renters
+uses:
+  bas: owner/bank@v1
+inputs:
+  feel:
+    responses: bas.agree4
+flow:
+  - say: "You are {{bas.size}} strong."
+  - if: bas.size > 2
+    then:
+      - ask: bas.consent
+`;
+		const read = workspaceOf({ "instruments/x.yaml": everywhere }).instruments[
+			"instruments/x.yaml"
+		];
+		expect(read?.uses.bas?.kind).toBe("pending");
+		// Only what this instrument itself leaves to fill in: nothing of `bas`.
+		expect(
+			(read?.instrument.findings ?? []).filter((f) => /bas\./.test(f.message)),
+		).toEqual([]);
+	});
+
+	it("still says so wherever a given bank has no such name", () => {
+		const wrong = `name: x
+universe: bas.nope
+uses:
+  bas: owner/bank@v1
+inputs:
+  feel:
+    responses: bas.nope
+flow:
+  - say: "You are {{bas.nope}} strong."
+  - if: bas.nope = "1"
+    then:
+      - ask: bas.consent
+`;
+		const read = workspaceOf(
+			{ "instruments/x.yaml": wrong },
+			{ remote: { "owner/bank@v1": { kind: "files", files: hh } } },
+		).instruments["instruments/x.yaml"];
+		expect(read?.uses.bas?.kind).toBe("remote");
+		const said = (read?.instrument.findings ?? [])
+			.filter((f) => /bas\.nope/.test(f.message))
+			.map((f) => f.path)
+			.sort();
+		// The universe, the input's scale, the placeholder and the condition: each its own.
+		expect(said).toEqual(
+			expect.arrayContaining([
+				"flow.0.say",
+				"flow.1.if",
+				"inputs.feel.responses",
+				"universe",
+			]),
+		);
+	});
+
 	it("says nothing of a bank in another repository while it's being read, and reads it once given", () => {
 		const files = { "instruments/remote.yaml": remote };
 		const pending = workspaceOf(files).instruments["instruments/remote.yaml"];

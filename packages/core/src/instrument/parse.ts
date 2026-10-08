@@ -180,7 +180,18 @@ export function parseInstrument(
 			return bank === undefined ? [] : [[u.alias, bank]];
 		}),
 	);
-	const inputs = readInputs(doc, top.get("inputs", true), available, say);
+	// A bank `uses` names but that isn't given: said once, on its `uses` entry, and
+	// nowhere its names are written (they can't be read yet, which isn't wrong).
+	const ungiven: ReadonlySet<string> = new Set(
+		uses.filter((u) => available[u.alias] === undefined).map((u) => u.alias),
+	);
+	const inputs = readInputs(
+		doc,
+		top.get("inputs", true),
+		available,
+		ungiven,
+		say,
+	);
 
 	// Names first, then the flow: what a name means doesn't depend on where it's written.
 	const scope = new Map<string, Named>();
@@ -444,6 +455,7 @@ function readInputs(
 	doc: Document,
 	node: unknown,
 	banks: Readonly<Record<string, BankScope>>,
+	ungiven: ReadonlySet<string>,
 	say: (f: Finding) => void,
 ): readonly Input[] {
 	if (node === undefined) return [];
@@ -537,6 +549,7 @@ function readInputs(
 						kinds[0],
 						`${path}.${kinds[0]}`,
 						banks,
+						ungiven,
 						say,
 					);
 		inputs.push({
@@ -556,11 +569,13 @@ function readDomain(
 	kind: string,
 	path: string,
 	banks: Readonly<Record<string, BankScope>>,
+	ungiven: ReadonlySet<string>,
 	say: (f: Finding) => void,
 ): ValueDomain | undefined {
 	if (kind === "responses") {
 		if (isScalar(node) && typeof node.value === "string") {
 			const [alias, scale] = node.value.split(".");
+			if (alias !== undefined && ungiven.has(alias)) return undefined;
 			const found =
 				alias !== undefined && scale !== undefined
 					? banks[alias]?.env.scales[scale]
@@ -642,6 +657,7 @@ function readUniverse(
 	const named = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/.exec(text);
 	if (named === null) return { kind: "text", text };
 	const [, alias = "", name = ""] = named;
+	if (ungivenBank(alias, ctx)) return undefined;
 	const entry = ctx.banks[alias]?.env.universes[name];
 	if (entry === undefined) {
 		ctx.say(
@@ -1469,6 +1485,7 @@ function report(
 					(n) => n.range[0] === p.range[0] && n.range[1] === p.range[1],
 				)?.name
 			: undefined;
+	if (name !== undefined && ungivenBank(name.split(".")[0] ?? "", ctx)) return;
 	ctx.say(
 		problem(
 			p.kind === "unknown-name"
@@ -1506,6 +1523,10 @@ function selectAllHint(
 		.map((d) => `\`${alias}.${d.name}\``)
 		.join(", ")}, "1" when chosen.`;
 }
+
+/** A bank `uses` names that wasn't given: its names are said nowhere (see `readUses`). */
+const ungivenBank = (alias: string, ctx: Context): boolean =>
+	ctx.banks[alias] === undefined && ctx.uses.some((u) => u.alias === alias);
 
 /** A bank variable two of its questions define: which is meant can't be said. */
 function ambiguous(
@@ -1770,7 +1791,10 @@ function placeholdersIn(
 	}));
 	ctx.pending.push(() => {
 		for (const { name, range } of found)
-			if (lookup(name, ctx) === undefined)
+			if (
+				lookup(name, ctx) === undefined &&
+				!ungivenBank(name.split(".")[0] ?? "", ctx)
+			)
 				ctx.say(
 					problem(
 						"unknown-name",
