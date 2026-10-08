@@ -39,6 +39,7 @@ import {
 	usedBy,
 } from "@qretools/core";
 import { installUrl } from "@qretools/shell";
+import { ExternalLink, failureDescription } from "@qretools/shell/ui";
 import { useMemo } from "react";
 import { SOURCE_URL } from "../config.js";
 import { fileOf, type Id, type Model, TEMPLATES } from "../model.js";
@@ -58,10 +59,8 @@ import {
 import { SESSION_STATUS, useApp, useEnv, useModel } from "./AppContext.js";
 import { BankFilter, Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
-import { ExternalLink } from "./ExternalLink.js";
 import { FileSkeleton } from "./FileSkeleton.js";
 import { MoveDialog } from "./MoveDialog.js";
-import { failureDescription } from "./Previews.js";
 import { SaveDialog } from "./SaveDialog.js";
 import { SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";

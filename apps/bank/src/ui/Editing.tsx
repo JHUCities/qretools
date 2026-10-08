@@ -41,6 +41,12 @@ import {
 } from "@qretools/core/editor";
 import { toDiagnostics } from "@qretools/editor";
 import { bankText, formatLink } from "@qretools/shell";
+import {
+	Findings,
+	type Related,
+	StatusBadge,
+	useSettled,
+} from "@qretools/shell/ui";
 import { memo, type ReactNode, useCallback, useMemo } from "react";
 import {
 	envOfRemote,
@@ -63,15 +69,7 @@ import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
 import { FileSkeleton, Panes } from "./FileSkeleton.js";
-import {
-	Codebook,
-	Ddi,
-	Findings,
-	type Related,
-	Respondent,
-	StatusBadge,
-} from "./Previews.js";
-import { useSettled } from "./useSettled.js";
+import { Codebook, Ddi, Respondent } from "./Previews.js";
 
 /**
  * How long typing must pause before the findings list catches up with the text. The

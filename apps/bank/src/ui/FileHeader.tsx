@@ -11,10 +11,10 @@ import {
 	VisuallyHidden,
 } from "@primer/react";
 import { plainText, UNNAMED } from "@qretools/core";
+import { failureDescription } from "@qretools/shell/ui";
 import { useId } from "react";
 import type { Activity, Entry } from "../model.js";
 import { SESSION_STATUS } from "./AppContext.js";
-import { failureDescription } from "./Previews.js";
 
 export interface HeaderActions {
 	readonly save: () => void;

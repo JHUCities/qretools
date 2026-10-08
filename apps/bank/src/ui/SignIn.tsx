@@ -23,13 +23,12 @@ import {
 } from "@primer/react";
 import { plainText } from "@qretools/core";
 import { bankText, installUrl, parseBank, sameBank } from "@qretools/shell";
+import { ExternalLink, failureDescription } from "@qretools/shell/ui";
 import { useId, useRef, useState } from "react";
 import { SOURCE_URL } from "../config.js";
 import { TOKEN_PASTE } from "../flags.js";
 import { hasOwnWork, type Model } from "../model.js";
 import { useApp } from "./AppContext.js";
-import { ExternalLink } from "./ExternalLink.js";
-import { failureDescription } from "./Previews.js";
 
 export function SignIn({ model }: { model: Model }) {
 	const { dispatch, effects, signIn: config, template } = useApp();

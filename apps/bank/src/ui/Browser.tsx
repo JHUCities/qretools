@@ -29,10 +29,10 @@ import {
 	status,
 	UNNAMED,
 } from "@qretools/core";
+import { StatusIcon } from "@qretools/shell/ui";
 import { useId } from "react";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
-import { StatusIcon } from "./Previews.js";
 
 export function Browser({
 	folders,

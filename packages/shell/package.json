@@ -3,10 +3,12 @@
 	"version": "2.0.0-alpha.0",
 	"private": true,
 	"type": "module",
-	"description": "What the QREtools apps share at their edge: GitHub sign-in, storage, links",
+	"description": "What the QREtools apps share at their edge: GitHub sign-in, storage, links, the Elm loop, and the look and React pieces of their interface",
 	"exports": {
 		".": "./src/index.ts",
-		"./base": "./src/ui/base.ts"
+		"./base": "./src/ui/base.ts",
+		"./ui": "./src/ui/index.ts",
+		"./test-setup": "./src/ui/test-setup.ts"
 	},
 	"scripts": {
 		"test": "vitest run",
@@ -27,7 +29,21 @@
 		"zod": "^4.6.5",
 		"zustand": "^5.0.15"
 	},
+	"peerDependencies": {
+		"@primer/octicons-react": "^19.38.0",
+		"@primer/react": "^38.40.0",
+		"react": "^19.3.0"
+	},
 	"devDependencies": {
+		"@primer/octicons-react": "^19.38.0",
+		"@primer/react": "^38.40.0",
+		"@testing-library/dom": "^10.4.2",
+		"@testing-library/react": "^16.3.3",
+		"@types/react": "^19.3.0",
+		"@types/react-dom": "^19.3.0",
+		"jsdom": "^30.1.1",
+		"react": "^19.3.0",
+		"react-dom": "^19.3.0",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.0",
 		"vitest": "^5.0.1"

@@ -10,8 +10,8 @@
  * transient input, so it is component state.
  */
 import { FormControl, Select, Stack, TextInput } from "@primer/react";
+import { inlineCode } from "@qretools/shell/ui";
 import { useState } from "react";
-import { inlineCode } from "./Previews.js";
 
 const NEW = "\u0000new";
 

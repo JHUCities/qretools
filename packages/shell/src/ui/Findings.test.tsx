@@ -3,7 +3,7 @@
 import type { Finding } from "@qretools/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { Findings } from "./Previews.js";
+import { Findings } from "./findings.tsx";
 
 const dup: Finding = {
 	code: "duplicate-text",

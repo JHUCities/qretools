@@ -15,9 +15,9 @@ import {
 	SHAPE,
 	schemePath,
 } from "@qretools/core";
+import { inlineCode } from "@qretools/shell/ui";
 import { useId } from "react";
 import type { Dispatch, Naming } from "../model.js";
-import { inlineCode } from "./Previews.js";
 
 const EXAMPLES: Readonly<Record<NamedScheme, string>> = {
 	concept: "neighborhood_satisfaction",

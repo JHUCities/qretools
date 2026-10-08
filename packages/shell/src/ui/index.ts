@@ -1,0 +1,16 @@
+/**
+ * `@qretools/shell/ui`: the React pieces the QREtools apps share, on Primer. Kept apart
+ * from the shell's main entry, which imports no React.
+ */
+export { ExternalLink } from "./ExternalLink.tsx";
+export {
+	Findings,
+	failureDescription,
+	findingKeys,
+	inlineCode,
+	type OnTarget,
+	type Related,
+	StatusBadge,
+	StatusIcon,
+} from "./findings.tsx";
+export { useSettled } from "./useSettled.ts";
