@@ -1,0 +1,44 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`an instrument's outline > follows the flow, nested as it nests, each item at its path 1`] = `
+[
+  "Say Thank you for taking part in this survey of {{county}}.  @flow.0",
+  "Ask \`hh.consent\` — Do you agree to take part in this survey?  @flow.1",
+  "Stop if \`hh.consent = "2"\`  @flow.2",
+  "Ask \`hh.size\` — How many people live in your household, including you?  @flow.3",
+  "Roster \`members\`  @flow.4",
+  "  Say The next questions are about person {{index}}.  @flow.4.flow.0",
+  "  Ask \`hh.age\` — How old is this person?  @flow.4.flow.1",
+  "  Ask \`hh.works\` — Does this person work for pay?  @flow.4.flow.2",
+  "Section Housing  @flow.5",
+  "  Ask \`hh.tenure\` — Do you own or rent your home?  @flow.5.flow.0",
+  "  Compute \`renter\` = \`hh.tenure = "2"\`  @flow.5.flow.1",
+  "  If \`renter\`  @flow.5.flow.2",
+  "    Ask \`hh.rent\` — How much is your rent each month, in dollars?  @flow.5.flow.2.then.0",
+  "    Ask \`hh.utilities\` — You said you pay {{rent}} a month. Does that include utilities?  @flow.5.flow.2.then.1",
+  "Roster \`vehicles\`  @flow.6",
+  "  Ask \`hh.vehicle\` — What kind of vehicle is it?  @flow.6.flow.0",
+  "  Ask \`hh.more_vehicles\` — Does your household have another vehicle?  @flow.6.flow.1",
+  "Each row of \`members\`  @flow.7",
+  "  If \`hh.works = "1"\`  @flow.7.flow.0",
+  "    Say Person {{index}} works.  @flow.7.flow.0.then.0",
+  "Ask \`hh.comments\` — Is there anything else you'd like to tell us?  @flow.8",
+]
+`;
+
+exports[`an instrument's outline > shows branches, a question asked again, and what is still to be written 1`] = `
+[
+  "Ask \`hh.size\` — How many people live in your household, including you?  @flow.0",
+  "Ask \`hh.size\` as \`size_again\` — How many people live in your household, including you?  @flow.1",
+  "If \`hh.size > 2\`  @flow.2",
+  "  Say Big.  @flow.2.then.0",
+  "Else if [condition]  @flow.2.else",
+  "  Say Unknown.  @flow.2.else.then.0",
+  "Else  @flow.2.else.else",
+  "  Ask [question]  @flow.2.else.else.0",
+  "Stop if [condition]  @flow.3",
+  "Compute [(no name yet)] = [value]  @flow.4",
+  "Roster [(no name yet)]  @flow.5",
+  "[step]  @flow.6",
+]
+`;

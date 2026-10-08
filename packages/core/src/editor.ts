@@ -8,6 +8,11 @@
 
 export { locate, pathAt } from "./findings.ts";
 export { type Inspection, inspect, mentionAt } from "./inspect.ts";
+export {
+	type OutlineItem,
+	type OutlinePart,
+	outlineOf,
+} from "./instrument/outline.ts";
 export { labelledSource, textEntrySource } from "./schemes.ts";
 export {
 	addSpace,

@@ -93,6 +93,7 @@ describe("the entry points", () => {
 			    "marksOf",
 			    "mentionAt",
 			    "nameFrom",
+			    "outlineOf",
 			    "pathAt",
 			    "placeAt",
 			    "questionJsonSchema",

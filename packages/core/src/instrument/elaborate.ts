@@ -332,12 +332,12 @@ export function elaborateInstrument(
 		emit(
 			item("Sequence", id(at), {
 				...extra,
-				ControlConstructReference: flow(nodes, at),
+				ControlConstructReference: flow(nodes),
 			}),
 		);
 
 	/** A list of steps as references to their constructs; a `stop` takes what follows into its else. */
-	const flow = (nodes: readonly Node[], at: string): JsonObject[] => {
+	const flow = (nodes: readonly Node[]): JsonObject[] => {
 		const refs: JsonObject[] = [];
 		for (let i = 0; i < nodes.length; i++) {
 			const node = nodes[i] as Node;
@@ -495,10 +495,7 @@ export function elaborateInstrument(
 			return withRow(v, param, () => {
 				const body = emit(
 					item("Sequence", id(`${at}-row`), {
-						ControlConstructReference: [
-							ref(counter),
-							...flow(node.flow, `${at}-row`),
-						],
+						ControlConstructReference: [ref(counter), ...flow(node.flow)],
 					}),
 				);
 				return [
