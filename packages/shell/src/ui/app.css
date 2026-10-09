@@ -586,6 +586,20 @@ code,
 	border: var(--borderWidth-thin) solid var(--borderColor-default);
 	border-radius: var(--borderRadius-medium);
 }
+/*
+ * Every pane's header one height, a small control's (the DDI pane's download), whatever
+ * it holds: stacked headers of different heights read as a mistake. Boxes are border-box
+ * (Primer's BaseStyles).
+ */
+.pane h3,
+.pane-head {
+	min-block-size: calc(
+		var(--control-small-size) +
+		2 *
+		var(--base-size-8) +
+		var(--borderWidth-thin)
+	);
+}
 .pane h3 {
 	margin: 0;
 	padding: var(--base-size-8) var(--base-size-12);
@@ -600,7 +614,38 @@ code,
 .pane-body {
 	padding: var(--base-size-12);
 }
-details.pane > summary {
+/*
+ * A header row holding a heading and its tools (the DDI pane's verdict and download):
+ * drawn as a pane's h3 is, one small control high whether or not a control is there.
+ */
+.pane-head {
+	padding: var(--base-size-8) var(--base-size-12);
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-default);
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--base-size-8);
+	align-items: center;
+	justify-content: space-between;
+}
+.pane .pane-head h3 {
+	padding: 0;
+	border-bottom: 0;
+	min-block-size: auto;
+}
+.pane-tools {
+	display: flex;
+	gap: var(--base-size-8);
+	align-items: center;
+}
+.ddi-body {
+	display: grid;
+	gap: var(--base-size-8);
+}
+/* The grid's gap is its only spacing. */
+.download-reason {
+	margin: 0;
+}
+.ddi-json > summary {
 	cursor: pointer;
 }
 .disclosure {
@@ -608,11 +653,8 @@ details.pane > summary {
 	gap: var(--base-size-4);
 	align-items: center;
 }
-details.pane[open] > summary .disclosure > svg {
+.ddi-json[open] > summary .disclosure > svg {
 	transform: rotate(90deg);
-}
-details.pane:not([open]) > summary h3 {
-	border-bottom: 0;
 }
 
 /* A hole in a preview: dashed and tinted, an invitation, never an error. */

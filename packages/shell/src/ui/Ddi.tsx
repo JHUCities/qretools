@@ -1,6 +1,8 @@
 /**
- * The DDI pane: the document as JSON, with its verdict against the official schema
- * beside the heading, and the schema's problems above it.
+ * The DDI pane: its verdict against the official schema and the app's action (an
+ * instrument's download) beside the heading, always shown; then what the app has to say
+ * and the schema's problems, never folded away; then the document as JSON, folded
+ * (owner, 2026-10-09: the download had sat below the fold, under a fold of the whole pane).
  */
 
 import { ChevronRightIcon } from "@primer/octicons-react";
@@ -22,6 +24,7 @@ export const Ddi = memo(function Ddi({
 	schema,
 	problems,
 	notice,
+	action,
 }: {
 	document: DdiDocument;
 	schema: DdiSchema;
@@ -31,6 +34,8 @@ export const Ddi = memo(function Ddi({
 	 * that it declares no agency yet). Pass a stable element: the pane is memoised.
 	 */
 	notice?: ReactNode;
+	/** Beside the verdict: what can be done with the document (download it). Stable, as `notice`. */
+	action?: ReactNode;
 }) {
 	const badge =
 		schema.kind === "loading" ? (
@@ -45,19 +50,16 @@ export const Ddi = memo(function Ddi({
 			</Label>
 		);
 	return (
-		// Primer's Details hides the browser's marker; the chevron stands in for it,
-		// on the heading's line.
-		<Details className="pane">
-			<Details.Summary>
-				<h3>
-					<span className="disclosure">
-						<ChevronRightIcon aria-hidden />
-						DDI-Lifecycle 4.0
-					</span>
+		<article className="pane">
+			{/* A row, not the heading: the action is no part of the heading's name. */}
+			<div className="pane-head">
+				<h3>DDI-Lifecycle 4.0</h3>
+				<span className="pane-tools">
 					{badge}
-				</h3>
-			</Details.Summary>
-			<div className="pane-body">
+					{action}
+				</span>
+			</div>
+			<div className="pane-body ddi-body">
 				{notice}
 				{problems.map((f, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: schema problems are positional and can repeat
@@ -70,8 +72,20 @@ export const Ddi = memo(function Ddi({
 						</span>
 					</InlineMessage>
 				))}
-				<pre className="json">{JSON.stringify(document, null, 2)}</pre>
+				{/*
+				 * Primer's Details (native: find in page opens it) hides the browser's marker;
+				 * the chevron stands in for it.
+				 */}
+				<Details className="ddi-json">
+					<Details.Summary>
+						<span className="disclosure">
+							<ChevronRightIcon aria-hidden />
+							Document as JSON
+						</span>
+					</Details.Summary>
+					<pre className="json">{JSON.stringify(document, null, 2)}</pre>
+				</Details>
 			</div>
-		</Details>
+		</article>
 	);
 });

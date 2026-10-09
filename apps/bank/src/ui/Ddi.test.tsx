@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 
 /**
- * The DDI pane as drawn before it moved into the shell, in each state: written first,
- * so the move (and its `notice` in place of `declare`) can show it changed nothing.
- * The snapshots are the ones taken before the move.
+ * The DDI pane in each state. Its header (the verdict, and the app's action) is always
+ * shown; what the app says and the schema's problems are never folded; only the JSON is.
  */
 import type { DdiDocument, Finding } from "@qretools/core";
 import { Ddi } from "@qretools/shell/ui";
@@ -23,7 +22,7 @@ const PROBLEM: Finding = {
 const html = (container: HTMLElement): string =>
 	container.innerHTML.replace(/_r_[0-9a-z]+_|«r[0-9a-z]+»|:r[0-9a-z]+:/g, "ID");
 
-describe("the DDI pane, as drawn before it moved", () => {
+describe("the DDI pane, as drawn", () => {
 	it("while the schema loads", () => {
 		const { container } = render(
 			<Ddi document={DOCUMENT} schema={{ kind: "loading" }} problems={[]} />,
@@ -64,5 +63,27 @@ describe("the DDI pane, as drawn before it moved", () => {
 			screen.getByRole("button", { name: "Add the bank's agency" }),
 		);
 		expect(declare).toHaveBeenCalledOnce();
+	});
+});
+
+describe("the DDI pane's header and fold", () => {
+	it("keeps the action beside the verdict, outside the heading and the fold", () => {
+		render(
+			<Ddi
+				document={DOCUMENT}
+				schema={{ kind: "ready" }}
+				problems={[PROBLEM]}
+				action={<button type="button">Download DDI</button>}
+			/>,
+		);
+		const heading = screen.getByRole("heading", { name: "DDI-Lifecycle 4.0" });
+		const download = screen.getByRole("button", { name: "Download DDI" });
+		expect(heading.contains(download)).toBe(false);
+		expect(download.closest("details, summary")).toBeNull();
+		// The problem is shown with the JSON folded; the JSON is inside the fold.
+		const fold = screen.getByText("Document as JSON").closest("details");
+		expect(fold?.open).toBe(false);
+		expect(screen.getByText(/is missing/).closest("details")).toBeNull();
+		expect(fold?.querySelector("pre")).not.toBeNull();
 	});
 });

@@ -14,23 +14,27 @@ import {
 	type WorkspaceFile,
 } from "@qretools/core";
 import type { OutlineItem, OutlinePart } from "@qretools/core/editor";
-import { Fragment, type ReactNode, useEffect, useId, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { inlineCode } from "./findings.tsx";
 
 /**
  * The DDI download: a link to the document as a file while it may be exported, and an
- * inactive button saying why not otherwise (the rule is the core's, the CLI's too).
+ * inactive button otherwise, described by `DownloadReason` (the rule is the core's, the
+ * CLI's too). Apart, so the button can sit in the pane's header, one height whatever the
+ * reason, and the reason, which changes as the author types, in the body.
  */
 export function Download({
 	name,
 	ddi,
 	refusal,
+	reason,
 }: {
 	name: string;
 	ddi: DdiDocument;
 	refusal: Refusal | undefined;
+	/** The id of the `DownloadReason` that says why not. */
+	reason: string;
 }) {
-	const reason = useId();
 	const allowed = refusal === undefined;
 	// The file, made while it may be downloaded and let go when it changes: made in the
 	// effect whose cleanup lets it go, so each URL pairs with its own revoke (StrictMode
@@ -61,19 +65,29 @@ export function Download({
 			</LinkButton>
 		);
 	return (
-		<>
-			<Button
-				size="small"
-				inactive
-				leadingVisual={DownloadIcon}
-				aria-describedby={reason}
-			>
-				Download DDI
-			</Button>
-			<span id={reason} className="quiet">
-				{refusal === undefined ? "" : refusalReason(refusal)}
-			</span>
-		</>
+		<Button
+			size="small"
+			inactive
+			leadingVisual={DownloadIcon}
+			aria-describedby={reason}
+		>
+			Download DDI
+		</Button>
+	);
+}
+
+/** Why the download is held back; nothing while it isn't. */
+export function DownloadReason({
+	id,
+	refusal,
+}: {
+	id: string;
+	refusal: Refusal | undefined;
+}) {
+	return refusal === undefined ? null : (
+		<p id={id} className="quiet download-reason">
+			{refusalReason(refusal)}
+		</p>
 	);
 }
 

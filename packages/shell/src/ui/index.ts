@@ -17,6 +17,7 @@ export {
 export { AccountMenu, ThemeToggle, Wordmark } from "./header.tsx";
 export {
 	Download,
+	DownloadReason,
 	Outline,
 	OutlineLabel,
 	WorkspaceNotice,

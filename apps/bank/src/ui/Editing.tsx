@@ -48,6 +48,7 @@ import { bankText, formatLink } from "@qretools/shell";
 import {
 	Ddi,
 	Download,
+	DownloadReason,
 	ExternalLink,
 	Findings,
 	Outline,
@@ -57,7 +58,7 @@ import {
 	useSettled,
 	WorkspaceNotice,
 } from "@qretools/shell/ui";
-import { memo, type ReactNode, useCallback, useMemo } from "react";
+import { memo, type ReactNode, useCallback, useId, useMemo } from "react";
 import {
 	bankFileOf,
 	type Entry,
@@ -383,15 +384,27 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 				: (effects.validate(ddi) ?? []),
 		[ddi, ddiSchema, effects],
 	);
-	const refusal = exportRefusal(instrument, problems);
+	// Memoised on what it reads: a new refusal object each render would rebuild the
+	// memoised DDI pane (and stringify the document) on every caret move.
+	const refusal = useMemo(
+		() => exportRefusal(instrument, problems),
+		[instrument, problems],
+	);
+	const reasonId = useId();
 	const notice = useMemo(
 		() => (
 			<>
-				<Download name={e.name} ddi={ddi} refusal={refusal} />
+				<DownloadReason id={reasonId} refusal={refusal} />
 				<WorkspaceNotice own={own} />
 			</>
 		),
-		[e.name, ddi, refusal, own],
+		[reasonId, refusal, own],
+	);
+	const action = useMemo(
+		() => (
+			<Download name={e.name} ddi={ddi} refusal={refusal} reason={reasonId} />
+		),
+		[e.name, ddi, refusal, reasonId],
 	);
 	return (
 		<>
@@ -480,6 +493,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 						schema={ddiSchema}
 						problems={problems}
 						notice={notice}
+						action={action}
 					/>
 				</ScrollableRegion>
 			</div>
