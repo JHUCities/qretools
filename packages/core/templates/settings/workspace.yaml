@@ -1,4 +1,4 @@
-# This workspace's own settings. QREtools reads them when it exports an
+# This workspace's details. QREtools reads them when it exports an
 # instrument (instruments/*.yaml) to DDI.
 
 # The DDI agency this workspace's instruments are published under: the

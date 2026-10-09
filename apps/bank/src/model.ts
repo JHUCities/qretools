@@ -28,7 +28,7 @@ import {
 import agree4 from "@qretools/core/starter/scales/agree4.yaml?raw";
 import satisfied5 from "@qretools/core/starter/scales/satisfied5.yaml?raw";
 import choiceTemplate from "@qretools/core/templates/choice.yaml?raw";
-import instrumentTemplate from "@qretools/core/templates/instrument.yaml?raw";
+import instrumentTemplate from "@qretools/core/templates/instrument/instrument.yaml?raw";
 import numberTemplate from "@qretools/core/templates/number.yaml?raw";
 import scaleTemplate from "@qretools/core/templates/scale.yaml?raw";
 import selectManyTemplate from "@qretools/core/templates/select-many.yaml?raw";

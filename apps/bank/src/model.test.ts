@@ -4,6 +4,7 @@ import {
 	EXAMPLE_SCALES,
 	envOf,
 	init,
+	instrumentSource,
 	type SchemeEntry,
 	signedOut,
 } from "./model.js";
@@ -55,5 +56,14 @@ describe("signing out", () => {
 		});
 		expect(kept.banks).toEqual(["banks/a"]);
 		expect(signedOut({ ...start, banks: ["banks/a"] }).banks).toEqual([""]);
+	});
+});
+
+describe("a new instrument's source", () => {
+	it("is the template with its name filled in, every other field still to fill in", () => {
+		const source = instrumentSource("wave1");
+		expect(source).toMatch(/^name: wave1$/m);
+		expect(source).toMatch(/^title:$/m);
+		expect(source).toMatch(/^ {2}- ask:$/m);
 	});
 });
