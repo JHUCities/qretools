@@ -24,7 +24,14 @@ export function ExternalLink({
 			{children}
 			{/* Spaced by a margin, not a space: a space would be underlined on hover. */}
 			{icon && (
-				<LinkExternalIcon size={12} aria-hidden className="external-icon" />
+				// On the baseline, as a capital letter sits: the octicon's own `text-bottom`
+				// hangs a 12px icon below the line's baseline.
+				<LinkExternalIcon
+					size={12}
+					verticalAlign="unset"
+					aria-hidden
+					className="external-icon"
+				/>
 			)}
 			<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
 		</Link>
