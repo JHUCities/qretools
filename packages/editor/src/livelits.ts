@@ -34,7 +34,7 @@ export interface LivelitHost {
 	/** What a source offers, from the open file's environment (or the app) as it is now. */
 	choices(source: Source): readonly Choice[];
 	/** Write `value` at the livelit, which the app finds again by its id in the text as it is. */
-	choose(livelit: Livelit, value: string): void;
+	choose(livelit: Livelit, value: string | readonly string[]): void;
 	/** One of the livelit's actions ("New shared scale…"), applied as a fix is. */
 	act(fix: Fix): void;
 }
@@ -160,7 +160,8 @@ function picker(host: LivelitHost) {
 const FILTER_FROM = 8;
 
 function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
-	const { source, current } = open.picker;
+	const { source } = open.picker;
+	const current = open.picker.kind === "one" ? open.picker.current : undefined;
 	const choices = ownChoices(source) ?? host.choices(source);
 	const dom = document.createElement("div");
 	dom.className = "cm-livelit-picker";
@@ -170,7 +171,7 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 		view.dispatch({ effects: openPicker.of(null) });
 		if (refocus) view.focus();
 	};
-	const choose = (value: string) => {
+	const choose = (value: string | readonly string[]) => {
 		close(false);
 		host.choose(open, value);
 	};
@@ -178,6 +179,8 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 		close(false);
 		host.act(fix);
 	};
+	if (open.picker.kind === "many")
+		return checklistDOM(dom, choices, open.picker.chosen, choose, close);
 	const list = document.createElement("ul");
 	list.className = "cm-livelit-list";
 	const items = choices.map((c) => {
@@ -283,6 +286,79 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 	};
 }
 
+/**
+ * A set chosen together: a checkbox per choice, then Apply, which writes them all (Enter
+ * on a checkbox applies too). Escape, as anywhere in a picker, gives the caret back.
+ */
+function checklistDOM(
+	dom: HTMLElement,
+	choices: readonly Choice[],
+	chosen: readonly string[],
+	choose: (value: readonly string[]) => void,
+	close: (refocus: boolean) => void,
+) {
+	const list = document.createElement("ul");
+	list.className = "cm-livelit-list";
+	const boxes = choices.map((c) => {
+		const li = document.createElement("li");
+		const label = document.createElement("label");
+		label.className = "cm-livelit-check";
+		const box = document.createElement("input");
+		box.type = "checkbox";
+		box.value = c.name;
+		box.checked = chosen.includes(c.name);
+		const name = document.createElement("span");
+		name.className = "cm-livelit-name";
+		name.textContent = c.name;
+		const text = document.createElement("span");
+		text.className = "cm-livelit-check-text";
+		text.append(name);
+		if (c.detail !== "") {
+			const detail = document.createElement("span");
+			detail.className = "cm-livelit-detail";
+			detail.textContent = c.detail;
+			text.append(detail);
+		}
+		label.append(box, text);
+		li.append(label);
+		list.append(li);
+		return box;
+	});
+	const apply = document.createElement("button");
+	apply.type = "button";
+	apply.className = "cm-livelit-apply";
+	apply.textContent = "Apply";
+	// In the choices' order, whatever order they were ticked in.
+	const picked = () => boxes.filter((b) => b.checked).map((b) => b.value);
+	apply.addEventListener("click", () => choose(picked()));
+	dom.append(list, apply);
+	// As for a list's buttons: a press keeps focus where it is (Safari doesn't focus a
+	// clicked checkbox), and the click still toggles.
+	dom.addEventListener("mousedown", (e) => {
+		if ((e.target as Element).closest("button, label, input"))
+			e.preventDefault();
+	});
+	dom.addEventListener("keydown", (e) => {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close(true);
+		} else if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+			e.preventDefault();
+			choose(picked());
+		}
+	});
+	dom.addEventListener("focusout", (e) => {
+		const to = e.relatedTarget as Node | null;
+		if (to === null || !dom.contains(to)) close(false);
+	});
+	return {
+		dom,
+		mount() {
+			(boxes[0] ?? apply).focus();
+		},
+	};
+}
+
 /** Mod-. with the caret on a field that can be picked for: open its picker. */
 const pickerKey = Prec.highest(
 	keymap.of([
@@ -384,4 +460,34 @@ const livelitTheme = EditorView.baseTheme({
 	},
 	".cm-livelit-none": { margin: 0, color: "var(--fgColor-muted)" },
 	".cm-livelit-create": { margin: 0 },
+	".cm-livelit-check": {
+		display: "grid",
+		gridTemplateColumns: "auto 1fr",
+		gap: "var(--base-size-8)",
+		alignItems: "start",
+		padding: "var(--base-size-4) var(--base-size-8)",
+		cursor: "pointer",
+	},
+	".cm-livelit-check input": { margin: "0.2em 0 0" },
+	".cm-livelit-check-text": { display: "grid" },
+	// Apply as Primer's default button: a bordered control, not a link.
+	".cm-livelit-apply": {
+		justifySelf: "start",
+		font: "inherit",
+		fontWeight: "500",
+		padding: "var(--base-size-4) var(--base-size-12)",
+		color: "var(--button-default-fgColor-rest)",
+		backgroundColor: "var(--button-default-bgColor-rest)",
+		border:
+			"var(--borderWidth-thin) solid var(--button-default-borderColor-rest)",
+		borderRadius: "var(--borderRadius-medium)",
+		cursor: "pointer",
+	},
+	".cm-livelit-apply:hover": {
+		backgroundColor: "var(--button-default-bgColor-hover)",
+	},
+	".cm-livelit-apply:focus-visible": {
+		outline: "var(--focus-outline)",
+		outlineOffset: "var(--base-size-2)",
+	},
 });

@@ -125,3 +125,67 @@ describe("a scale picker in the editor", () => {
 		expect(parent.querySelector('[role="dialog"]')).toBeNull();
 	});
 });
+
+describe("a checklist picker", () => {
+	it("ticks what is chosen, and Apply hands back the set in the choices' order", () => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const chosen: unknown[] = [];
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+			() => {},
+			{
+				livelit: {
+					choices: () => [],
+					choose: (livelit, value) => chosen.push({ id: livelit.id, value }),
+					act: () => {},
+				},
+			},
+		);
+		const text = "agency: org.example\nrequired: [note]\n";
+		editor.sync({
+			id: 1,
+			text,
+			diagnostics: [],
+			marks: [],
+			livelits: [
+				{
+					id: "required",
+					label: "Choose the fields every question must have",
+					at: text.length - 1,
+					field: [20, text.length - 1],
+					span: [30, text.length - 1],
+					picker: {
+						kind: "many",
+						source: {
+							kind: "enum",
+							values: [
+								{ name: "title", detail: "" },
+								{ name: "note", detail: "" },
+							],
+						},
+						chosen: ["note"],
+					},
+					actions: [],
+				},
+			],
+		});
+		(parent.querySelector("button.cm-livelit") as HTMLButtonElement).click();
+		const boxes = [
+			...parent.querySelectorAll<HTMLInputElement>(
+				'[role="dialog"] input[type="checkbox"]',
+			),
+		];
+		expect(boxes.map((b) => [b.value, b.checked])).toEqual([
+			["title", false],
+			["note", true],
+		]);
+		(boxes[0] as HTMLInputElement).click();
+		(parent.querySelector(".cm-livelit-apply") as HTMLButtonElement).click();
+		expect(chosen).toEqual([{ id: "required", value: ["title", "note"] }]);
+		expect(parent.querySelector('[role="dialog"]')).toBeNull();
+		editor.destroy();
+	});
+});

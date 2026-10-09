@@ -22,7 +22,7 @@ import {
 	type Mention,
 	type NamedScheme,
 } from "./env.ts";
-import { scaleSummary } from "./schema.ts";
+import { describe, REQUIRABLE_KEYS, scaleSummary } from "./schema.ts";
 
 /** The kinds of shared entry a field can be picked for: every field that names one. */
 export const LIVELIT_KINDS: readonly NamedScheme[] = [
@@ -47,12 +47,21 @@ export type Source =
 	| { readonly kind: "scheme"; readonly scheme: NamedScheme }
 	| { readonly kind: "enum"; readonly values: readonly Choice[] };
 
-export type Picker = {
-	readonly kind: "one";
-	readonly source: Source;
-	/** What is written there now, whether or not it is one of the choices. */
-	readonly current?: string;
-};
+export type Picker =
+	| {
+			/** One value: choosing it writes it. */
+			readonly kind: "one";
+			readonly source: Source;
+			/** What is written there now, whether or not it is one of the choices. */
+			readonly current?: string;
+	  }
+	| {
+			/** A set of values, chosen together: applying writes them all as a list. */
+			readonly kind: "many";
+			readonly source: Source;
+			/** What the list holds now. */
+			readonly chosen: readonly string[];
+	  };
 
 export interface Livelit {
 	/** Its place, as findings name places: what a choice names it by. */
@@ -70,12 +79,75 @@ export interface Livelit {
 	readonly actions: readonly Fix[];
 }
 
-/** Where a one-line value starts in its field: after the colon and its spaces. */
+/**
+ * A field's value as text: from after the colon and its spaces to the value's last
+ * character. A block value (a list on the lines below) starts at its newline, so writing
+ * there replaces the whole block.
+ */
 function valueSpan(source: string, field: Range): Range {
 	const text = source.slice(field[0], field[1]);
 	let start = text.indexOf(":") + 1;
 	while (text[start] === " " || text[start] === "\t") start++;
-	return [field[0] + start, field[1]];
+	let end = text.length;
+	while (end > start && /\s/.test(text[end - 1] ?? "")) end--;
+	return [field[0] + start, field[0] + end];
+}
+
+/** A value a fixed-choice picker can replace: nothing yet, or one plain word. */
+const WORD = /^[A-Za-z_][\w-]*$/;
+
+/** The fixed choices of a question's own fields: how many may be chosen, a fill's type. */
+const SELECT: readonly Choice[] = [
+	{ name: "one", detail: "The respondent picks one response" },
+	{ name: "many", detail: "Select all that apply" },
+];
+const FILL_TYPE: readonly Choice[] = [
+	{ name: "number", detail: "A number, such as a count or an amount" },
+	{ name: "text", detail: "Words" },
+];
+
+/** A picker of fixed values at a field written empty or as one word; none elsewhere. */
+function enumAt(
+	source: string,
+	parsed: {
+		readonly ranges: Readonly<Record<string, Range>>;
+		readonly empties: Readonly<Record<string, number>>;
+	},
+	id: string,
+	label: string,
+	values: readonly Choice[],
+): Livelit[] {
+	const field = parsed.ranges[id];
+	if (field === undefined) return [];
+	const source_ = { kind: "enum" as const, values };
+	const empty = parsed.empties[id];
+	if (empty !== undefined)
+		return [
+			{
+				id,
+				label,
+				at: empty,
+				field,
+				span: [empty, empty],
+				picker: { kind: "one", source: source_ },
+				actions: [],
+			},
+		];
+	const span = valueSpan(source, field);
+	const written = source.slice(span[0], span[1]);
+	return WORD.test(written)
+		? [
+				{
+					id,
+					label,
+					at: span[1],
+					field,
+					span,
+					picker: { kind: "one", source: source_, current: written },
+					actions: [],
+				},
+			]
+		: [];
 }
 
 /**
@@ -91,6 +163,33 @@ export function livelitsOf(
 		readonly mentions: readonly Mention[];
 	},
 	kinds: readonly NamedScheme[] = LIVELIT_KINDS,
+): readonly Livelit[] {
+	const fills = Object.keys(parsed.ranges).filter((p) =>
+		/^fills\.[^.]+$/.test(p),
+	);
+	return [
+		...namedLivelits(source, parsed, kinds),
+		...enumAt(
+			source,
+			parsed,
+			"select",
+			"Choose how many may be chosen",
+			SELECT,
+		),
+		...fills.flatMap((id) =>
+			enumAt(source, parsed, id, "Choose the fill's type", FILL_TYPE),
+		),
+	];
+}
+
+function namedLivelits(
+	source: string,
+	parsed: {
+		readonly ranges: Readonly<Record<string, Range>>;
+		readonly empties: Readonly<Record<string, number>>;
+		readonly mentions: readonly Mention[];
+	},
+	kinds: readonly NamedScheme[],
 ): readonly Livelit[] {
 	return kinds.flatMap((scheme): Livelit[] => {
 		const id = FIELD_OF[scheme];
@@ -174,17 +273,68 @@ export const ownChoices = (source: Source): readonly Choice[] | undefined =>
 export function applyLivelit(
 	source: string,
 	livelit: Livelit,
-	value: string,
+	value: string | readonly string[],
 ): { readonly text: string; readonly caret: number } | undefined {
 	if (value === "") return undefined;
 	const [from, to] = livelit.span;
-	// Quoted only where YAML needs it (`010`, `yes: no`), as a fix writes a value; at an
-	// empty value's point (straight after the colon), with the space it needs.
-	const written = from === to ? ` ${scalar(value)}` : scalar(value);
+	// Quoted only where YAML needs it (`010`, `yes: no`), as a fix writes a value. A list
+	// keeps the author's form: a block list stays a block at its indent (a comment on an
+	// item is lost with it), anything else is written on one line, `[title, concept]`.
+	// Straight after the colon (an empty value) it takes the space it needs.
+	const block = /^\n([ \t]*)-/.exec(source.slice(from, to));
+	const text =
+		typeof value === "string"
+			? scalar(value)
+			: block !== null && value.length > 0
+				? value.map((v) => `\n${block[1]}- ${scalar(v)}`).join("")
+				: `[${value.map(scalar).join(", ")}]`;
+	const written =
+		source[from - 1] === ":" && !text.startsWith("\n") ? ` ${text}` : text;
 	return {
 		text: source.slice(0, from) + written + source.slice(to),
 		caret: from + written.length,
 	};
+}
+
+/**
+ * The picker of a bank's details (`bank.yaml`): which fields every question must also
+ * have, chosen together as a checklist, where `required` is written (empty or a list).
+ */
+export function settingsLivelits(
+	source: string,
+	index: {
+		readonly ranges: Readonly<Record<string, Range>>;
+		readonly empties: Readonly<Record<string, number>>;
+	},
+	chosen: readonly string[],
+): readonly Livelit[] {
+	const id = "required";
+	const field = index.ranges[id];
+	if (field === undefined) return [];
+	const empty = index.empties[id];
+	const span: Range =
+		empty !== undefined ? [empty, empty] : valueSpan(source, field);
+	return [
+		{
+			id,
+			label: "Choose the fields every question must have",
+			at: span[1],
+			field,
+			span,
+			picker: {
+				kind: "many",
+				source: {
+					kind: "enum",
+					values: REQUIRABLE_KEYS.map((name) => ({
+						name,
+						detail: describe(name),
+					})),
+				},
+				chosen,
+			},
+			actions: [],
+		},
+	];
 }
 
 /** A new shared entry of this kind, named in its dialog, then written at `path`. */

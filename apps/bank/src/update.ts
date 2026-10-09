@@ -5,6 +5,7 @@ import {
 	banksIn,
 	compact,
 	EMPTY_ENV,
+	evaluateScheme,
 	exampleInstrument,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
@@ -35,6 +36,7 @@ import {
 	addSpace,
 	applyEdits,
 	applyLivelit,
+	type Livelit,
 	labelledSource,
 	livelitsOf,
 	locate,
@@ -251,11 +253,8 @@ function step(model: Model, msg: Msg): Step {
 		case "livelitChosen": {
 			// Like typing: only the open file, which the author can edit.
 			const q = current(model);
-			if (!q || q.id !== msg.id || q.kind !== "question") return [model, []];
-			const parsed = parseSurface(q.source, envIn(model, q.bank));
-			const livelit = livelitsOf(q.source, parsed).find(
-				(l) => l.id === msg.livelit,
-			);
+			if (!q || q.id !== msg.id || !isBankEntry(q)) return [model, []];
+			const livelit = livelitsIn(model, q).find((l) => l.id === msg.livelit);
 			const written =
 				livelit === undefined
 					? undefined
@@ -2316,6 +2315,17 @@ function withFile(model: Model, f: Entry): Model {
 				local: { ...local, schemes: { ...local.schemes, [f.id]: f } },
 			};
 	}
+}
+
+/**
+ * A file's pickers in its text as it is now: a question's fields, a bank's details. One
+ * place, so a choice is always written where its picker is now.
+ */
+function livelitsIn(model: Model, f: BankEntry): readonly Livelit[] {
+	const env = envIn(model, f.bank);
+	return f.kind === "question"
+		? livelitsOf(f.source, parseSurface(f.source, env))
+		: evaluateScheme(f.kind, f.source, env, f.name).livelits;
 }
 
 function withSource(model: Model, id: Id, source: string): Model {
