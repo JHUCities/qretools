@@ -25,14 +25,19 @@ import type { Fix } from "@qretools/core";
 import {
 	type Choice,
 	type Livelit,
+	type Offered,
 	ownChoices,
 	type Source,
 } from "@qretools/core/editor";
+import { codeLine } from "./diagnostics.ts";
 
 /** What the app gives the editor so it can offer livelits: read when a picker opens. */
 export interface LivelitHost {
-	/** What a source offers, from the open file's environment (or the app) as it is now. */
-	choices(source: Source): readonly Choice[];
+	/**
+	 * What a source offers, from the open file's environment (or the app) as it is now, or
+	 * why it offers nothing, said in the picker instead.
+	 */
+	choices(source: Source): Offered;
 	/** Write `value` at the livelit, which the app finds again by its id in the text as it is. */
 	choose(livelit: Livelit, value: string | readonly string[]): void;
 	/** One of the livelit's actions ("New shared scale…"), applied as a fix is. */
@@ -162,7 +167,7 @@ const FILTER_FROM = 8;
 function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 	const { source } = open.picker;
 	const current = open.picker.kind === "one" ? open.picker.current : undefined;
-	const choices = ownChoices(source) ?? host.choices(source);
+	const offered = ownChoices(source) ?? host.choices(source);
 	const dom = document.createElement("div");
 	dom.className = "cm-livelit-picker";
 	dom.setAttribute("role", "dialog");
@@ -179,8 +184,10 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 		close(false);
 		host.act(fix);
 	};
+	if ("reason" in offered) return reasonDOM(dom, offered.reason, close);
+	const choices = offered;
 	if (open.picker.kind === "many")
-		return checklistDOM(dom, choices, open.picker.chosen, choose, close);
+		return checklistDOM(dom, choices, open.picker, choose, close);
 	const list = document.createElement("ul");
 	list.className = "cm-livelit-list";
 	const items = choices.map((c) => {
@@ -287,19 +294,59 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 }
 
 /**
+ * Why there is nothing to choose (a condition's name with no codes), and Close: never an
+ * empty list with Apply. The finding on the field says the same.
+ */
+function reasonDOM(
+	dom: HTMLElement,
+	reason: string,
+	close: (refocus: boolean) => void,
+) {
+	const p = codeLine(reason, "cm-livelit-none");
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "cm-livelit-apply";
+	button.textContent = "Close";
+	button.addEventListener("click", () => close(true));
+	dom.append(p, button);
+	dom.addEventListener("mousedown", (e) => {
+		if ((e.target as Element).closest("button")) e.preventDefault();
+	});
+	dom.addEventListener("keydown", (e) => {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close(true);
+		}
+	});
+	dom.addEventListener("focusout", (e) => {
+		const to = e.relatedTarget as Node | null;
+		if (to === null || !dom.contains(to)) close(false);
+	});
+	return { dom, mount: () => button.focus() };
+}
+
+/**
  * A set chosen together: a checkbox per choice, then Apply, which writes them all (Enter
- * on a checkbox applies too). Escape, as anywhere in a picker, gives the caret back.
+ * on a checkbox applies too), in the choices' order with any stale ones last. Escape, as anywhere in a picker, gives the caret back.
  */
 function checklistDOM(
 	dom: HTMLElement,
 	choices: readonly Choice[],
-	chosen: readonly string[],
+	{
+		chosen,
+		min = 0,
+	}: { readonly chosen: readonly string[]; readonly min?: number },
 	choose: (value: readonly string[]) => void,
 	close: (refocus: boolean) => void,
 ) {
 	const list = document.createElement("ul");
 	list.className = "cm-livelit-list";
-	const boxes = choices.map((c) => {
+	// What is written there that isn't a choice now stays, ticked, after the choices: a
+	// picker never drops what the author wrote; unticking it is deliberate.
+	const stale = chosen
+		.filter((v) => !choices.some((c) => c.name === v))
+		.map((name) => ({ name, detail: "Not one of the choices" }));
+	const boxes = [...choices, ...stale].map((c) => {
 		const li = document.createElement("li");
 		const label = document.createElement("label");
 		label.className = "cm-livelit-check";
@@ -330,8 +377,28 @@ function checklistDOM(
 	apply.textContent = "Apply";
 	// In the choices' order, whatever order they were ticked in.
 	const picked = () => boxes.filter((b) => b.checked).map((b) => b.value);
-	apply.addEventListener("click", () => choose(picked()));
-	dom.append(list, apply);
+	// Fewer than the fewest allowed: Apply stays, inactive, and says why (as Primer's
+	// inactive buttons do), rather than writing what the core knows is wrong.
+	const why = codeLine(
+		`Choose at least ${min === 1 ? "one" : String(min)}.`,
+		"cm-livelit-none",
+	);
+	why.id = `cm-livelit-min-${++minIds}`;
+	const enough = () => picked().length >= min;
+	const update = () => {
+		const short = !enough();
+		apply.setAttribute("aria-disabled", String(short));
+		why.hidden = !short;
+		if (short) apply.setAttribute("aria-describedby", why.id);
+		else apply.removeAttribute("aria-describedby");
+	};
+	const apply_ = () => {
+		if (enough()) choose(picked());
+	};
+	apply.addEventListener("click", apply_);
+	list.addEventListener("change", update);
+	update();
+	dom.append(list, why, apply);
 	// As for a list's buttons: a press keeps focus where it is (Safari doesn't focus a
 	// clicked checkbox), and the click still toggles.
 	dom.addEventListener("mousedown", (e) => {
@@ -344,7 +411,7 @@ function checklistDOM(
 			close(true);
 		} else if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
 			e.preventDefault();
-			choose(picked());
+			apply_();
 		}
 	});
 	dom.addEventListener("focusout", (e) => {
@@ -358,6 +425,9 @@ function checklistDOM(
 		},
 	};
 }
+
+/** Ids for the line an inactive Apply is described by, unique in the page. */
+let minIds = 0;
 
 /** Mod-. with the caret on a field that can be picked for: open its picker. */
 const pickerKey = Prec.highest(
@@ -483,8 +553,13 @@ const livelitTheme = EditorView.baseTheme({
 		borderRadius: "var(--borderRadius-medium)",
 		cursor: "pointer",
 	},
-	".cm-livelit-apply:hover": {
+	'.cm-livelit-apply:not([aria-disabled="true"]):hover': {
 		backgroundColor: "var(--button-default-bgColor-hover)",
+	},
+	// Inactive, as Primer draws an inactive button: still focusable, still described.
+	'.cm-livelit-apply[aria-disabled="true"]': {
+		color: "var(--fgColor-disabled)",
+		cursor: "not-allowed",
 	},
 	".cm-livelit-apply:focus-visible": {
 		outline: "var(--focus-outline)",

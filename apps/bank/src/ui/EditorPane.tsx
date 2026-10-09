@@ -9,6 +9,7 @@ import { type Fix, instrumentPath, remotesOf, WORKSPACE } from "@qretools/core";
 import {
 	bankChoices,
 	choicesOf,
+	codeChoices,
 	domainSnippets,
 	type Livelit,
 	newLineAfter,
@@ -81,6 +82,12 @@ export function EditorPane(
 						choices: (source: Source) => {
 							const { model } = store.getState();
 							if (source.kind === "questions") return questionChoices(scopes());
+							if (source.kind === "codes") {
+								const e = model.local.workspace[open.current];
+								return e?.kind === "instrument"
+									? codeChoices(e.source, scopes(), source.name)
+									: [];
+							}
 							if (source.kind === "banks")
 								return bankChoices(
 									WORKSPACE.instruments,

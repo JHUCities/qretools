@@ -51,7 +51,15 @@ export type Source =
 	| { readonly kind: "scheme"; readonly scheme: NamedScheme }
 	| { readonly kind: "enum"; readonly values: readonly Choice[] }
 	| { readonly kind: "questions" }
-	| { readonly kind: "banks" };
+	| { readonly kind: "banks" }
+	/** The codes of the coded answer a condition names (`codeChoices`). */
+	| { readonly kind: "codes"; readonly name: string };
+
+/**
+ * What a picker opened on: its choices, or why there are none to offer (a condition's
+ * name that has no codes), which it says instead.
+ */
+export type Offered = readonly Choice[] | { readonly reason: string };
 
 export type Picker =
 	| {
@@ -67,6 +75,8 @@ export type Picker =
 			readonly source: Source;
 			/** What the list holds now. */
 			readonly chosen: readonly string[];
+			/** The fewest that may be applied, when fewer would be wrong (a set needs one). */
+			readonly min?: number;
 	  };
 
 export interface Livelit {
@@ -83,6 +93,11 @@ export interface Livelit {
 	readonly picker: Picker;
 	/** What else it offers, below the choices: "New shared scale…". */
 	readonly actions: readonly Fix[];
+	/**
+	 * A set of codes inside a condition (`x in {"1", "2"}`): written as the condition
+	 * language writes one, raw, escaped for the YAML scalar holding it.
+	 */
+	readonly set?: "plain" | "double" | "single";
 }
 
 /**
@@ -289,17 +304,36 @@ export function applyLivelit(
 	// Straight after the colon (an empty value) it takes the space it needs.
 	const block = /^\n([ \t]*)-/.exec(source.slice(from, to));
 	const text =
-		typeof value === "string"
-			? scalar(value)
-			: block !== null && value.length > 0
-				? value.map((v) => `\n${block[1]}- ${scalar(v)}`).join("")
-				: `[${value.map(scalar).join(", ")}]`;
+		livelit.set !== undefined
+			? setText(typeof value === "string" ? [value] : value, livelit.set)
+			: typeof value === "string"
+				? scalar(value)
+				: block !== null && value.length > 0
+					? value.map((v) => `\n${block[1]}- ${scalar(v)}`).join("")
+					: `[${value.map(scalar).join(", ")}]`;
+	if (text === undefined) return undefined;
 	const written =
 		source[from - 1] === ":" && !text.startsWith("\n") ? ` ${text}` : text;
+	// Nothing changes (an Apply with the same ticks): nothing is written, no undo step.
+	if (written === source.slice(from, to)) return undefined;
 	return {
 		text: source.slice(0, from) + written + source.slice(to),
 		caret: from + written.length,
 	};
+}
+
+/**
+ * A set of codes as a condition writes it, `{"1", "2"}`, for the scalar holding it: inside
+ * double quotes each `"` is `\"`. Undefined for a code that can't be written there (one
+ * holding a quote or a backslash, which codes never do), never a guess at escaping.
+ */
+function setText(
+	codes: readonly string[],
+	form: NonNullable<Livelit["set"]>,
+): string | undefined {
+	if (codes.some((c) => /["'\\]/.test(c))) return undefined;
+	const quote = form === "double" ? '\\"' : '"';
+	return `{${codes.map((c) => `${quote}${c}${quote}`).join(", ")}}`;
 }
 
 /**

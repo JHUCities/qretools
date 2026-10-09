@@ -57,6 +57,8 @@ export type Expr =
 			readonly negated: boolean;
 			readonly operand: Expr;
 			readonly set: readonly Expr[];
+			/** The set as written, `{` to `}`; absent while it isn't closed. */
+			readonly setRange?: Range;
 			readonly range: Range;
 	  }
 	| {
@@ -128,7 +130,13 @@ export function moveRanges(e: Expr, at: (r: Range) => Range): Expr {
 			case "binary":
 				return { ...x, left: go(x.left), right: go(x.right), range };
 			case "member":
-				return { ...x, operand: go(x.operand), set: x.set.map(go), range };
+				return {
+					...x,
+					operand: go(x.operand),
+					set: x.set.map(go),
+					...(x.setRange !== undefined && { setRange: at(x.setRange) }),
+					range,
+				};
 			case "call":
 				return { ...x, args: x.args.map(go), range };
 			default:

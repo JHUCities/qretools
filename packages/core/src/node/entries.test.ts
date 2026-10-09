@@ -113,6 +113,7 @@ describe("the entry points", () => {
 			    "bankChoices",
 			    "bankFileJsonSchema",
 			    "choicesOf",
+			    "codeChoices",
 			    "createFor",
 			    "domainSnippets",
 			    "inspect",
