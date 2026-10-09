@@ -47,6 +47,7 @@ import {
 	quoteCode,
 	rangesOf,
 	renameEdits,
+	sharedScaleSource,
 	textEntrySource,
 	withFields,
 } from "@qretools/core/editor";
@@ -316,6 +317,31 @@ function step(model: Model, msg: Msg): Step {
 					withSource(model, q.id, spaced),
 					[{ kind: "revealRange", range: [at + 1, at + 1] }],
 				]);
+			}
+			// Options made a shared scale: its name dialog, in the question's bank, pointed
+			// back at the options it replaces.
+			if (fix.kind === "share") {
+				if (!isBankEntry(q)) return [model, []];
+				return [
+					{
+						...model,
+						browser: {
+							...model.browser,
+							naming: {
+								kind: "scale",
+								name: "",
+								text: "",
+								bank: q.bank,
+								purpose: {
+									kind: "create",
+									use: { id: q.id, path: fix.path },
+									share: true,
+								},
+							},
+						},
+					},
+					[],
+				];
 			}
 			if (fix.kind === "variant") {
 				const added = addVariant(q.source, fix.name);
@@ -779,13 +805,23 @@ function step(model: Model, msg: Msg): Step {
 			}
 			const written = naming.text.trim() !== "";
 			const shape = SHAPE[naming.kind];
-			const source = !written
-				? SCHEME_TEMPLATES[naming.kind]
-				: shape === "labelled"
-					? labelledSource(naming.text)
-					: shape === "text"
-						? textEntrySource(naming.text)
-						: SCHEME_TEMPLATES[naming.kind];
+			// Shared from a question's options: those, as they are now (checked above).
+			const shared =
+				naming.purpose.share === true && naming.purpose.use !== undefined
+					? sharedScaleSource(
+							model.local.questions[naming.purpose.use.id]?.source ?? "",
+						)
+					: undefined;
+			const source =
+				shared !== undefined
+					? shared
+					: !written
+						? SCHEME_TEMPLATES[naming.kind]
+						: shape === "labelled"
+							? labelledSource(naming.text)
+							: shape === "text"
+								? textEntrySource(naming.text)
+								: SCHEME_TEMPLATES[naming.kind];
 			// The question that named it now names the file, whatever name was chosen.
 			const { use } = naming.purpose;
 			const [added, id] = add(closed, {
@@ -804,10 +840,13 @@ function step(model: Model, msg: Msg): Step {
 							applyEdits(q.source, [{ path: use.path, value: naming.name }]) ??
 								q.source,
 						);
-			// A universe or instruction is complete with its text: stay on the question.
-			// A scale needs its labels written, so it opens.
+			// A universe or instruction is complete with its text, and a scale made from the
+			// question's own options with them: stay on the question. A new scale needs its
+			// labels written, so it opens.
 			const stay =
-				use !== undefined && q !== undefined && naming.kind !== "scale";
+				use !== undefined &&
+				q !== undefined &&
+				(naming.kind !== "scale" || shared !== undefined);
 			return persist([
 				stay ? used : { ...used, screen: { kind: "editing", id } },
 				[],
@@ -2210,7 +2249,27 @@ export function namingProblem(
 	naming: Naming,
 ): string | undefined {
 	const self = naming.purpose.kind === "rename" ? naming.purpose.id : undefined;
-	return schemeNameProblem(model, naming.kind, naming.name, naming.bank, self);
+	return (
+		schemeNameProblem(model, naming.kind, naming.name, naming.bank, self) ??
+		shareProblem(model, naming)
+	);
+}
+
+/**
+ * Why a question's options can't be made the shared scale being named, as they are now
+ * (they changed since the dialog opened): nothing is written then, rather than a scale
+ * without them that the question would name in their place.
+ */
+function shareProblem(model: Model, naming: Naming): string | undefined {
+	const { purpose } = naming;
+	if (purpose.kind !== "create" || purpose.share !== true) return undefined;
+	const q =
+		purpose.use === undefined
+			? undefined
+			: model.local.questions[purpose.use.id];
+	return q !== undefined && sharedScaleSource(q.source) !== undefined
+		? undefined
+		: "These responses can't be shared as they are now: each must be a plain `code: label` line, with no title, variable or note of its own.";
 }
 
 /** Every question of its bank in this tab that names the file by its old name now names the new one. */
@@ -2423,7 +2482,7 @@ function livelitsIn(model: Model, f: Entry): readonly Livelit[] {
 	if (!isBankEntry(f)) return [];
 	const env = envIn(model, f.bank);
 	return f.kind === "question"
-		? livelitsOf(f.source, parseSurface(f.source, env))
+		? livelitsOf(f.source, parseSurface(f.source, env), env)
 		: evaluateScheme(f.kind, f.source, env, f.name).livelits;
 }
 

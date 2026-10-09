@@ -160,6 +160,12 @@ export type Fix =
 			readonly path: string;
 	  }
 	| {
+			/** The options written inline at `path` made a shared scale, named in a dialog. */
+			readonly kind: "share";
+			readonly label: string;
+			readonly path: string;
+	  }
+	| {
 			/** This question named as a deliberate variant of question `name` (`addVariant`). */
 			readonly kind: "variant";
 			readonly label: string;

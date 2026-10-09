@@ -28,14 +28,19 @@ const env: Env = {
 	},
 };
 const HEAD = "name: q\ntext: Is it so?\nintent: To see why.\n";
-const at = (source: string) => livelitsOf(source, parseSurface(source, env));
+const at = (source: string) =>
+	livelitsOf(source, parseSurface(source, env), env);
 /** Each picker as `[id, at, the text it would replace, what is written there]`. */
 const summary = (source: string) =>
 	at(source).map((l) => [
 		l.id,
 		l.at,
 		source.slice(l.span[0], l.span[1]),
-		l.picker.kind === "one" ? l.picker.current : l.picker.chosen,
+		l.picker.kind === "one"
+			? l.picker.current
+			: l.picker.kind === "many"
+				? l.picker.chosen
+				: l.picker.kind,
 	]);
 const choose = (source: string, id: string, value: string) => {
 	const l = at(source).find((x) => x.id === id) as Livelit;
@@ -65,8 +70,46 @@ describe("a scale picker", () => {
 	});
 
 	it("is absent where the options are written inline, or there's no `responses`", () => {
-		expect(at(`${HEAD}responses:\n  "1": Yes\n`)).toEqual([]);
+		// Inline options offer to be shared instead (below), never a scale over them.
+		expect(
+			at(`${HEAD}responses:\n  "1": Yes\n`).map((l) => l.picker.kind),
+		).toEqual(["actions"]);
 		expect(at(`${HEAD}open: {}\n`)).toEqual([]);
+	});
+});
+
+describe("an offer to share options written inline", () => {
+	it("sits after `responses:`, offering to make them a shared scale", () => {
+		const text = `${HEAD}responses:\n  "1": Yes\n  "2": No\n`;
+		const [share] = at(text);
+		expect(share).toMatchObject({
+			id: "responses",
+			label: "Share these responses",
+			at: `${HEAD}responses:`.length,
+			picker: { kind: "actions" },
+			actions: [
+				{
+					kind: "share",
+					label: "Make these a shared scale…",
+					path: "responses",
+				},
+			],
+		});
+	});
+
+	it("writes nothing through it: there is nothing to choose", () => {
+		const text = `${HEAD}responses:\n  "1": Yes\n`;
+		expect(choose(text, "responses", "agree4")).toBeUndefined();
+	});
+
+	it("isn't offered where a shared scale has these labels, or an option carries its own", () => {
+		// agree4's labels: `matches-scale` offers its name instead.
+		expect(at(`${HEAD}responses:\n  "1": Agree\n  "2": Disagree\n`)).toEqual(
+			[],
+		);
+		expect(
+			at(`${HEAD}responses:\n  "1": { label: Yes, title: YES }\n  "2": No\n`),
+		).toEqual([]);
 	});
 });
 
@@ -154,7 +197,7 @@ describe("pickers for every field that names a shared entry", () => {
 describe("pickers of fixed values", () => {
 	it("sit at `select` and at each fill's type, empty or one word, and offer their values", () => {
 		const text = `${HEAD}select:\nfills:\n  rent: number\nresponses:\n  "1": Yes\n`;
-		expect(summary(text)).toEqual([
+		expect(summary(text).filter(([id]) => id !== "responses")).toEqual([
 			["select", `${HEAD}select:`.length, "", undefined],
 			[
 				"fills.rent",
@@ -163,8 +206,8 @@ describe("pickers of fixed values", () => {
 				"number",
 			],
 		]);
-		const [select] = at(text);
-		expect(select?.picker.source).toEqual({
+		const select = at(text).find((l) => l.id === "select");
+		expect(select?.picker.kind !== "actions" && select?.picker.source).toEqual({
 			kind: "enum",
 			values: [
 				{ name: "one", detail: "The respondent picks one response" },

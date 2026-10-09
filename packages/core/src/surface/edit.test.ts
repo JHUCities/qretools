@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { addVariant, applyEdits, renameEdits } from "./edit.ts";
+import {
+	addVariant,
+	applyEdits,
+	renameEdits,
+	sharedScaleSource,
+} from "./edit.ts";
 
 describe("applying edits", () => {
 	it("replaces a block map with the name, keeping the line that follows", () => {
@@ -140,5 +145,28 @@ describe("naming a question as a variant", () => {
 		expect(add("name: q\nvariant_of:\n  other: Why.\n")).toBe("named");
 		expect(add("name: q\nvariant_of: {a: b}\n")).toBe("unwritable");
 		expect(add("[a, b]")).toBe("unwritable");
+	});
+});
+
+describe("a shared scale from a question's own options", () => {
+	it("copies them as written, codes as spelled and comments kept, under `labels:`", () => {
+		expect(
+			sharedScaleSource(
+				'name: q\nresponses:\n    "010": Agree\n    # the middle\n    "020": Neither\n    030: Disagree\nnote: n\n',
+			),
+		).toBe(
+			'labels:\n  "010": Agree\n  # the middle\n  "020": Neither\n  030: Disagree\n',
+		);
+	});
+
+	it("is undefined for options a scale can't hold as they stand, or none written inline", () => {
+		for (const text of [
+			'responses:\n  "1": { label: Yes, title: YES }\n',
+			'responses: { "1": Yes }\n',
+			"responses: agree4\n",
+			'responses:\n  "1":\n',
+			"open: {}\n",
+		])
+			expect(sharedScaleSource(text), text).toBeUndefined();
 	});
 });

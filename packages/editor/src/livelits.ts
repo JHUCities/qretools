@@ -137,7 +137,9 @@ const buttons = EditorView.decorations.compute(
 					Decoration.widget({
 						widget: new PickerButton(
 							l,
-							l.span[0] === l.span[1],
+							// An empty value's (its hole's circle is drawn there); an actions
+							// picker's span is a point but holds no hole.
+							l.span[0] === l.span[1] && l.picker.kind !== "actions",
 							open !== null && open.id === l.id,
 						),
 						side: 1,
@@ -165,9 +167,12 @@ function picker(host: LivelitHost) {
 const FILTER_FROM = 8;
 
 function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
-	const { source } = open.picker;
 	const current = open.picker.kind === "one" ? open.picker.current : undefined;
-	const offered = ownChoices(source) ?? host.choices(source);
+	// Only things to do (a code-actions menu): no choices to ask the host for.
+	const offered =
+		open.picker.kind === "actions"
+			? []
+			: (ownChoices(open.picker.source) ?? host.choices(open.picker.source));
 	const dom = document.createElement("div");
 	dom.className = "cm-livelit-picker";
 	dom.setAttribute("role", "dialog");
@@ -242,12 +247,15 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 		});
 		dom.append(input);
 	}
-	if (choices.length === 0) {
-		const none = document.createElement("p");
-		none.className = "cm-livelit-none";
-		none.textContent = "Nothing to choose yet.";
-		dom.append(none);
-	} else dom.append(list);
+	// An actions picker lists nothing above its actions.
+	if (open.picker.kind !== "actions") {
+		if (choices.length === 0) {
+			const none = document.createElement("p");
+			none.className = "cm-livelit-none";
+			none.textContent = "Nothing to choose yet.";
+			dom.append(none);
+		} else dom.append(list);
+	}
 	const actions = open.actions.map((fix) => {
 		const button = document.createElement("button");
 		button.type = "button";

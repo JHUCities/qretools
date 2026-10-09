@@ -47,7 +47,7 @@ describe("an instrument's pickers", () => {
 		const shown = ids({ bas: BAS }).map((l) => [
 			l.id,
 			SOURCE.slice(l.span[0], l.span[1]),
-			l.picker.source.kind,
+			l.picker.kind === "actions" ? "actions" : l.picker.source.kind,
 		]);
 		expect(shown).toEqual([
 			["uses.bas", "../banks/bas", "banks"],
