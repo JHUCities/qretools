@@ -17,6 +17,7 @@ import {
 	type Pair,
 	parseDocument,
 	type Scalar,
+	visit,
 	type YAMLMap,
 	type Node as YamlNode,
 } from "yaml";
@@ -24,14 +25,21 @@ import { KEYWORDS, type Token, tokenize } from "../cond/lex.ts";
 import { NAME_KIND } from "../copy.ts";
 import type { BankScope } from "../evaluate.ts";
 import type { Node } from "./draft.ts";
-import { CONSTRUCTS, EXPRESSIONS, parseInstrument } from "./parse.ts";
+import {
+	CHECK_FIELDS,
+	CONSTRUCTS,
+	EXPRESSIONS,
+	FIELDS,
+	LIST_FIELDS,
+	parseInstrument,
+} from "./parse.ts";
 import { scalarMap } from "./scalar.ts";
 
 export interface CompletionOption {
 	readonly label: string;
 	/** What it is: a question's title or text, or what kind of name it is. */
 	readonly detail?: string;
-	readonly kind: "question" | "variable" | "name" | "code";
+	readonly kind: "question" | "variable" | "name" | "code" | "field" | "step";
 	/** What to insert, where it differs from the label (a code inside a double-quoted value). */
 	readonly apply?: string;
 }
@@ -41,6 +49,11 @@ export interface InstrumentCompletion {
 	readonly from: number;
 	/** Where the replaced text ends, when past the caret (a string's closing quote). */
 	readonly to?: number;
+	/**
+	 * The options are already narrowed to the word being typed: an editor shows them as
+	 * they are (each `apply` carries its own indent, from the line's start).
+	 */
+	readonly filtered?: true;
 	readonly options: readonly CompletionOption[];
 }
 
@@ -60,6 +73,8 @@ export function instrumentCompletion(
 	banks: Readonly<Record<string, BankScope>>,
 ): InstrumentCompletion | undefined {
 	const doc = parseDocument(source, { prettyErrors: false });
+	const key = keyCompletion(source, doc, offset);
+	if (key !== undefined) return key;
 	const at = pairAt(source, doc.contents, offset, []);
 	if (at === undefined) return undefined;
 	const field = fieldOf(at);
@@ -89,6 +104,130 @@ export function instrumentCompletion(
 		...(word.to !== undefined && { to: word.to }),
 		options,
 	};
+}
+
+/** A key written before the caret: its name, where it starts, and the map holding it. */
+interface KeyAt {
+	readonly name: string;
+	readonly offset: number;
+	readonly column: number;
+	readonly map: YAMLMap;
+	/** The map is an item of a list (a step, or a check). */
+	readonly item: boolean;
+}
+
+/**
+ * Where a key goes, and which: a word being typed (or none) alone on the caret's line.
+ * After `- ` in a list field, the items it takes (a flow's steps, a check's `ensure`);
+ * at a step's field column, its fields not yet written and, as new steps beside it, the
+ * constructs. The parent is read from the YAML the core parses (the keys before the
+ * caret's line and the maps holding them); only the caret's own line is read as text.
+ */
+function keyCompletion(
+	source: string,
+	doc: ReturnType<typeof parseDocument>,
+	offset: number,
+): InstrumentCompletion | undefined {
+	const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+	const m = /^( *)(- +)?([A-Za-z_]*)$/.exec(source.slice(lineStart, offset));
+	if (m === null || /\S/.test(lineRest(source, offset))) return undefined;
+	const indent = m[1]?.length ?? 0;
+	const dash = m[2];
+	const word = m[3] ?? "";
+	const keys = keysBefore(source, doc, lineStart);
+	const matching = (names: readonly string[]) =>
+		names.filter((n) => n.startsWith(word));
+	if (dash !== undefined) {
+		// The list's own key: the last one before the line, left of the dash.
+		const parent = [...keys].reverse().find((k) => k.column < indent);
+		if (
+			parent === undefined ||
+			!(LIST_FIELDS as readonly string[]).includes(parent.name)
+		)
+			return undefined;
+		const items = parent.name === "checks" ? ["ensure"] : CONSTRUCTS;
+		return {
+			from: offset - word.length,
+			options: matching(items).map((name) => ({
+				label: name,
+				kind: parent.name === "checks" ? "field" : "step",
+				apply: `${name}: `,
+			})),
+		};
+	}
+	// A field of the map whose keys are at this column, if it hasn't ended since.
+	const last = [...keys].reverse().find((k) => k.column <= indent);
+	if (last === undefined || last.column !== indent) return undefined;
+	const written = last.map.items.flatMap((p) =>
+		isScalar(p.key) ? [String(p.key.value)] : [],
+	);
+	const construct = written.find((k) =>
+		(CONSTRUCTS as readonly string[]).includes(k),
+	);
+	const fields =
+		construct !== undefined
+			? (FIELDS[construct] ?? [])
+			: written.includes("ensure")
+				? CHECK_FIELDS.filter((f) => f !== "ensure")
+				: undefined;
+	if (fields === undefined) return undefined;
+	const pad = " ".repeat(indent);
+	const field = (name: string): CompletionOption => ({
+		label: name,
+		kind: "field",
+		// A field that holds a list comes with its first item, as Return writes it.
+		apply: (LIST_FIELDS as readonly string[]).includes(name)
+			? `${pad}${name}:\n${pad}  - `
+			: `${pad}${name}: `,
+		detail: construct === undefined ? "check" : `${construct} field`,
+	});
+	// Beside a step, a new step: at the step's dash, one level out.
+	const steps =
+		construct === undefined || !last.item || indent < 2
+			? []
+			: matching(CONSTRUCTS).map(
+					(name): CompletionOption => ({
+						label: `- ${name}`,
+						kind: "step",
+						apply: `${" ".repeat(indent - 2)}- ${name}: `,
+						detail: "new step",
+					}),
+				);
+	return {
+		from: lineStart,
+		to: offset,
+		filtered: true,
+		options: [
+			...matching(fields.filter((f) => !written.includes(f))).map(field),
+			...steps,
+		],
+	};
+}
+
+/** Every key written before `end`, in order, with its column and the map holding it. */
+function keysBefore(
+	source: string,
+	doc: ReturnType<typeof parseDocument>,
+	end: number,
+): readonly KeyAt[] {
+	const keys: KeyAt[] = [];
+	visit(doc, {
+		Pair(_, pair, path) {
+			const at = pair.key;
+			if (!isScalar(at) || at.range == null || at.range[0] >= end) return;
+			const map = path.at(-1);
+			if (!isMap(map)) return;
+			const start = at.range[0];
+			keys.push({
+				name: String(at.value),
+				offset: start,
+				column: start - (source.lastIndexOf("\n", start - 1) + 1),
+				map,
+				item: isSeq(path.at(-2)),
+			});
+		},
+	});
+	return keys.sort((a, b) => a.offset - b.offset);
 }
 
 /**

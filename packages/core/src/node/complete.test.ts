@@ -197,6 +197,69 @@ describe("completion in an instrument", async () => {
 		expect(at("  - stop: hh.size > |\n")?.labels).toContain("renter");
 	});
 
+	it("offers a list's items after its dash: a flow's steps, a check's ensure", () => {
+		const steps = at("  - |\n");
+		expect(steps?.labels).toEqual([
+			"ask",
+			"say",
+			"section",
+			"if",
+			"stop",
+			"compute",
+			"roster",
+			"each",
+		]);
+		expect(steps?.options[0]).toMatchObject({ kind: "step", apply: "ask: " });
+		expect(at("  - s|\n")?.labels).toEqual(["say", "section", "stop"]);
+		expect(at("  - ask: hh.size\n    checks:\n      - |\n")?.labels).toEqual([
+			"ensure",
+		]);
+	});
+
+	it("offers a step's unwritten fields at its column, and new steps beside it", () => {
+		const ask = "  - ask: hh.size\n    universe: x\n    |\n";
+		const r = at(ask);
+		expect(r?.labels).toEqual([
+			"as",
+			"options",
+			"seconds",
+			"fill",
+			"checks",
+			"- ask",
+			"- say",
+			"- section",
+			"- if",
+			"- stop",
+			"- compute",
+			"- roster",
+			"- each",
+		]);
+		const source = (HEAD + ask).replace("|", "");
+		const offset = (HEAD + ask).indexOf("|");
+		const result = instrumentCompletion(source, offset, banks);
+		expect(result?.filtered).toBe(true);
+		// Each brings its own indent from the line's start: a field at the step's column,
+		// a new step one level out, a list field with its first item.
+		expect(result?.from).toBe(source.lastIndexOf("\n", offset - 1) + 1);
+		const apply = (label: string) =>
+			result?.options.find((o) => o.label === label)?.apply;
+		expect(apply("as")).toBe("    as: ");
+		expect(apply("- ask")).toBe("  - ask: ");
+		expect(apply("checks")).toBe("    checks:\n      - ");
+		// Typing narrows both: `c` is checks and compute; `a` is as and a new ask.
+		expect(at("  - ask: hh.size\n    c|\n")?.labels).toEqual([
+			"checks",
+			"- compute",
+		]);
+		expect(at("  - ask: hh.size\n    a|\n")?.labels).toEqual(["as", "- ask"]);
+		// A check's own fields after its ensure.
+		expect(
+			at(
+				"  - ask: hh.size\n    checks:\n      - ensure: hh.size > 0\n        |\n",
+			)?.labels,
+		).toEqual(["severity", "message", "name"]);
+	});
+
 	it("finds every place the parser reads a condition or value", () => {
 		for (const text of [
 			"  - stop: |\n",

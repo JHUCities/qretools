@@ -1,7 +1,7 @@
 /** Return after a list field opens its first item, for exactly the fields the parser reads as lists. */
 import { describe, expect, it } from "vitest";
 import { instrumentOf } from "../instrument/instrument.ts";
-import { LIST_FIELDS, newListItem } from "../instrument/parse.ts";
+import { LIST_FIELDS, newLineAfter } from "../instrument/parse.ts";
 
 describe("a list field", () => {
 	it("is read as a list by the parser: anything else there is a wrong type", () => {
@@ -24,12 +24,15 @@ describe("a list field", () => {
 	});
 
 	it("opens its first item on Return, two past the key's column", () => {
-		expect(newListItem("flow:", "")).toBe("\n  - ");
-		expect(newListItem("    then:  ", "")).toBe("\n      - ");
-		expect(newListItem("  - section: x", "")).toBeUndefined();
-		expect(newListItem("    checks:", "")).toBe("\n      - ");
+		expect(newLineAfter("flow:", "")).toBe("\n  - ");
+		expect(newLineAfter("    then:  ", "")).toBe("\n      - ");
+		expect(newLineAfter("  - section: x", "")).toBe("\n    ");
+		expect(newLineAfter("    checks:", "")).toBe("\n      - ");
+		// After an item with its value, the item's field column, and nothing more.
+		expect(newLineAfter("  - ask: hh.size", "")).toBe("\n    ");
+		expect(newLineAfter("      - ensure: hh.size > 0", "")).toBe("\n        ");
 		// Not a list, or something after the caret: the editor's own newline.
-		expect(newListItem("name:", "")).toBeUndefined();
-		expect(newListItem("flow:", " []")).toBeUndefined();
+		expect(newLineAfter("name:", "")).toBeUndefined();
+		expect(newLineAfter("flow:", " []")).toBeUndefined();
 	});
 });

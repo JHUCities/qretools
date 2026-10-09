@@ -85,7 +85,7 @@ export const CONSTRUCTS = [
  * The fields whose value is a list of items: a flow's steps (the instrument's own, a
  * section's, a roster's, an `each`'s, an `if`'s `then` and `else`) and an ask's checks.
  * `readFlow` and `readChecks` read them; Return after one opens its first item
- * (`newListItem`). A test (lists.test.ts) gives each a scalar and expects the parser's
+ * (`newLineAfter`). A test (lists.test.ts) gives each a scalar and expects the parser's
  * `wrong-type`: it is what holds this table to the parser, so add a field here only
  * with it.
  */
@@ -93,20 +93,32 @@ export const LIST_FIELDS = ["flow", "then", "else", "checks"] as const;
 
 /**
  * What Return writes after `before` (the line up to the caret), with `after` (the rest
- * of that line): after a list field's key, the first item's dash, two past the key's
- * column (`flow:` gives `  - `, `    then:` gives `      - `); else undefined, the
- * editor's own newline. The key's column counts any list markers before it.
+ * of that line), or undefined for the editor's own newline:
+ * - after a list field's key, the first item's dash, two past the key's column
+ *   (`flow:` gives `  - `, `    then:` gives `      - `);
+ * - after a list item with its value written (`  - ask: hh.x`), the item's field column
+ *   (`    `), where typing a letter offers the step's fields and a new step beside it.
+ * Nothing more opens on Return itself: a second Return stays a blank line.
  */
-export function newListItem(before: string, after: string): string | undefined {
+export function newLineAfter(
+	before: string,
+	after: string,
+): string | undefined {
 	if (after.trim() !== "") return undefined;
-	const m = /^( *(?:- +)*)([A-Za-z_]+):[ \t]*$/.exec(before);
-	if (m === null || !(LIST_FIELDS as readonly string[]).includes(m[2] ?? ""))
-		return undefined;
-	return `\n${" ".repeat((m[1]?.length ?? 0) + 2)}- `;
+	const list = /^( *(?:- +)*)([A-Za-z_]+):[ \t]*$/.exec(before);
+	if (list !== null)
+		return (LIST_FIELDS as readonly string[]).includes(list[2] ?? "")
+			? `\n${" ".repeat((list[1]?.length ?? 0) + 2)}- `
+			: undefined;
+	const item = /^( *(?:- +)+)[A-Za-z_]+:[ \t]*\S/.exec(before);
+	return item === null ? undefined : `\n${" ".repeat(item[1]?.length ?? 0)}`;
 }
 
-/** What each construct may carry besides its own key. */
-const FIELDS: Readonly<Record<string, readonly string[]>> = {
+/** What a check may carry, in the order a check is written: read by this table, offered by completion. */
+export const CHECK_FIELDS = ["ensure", "severity", "message", "name"] as const;
+
+/** What each construct may carry besides its own key: what completion offers in a step. */
+export const FIELDS: Readonly<Record<string, readonly string[]>> = {
 	ask: ["as", "universe", "options", "seconds", "fill", "checks"],
 	say: [],
 	section: ["flow", "order"],
@@ -1725,7 +1737,7 @@ function readChecks(
 			return { path: at, messageReads: [] };
 		}
 		for (const k of keysOf(item))
-			if (!["ensure", "severity", "message", "name"].includes(k))
+			if (!(CHECK_FIELDS as readonly string[]).includes(k))
 				ctx.say(
 					problem(
 						"unknown-key",

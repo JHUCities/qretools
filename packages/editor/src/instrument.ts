@@ -18,6 +18,8 @@ const TYPE = {
 	variable: "variable",
 	name: "variable",
 	code: "enum",
+	field: "property",
+	step: "keyword",
 } as const;
 
 /** A code being typed: its quotes and what is between them. */
@@ -38,15 +40,22 @@ export function instrumentSource(
 		// one exception is where a code goes (after `=`, `<>`, `{` or `, ` beside a coded
 		// answer, owner 2026-10-09): the codes open there at once.
 		const codes = found?.options.every((o) => o.kind === "code") ?? false;
+		// A field's text starts at the line's start: its indent is not a word typed.
+		const typed =
+			found !== undefined &&
+			context.state.sliceDoc(found.from, context.pos).trim() !== "";
 		if (
 			found === undefined ||
 			found.options.length === 0 ||
-			(!context.explicit && found.from === context.pos && !codes)
+			(!context.explicit && !typed && !codes)
 		)
 			return null;
 		return {
 			from: found.from,
 			...(found.to !== undefined && { to: found.to }),
+			// Fields and steps come narrowed by the core, each with its own indent from the
+			// line's start: shown as they are, never filtered again against the indent.
+			...(found.filtered && { filter: false }),
 			options: found.options.map(
 				(o): Completion => ({
 					label: o.label,
@@ -56,8 +65,9 @@ export function instrumentSource(
 				}),
 			),
 			// CodeMirror narrows the list itself while a name or a code is typed, and
-			// asks again once the text is neither.
-			validFor: codes ? CODE : NAME,
+			// asks again once the text is neither; a list the core narrowed is asked again
+			// at every keystroke.
+			...(!found.filtered && { validFor: codes ? CODE : NAME }),
 		};
 	};
 }

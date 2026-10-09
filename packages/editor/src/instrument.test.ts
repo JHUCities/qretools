@@ -6,7 +6,7 @@ import {
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { type Bank, bankOf } from "@qretools/core";
-import { newListItem } from "@qretools/core/editor";
+import { newLineAfter } from "@qretools/core/editor";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "./editor.ts";
 import { instrumentSource } from "./instrument.ts";
@@ -94,6 +94,23 @@ describe("a coded answer's codes, as CodeMirror asks for them", () => {
 	});
 });
 
+describe("a step's fields and new steps, as CodeMirror asks for them", () => {
+	const STEP = "uses:\n  hh: ./hh\nflow:\n  - ask: hh.size\n    ";
+	it("open once a letter is typed at its column, never on the bare indent", () => {
+		expect(ask(STEP, false)).toBeNull();
+		const c = ask(`${STEP}c`, false);
+		expect(c?.options.map((o) => o.label)).toEqual(["checks", "- compute"]);
+		expect(c?.filter).toBe(false);
+		const a = ask(`${STEP}a`, false);
+		expect(a?.options.map((o) => [o.label, o.apply])).toEqual([
+			["as", "    as: "],
+			["- ask", "  - ask: "],
+		]);
+		// Asked for, they're there before a letter.
+		expect(ask(STEP, true)?.options.length).toBeGreaterThan(2);
+	});
+});
+
 describe("where no code goes", () => {
 	it("opens nothing unasked: a name that isn't coded, after a set's brace, or before one", () => {
 		const flow = "uses:\n  hh: ./hh\nflow:\n  - stop: ";
@@ -158,7 +175,7 @@ describe("Return in an instrument", () => {
 			() => {},
 			{
 				completions: [],
-				...(options.newLine && { newLine: newListItem }),
+				...(options.newLine && { newLine: newLineAfter }),
 			},
 		);
 		const at = text.indexOf("|");
@@ -189,6 +206,15 @@ describe("Return in an instrument", () => {
 		expect(press("flow:\n  - if: x\n    then:  |\n")).toBe(
 			"flow:\n  - if: x\n    then:\n      - |\n",
 		);
+	});
+
+	it("goes to a step's field column after it, and opens nothing: a second Return is a blank line", () => {
+		expect(press("flow:\n  - ask: hh.size|\n")).toBe(
+			"flow:\n  - ask: hh.size\n    |\n",
+		);
+		const second = press("flow:\n  - ask: hh.size\n    |\n");
+		expect(second).not.toContain("as:");
+		expect(second).not.toContain("checks:");
 	});
 
 	it("leaves Return alone elsewhere, in another author's version, and in a question", () => {

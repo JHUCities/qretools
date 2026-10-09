@@ -70,7 +70,7 @@ export interface EditorOptions {
 	readonly completions?: readonly CompletionSource[];
 	/**
 	 * What Return writes after the line up to the caret (and the rest of that line), when
-	 * it isn't the editor's own newline: an instrument's list item (core `newListItem`).
+	 * it isn't the editor's own newline: an instrument's list item (core `newLineAfter`).
 	 */
 	readonly newLine?: (before: string, after: string) => string | undefined;
 }

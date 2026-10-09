@@ -117,7 +117,7 @@ describe("the entry points", () => {
 			    "marksOf",
 			    "mentionAt",
 			    "nameFrom",
-			    "newListItem",
+			    "newLineAfter",
 			    "outlineOf",
 			    "pathAt",
 			    "placeAt",
