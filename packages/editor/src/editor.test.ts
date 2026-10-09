@@ -138,6 +138,34 @@ describe("go to definition in the editor", () => {
 		editor.destroy();
 	});
 
+	it("follows a name from another repository too, drawn apart, knowing where it opens", () => {
+		const { editor, view, followed, from, parent } = setup();
+		const href = "https://github.com/o/r/blob/v1/scales/agree4.yaml";
+		editor.sync({
+			id: 1,
+			text: view.state.doc.toString(),
+			diagnostics: [],
+			marks: [{ kind: "external", range: [from, from + 6], href }],
+			schema: {},
+		});
+		expect(refRangeAt(view.state, from + 3)).toEqual({
+			from,
+			to: from + 6,
+			href,
+		});
+		const name = parent.querySelector(".cm-external") as HTMLElement;
+		name.dispatchEvent(
+			new MouseEvent("mousedown", {
+				bubbles: true,
+				cancelable: true,
+				button: 0,
+				...mod,
+			}),
+		);
+		expect(followed).toEqual([from]);
+		editor.destroy();
+	});
+
 	it("finds the name under the pointer, and not one that only touches it on the other side", () => {
 		const { editor, view, from } = setup();
 		const to = from + 6;

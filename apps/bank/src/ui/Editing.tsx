@@ -73,6 +73,7 @@ import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
 import {
 	bankLoading,
 	branchOwner,
+	externalUrl,
 	hrefOf,
 	instrumentAlsoSaves,
 	instrumentDependencies,
@@ -300,11 +301,17 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const stale = useStale(e);
 	const read = evaluations.instrument(slices, e);
 	const { instrument } = read;
-	// A name is green exactly where it can be followed: where its bank resolves it.
+	// A name is marked exactly where it can be followed: green where its bank is this
+	// workspace's (it opens in place), blue where it's another repository's (GitHub).
 	const marks = useMemo(
 		(): readonly Mark[] =>
-			instrument.refs.map((r) => ({ kind: "ref", range: r.range })),
-		[instrument.refs],
+			instrument.refs.map((r): Mark => {
+				const href = externalUrl(read, r);
+				return href === undefined
+					? { kind: "ref", range: r.range }
+					: { kind: "external", range: r.range, href };
+			}),
+		[instrument.refs, read],
 	);
 	const own = evaluations.workspaceFile(slices);
 	const { findings, ranges, draft, ddi } = instrument;

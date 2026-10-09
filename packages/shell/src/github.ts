@@ -47,6 +47,21 @@ const ONCE = { request: { retries: 0 } } as const;
  * `pacing` turns on the plugins' timing: writes spaced about a second apart (GitHub's
  * guidance) and retries with backoff. Tests turn it off to run without waiting.
  */
+/**
+ * A file on GitHub at a ref, as its web page shows it: every path segment encoded, the
+ * ref's own `/` kept (GitHub matches the longest ref). The one place a file's web
+ * address is made; another forge would make its own.
+ */
+export const blobUrl = (
+	{ owner, repo }: { readonly owner: string; readonly repo: string },
+	ref: string,
+	path: string,
+): string =>
+	`https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/blob/${ref
+		.split("/")
+		.map(encodeURIComponent)
+		.join("/")}/${path.split("/").map(encodeURIComponent).join("/")}`;
+
 export const makeGitHubStore = (
 	{ owner, repo, path: folder }: BankRef,
 	token: () => Promise<string>,

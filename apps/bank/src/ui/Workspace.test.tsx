@@ -46,8 +46,18 @@ function renderWorkspace(files = FILES) {
 				}),
 			),
 		// A bank in another repository an instrument names: not there in these tests.
+		// A bank in another repository an instrument names: one question, `far`.
 		loadBankAt: () =>
-			Promise.resolve(ok({ found: false, reason: "Not in these tests." })),
+			Promise.resolve(
+				ok({
+					found: true,
+					files: [
+						{ path: "bank.yaml", sha: "r1", text: "agency: org.example\n" },
+						{ path: "questions/t/far.yaml", sha: "r2", text: QUESTION("far") },
+					],
+					unread: [],
+				}),
+			),
 		loadWorkspace: () =>
 			Promise.resolve(
 				ok({
@@ -285,6 +295,24 @@ describe("a workspace's instruments", () => {
 		).not.toBe(first);
 		expect(revoked).toContain(first);
 	}, 15_000);
+
+	it("mark a name of this workspace's bank apart from one of another repository's", async () => {
+		renderWorkspace([
+			...FILES.filter((f) => f.path !== "instruments/wave1.yaml"),
+			file(
+				"instruments/wave1.yaml",
+				"name: wave1\nuses:\n  a: ../banks/a\n  far: o/elsewhere@v1\nflow:\n  - ask: a.alpha\n  - ask: far.far\n",
+			),
+		]);
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
+		await act(async () => {});
+		const editor = document.querySelector(".cm-content") as HTMLElement;
+		const local = [...editor.querySelectorAll(".cm-ref:not(.cm-external)")];
+		const away = [...editor.querySelectorAll(".cm-external")];
+		expect(local.map((e) => e.textContent)).toEqual(["a.alpha"]);
+		expect(away.map((e) => e.textContent)).toEqual(["far.far"]);
+	});
 
 	it("aren't shown for a workspace that is one bank alone", async () => {
 		renderWorkspace([

@@ -651,3 +651,58 @@ describe("following an instrument's question, editing it, and coming back", () =
 		expect(forward.screen).toEqual({ kind: "editing", id: q.id });
 	});
 });
+
+describe("a name from a bank in another repository", () => {
+	const hh = () =>
+		Object.fromEntries(
+			Object.entries(files).flatMap(([path, text]) =>
+				path.startsWith("households/")
+					? [[path.slice("households/".length), text]]
+					: [],
+			),
+		);
+	/** F12 on `word` in an instrument using `address` as `bas`, that bank read. */
+	const follow = (address: string, key: string, word = "bas.consent") => {
+		const m = loaded();
+		const e = at(m, "instruments/remote.yaml") as InstrumentEntry;
+		const source = e.source.replace("owner/bank@v1", address);
+		const read: Model = {
+			...m,
+			remoteBanks: { [key]: { kind: "files", files: hh() } },
+			local: {
+				...m.local,
+				workspace: { ...m.local.workspace, [e.id]: { ...e, source } },
+			},
+		};
+		const [opened] = update(read, { kind: "fileOpened", id: e.id });
+		return update(opened, {
+			kind: "definitionRequested",
+			id: e.id,
+			offset: source.indexOf(word) + 3,
+		});
+	};
+
+	it("opens on GitHub at its tag, in a new tab, and leaves the app where it was", () => {
+		const [m, cmds] = follow("owner/bank@v1", "owner/bank@v1");
+		expect(cmds).toEqual([
+			{
+				kind: "openExternal",
+				url: "https://github.com/owner/bank/blob/v1/questions/household/consent.yaml",
+			},
+		]);
+		expect(m.screen.kind).toBe("editing");
+	});
+
+	it("opens within the bank's folder when the address names one", () => {
+		const [, cmds] = follow(
+			"Owner/Bank/banks/hh@release/2026.1",
+			"owner/bank/banks/hh@release/2026.1",
+		);
+		expect(cmds).toEqual([
+			{
+				kind: "openExternal",
+				url: "https://github.com/Owner/Bank/blob/release/2026.1/banks/hh/questions/household/consent.yaml",
+			},
+		]);
+	});
+});

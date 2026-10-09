@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { batchesOf, makeGitHubStore } from "./github.ts";
+import { batchesOf, blobUrl, makeGitHubStore } from "./github.ts";
 import { AuthError, type BranchTarget } from "./storage.ts";
 
 type Seen = { url: string; method: string; body: Record<string, unknown> };
@@ -885,5 +885,16 @@ describe("batches of blobs", () => {
 		const size = (i: number) => [600_000, 600_000, 2_000_000, 10][i] ?? 0;
 		expect(batchesOf(ids(4), size)).toEqual([[0], [1], [2], [3]]);
 		expect(batchesOf(ids(3), () => 400_000)).toEqual([[0, 1], [2]]);
+	});
+});
+
+describe("a file's page on GitHub", () => {
+	it("is at its ref, each segment encoded, a ref's own slash kept", () => {
+		expect(
+			blobUrl({ owner: "o", repo: "r" }, "v1", "banks/hh/questions/t/q.yaml"),
+		).toBe("https://github.com/o/r/blob/v1/banks/hh/questions/t/q.yaml");
+		expect(
+			blobUrl({ owner: "o", repo: "r" }, "release/2026.1", "a b.yaml"),
+		).toBe("https://github.com/o/r/blob/release/2026.1/a%20b.yaml");
 	});
 });

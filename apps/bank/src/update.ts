@@ -1,4 +1,5 @@
 import {
+	addressOf,
 	bankAt,
 	bankLocation,
 	banksIn,
@@ -7,6 +8,7 @@ import {
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
 	type InstrumentIn,
+	type InstrumentRef,
 	inBank,
 	instrumentOf,
 	instrumentPath,
@@ -43,6 +45,7 @@ import {
 	type BankSettings,
 	type BranchTarget,
 	bankText,
+	blobUrl,
 	type Change,
 	type Failure,
 	formatLink,
@@ -411,6 +414,10 @@ function step(model: Model, msg: Msg): Step {
 			if (q.kind === "instrument") {
 				const read = createEvaluations().instrument(model, q);
 				const ref = instrumentRefAt(read.instrument.refs, msg.offset);
+				// A bank in another repository opens where it is, on GitHub, in a new tab.
+				const away = ref === undefined ? undefined : externalUrl(read, ref);
+				if (away !== undefined)
+					return [model, [{ kind: "openExternal", url: away }]];
 				const use = ref === undefined ? undefined : read.uses[ref.alias];
 				const target =
 					ref === undefined || use?.kind !== "local"
@@ -1377,6 +1384,24 @@ export const instrumentAlsoSaves = (
 			? questionName(f)
 			: `${SCHEME_NAME[f.kind]} ${f.name}`,
 	);
+
+/**
+ * Where a name in a bank of another repository is, on GitHub at the tag the
+ * instrument names; undefined for a name in a bank of this workspace.
+ */
+export function externalUrl(
+	read: InstrumentIn,
+	ref: InstrumentRef,
+): string | undefined {
+	if (read.uses[ref.alias]?.kind !== "remote") return undefined;
+	const written = read.instrument.draft.uses.find(
+		(u) => u.alias === ref.alias,
+	)?.address;
+	const address = written === undefined ? undefined : addressOf(written);
+	return address?.kind === "remote"
+		? blobUrl(address, address.ref, inBank(address.path, ref.path))
+		: undefined;
+}
 
 /** The working bank file that claims a workspace path, if any. */
 function bankFileClaiming(

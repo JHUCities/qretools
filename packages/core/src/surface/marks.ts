@@ -10,11 +10,17 @@ import type { Range } from "../findings.ts";
 import { type Env, inScope, type Mention } from "./env.ts";
 import { clampRange } from "./read.ts";
 
-export type MarkKind = "ref" | "code" | "legacy" | "fill";
+/**
+ * `external` is a name in a bank of another repository (an instrument's import): it
+ * resolves, but opens where that bank is, never in place.
+ */
+export type MarkKind = "ref" | "external" | "code" | "legacy" | "fill";
 
 export interface Mark {
 	readonly kind: MarkKind;
 	readonly range: Range;
+	/** Where an `external` name's file is, as a web address: the shell's to make. */
+	readonly href?: string;
 }
 
 /** A question's marks by meaning: resolved names, response codes, the `legacy` block. */

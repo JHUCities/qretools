@@ -7,6 +7,8 @@
  */
 import "@fontsource-variable/mona-sans";
 import "@fontsource/monaspace-neon/400.css";
+// Its italic: a name from a bank in another repository is drawn in it (editor.ts).
+import "@fontsource/monaspace-neon/400-italic.css";
 import "@fontsource/monaspace-radon/latin-700.css";
 import "@fontsource/monaspace-krypton/latin-500.css";
 import "@primer/primitives/dist/css/primitives.css";

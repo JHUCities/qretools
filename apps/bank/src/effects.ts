@@ -159,6 +159,13 @@ export function createEffects(deps: Deps): Effects {
 					s.whoAmI().then((result) => dispatch({ kind: "connected", result }));
 					return;
 				}
+				case "openExternal":
+					// Must stay inside the click or keypress that asked for it (follow,
+					// dispatch, update, exec run synchronously): a browser opens a new tab
+					// only during the gesture, so a debounce or an `await` on this path
+					// would have the popup blocker drop it without a word.
+					window.open(cmd.url, "_blank", "noopener,noreferrer");
+					return;
 				case "loadRemoteBanks":
 					if (waiting !== undefined) clearTimeout(waiting);
 					waiting = undefined;

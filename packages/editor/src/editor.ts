@@ -237,6 +237,8 @@ const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const MARK_CLASS = {
 	ref: Decoration.mark({ class: "cm-ref" }),
+	// Followable as a shared name is, but drawn as a link out: it opens elsewhere.
+	external: Decoration.mark({ class: "cm-ref cm-external" }),
 	code: Decoration.mark({ class: "cm-code" }),
 	legacy: Decoration.mark({ class: "cm-legacy" }),
 	fill: Decoration.mark({ class: "cm-fill" }),
@@ -245,10 +247,16 @@ const MARK_CLASS = {
 /** Clamped to the document as it is now: a mark past its end is dropped, never thrown. */
 function decorationsOf(marks: readonly Mark[], length: number): DecorationSet {
 	const list: Ranged<Decoration>[] = [];
-	for (const { kind, range } of marks) {
+	for (const { kind, range, href } of marks) {
 		const from = Math.min(Math.max(0, range[0]), length);
 		const to = Math.min(Math.max(from, range[1]), length);
-		if (to > from) list.push(MARK_CLASS[kind].range(from, to));
+		if (to <= from) continue;
+		// An external name carries where it opens, for its hover's link.
+		const mark =
+			kind === "external" && href !== undefined
+				? Decoration.mark({ class: "cm-ref cm-external", href })
+				: MARK_CLASS[kind];
+		list.push(mark.range(from, to));
 	}
 	return Decoration.set(list, true);
 }
@@ -265,12 +273,13 @@ export function refRangeAt(
 	state: EditorState,
 	pos: number,
 	side = 0,
-): { from: number; to: number } | undefined {
-	let found: { from: number; to: number } | undefined;
+): { from: number; to: number; href?: string } | undefined {
+	let found: { from: number; to: number; href?: string } | undefined;
 	state.field(semantics).between(pos, pos, (from, to, value) => {
-		if (value.spec.class !== "cm-ref") return;
+		if (!String(value.spec.class).split(" ").includes("cm-ref")) return;
 		if ((from === pos && side < 0) || (to === pos && side > 0)) return;
-		found = { from, to };
+		const href: unknown = value.spec.href;
+		found = typeof href === "string" ? { from, to, href } : { from, to };
 	});
 	return found;
 }
@@ -335,11 +344,23 @@ function followDefinition(onFollow: (offset: number) => void) {
 					create: () => {
 						const dom = document.createElement("div");
 						dom.className = "cm-follow-tip";
-						const go = document.createElement("button");
-						go.type = "button";
+						// A name from another repository opens there: a real link, so
+						// middle-click, copying it and the browser's preview all work.
+						const go =
+							ref.href !== undefined
+								? Object.assign(document.createElement("a"), {
+										href: ref.href,
+										target: "_blank",
+										rel: "noreferrer",
+										textContent: "Open on GitHub",
+									})
+								: Object.assign(document.createElement("button"), {
+										type: "button",
+										textContent: "Go to definition",
+									});
 						go.className = "cm-action";
-						go.textContent = "Go to definition";
-						go.addEventListener("click", () => onFollow(ref.from));
+						if (ref.href === undefined)
+							go.addEventListener("click", () => onFollow(ref.from));
 						const keys = document.createElement("span");
 						keys.className = "cm-action-keys";
 						keys.textContent = FOLLOW_KEYS;
@@ -580,6 +601,11 @@ const primerTheme = EditorView.theme({
 			textUnderlinePosition: "under",
 			textDecorationThickness: "var(--borderWidth-thin)",
 		},
+	// A name from another repository: a shared name, so green, set apart in italic (every
+	// hue left is another role's or fails contrast on the selection). It opens on GitHub.
+	".cm-external, .cm-external *": {
+		fontStyle: "italic",
+	},
 	".cm-code, .cm-code *": {
 		color: "var(--prettylights-syntax-constant)",
 	},

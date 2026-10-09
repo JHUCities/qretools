@@ -444,6 +444,8 @@ export type RemoteAddress = Extract<Address, { readonly kind: "remote" }>;
 export type RemoteRead = { readonly kind: "loading" } | RemoteBank;
 
 export type Cmd =
+	/** A page elsewhere (another repository's file on GitHub), in a new tab. */
+	| { readonly kind: "openExternal"; readonly url: string }
 	/**
 	 * Read these banks in other repositories, each at its tag. While an address is being
 	 * typed its read waits for a pause (`now` false), the latest batch replacing one not
