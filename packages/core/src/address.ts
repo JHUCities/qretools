@@ -106,3 +106,19 @@ export function joinFolder(base: string, relative: string): string | undefined {
 	}
 	return out.join("/");
 }
+
+/**
+ * How a folder beside `base` is written from it, `joinFolder`'s inverse: `../banks/hh`
+ * from `instruments`, `../` for the root, `./` for `base` itself. Always starts `./` or
+ * `../`, so `addressOf` reads it as local.
+ */
+export function relativeFolder(base: string, to: string): string {
+	const from = base.split("/").filter((p) => p !== "");
+	const target = to.split("/").filter((p) => p !== "");
+	let shared = 0;
+	while (shared < from.length && from[shared] === target[shared]) shared++;
+	const up = from.length - shared;
+	const down = target.slice(shared).join("/");
+	const head = up === 0 ? "./" : "../".repeat(up);
+	return `${head}${down}`;
+}

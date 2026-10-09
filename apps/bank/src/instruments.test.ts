@@ -965,3 +965,29 @@ describe("a name from a bank in another repository", () => {
 		]);
 	});
 });
+
+describe("an instrument's pickers", () => {
+	it("write the question chosen at an ask, found again in the text as it is now", () => {
+		const m = loaded();
+		const id = at(m, HOUSEHOLDS).id;
+		const open: Model = { ...m, screen: { kind: "editing", id } };
+		const [next, cmds] = update(open, {
+			kind: "livelitChosen",
+			id,
+			livelit: "flow.1.ask",
+			value: "hh.tenure",
+		});
+		const source = next.local.workspace[id]?.source ?? "";
+		expect(source).toContain("  - ask: hh.tenure\n  - stop: hh.consent");
+		const end = source.indexOf("hh.tenure") + "hh.tenure".length;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [end, end] });
+		// The bank written at `uses` is a folder beside the instrument.
+		const [bank] = update(open, {
+			kind: "livelitChosen",
+			id,
+			livelit: "uses.hh",
+			value: "../banks/hh",
+		});
+		expect(bank.local.workspace[id]?.source).toContain("  hh: ../banks/hh\n");
+	});
+});
