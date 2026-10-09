@@ -41,6 +41,7 @@ import {
 	rangesOf,
 	renameEdits,
 	textEntrySource,
+	withFields,
 } from "@qretools/core/editor";
 import {
 	type BankSettings,
@@ -474,10 +475,16 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "questionCreated": {
+			const bank = msg.bank ?? newBank(model);
+			// A template takes the fields its bank also requires, empty, in their places;
+			// a blank question stays blank (its required fields show as holes at the end).
 			const [next, id] = add(model, {
 				kind: "question",
-				bank: msg.bank ?? newBank(model),
-				source: msg.text,
+				bank,
+				source:
+					msg.text === ""
+						? ""
+						: withFields(msg.text, envIn(model, bank).required),
 			});
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
 		}

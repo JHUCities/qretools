@@ -2,17 +2,19 @@
  * Each bank of a workspace reads its own shared files: its names mean nothing in
  * another, and editing one bank never re-evaluates another.
  */
-import { type Mention, ok } from "@qretools/core";
+import { type Mention, ok, parseSurface } from "@qretools/core";
 import { formatLink } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
 	type Cmd,
+	envIn,
 	init,
 	type Model,
 	type Question,
 	type SchemeEntry,
 	schemeFileNamed,
+	TEMPLATES,
 } from "./model.js";
 import { dependencies } from "./sync.js";
 import { schemeNameProblem, update } from "./update.js";
@@ -270,6 +272,30 @@ describe("loading a workspace", () => {
 			})[0];
 		expect(load(m, unread).failures).toHaveLength(1);
 		expect(load(m, []).failures).toEqual([]);
+	});
+
+	it("starts a template question with its bank's required fields in their places; a blank one blank", () => {
+		const requiring = WORKSPACE.map((f) =>
+			f.path === "banks/a/bank.yaml"
+				? file(f.path, "agency: org.example\nrequired: [concept]\n")
+				: f,
+		);
+		const created = (text: string) => {
+			const [m] = update(loaded(requiring), {
+				kind: "questionCreated",
+				text,
+				bank: "banks/a",
+			});
+			const id = Math.max(...Object.keys(m.local.questions).map(Number));
+			return { m, q: m.local.questions[id] as Question };
+		};
+		const { m, q } = created(TEMPLATES[0]?.text ?? "");
+		expect(q.source).toMatch(/^intent:\nconcept:\nresponses:$/m);
+		// Read as its bank reads it: holes only, the template's and the bank's.
+		const findings = parseSurface(q.source, envIn(m, "banks/a")).findings;
+		expect(findings.filter((f) => f.severity !== "hole")).toEqual([]);
+		expect(findings.map((f) => f.path)).toContain("concept");
+		expect(created("").q.source).toBe("");
 	});
 
 	it("saves a new question and a new shared file under the bank they were made in", () => {

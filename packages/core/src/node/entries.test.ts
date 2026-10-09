@@ -129,6 +129,7 @@ describe("the entry points", () => {
 			    "spaceBefore",
 			    "textEntryJsonSchema",
 			    "textEntrySource",
+			    "withFields",
 			    "workspaceFileJsonSchema",
 			  ],
 			  "node": [

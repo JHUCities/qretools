@@ -8,11 +8,12 @@
  * trailing newline, which is kept), and replacing only the value would leave a block
  * map's name on a line of its own.
  */
-import { isScalar, parseDocument, stringify, visit } from "yaml";
+import { isMap, isScalar, parseDocument, stringify, visit } from "yaml";
 import type { Edit } from "../findings.ts";
 import type { NamedScheme } from "./env.ts";
 import { EMPTY_ENV } from "./env.ts";
 import { indexDocument, parseSurface } from "./parse.ts";
+import { KNOWN_KEYS } from "./schema.ts";
 
 export type { Edit, Fix } from "../findings.ts";
 
@@ -147,4 +148,67 @@ export function quoteCode(
 	if (!new RegExp(`^${escaped}\\s*:`).test(source.slice(from)))
 		return undefined;
 	return `${source.slice(0, from)}${JSON.stringify(code)}${source.slice(from + code.length)}`;
+}
+
+/**
+ * Where a top-level key's lines start: its own line, or the comments and blank lines just
+ * above it, which introduce it and stay with it.
+ */
+function above(source: string, at: number): number {
+	let start = source.lastIndexOf("\n", at - 1) + 1;
+	while (start > 0) {
+		const prev = source.lastIndexOf("\n", start - 2) + 1;
+		// Only a line starting at column 0 is a top-level comment: an indented `#` may be a
+		// block of text's own words.
+		const line = source.slice(prev, start - 1);
+		if (line.trim() !== "" && !line.startsWith("#")) break;
+		start = prev;
+	}
+	return start;
+}
+
+/**
+ * The text with each of `keys` it lacks at the top level added as an empty `key:` line,
+ * where the question's field order puts it: before the first field written that comes
+ * after it in that order (`KNOWN_KEYS`), else at the end. A new question takes its
+ * bank's required fields this way, each a hole where the author will fill it in: once, at
+ * creation, never later (a field the bank requires afterwards shows as a hole, not a line).
+ */
+export function withFields(source: string, keys: readonly string[]): string {
+	const doc = parseDocument(source, { prettyErrors: false });
+	const contents = doc.contents;
+	// Text that isn't fields on lines of their own (a list, a word, `{name: q}`) is the
+	// author's to fix, not ours to add to.
+	if (contents !== null && (!isMap(contents) || contents.flow)) return source;
+	const written = isMap(contents)
+		? contents.items.flatMap((p) =>
+				isScalar(p.key) && p.key.range !== undefined && p.key.range !== null
+					? [{ key: String(p.key.value), at: above(source, p.key.range[0]) }]
+					: [],
+			)
+		: [];
+	const order = (k: string): number => {
+		const i = (KNOWN_KEYS as readonly string[]).indexOf(k);
+		return i === -1 ? Number.POSITIVE_INFINITY : i;
+	};
+	// At the end, after a last line with no newline of its own.
+	const base = source === "" || source.endsWith("\n") ? source : `${source}\n`;
+	// What goes before each place, in the fields' own order.
+	const at = new Map<number, string>();
+	for (const key of [...new Set(keys)].sort((a, b) => order(a) - order(b))) {
+		if (written.some((w) => w.key === key)) continue;
+		const next = written
+			.filter((w) => order(w.key) > order(key))
+			.sort((a, b) => a.at - b.at)[0];
+		const place = next?.at ?? base.length;
+		at.set(place, `${at.get(place) ?? ""}${key}:\n`);
+	}
+	if (at.size === 0) return source;
+	return [...at]
+		.sort(([a], [b]) => b - a)
+		.reduce(
+			(text, [place, lines]) =>
+				text.slice(0, place) + lines + text.slice(place),
+			base,
+		);
 }

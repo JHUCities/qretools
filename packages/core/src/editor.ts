@@ -26,6 +26,7 @@ export {
 	quoteCode,
 	renameEdits,
 	spaceBefore,
+	withFields,
 } from "./surface/edit.ts";
 export { marksOf } from "./surface/marks.ts";
 export { rangesOf } from "./surface/parse.ts";
