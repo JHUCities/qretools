@@ -22,6 +22,8 @@ export interface OutlineItem {
 	readonly label: readonly OutlinePart[];
 	/** For an `ask`: the question's title, or its text when it has none. */
 	readonly detail?: string;
+	/** For an `ask` whose question resolved: which it is, by its bank's alias and its path there. */
+	readonly question?: { readonly alias: string; readonly path: string };
 	readonly children: readonly OutlineItem[];
 }
 
@@ -61,6 +63,7 @@ function itemOf(node: Node): OutlineItem | readonly OutlineItem[] {
 					...(node.as === undefined ? [] : [keyword("as"), code(node.as)]),
 				]),
 				...(detail !== undefined && { detail }),
+				...(q !== undefined && { question: { alias: q.alias, path: q.path } }),
 			};
 		}
 		case "say":

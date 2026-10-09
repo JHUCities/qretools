@@ -3,7 +3,7 @@
  * DDI download, and what its workspace's details say about the export.
  */
 import { DownloadIcon } from "@primer/octicons-react";
-import { Button, Link, LinkButton, Truncate } from "@primer/react";
+import { Button, Link, LinkButton, VisuallyHidden } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
 import {
 	type DdiDocument,
@@ -14,7 +14,7 @@ import {
 	type WorkspaceFile,
 } from "@qretools/core";
 import type { OutlineItem, OutlinePart } from "@qretools/core/editor";
-import { Fragment, useEffect, useId, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useState } from "react";
 import { inlineCode } from "./findings.tsx";
 
 /**
@@ -108,9 +108,15 @@ export function WorkspaceNotice({ own }: { own: WorkspaceFile | undefined }) {
 export function Outline({
 	items,
 	onTarget,
+	question,
 }: {
 	items: readonly OutlineItem[];
 	onTarget: (target: Target) => void;
+	/**
+	 * An ask's question's words as a way to the question itself (the app knows where it
+	 * lives); absent, or undefined for an item, they're plain text.
+	 */
+	question?: (item: OutlineItem, words: string) => ReactNode | undefined;
 }) {
 	return (
 		<ol className="outline">
@@ -122,18 +128,21 @@ export function Outline({
 						onClick={() => onTarget({ path: item.path, severity: "info" })}
 					>
 						<OutlineLabel label={item.label} />
+						{/* Told apart from the question's own link in a links list. */}
+						<VisuallyHidden> in the source</VisuallyHidden>
 					</Link>
+					{/* The label goes to the source; the question's words, to the question. */}
 					{item.detail !== undefined && (
-						<Truncate
-							as="span"
-							title={item.detail}
-							className="quiet outline-detail"
-						>
-							{item.detail}
-						</Truncate>
+						<span className="quiet outline-detail">
+							{question?.(item, item.detail) ?? item.detail}
+						</span>
 					)}
 					{item.children.length > 0 && (
-						<Outline items={item.children} onTarget={onTarget} />
+						<Outline
+							items={item.children}
+							onTarget={onTarget}
+							{...(question !== undefined && { question })}
+						/>
 					)}
 				</li>
 			))}

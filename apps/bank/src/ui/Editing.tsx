@@ -48,6 +48,7 @@ import { bankText, formatLink } from "@qretools/shell";
 import {
 	Ddi,
 	Download,
+	ExternalLink,
 	Findings,
 	Outline,
 	OutlineLabel,
@@ -82,6 +83,7 @@ import {
 	bankLoading,
 	branchOwner,
 	externalUrl,
+	followOf,
 	hrefOf,
 	instrumentAlsoSaves,
 	instrumentDependencies,
@@ -314,7 +316,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const ddiSchema = useModel((m) => m.ddiSchema);
 	const activity = useModel((m) => m.activity);
 	const slices = useSlices();
-	const { onTarget, onFix, on } = useActions(e.id);
+	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const stale = useStale(e);
 	const read = evaluations.instrument(slices, e);
 	const { instrument } = read;
@@ -439,7 +441,35 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 									{outlined.length === 0 ? (
 										<p className="quiet">The flow has no steps yet.</p>
 									) : (
-										<Outline items={outlined} onTarget={onTarget} />
+										<Outline
+											items={outlined}
+											onTarget={onTarget}
+											question={(item, words) => {
+												const follow =
+													item.question === undefined
+														? undefined
+														: followOf(slices, read, item.question);
+												if (follow === undefined) return undefined;
+												return follow.kind === "external" ? (
+													<ExternalLink href={follow.url} muted icon={false}>
+														{words}
+													</ExternalLink>
+												) : (
+													<FileLink
+														id={follow.file.id}
+														muted
+														onOpen={() =>
+															dispatch({
+																kind: "fileOpened",
+																id: follow.file.id,
+															})
+														}
+													>
+														{words}
+													</FileLink>
+												);
+											}}
+										/>
 									)}
 								</div>
 							) : null
@@ -1181,12 +1211,15 @@ function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
 function FileLink({
 	id,
 	at,
+	muted = false,
 	onOpen,
 	children,
 }: {
 	id: Id;
 	/** A place in the file to open at (a path in its own terms). */
 	at?: string;
+	/** Secondary to what it sits beside (the outline's question words): grey until hovered. */
+	muted?: boolean;
 	onOpen: () => void;
 	children: ReactNode;
 }) {
@@ -1195,7 +1228,14 @@ function FileLink({
 		return f === undefined ? undefined : hrefOf(m, f, at);
 	});
 	return href !== undefined ? (
-		<Link href={href}>{children}</Link>
+		<Link href={href} muted={muted}>
+			{children}
+		</Link>
+	) : muted ? (
+		// A draft has no address: a button, drawn as the muted link it stands for.
+		<Link as="button" type="button" muted onClick={onOpen}>
+			{children}
+		</Link>
 	) : (
 		<Button variant="link" onClick={onOpen}>
 			{children}

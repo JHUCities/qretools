@@ -260,6 +260,14 @@ describe("a workspace's instruments", () => {
 		// The outline is the flow, each step a way to its place.
 		expect(screen.getByRole("button", { name: /alpha/ })).toBeTruthy();
 		expect(screen.getByRole("button", { name: /Close/ })).toBeTruthy();
+		// An ask's label goes to the source, its question's words to the question.
+		expect(
+			screen.getByRole("button", { name: /alpha\s*in the source$/ }),
+		).toBeTruthy();
+		const words = screen.getByRole("link", { name: "Is it so?" });
+		expect(words.getAttribute("href")).toMatch(
+			/file=banks%2Fa%2Fquestions%2Ft%2Falpha\.yaml/,
+		);
 	});
 
 	it("are made from New, named first", async () => {

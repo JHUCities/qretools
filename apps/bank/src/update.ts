@@ -9,7 +9,6 @@ import {
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
 	type InstrumentIn,
-	type InstrumentRef,
 	inBank,
 	instrumentOf,
 	instrumentPath,
@@ -413,16 +412,13 @@ function step(model: Model, msg: Msg): Step {
 				// a file makes no history entry in an editor.
 				if (ref?.kind === "here")
 					return [model, [{ kind: "revealRange", range: ref.declared }]];
+				const follow =
+					ref === undefined ? undefined : followOf(model, read, ref);
+				if (follow === undefined) return [model, []];
 				// A bank in another repository opens where it is, on GitHub, in a new tab.
-				const away = ref === undefined ? undefined : externalUrl(read, ref);
-				if (away !== undefined)
-					return [model, [{ kind: "openExternal", url: away }]];
-				const use = ref === undefined ? undefined : read.uses[ref.alias];
-				const target =
-					ref === undefined || use?.kind !== "local"
-						? undefined
-						: bankFileClaiming(model, inBank(use.folder, ref.path));
-				if (target === undefined) return [model, []];
+				if (follow.kind === "external")
+					return [model, [{ kind: "openExternal", url: follow.url }]];
+				const target = follow.file;
 				const [opened, cmds] = step(model, {
 					kind: "fileOpened",
 					id: target.id,
@@ -1485,11 +1481,10 @@ export const instrumentAlsoSaves = (
  */
 export function externalUrl(
 	read: InstrumentIn,
-	ref: InstrumentRef,
+	ref: { readonly alias: string; readonly path: string },
 ): string | undefined {
 	// A code is followed into its list as a name is into its file.
-	if (ref.kind === "here" || read.uses[ref.alias]?.kind !== "remote")
-		return undefined;
+	if (read.uses[ref.alias]?.kind !== "remote") return undefined;
 	const written = read.instrument.draft.uses.find(
 		(u) => u.alias === ref.alias,
 	)?.address;
@@ -1497,6 +1492,30 @@ export function externalUrl(
 	return address?.kind === "remote"
 		? blobUrl(address, address.ref, inBank(address.path, ref.path))
 		: undefined;
+}
+
+/**
+ * Where a bank file an instrument names leads: GitHub, for a bank in another repository;
+ * else the working file of this workspace that holds it; or nowhere (a bank that didn't
+ * load). One answer for Cmd-click, F12 and the outline's links, so they can't disagree.
+ */
+export type Follow =
+	| { readonly kind: "external"; readonly url: string }
+	| { readonly kind: "file"; readonly file: BankEntry };
+
+export function followOf(
+	model: Pick<Model, "local">,
+	read: InstrumentIn,
+	ref: { readonly alias: string; readonly path: string },
+): Follow | undefined {
+	const url = externalUrl(read, ref);
+	if (url !== undefined) return { kind: "external", url };
+	const use = read.uses[ref.alias];
+	const file =
+		use?.kind === "local"
+			? bankFileClaiming(model, inBank(use.folder, ref.path))
+			: undefined;
+	return file === undefined ? undefined : { kind: "file", file };
 }
 
 /** The working bank file that claims a workspace path, if any. */

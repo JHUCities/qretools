@@ -838,7 +838,9 @@ button.finding-message {
 .outline-keyword {
 	font-weight: var(--base-text-weight-semibold);
 }
+/* The question's words, whole: they wrap (owner, 2026-10-09: clipped, they hid what is asked). */
 .outline-detail {
 	display: block;
 	font-size: var(--text-body-size-small);
+	overflow-wrap: break-word;
 }
