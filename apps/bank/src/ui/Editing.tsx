@@ -69,7 +69,14 @@ import {
 	schemeFileNamed,
 	type WorkspaceFileEntry,
 } from "../model.js";
-import { alsoSaves, isUnsaved, remoteBlob, syncOf, usersIn } from "../sync.js";
+import {
+	alsoSaves,
+	claimOf,
+	isUnsaved,
+	remoteBlob,
+	syncOf,
+	usersIn,
+} from "../sync.js";
 import {
 	bankLoading,
 	branchOwner,
@@ -81,7 +88,7 @@ import {
 	writeBlocked,
 } from "../update.js";
 import { type InstrumentUse, instrumentsUsing } from "../usedBy.js";
-import { useApp, useEnv, useModel } from "./AppContext.js";
+import { useApp, useEnv, useInstrumentUses, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
 import { FileSkeleton, Panes } from "./FileSkeleton.js";
@@ -167,14 +174,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const { dispatch, onTarget, onFix, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, env);
-	// The instruments here that use it: rebuilt only when an instrument or this one changes.
-	const remoteBanks = useModel((m) => m.remoteBanks);
-	const banks = useModel((m) => m.banks);
-	const instruments = useMemo(
-		() =>
-			instrumentsUsing({ local, remote, banks, remoteBanks }, evaluations, q),
-		[local, remote, banks, remoteBanks, evaluations, q],
-	);
+	// The instruments here that use it (none before its first save: no path yet).
+	const instruments = instrumentsUsing(useInstrumentUses(), claimOf(q));
 	// Until the bank declares its agency, say so beside its DDI (not while it loads).
 	const loading = useModel(bankLoading);
 	const declare = useCallback(
@@ -540,6 +541,8 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 		[findings, ev.ranges, onFix],
 	);
 	const [listed, flush] = useSettled(findings, SETTLE_MS, e.id);
+	// Instruments here that name it too: a universe on a step, a scale an input is on.
+	const instrumentUsers = instrumentsUsing(useInstrumentUses(), claimOf(e));
 	const users = isRoot(e.kind)
 		? undefined
 		: [...new Set(usedBy(index, e.kind, e.name).map((s) => s.key))];
@@ -595,7 +598,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						badge={{
 							findings: <StatusBadge status={status(findings)} />,
 							usedBy: users !== undefined && (
-								<CounterLabel>{users.length}</CounterLabel>
+								<CounterLabel>
+									{users.length + instrumentUsers.length}
+								</CounterLabel>
 							),
 						}}
 						body={(pane) =>
@@ -624,8 +629,8 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 										<p className="quiet">
 											Every variable in the bank uses the missing values.
 										</p>
-									) : users.length === 0 ? (
-										<p className="quiet">No question names it.</p>
+									) : users.length === 0 && instrumentUsers.length === 0 ? (
+										<p className="quiet">No question or instrument names it.</p>
 									) : !inEffect ? (
 										<p className="fg-attention">
 											This can't be read yet, so each of these shows a field to
@@ -634,27 +639,39 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 										</p>
 									) : null}
 									{users !== undefined && users.length > 0 && (
-										<ul className="used-by">
-											{users.map((id) => {
-												const q = questions[id];
-												const name =
-													q === undefined
-														? undefined
-														: evaluations.get(q, env).draft.name;
-												return (
-													<li key={id}>
-														<FileLink
-															id={id}
-															onOpen={() =>
-																dispatch({ kind: "fileOpened", id })
-															}
-														>
-															{name ?? UNNAMED}
-														</FileLink>
-													</li>
-												);
-											})}
-										</ul>
+										<>
+											{/* Questions are named as such only beside instruments. */}
+											{instrumentUsers.length > 0 && (
+												<h4 className="browser-heading">Questions</h4>
+											)}
+											<ul className="used-by">
+												{users.map((id) => {
+													const q = questions[id];
+													const name =
+														q === undefined
+															? undefined
+															: evaluations.get(q, env).draft.name;
+													return (
+														<li key={id}>
+															<FileLink
+																id={id}
+																onOpen={() =>
+																	dispatch({ kind: "fileOpened", id })
+																}
+															>
+																{name ?? UNNAMED}
+															</FileLink>
+														</li>
+													);
+												})}
+											</ul>
+										</>
+									)}
+									{instrumentUsers.length > 0 && (
+										<>
+											<h4 className="browser-heading">Instruments</h4>
+											<InstrumentsUsing uses={instrumentUsers} />
+										</>
 									)}
 								</>
 							) : null

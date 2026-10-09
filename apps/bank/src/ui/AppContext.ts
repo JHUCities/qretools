@@ -1,8 +1,9 @@
 import type { Env } from "@qretools/core";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { useStore } from "zustand";
 import type { Model } from "../model.js";
 import type { App } from "../store.js";
+import { type InstrumentUses, instrumentUses } from "../usedBy.js";
 
 export const AppContext = createContext<App | null>(null);
 
@@ -28,6 +29,22 @@ export function useEnv(bank: string): Env {
 	const remote = useModel((m) => m.remote);
 	const banks = useModel((m) => m.banks);
 	return evaluations.env({ local, remote, banks }, bank);
+}
+
+/**
+ * Which instruments here use each bank file, by its path. Rebuilt with the workspace;
+ * cheap, since each instrument's reading is cached in the evaluations.
+ */
+export function useInstrumentUses(): InstrumentUses {
+	const { evaluations } = useApp();
+	const local = useModel((m) => m.local);
+	const remote = useModel((m) => m.remote);
+	const banks = useModel((m) => m.banks);
+	const remoteBanks = useModel((m) => m.remoteBanks);
+	return useMemo(
+		() => instrumentUses({ local, remote, banks, remoteBanks }, evaluations),
+		[local, remote, banks, remoteBanks, evaluations],
+	);
 }
 
 /** The top bar's status, which a file's inactive write buttons name as their reason. */

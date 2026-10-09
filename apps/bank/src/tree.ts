@@ -36,7 +36,8 @@ export type TreeInput = Pick<
 	"local" | "browser" | "screen" | "activity"
 >;
 
-import { isUnsaved } from "./sync.js";
+import { claimOf, isUnsaved } from "./sync.js";
+import { type InstrumentUses, instrumentsUsing } from "./usedBy.js";
 
 export const UNFILED = "(unfiled)";
 
@@ -194,6 +195,8 @@ export function schemeSections(
 	/** The bank's symbol table: a file is used by questions of its own bank only. */
 	index: Index<Id>,
 	bank: string,
+	/** The instruments here naming each bank file, by path: they use it too. */
+	instruments: InstrumentUses = new Map(),
 ): readonly SchemeSection[] {
 	const filter = model.browser.filter.trim().toLowerCase();
 	const entries = Object.values(model.local.schemes).filter(
@@ -209,7 +212,9 @@ export function schemeSections(
 					name: e.name,
 					status: status(evaluate(e).findings),
 					...(!isRoot(e.kind) && {
-						usedBy: usedBy(index, e.kind, e.name).length,
+						usedBy:
+							usedBy(index, e.kind, e.name).length +
+							instrumentsUsing(instruments, claimOf(e)).length,
 					}),
 				}),
 			)

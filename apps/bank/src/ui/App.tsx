@@ -58,7 +58,7 @@ import {
 	newBank,
 	TEMPLATES,
 } from "../model.js";
-import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
+import { alsoSaves, claimOf, isUnsaved, usersIn } from "../sync.js";
 import {
 	bankFolders,
 	banksShown,
@@ -80,7 +80,13 @@ import {
 	signOutPlan,
 	writeBlocked,
 } from "../update.js";
-import { SESSION_STATUS, useApp, useModel } from "./AppContext.js";
+import { instrumentsUsing } from "../usedBy.js";
+import {
+	SESSION_STATUS,
+	useApp,
+	useInstrumentUses,
+	useModel,
+} from "./AppContext.js";
 import { BankFilter, type BankTree, Browser, bankLabel } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { type FileKind, FileSkeleton } from "./FileSkeleton.js";
@@ -235,6 +241,8 @@ export function App() {
 	const loading = bankLoading(model);
 	const status = sessionStatus(model);
 	// The tree is drawn from these slices only, so a caret move does not redraw it.
+	// Which instruments use each bank file: the tree's counts and the delete dialog's.
+	const instrumentUses = useInstrumentUses();
 	const treeInput = useMemo(
 		() => ({ local, browser, screen, activity }),
 		[local, browser, screen, activity],
@@ -278,10 +286,11 @@ export function App() {
 						(e) => evaluations.scheme(e, envFor(e.bank)),
 						indexFor(bank),
 						bank,
+						instrumentUses,
 					),
 				}),
 			),
-		[shownBanks, treeInput, evaluations, envFor, indexFor],
+		[shownBanks, treeInput, evaluations, envFor, indexFor, instrumentUses],
 	);
 	// The workspace's own files, read as their author sees them.
 	const workspace = useMemo(() => {
@@ -365,6 +374,11 @@ export function App() {
 							: confirm.name;
 	// Deleting a scheme file others name turns each of those names into a hole: say how many.
 	// Nothing names an instrument or the workspace details: no count for them.
+	// …and each instrument here that names it, which would show one too.
+	const confirmInstruments =
+		confirm === undefined || !isScheme(confirm) || isRoot(confirm.kind)
+			? 0
+			: instrumentsUsing(instrumentUses, claimOf(confirm)).length;
 	const confirmUsers =
 		confirm === undefined || !isScheme(confirm) || isRoot(confirm.kind)
 			? 0
@@ -742,8 +756,8 @@ export function App() {
 					{confirm.base !== undefined &&
 						isUnsaved(confirm) &&
 						" Your unsaved changes to it are discarded."}
-					{confirmUsers > 0 &&
-						` ${confirmUsers} question${confirmUsers === 1 ? " names" : "s name"} it; each will show a field to fill in there until it's changed.`}
+					{confirmUsers + confirmInstruments > 0 &&
+						` ${namedBy(confirmUsers, confirmInstruments)} it; each will show a field to fill in there until it's changed.`}
 				</ConfirmationDialog>
 			)}
 		</>
@@ -922,6 +936,17 @@ const busy = (model: Model): boolean =>
 		(model.loading.kind === "loading" ||
 			saving(model) ||
 			(model.screen.kind === "foreign" && model.screen.file === undefined)));
+
+/** "3 questions and 1 instrument name", "1 question names": who names a shared file. */
+function namedBy(questions: number, instruments: number): string {
+	const count = (n: number, what: string) =>
+		`${n} ${what}${n === 1 ? "" : "s"}`;
+	const who = [
+		...(questions > 0 ? [count(questions, "question")] : []),
+		...(instruments > 0 ? [count(instruments, "instrument")] : []),
+	].join(" and ");
+	return `${who} ${questions + instruments === 1 ? "names" : "name"}`;
+}
 
 const capitalise = (s: string): string =>
 	s.charAt(0).toUpperCase() + s.slice(1);

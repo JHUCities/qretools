@@ -15,8 +15,10 @@ import {
 	type InstrumentEntry,
 	init,
 	type Model,
+	type Msg,
 	type Question,
 } from "./model.js";
+import { claimOf } from "./sync.js";
 import {
 	instrumentAlsoSaves,
 	instrumentDependencies,
@@ -24,7 +26,7 @@ import {
 	signOutPlan,
 	update,
 } from "./update.js";
-import { instrumentsUsing } from "./usedBy.js";
+import { instrumentsUsing, instrumentUses } from "./usedBy.js";
 
 let files: Record<string, string>;
 beforeAll(async () => {
@@ -423,9 +425,10 @@ describe("the example instrument", () => {
 describe("the instruments a question is used by", () => {
 	/** `instrumentsUsing` for the question at `path`, with the workspace as `m` holds it. */
 	const usesOf = (m: Model, path: string) =>
-		instrumentsUsing(m, createEvaluations(), at(m, path) as Question).map(
-			(u) => ({ name: u.name, places: u.places, first: u.first[0] }),
-		);
+		instrumentsUsing(
+			instrumentUses(m, createEvaluations()),
+			claimOf(at(m, path)),
+		).map((u) => ({ name: u.name, places: u.places, first: u.first[0] }));
 	/** The workspace with an instrument of this source added, as a saved file would be. */
 	const withInstrument = (m: Model, name: string, source: string): Model => {
 		const [added] = update(m, { kind: "instrumentCreateOpened" });
@@ -458,9 +461,8 @@ describe("the instruments a question is used by", () => {
 	it("links each to its first place, which a link opens it at", () => {
 		const m = loaded();
 		const [use] = instrumentsUsing(
-			m,
-			createEvaluations(),
-			at(m, CONSENT) as Question,
+			instrumentUses(m, createEvaluations()),
+			claimOf(at(m, CONSENT)),
 		);
 		expect(use?.at).toBe("flow.1.ask");
 		const households = at(m, HOUSEHOLDS) as InstrumentEntry;
@@ -490,6 +492,59 @@ describe("the instruments a question is used by", () => {
 		]);
 	});
 
+	it("counts an instrument's universe as a use of the shared universe", () => {
+		const m = loaded();
+		const e = at(m, HOUSEHOLDS) as InstrumentEntry;
+		const source = e.source.replace(/^uses:/m, "universe: hh.renters\nuses:");
+		const named: Model = {
+			...m,
+			local: {
+				...m.local,
+				workspace: { ...m.local.workspace, [e.id]: { ...e, source } },
+			},
+		};
+		const universe = at(named, "households/universes/renters.yaml");
+		expect(
+			instrumentsUsing(
+				instrumentUses(named, createEvaluations()),
+				claimOf(universe),
+			).map((u) => u.name),
+		).toEqual(["households"]);
+	});
+
+	it("follows a draft shared file's rename into the instruments naming it", () => {
+		const steps: Msg[] = [
+			{ kind: "schemeCreateOpened", scheme: "universe", bank: "households" },
+			{ kind: "schemeNameChanged", name: "r" },
+			{ kind: "schemeTextChanged", text: "Renters" },
+			{ kind: "schemeNamingConfirmed" },
+		];
+		const made = steps.reduce((m, msg) => update(m, msg)[0], loaded());
+		const draft = Object.values(made.local.schemes).find(
+			(f) => f.kind === "universe" && f.name === "r",
+		);
+		expect(draft?.base).toBeUndefined();
+		const e = at(made, HOUSEHOLDS) as InstrumentEntry;
+		const source = e.source.replace(/^uses:/m, "universe: hh.r\nuses:");
+		const named: Model = {
+			...made,
+			local: {
+				...made.local,
+				workspace: { ...made.local.workspace, [e.id]: { ...e, source } },
+			},
+		};
+		const renamed = (
+			[
+				{ kind: "schemeRenameOpened", id: draft?.id ?? -1 },
+				{ kind: "schemeNameChanged", name: "r2" },
+				{ kind: "schemeNamingConfirmed" },
+			] as Msg[]
+		).reduce((m, msg) => update(m, msg)[0], named);
+		const after = renamed.local.workspace[e.id];
+		expect(after?.source).toContain("universe: hh.r2\n");
+		expect(after?.source).not.toContain("universe: hh.r\n");
+	});
+
 	it("is none for a question no instrument here names, or one never saved", () => {
 		const m = loaded();
 		expect(usesOf(m, "bank/questions/examples/library_visits.yaml")).toEqual(
@@ -497,7 +552,9 @@ describe("the instruments a question is used by", () => {
 		);
 		const draft = { ...(at(m, CONSENT) as Question) };
 		delete (draft as { base?: unknown }).base;
-		expect(instrumentsUsing(m, createEvaluations(), draft)).toEqual([]);
+		expect(
+			instrumentsUsing(instrumentUses(m, createEvaluations()), claimOf(draft)),
+		).toEqual([]);
 	});
 });
 

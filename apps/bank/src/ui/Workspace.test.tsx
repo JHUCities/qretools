@@ -220,6 +220,31 @@ describe("a workspace's instruments", () => {
 		expect(screen.getByRole("link", { name: "wave1" })).toBeTruthy();
 	});
 
+	it("count, and are listed apart, on a shared scale a question and an instrument both use", async () => {
+		const app = renderWorkspace([
+			...FILES.filter((f) => f.path !== "instruments/wave1.yaml"),
+			file(
+				"instruments/wave1.yaml",
+				"name: wave1\nuses:\n  a: ../banks/a\ninputs:\n  x:\n    responses: a.yn\nflow:\n  - ask: a.alpha\n",
+			),
+		]);
+		await act(async () => {});
+		const yn = Object.values(app.store.getState().model.local.schemes).find(
+			(e) => e.name === "yn",
+		);
+		act(() => app.dispatch({ kind: "fileOpened", id: yn?.id ?? -1 }));
+		await act(async () => {});
+		// Opening it opens its section: the tree's count is the pane's, both kinds of file.
+		expect(screen.getAllByText("used by 2").length).toBeGreaterThan(0);
+		// The previews (ScrollableRegion names itself only while it scrolls, which jsdom
+		// never measures).
+		const previews = document.querySelector(".split .right") as HTMLElement;
+		for (const name of ["Questions", "Instruments"])
+			expect(within(previews).getByRole("heading", { name })).toBeTruthy();
+		expect(within(previews).getByRole("link", { name: "alpha" })).toBeTruthy();
+		expect(within(previews).getByRole("link", { name: "wave1" })).toBeTruthy();
+	});
+
 	it("open as their source, findings, outline and DDI", async () => {
 		renderWorkspace();
 		await act(async () => {});

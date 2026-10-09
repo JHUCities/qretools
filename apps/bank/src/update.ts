@@ -636,11 +636,14 @@ function step(model: Model, msg: Msg): Step {
 				const { id } = naming.purpose;
 				const e = model.local.schemes[id];
 				if (!e || isRoot(e.kind) || e.base !== undefined) return [closed, []];
+				// The instruments' references are read before the rename, while they resolve.
+				const inInstruments = instrumentRenames(model, e, naming.name);
 				const renamed = withFile(closed, { ...e, name: naming.name });
-				return persist([
+				const rewritten = inInstruments.reduce(
+					(m, [id, text]) => withSource(m, id, text),
 					renameReferences(renamed, e.kind, e.name, naming.name, e.bank),
-					[],
-				]);
+				);
+				return persist([rewritten, []]);
 			}
 			const written = naming.text.trim() !== "";
 			const shape = SHAPE[naming.kind];
@@ -2068,6 +2071,40 @@ function renameReferences(
 			next = withSource(next, q.id, text);
 	}
 	return next;
+}
+
+/**
+ * Each instrument here that names the shared file `e`, with its text once every name
+ * of it reads `<alias>.<to>`: a universe on a step, a scale an input is on. Read while
+ * the old name still resolves; an instrument naming it becomes an unsaved change, as a
+ * question does.
+ */
+function instrumentRenames(
+	model: Model,
+	e: SchemeEntry,
+	to: string,
+): readonly (readonly [Id, string])[] {
+	const path = claimOf(e);
+	const evaluations = createEvaluations();
+	return Object.values(model.local.workspace).flatMap((i) => {
+		if (i.kind !== "instrument") return [];
+		const read = evaluations.instrument(model, i);
+		const hits = read.instrument.refs.filter((r) => {
+			if (r.kind !== "bank") return false;
+			const use = read.uses[r.alias];
+			return use?.kind === "local" && inBank(use.folder, r.path) === path;
+		});
+		if (hits.length === 0) return [];
+		// From the end, so each range still points where it did.
+		const text = [...hits]
+			.sort((a, b) => b.range[0] - a.range[0])
+			.reduce(
+				(src, r) =>
+					`${src.slice(0, r.range[0])}${r.kind === "bank" ? r.alias : ""}.${to}${src.slice(r.range[1])}`,
+				i.source,
+			);
+		return [[i.id, text] as const];
+	});
 }
 
 const current = (model: Model): Entry | undefined =>
