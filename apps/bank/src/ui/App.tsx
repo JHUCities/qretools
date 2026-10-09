@@ -857,50 +857,27 @@ function BranchLine({ model }: { model: Model }) {
 			</Truncate>
 		</>
 	);
+	const behind = loaded === undefined ? 0 : loaded.behindBy;
 	return (
-		<div className="branch-line">
-			{/* Before the first save the branch does not exist yet: named, not linked. */}
-			{exists ? (
-				<Link
-					className="branch"
-					href={treeUrl(model, branch)}
-					target="_blank"
-					rel="noreferrer"
-					muted
-					title={branch}
-				>
-					{name}
-					<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-				</Link>
-			) : (
-				<span className="branch quiet" title={branch}>
-					{name}
-				</span>
-			)}
-			{/* At the line's end once the bank has loaded: the name never moves for them. */}
-			<span className="branch-extras">
-				{loaded !== undefined && loaded.behindBy > 0 && (
-					<>
-						{/* What changed, before updating: the compare page. */}
-						<ExternalLink href={compare} muted>
-							{loaded.behindBy} behind {session.defaultBranch}
-						</ExternalLink>
-						{/* Only once the branch exists: the first save makes it up to date. */}
-						{exists && (
-							<Button
-								size="small"
-								variant="invisible"
-								inactive={blocked !== undefined}
-								onClick={() =>
-									blocked === undefined &&
-									dispatch({ kind: "updateFromDefaultRequested" })
-								}
-							>
-								Update
-								<VisuallyHidden> from {session.defaultBranch}</VisuallyHidden>
-							</Button>
-						)}
-					</>
+		<>
+			<div className="branch-line">
+				{/* Before the first save the branch does not exist yet: named, not linked. */}
+				{exists ? (
+					<Link
+						className="branch"
+						href={treeUrl(model, branch)}
+						target="_blank"
+						rel="noreferrer"
+						muted
+						title={branch}
+					>
+						{name}
+						<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+					</Link>
+				) : (
+					<span className="branch quiet" title={branch}>
+						{name}
+					</span>
 				)}
 				{/*
 				 * Something to propose: the pull-request icon with a dot, as VS Code badges
@@ -913,6 +890,7 @@ function BranchLine({ model }: { model: Model }) {
 						href={compare}
 						target="_blank"
 						rel="noreferrer"
+						className="branch-propose"
 						icon={GitPullRequestIcon}
 						variant="invisible"
 						aria-label="Open pull request (opens in a new tab)"
@@ -920,8 +898,39 @@ function BranchLine({ model }: { model: Model }) {
 						notificationIndicator="icon"
 					/>
 				)}
-			</span>
-		</div>
+			</div>
+			{/*
+			 * Behind the default branch: its own row, once the workspace has loaded, so the
+			 * branch's name is never cut short to make room (as github.com's branch bar says
+			 * "This branch is N commits behind main").
+			 */}
+			{behind > 0 && (
+				<div className="branch-behind">
+					{/* What changed, before updating: the compare page. */}
+					<ExternalLink href={compare}>
+						{behind} {behind === 1 ? "commit" : "commits"} behind{" "}
+						{session.defaultBranch}
+					</ExternalLink>
+					{/* Only once the branch exists: the first save makes it up to date. */}
+					{exists && (
+						<Button
+							size="small"
+							inactive={blocked !== undefined}
+							aria-describedby={
+								blocked === undefined ? undefined : SESSION_STATUS
+							}
+							onClick={() =>
+								blocked === undefined &&
+								dispatch({ kind: "updateFromDefaultRequested" })
+							}
+						>
+							Update
+							<VisuallyHidden> from {session.defaultBranch}</VisuallyHidden>
+						</Button>
+					)}
+				</div>
+			)}
+		</>
 	);
 }
 

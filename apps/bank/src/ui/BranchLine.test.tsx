@@ -12,7 +12,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
-import { AppContext } from "./AppContext.js";
+import { AppContext, SESSION_STATUS } from "./AppContext.js";
 
 const FILES = [
 	{ path: "bank.yaml", sha: "s0", text: "agency: org.example\n" },
@@ -23,7 +23,10 @@ const FILES = [
 	},
 ];
 
-function renderBank(from: "branch" | "default", answer: Updated = "conflict") {
+function renderBank(
+	from: "branch" | "default",
+	answer: Updated | "never" = "conflict",
+) {
 	const asked: string[] = [];
 	const store = {
 		whoAmI: () =>
@@ -48,7 +51,9 @@ function renderBank(from: "branch" | "default", answer: Updated = "conflict") {
 			),
 		updateFromDefault: () => {
 			asked.push("update");
-			return Promise.resolve(ok(answer));
+			return answer === "never"
+				? new Promise(() => {})
+				: Promise.resolve(ok(answer));
 		},
 	} as unknown as Store;
 	const app = createApp(
@@ -80,8 +85,26 @@ describe("the branch line's Update", () => {
 	it("isn't offered before the branch exists", async () => {
 		renderBank("default");
 		await act(async () => {});
-		expect(screen.getByRole("link", { name: /2 behind trunk/ })).toBeTruthy();
+		expect(
+			screen.getByRole("link", { name: /2 commits behind trunk/ }),
+		).toBeTruthy();
 		expect(screen.queryByRole("button", { name: /^Update/ })).toBeNull();
+	});
+
+	it("while blocked, stays focusable and points at the status that says why", async () => {
+		renderBank("branch", "never");
+		await act(async () => {});
+		const update = screen.getByRole("button", {
+			name: /^Update\s*from trunk$/,
+		});
+		expect(update.getAttribute("aria-describedby")).toBeNull();
+		fireEvent.click(update);
+		await act(async () => {});
+		const blocked = screen.getByRole("button", {
+			name: /^Update\s*from trunk$/,
+		});
+		expect(blocked.getAttribute("aria-describedby")).toBe(SESSION_STATUS);
+		expect(document.getElementById(SESSION_STATUS)?.textContent).not.toBe("");
 	});
 
 	it("brings the default branch in, and shows a conflict with the way to a pull request", async () => {

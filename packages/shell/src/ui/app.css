@@ -167,6 +167,8 @@ code,
 .sidebar-body {
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr) auto;
+	/* Its own column, never sized by content that cannot wrap (the branch line). */
+	grid-template-columns: minmax(0, 1fr);
 }
 /*
  * The branch and the filter, one group as github.com's branch picker and "Go to file":
@@ -322,8 +324,8 @@ code,
 }
 /*
  * The branch as github.com's code view shows it above the tree, but a link, not a picker
- * (it is never a choice): one control high, the name truncating, "behind" and the
- * pull-request icon at the end, where arriving moves nothing before them.
+ * (it is never a choice): one control high, the name truncating only when it alone is
+ * too long, the pull-request icon at the end.
  */
 .branch-line {
 	display: flex;
@@ -338,16 +340,24 @@ code,
 	flex: 0 1 auto;
 	min-width: 0;
 }
-.branch-line .branch svg {
+.branch-line .branch svg,
+.branch-line .branch-propose {
 	flex-shrink: 0;
 }
-.branch-line .branch-extras {
+.branch-line .branch-propose {
+	margin-inline-start: auto;
+}
+/*
+ * Behind the default branch, a row of its own (owner, 2026-10-09: it had squeezed the
+ * name and run past the sidebar): the count as a link, Update beside it, one small
+ * control high whether or not Update shows.
+ */
+.branch-behind {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--base-size-8);
-	margin-inline-start: auto;
-	flex-shrink: 0;
-	white-space: nowrap;
+	min-block-size: var(--control-small-size);
 }
 /* The avatar is the button: its hover and focus take the avatar's round shape. */
 .topbar .account {
