@@ -216,8 +216,10 @@ describe("a workspace's instruments", () => {
 		await act(async () => {});
 		const heading = screen.getByRole("heading", { name: /^Used by/ });
 		expect(heading.textContent).toMatch(/^Used by\s*1\b/);
-		// The tree's wave1 is a tree item; the pane's is a link.
+		// The tree's wave1 is a tree item; the pane's is a link, and so is each step.
 		expect(screen.getByRole("link", { name: "wave1" })).toBeTruthy();
+		const step = screen.getByRole("link", { name: /^Ask\s*a\.alpha$/ });
+		expect(step.getAttribute("href")).toMatch(/&at=flow\.0\.ask$/);
 	});
 
 	it("count, and are listed apart, on a shared scale a question and an instrument both use", async () => {

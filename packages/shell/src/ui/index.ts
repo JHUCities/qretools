@@ -15,5 +15,10 @@ export {
 	StatusIcon,
 } from "./findings.tsx";
 export { AccountMenu, ThemeToggle, Wordmark } from "./header.tsx";
-export { Download, Outline, WorkspaceNotice } from "./instrument.tsx";
+export {
+	Download,
+	Outline,
+	OutlineLabel,
+	WorkspaceNotice,
+} from "./instrument.tsx";
 export { useSettled } from "./useSettled.ts";

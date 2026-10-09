@@ -50,6 +50,7 @@ import {
 	Download,
 	Findings,
 	Outline,
+	OutlineLabel,
 	type Related,
 	StatusBadge,
 	useSettled,
@@ -1138,7 +1139,10 @@ export function ForeignView({
  * hashchange opens, and which can open in a new tab). A draft has no address on GitHub
  * yet, so it opens with a button instead.
  */
-/** The instruments here that use a question, each once, as links to them. */
+/**
+ * The instruments here that use a file, each once, with each step that names it as a
+ * link that opens the instrument there (as its outline's items go to their steps).
+ */
 function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
 	const { dispatch } = useApp();
 	return uses.length === 0 ? (
@@ -1149,12 +1153,24 @@ function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
 				<li key={u.id}>
 					<FileLink
 						id={u.id}
-						at={u.at}
+						{...(u.places[0] !== undefined && { at: u.places[0].at })}
 						onOpen={() => dispatch({ kind: "fileOpened", id: u.id })}
 					>
 						{u.name}
 					</FileLink>
-					{u.places > 1 && <span className="quiet"> ({u.places} places)</span>}
+					<ul className="outline">
+						{u.places.map((p) => (
+							<li key={p.at}>
+								<FileLink
+									id={u.id}
+									at={p.at}
+									onOpen={() => dispatch({ kind: "fileOpened", id: u.id })}
+								>
+									<OutlineLabel label={p.label} />
+								</FileLink>
+							</li>
+						))}
+					</ul>
 				</li>
 			))}
 		</ul>

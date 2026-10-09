@@ -2,25 +2,58 @@
  * The instruments in this workspace that use a bank's file: a question they ask or read
  * (an option variable included) in a condition, a shared universe on the instrument or
  * a step, a shared scale an input's answers are on. Each instrument is listed once per
- * file, with how many places name it and the first of them. Derived from the
+ * file, with each step that names it, labelled as its outline labels it. Derived from the
  * instruments' own references, never stored on the file: a use is a fact about the
  * instrument (AGENTS: "asked" is derived).
  */
 import { inBank, type Range } from "@qretools/core";
-import { pathAt } from "@qretools/core/editor";
+import {
+	type OutlineItem,
+	type OutlinePart,
+	outlineOf,
+	pathAt,
+} from "@qretools/core/editor";
 import type { Evaluations } from "./evaluations.js";
 import type { Id, InstrumentEntry, Path } from "./model.js";
 
 export interface InstrumentUse {
 	readonly id: Id;
 	readonly name: string;
-	/** How many places in it name the file. */
-	readonly places: number;
-	/** The first of them, in document order. */
-	readonly first: Range;
-	/** The same place in the instrument's own terms (`flow.1.ask`), for a link to it. */
-	readonly at: string;
+	/** Each step that names the file, once, in document order. */
+	readonly places: readonly Place[];
 }
+
+/** A step of an instrument that names a file: where, and how its outline says it. */
+export interface Place {
+	/** The place in the instrument's own terms (`flow.1.ask`), for a link to it. */
+	readonly at: string;
+	/** The step's label, as the outline gives it ("Stop if `hh.consent = "2"`"). */
+	readonly label: readonly OutlinePart[];
+}
+
+/** Every outline item, at any depth, longest path first: the first prefix is the step. */
+const flat = (items: readonly OutlineItem[]): readonly OutlineItem[] =>
+	items.flatMap((i) => [i, ...flat(i.children)]);
+
+/** The outline item of the step holding `at`: the longest path that is it or holds it. */
+const stepOf = (
+	items: readonly OutlineItem[],
+	at: string,
+): OutlineItem | undefined =>
+	[...items]
+		.filter((i) => at === i.path || at.startsWith(`${i.path}.`))
+		.sort((a, b) => b.path.length - a.path.length)[0];
+
+/** A place outside the flow, as a reader would name it. */
+const outside = (at: string): readonly OutlinePart[] =>
+	at === "universe"
+		? [{ kind: "keyword", text: "Universe" }]
+		: at.startsWith("inputs.")
+			? [
+					{ kind: "keyword", text: "Input" },
+					{ kind: "code", text: at.split(".")[1] ?? "" },
+				]
+			: [{ kind: "text", text: at }];
 
 type Slices = Parameters<Evaluations["instrument"]>[0];
 
@@ -43,6 +76,7 @@ export function instrumentUses(
 		.sort((a, b) => a.name.localeCompare(b.name));
 	for (const e of instruments) {
 		const read = evaluations.instrument(model, e);
+		const items = flat(outlineOf(read.instrument.draft));
 		const byPath = new Map<Path, Range[]>();
 		for (const r of read.instrument.refs) {
 			if (r.kind !== "bank") continue;
@@ -52,17 +86,22 @@ export function instrumentUses(
 			byPath.set(path, [...(byPath.get(path) ?? []), r.range]);
 		}
 		for (const [path, ranges] of byPath) {
-			const [first] = ranges;
-			if (first === undefined) continue;
+			// One place per step: a name read twice in one condition is one place. What is
+			// outside the flow (the instrument's own universe, an input) says where it is.
+			const places = new Map<string, Place>();
+			for (const range of ranges) {
+				const at = pathAt(read.instrument.ranges, range[0]);
+				const step = stepOf(items, at);
+				const key = step?.path ?? at;
+				if (!places.has(key))
+					places.set(key, {
+						at,
+						label: step?.label ?? outside(at),
+					});
+			}
 			out.set(path, [
 				...(out.get(path) ?? []),
-				{
-					id: e.id,
-					name: e.name,
-					places: ranges.length,
-					first,
-					at: pathAt(read.instrument.ranges, first[0]),
-				},
+				{ id: e.id, name: e.name, places: [...places.values()] },
 			]);
 		}
 	}

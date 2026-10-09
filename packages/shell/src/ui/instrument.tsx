@@ -121,14 +121,7 @@ export function Outline({
 						type="button"
 						onClick={() => onTarget({ path: item.path, severity: "info" })}
 					>
-						{item.label.map((part, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: a label's parts are positional
-							<Fragment key={i}>
-								{/* Heard as words; the flex gap draws the space. */}
-								{i > 0 && " "}
-								<Part part={part} />
-							</Fragment>
-						))}
+						<OutlineLabel label={item.label} />
 					</Link>
 					{item.detail !== undefined && (
 						<Truncate
@@ -146,6 +139,21 @@ export function Outline({
 			))}
 		</ol>
 	);
+}
+
+/**
+ * A step's label as the outline says it ("Stop if `hh.consent = "2"`"): also how a
+ * question's "Used by" names the places an instrument reads it.
+ */
+export function OutlineLabel({ label }: { label: readonly OutlinePart[] }) {
+	return label.map((part, i) => (
+		// biome-ignore lint/suspicious/noArrayIndexKey: a label's parts are positional
+		<Fragment key={i}>
+			{/* Heard as words; the flex gap draws the space. */}
+			{i > 0 && " "}
+			<Part part={part} />
+		</Fragment>
+	));
 }
 
 function Part({ part }: { part: OutlinePart }) {

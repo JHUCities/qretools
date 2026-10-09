@@ -428,7 +428,13 @@ describe("the instruments a question is used by", () => {
 		instrumentsUsing(
 			instrumentUses(m, createEvaluations()),
 			claimOf(at(m, path)),
-		).map((u) => ({ name: u.name, places: u.places, first: u.first[0] }));
+		).map((u) => ({
+			name: u.name,
+			places: u.places.map((p) => ({
+				at: p.at,
+				label: p.label.map((part) => part.text).join(" "),
+			})),
+		}));
 	/** The workspace with an instrument of this source added, as a saved file would be. */
 	const withInstrument = (m: Model, name: string, source: string): Model => {
 		const [added] = update(m, { kind: "instrumentCreateOpened" });
@@ -446,16 +452,28 @@ describe("the instruments a question is used by", () => {
 		};
 	};
 
-	it("lists each instrument once, with its places, the first an ask", () => {
-		const m = loaded();
-		const households = at(m, HOUSEHOLDS) as InstrumentEntry;
-		const [use] = usesOf(m, CONSENT);
-		// Asked, then read in `stop:`: two places, the first the ask.
+	it("lists each instrument once, with each step that names it, as its outline says it", () => {
+		const [use] = usesOf(loaded(), CONSENT);
+		// Asked, then read in `stop:`.
 		expect(use).toEqual({
 			name: "households",
-			places: 2,
-			first: households.source.indexOf("hh.consent"),
+			places: [
+				{ at: "flow.1.ask", label: "Ask hh.consent" },
+				{ at: "flow.2.stop", label: expect.stringMatching(/^Stop/) },
+			],
 		});
+	});
+
+	it("lists a step once however often it names the file, and a check by its ask", () => {
+		const m = withInstrument(
+			loaded(),
+			"twice",
+			"name: twice\nuses:\n  hh: ../households\nflow:\n  - ask: hh.size\n    checks:\n      - ensure: hh.size > 0 and hh.size < 30\n        severity: info\n        message: Is that right?\n",
+		);
+		const use = usesOf(m, "households/questions/household/size.yaml").find(
+			(u) => u.name === "twice",
+		);
+		expect(use?.places).toEqual([{ at: "flow.0.ask", label: "Ask hh.size" }]);
 	});
 
 	it("links each to its first place, which a link opens it at", () => {
@@ -464,7 +482,7 @@ describe("the instruments a question is used by", () => {
 			instrumentUses(m, createEvaluations()),
 			claimOf(at(m, CONSENT)),
 		);
-		expect(use?.at).toBe("flow.1.ask");
+		expect(use?.places[0]?.at).toBe("flow.1.ask");
 		const households = at(m, HOUSEHOLDS) as InstrumentEntry;
 		const [opened, cmds] = update(m, {
 			kind: "hashChanged",
@@ -488,7 +506,7 @@ describe("the instruments a question is used by", () => {
 			'name: news\nuses:\n  b: ../bank\n  again: ../bank\nflow:\n  - if: again.news_sources_1 = "1"\n    then:\n      - say: Reads the paper.\n',
 		);
 		expect(usesOf(m, "bank/questions/examples/news_sources.yaml")).toEqual([
-			{ name: "news", places: 1, first: expect.any(Number) },
+			{ name: "news", places: [expect.objectContaining({ at: "flow.0.if" })] },
 		]);
 	});
 
