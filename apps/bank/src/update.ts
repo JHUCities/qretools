@@ -34,7 +34,9 @@ import {
 import {
 	addSpace,
 	applyEdits,
+	applyLivelit,
 	labelledSource,
+	livelitsOf,
 	locate,
 	mentionAt,
 	quoteCode,
@@ -245,6 +247,26 @@ function step(model: Model, msg: Msg): Step {
 						{ ...model, theme: msg.theme },
 						[{ kind: "applyTheme", theme: msg.theme }],
 					];
+
+		case "livelitChosen": {
+			// Like typing: only the open file, which the author can edit.
+			const q = current(model);
+			if (!q || q.id !== msg.id || q.kind !== "question") return [model, []];
+			const parsed = parseSurface(q.source, envIn(model, q.bank));
+			const livelit = livelitsOf(q.source, parsed).find(
+				(l) => l.id === msg.livelit,
+			);
+			const written =
+				livelit === undefined
+					? undefined
+					: applyLivelit(q.source, livelit, msg.value);
+			if (written === undefined) return [model, []];
+			// Focus follows the choice into the source: the caret after what was written.
+			return persist([
+				withSource(model, q.id, written.text),
+				[{ kind: "revealRange", range: [written.caret, written.caret] }],
+			]);
+		}
 
 		case "fixApplied": {
 			// Like typing: only the open file, which the author can edit. A path the text
