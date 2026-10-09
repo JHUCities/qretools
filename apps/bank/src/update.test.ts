@@ -1,5 +1,5 @@
 import { EMPTY_ENV, evaluate, ok } from "@qretools/core";
-import { locate } from "@qretools/core/editor";
+import { createFor, locate } from "@qretools/core/editor";
 import { toDiagnostics } from "@qretools/editor";
 import type { File } from "@qretools/shell";
 import { formatLink } from "@qretools/shell";
@@ -327,6 +327,46 @@ describe("a quick fix", () => {
 		};
 		const [, cmds] = update(m, { kind: "fixApplied", id: 1, fix: create });
 		expect(cmds.some((c) => c.kind === "revealRange")).toBe(false);
+	});
+
+	it("makes a new shared entry from a field's picker, then names it there, for every kind", () => {
+		const cases = [
+			["concept", "concept", "concept:\n", "concept: fresh_one\n"],
+			["universe", "universe", "universe:\n", "universe: fresh_one\n"],
+			[
+				"instruction",
+				"instruction",
+				"instruction:\n",
+				"instruction: fresh_one\n",
+			],
+			[
+				"unit",
+				"number.unit",
+				"number:\n  unit:\n",
+				"number:\n  unit: fresh_one\n",
+			],
+			["scale", "responses", "responses:\n", "responses: fresh_one\n"],
+		] as const;
+		for (const [kind, path, before, after] of cases) {
+			const m = update(fresh(), {
+				kind: "questionCreated",
+				text: `name: q\n${before}`,
+			})[0];
+			const [named] = run(
+				m,
+				{ kind: "fixApplied", id: 1, fix: createFor(kind, path) },
+				{ kind: "schemeNameChanged", name: "fresh_one" },
+				{ kind: "schemeTextChanged", text: "Some words" },
+				{ kind: "schemeNamingConfirmed" },
+			);
+			expect([kind, named.local.questions[1]?.source]).toEqual([
+				kind,
+				`name: q\n${after}`,
+			]);
+			expect(
+				Object.values(named.local.schemes).map((e) => [e.kind, e.name]),
+			).toContainEqual([kind, "fresh_one"]);
+		}
 	});
 
 	it("does nothing when its place is gone, or no file is open", () => {
