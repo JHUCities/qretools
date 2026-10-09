@@ -540,6 +540,38 @@ describe("GitHub adapter (Octokit)", () => {
 	});
 });
 
+describe("bringing the default branch into the author's", () => {
+	it("merges it with GitHub's own message, once, and says what happened", async () => {
+		for (const [status, answer] of [
+			[201, "merged"],
+			[204, "upToDate"],
+			[409, "conflict"],
+		] as const) {
+			const { s, seen } = store(() =>
+				json(status === 409 ? { message: "Merge conflict" } : {}, status),
+			);
+			expect(
+				await s.updateFromDefault({ ...target, defaultBranch: "trunk" }),
+			).toEqual({ ok: true, value: answer });
+			// A merge is a write: one request, never retried.
+			expect(seen).toHaveLength(1);
+			expect(seen[0]?.method).toBe("POST");
+			expect(seen[0]?.url).toMatch(
+				/\/repos\/JHUCities\/bas-question-bank\/merges$/,
+			);
+			expect(seen[0]?.body).toEqual({ base: "qretools-iain", head: "trunk" });
+		}
+	});
+
+	it("reports anything else as a failure", async () => {
+		const { s } = store(() => json({ message: "Not Found" }, 404));
+		expect(await s.updateFromDefault(target)).toMatchObject({
+			ok: false,
+			error: { kind: "http", status: 404 },
+		});
+	});
+});
+
 describe("loading a workspace", () => {
 	/** A repository with one branch per entry: each a folder tree of path to text. */
 	function workspaceRepo({

@@ -28,12 +28,16 @@ export interface Failure {
 		/** The GitHub App signed in with is not installed on the repository: no writes. */
 		| "notInstalled"
 		/** The app declined before any request was made. */
-		| "refused";
+		| "refused"
+		/** The author's branch and the default branch changed the same lines: a pull request resolves it. */
+		| "conflict";
 	readonly message: string;
 	readonly hint?: string;
 	/** GitHub's or a library's own words, kept under the plain message. */
 	readonly detail?: string;
 	readonly status?: number;
+	/** The one thing to do about it, where that is a page on GitHub. */
+	readonly link?: { readonly label: string; readonly href: string };
 }
 
 export interface BankSettings {
@@ -235,7 +239,16 @@ export interface Store {
 	): Promise<Result<Committed, CommitFailure>>;
 	/** Create the target branch at the default branch's head; an existing branch is success. */
 	ensureBranch(target: BranchTarget): Promise<Result<void, Failure>>;
+	/**
+	 * Bring the default branch into the target branch, as git merges: `merged` (a merge
+	 * commit on the branch), `upToDate` (nothing to bring), or `conflict` (they changed
+	 * the same lines; nothing is written). A conflict is an answer, not a failure.
+	 */
+	updateFromDefault(target: BranchTarget): Promise<Result<Updated, Failure>>;
 }
+
+/** What bringing the default branch into the author's branch did. */
+export type Updated = "merged" | "upToDate" | "conflict";
 
 /**
  * One file in a change set. `text: null` deletes it. `id` is the caller's working

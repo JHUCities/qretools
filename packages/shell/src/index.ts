@@ -54,5 +54,6 @@ export {
 	type Store,
 	sameBank,
 	type TaggedBank,
+	type Updated,
 	type Who,
 } from "./storage.ts";

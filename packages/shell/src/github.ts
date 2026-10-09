@@ -36,6 +36,7 @@ import {
 	type LoadedWorkspace,
 	type Store,
 	type TaggedBank,
+	type Updated,
 } from "./storage.ts";
 
 const GitHub = Octokit.plugin(retry, throttling);
@@ -720,6 +721,30 @@ export const makeGitHubStore = (
 		},
 
 		ensureBranch,
+
+		/**
+		 * GitHub's merges API, as its "Update branch" does: the default branch merged into
+		 * the author's, with GitHub's own message ("Merge main into …"). Run once: a merge
+		 * is a write.
+		 */
+		async updateFromDefault(target): Promise<Result<Updated, Failure>> {
+			const merged = await run(() =>
+				octokit.request("POST /repos/{owner}/{repo}/merges", {
+					owner,
+					repo,
+					base: target.branch,
+					head: target.defaultBranch,
+					...ONCE,
+				}),
+			);
+			// Octokit's types know only 201; GitHub answers 204 when there is nothing to merge.
+			if (merged.ok) {
+				const status: number = merged.value.status;
+				return ok(status === 204 ? "upToDate" : "merged");
+			}
+			// 409 is GitHub's "Merge conflict": the two changed the same lines.
+			return merged.error.status === 409 ? ok("conflict") : merged;
+		},
 	};
 };
 

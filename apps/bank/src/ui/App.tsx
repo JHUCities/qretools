@@ -69,6 +69,7 @@ import {
 } from "../tree.js";
 import {
 	bankLoading,
+	compareUrl,
 	folderOfPath,
 	instrumentNameProblem,
 	movedPath,
@@ -504,7 +505,18 @@ export function App() {
 								key={i}
 								variant="critical"
 								title={plainText(f.message)}
-								description={failureDescription(f)}
+								description={
+									f.link === undefined ? (
+										failureDescription(f)
+									) : (
+										<>
+											{failureDescription(f)}{" "}
+											<ExternalLink href={f.link.href}>
+												{f.link.label}
+											</ExternalLink>
+										</>
+									)
+								}
 								onDismiss={() =>
 									dispatch({ kind: "failureDismissed", index: i })
 								}
@@ -806,17 +818,19 @@ function Account({ model }: { model: Model }) {
 }
 
 /**
- * The author's branch above the tree, then what it holds that the bank does not, as
- * links to GitHub, which does the rest: the pull request, review, updating the branch,
- * merging.
- * The app states facts and links; it never recreates GitHub's interface.
+ * The author's branch above the tree, then how it stands against the default branch:
+ * behind it, with "Update" to bring its changes in (a merge on GitHub; a conflict is
+ * left to a pull request), and anything to propose, as a link to the pull request
+ * form. Review and merging stay on GitHub.
  */
 function BranchLine({ model }: { model: Model }) {
+	const { dispatch } = useApp();
 	const { session, loading } = model;
 	if (session.kind !== "connected") return null;
+	const blocked = writeBlocked(model);
 	const branch = ownBranch(session.login);
 	const exists = loading.kind === "loaded" && loading.from === "branch";
-	const compare = `${repoUrl(model)}/compare/${session.defaultBranch}...${encodeURI(branch)}?expand=1`;
+	const compare = compareUrl(model.settings, session);
 	const loaded = loading.kind === "loaded" ? loading : undefined;
 	// The same icon, gap and text either way, so the first save changes nothing but the link.
 	const name = (
@@ -852,9 +866,27 @@ function BranchLine({ model }: { model: Model }) {
 			{/* At the line's end once the bank has loaded: the name never moves for them. */}
 			<span className="branch-extras">
 				{loaded !== undefined && loaded.behindBy > 0 && (
-					<ExternalLink href={compare} muted>
-						{loaded.behindBy} behind {session.defaultBranch}
-					</ExternalLink>
+					<>
+						{/* What changed, before updating: the compare page. */}
+						<ExternalLink href={compare} muted>
+							{loaded.behindBy} behind {session.defaultBranch}
+						</ExternalLink>
+						{/* Only once the branch exists: the first save makes it up to date. */}
+						{exists && (
+							<Button
+								size="small"
+								variant="invisible"
+								inactive={blocked !== undefined}
+								onClick={() =>
+									blocked === undefined &&
+									dispatch({ kind: "updateFromDefaultRequested" })
+								}
+							>
+								Update
+								<VisuallyHidden> from {session.defaultBranch}</VisuallyHidden>
+							</Button>
+						)}
+					</>
 				)}
 				{/*
 				 * Something to propose: the pull-request icon with a dot, as VS Code badges

@@ -1101,6 +1101,7 @@ function step(model: Model, msg: Msg): Step {
 						...model,
 						loading: { kind: "failed", failure: msg.result.error } as const,
 						pendingLink: undefined,
+						updating: undefined,
 					}),
 					[],
 				];
@@ -1138,6 +1139,8 @@ function step(model: Model, msg: Msg): Step {
 				nextId,
 				loading: { kind: "loaded", from, proposable, behindBy } as const,
 				pendingLink: undefined,
+				// An update from the default branch ends here, with the branch as it now is.
+				updating: undefined,
 				// What GitHub wouldn't give as text is left out, and said once: this load's
 				// notice replaces an earlier load's, and a load with none clears it.
 				failures: [
@@ -1151,6 +1154,62 @@ function step(model: Model, msg: Msg): Step {
 					? [loaded, []]
 					: openLink(loaded, model.pendingLink);
 			return persist([opened, cmds]);
+		}
+
+		case "updateFromDefaultRequested": {
+			// Only an author's branch that exists can be brought up to date (the first save
+			// makes it from the default branch), and never while a write is under way.
+			const { session, loading } = model;
+			if (
+				session.kind !== "connected" ||
+				loading.kind !== "loaded" ||
+				loading.from !== "branch" ||
+				writeBlocked(model) !== undefined
+			)
+				return [model, []];
+			return [
+				{ ...model, updating: true },
+				[
+					{
+						kind: "updateFromDefault",
+						target: targetOf(model.settings, session),
+					},
+				],
+			];
+		}
+
+		case "updatedFromDefault": {
+			const done = compact({ ...model, updating: undefined });
+			if (model.session.kind !== "connected") return [done, []];
+			if (!msg.result.ok)
+				return [
+					{ ...done, failures: [...done.failures, msg.result.error] },
+					[],
+				];
+			if (msg.result.value === "conflict") {
+				const { defaultBranch } = model.session;
+				return [
+					{
+						...done,
+						failures: [
+							...done.failures,
+							{
+								kind: "conflict",
+								message: `Your branch conflicts with updates to ${defaultBranch}.`,
+								hint: "Open a pull request with your changes, and the bank's owner resolves the conflicts.",
+								link: {
+									label: "Open a pull request",
+									href: compareUrl(model.settings, model.session),
+								},
+							},
+						],
+					},
+					[],
+				];
+			}
+			// Merged, or nothing to bring: reload, still updating, so no save is checked
+			// against the branch as it was before the merge.
+			return step(model, { kind: "bankReloadRequested" });
 		}
 
 		case "bankReloadRequested":
@@ -1634,6 +1693,7 @@ function stale(model: Model, msg: Msg): boolean {
 		model.session.kind === "anonymous" || model.session.kind === "failed";
 	switch (msg.kind) {
 		case "workspaceLoaded":
+		case "updatedFromDefault":
 		case "committed":
 		case "fileReloaded":
 		case "foreignLoaded":
@@ -1995,6 +2055,8 @@ export function writeBlocked(model: Model): string | undefined {
 	if (model.session.access.kind === "readOnly") return "Read access only";
 	if (model.session.access.kind === "notInstalled")
 		return "The app can't save to this bank";
+	if (model.updating)
+		return `Bringing ${model.session.defaultBranch} into your branch…`;
 	if (model.loading.kind === "failed") return "The bank didn't load";
 	if (model.loading.kind !== "loaded") return "Loading the bank…";
 	// One commit at a time: two in flight naming the same file would make the second
@@ -2041,6 +2103,16 @@ export function sessionStatus(model: Model): string | undefined {
 					: writeBlocked(model);
 	}
 }
+
+/**
+ * GitHub's compare page for the author's branch against the default branch: the pull
+ * request form once there is something to propose.
+ */
+export const compareUrl = (
+	settings: BankSettings,
+	session: { readonly login: string; readonly defaultBranch: string },
+): string =>
+	`https://github.com/${settings.owner}/${settings.repo}/compare/${session.defaultBranch}...${encodeURI(ownBranch(session.login))}?expand=1`;
 
 /** The author's own branch: each author works apart and proposes with a pull request. */
 const BRANCH_PREFIX = "qretools-";

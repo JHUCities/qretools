@@ -45,7 +45,6 @@ function renderWorkspace(files = FILES) {
 					defaultBranch: "main",
 				}),
 			),
-		// A bank in another repository an instrument names: not there in these tests.
 		// A bank in another repository an instrument names: one question, `far`.
 		loadBankAt: () =>
 			Promise.resolve(

@@ -185,6 +185,18 @@ export function createEffects(deps: Deps): Effects {
 					);
 					return;
 				}
+				case "updateFromDefault": {
+					const s = storeFor(cmd.target);
+					if (!s)
+						return dispatch({
+							kind: "updatedFromDefault",
+							result: err(NO_TOKEN),
+						});
+					s.updateFromDefault(cmd.target).then((result) =>
+						dispatch({ kind: "updatedFromDefault", result }),
+					);
+					return;
+				}
 				case "readFile": {
 					const s = storeFor(cmd.target);
 					if (!s)

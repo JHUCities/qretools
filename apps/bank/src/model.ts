@@ -45,6 +45,7 @@ import type {
 	Link,
 	LoadedWorkspace,
 	TaggedBank,
+	Updated,
 	Who,
 } from "@qretools/shell";
 import { bankText, sameBank } from "@qretools/shell";
@@ -299,6 +300,11 @@ export interface Model {
 	readonly settings: BankSettings;
 	readonly loading: Bank;
 	readonly failures: readonly Failure[];
+	/**
+	 * The default branch is being brought into the author's: from the request until the
+	 * reload after it lands, so no save is checked against the branch as it was before.
+	 */
+	readonly updating?: true;
 	readonly ddiSchema: DdiSchema;
 	/** Light or dark as chosen on this device, or the system's (until the toggle is used). */
 	readonly theme: ThemeChoice;
@@ -433,6 +439,12 @@ export type Msg =
 	  }
 	/** Read the bank again, as the same session: a retry after a failed load. */
 	| { readonly kind: "bankReloadRequested" }
+	/** Bring the default branch's changes into the author's branch ("Update"). */
+	| { readonly kind: "updateFromDefaultRequested" }
+	| {
+			readonly kind: "updatedFromDefault";
+			readonly result: Result<Updated, Failure>;
+	  }
 	/** Sign out now, keeping only the author's own work (a failed session's way out). */
 	| { readonly kind: "disconnected" }
 	/** "Sign out" from the account menu: asks first when there is unsaved work. */
@@ -479,6 +491,7 @@ export type Cmd =
 	| { readonly kind: "connect"; readonly repo: BankRef }
 	/** Read every file of the workspace, from the author's branch or, before it exists, the bank's. */
 	| { readonly kind: "loadWorkspace"; readonly target: BranchTarget }
+	| { readonly kind: "updateFromDefault"; readonly target: BranchTarget }
 	| {
 			readonly kind: "readFile";
 			readonly id: Id;
@@ -692,6 +705,7 @@ export function signedOut(model: Model): Model {
 		screen: { kind: "blank" } as const,
 		cursor: undefined,
 		pendingLink: undefined,
+		updating: undefined,
 		browser: {
 			filter: model.browser.filter,
 			expanded: model.browser.expanded,
