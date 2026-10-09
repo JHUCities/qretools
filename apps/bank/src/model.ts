@@ -497,6 +497,8 @@ export type Cmd =
 	/** Read every file of the workspace, from the author's branch or, before it exists, the bank's. */
 	| { readonly kind: "loadWorkspace"; readonly target: BranchTarget }
 	| { readonly kind: "updateFromDefault"; readonly target: BranchTarget }
+	/** Take the link out of the address, adding no history entry and loading nothing. */
+	| { readonly kind: "clearLink" }
 	| {
 			readonly kind: "readFile";
 			readonly id: Id;

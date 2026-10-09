@@ -1613,7 +1613,26 @@ function withSettings(model: Model, settings: BankSettings): Step {
 				`Unsaved work in this tab for ${bankText(model.settings)} was set aside.`,
 			)
 		: [model, []];
-	return [{ ...kept, settings }, [...cmds, { kind: "saveSettings", settings }]];
+	// A link waiting for another bank than the one chosen on the form is dropped, and
+	// taken out of the address first: sign-in saves the address to come back to, and
+	// would bring it back to be refused once this bank loads. A link to the chosen
+	// bank still opens after signing in.
+	const pending = model.pendingLink;
+	const linked = pending === undefined ? undefined : parseBank(pending.repo);
+	const elsewhere =
+		linked !== undefined && !(linked.ok && sameBank(linked.value, settings));
+	return [
+		compact({
+			...kept,
+			settings,
+			...(elsewhere && { pendingLink: undefined }),
+		}),
+		[
+			...(elsewhere ? [{ kind: "clearLink" } as const] : []),
+			...cmds,
+			{ kind: "saveSettings", settings },
+		],
+	];
 }
 
 /** The app declined before any request: say so on the file. */

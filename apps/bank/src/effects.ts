@@ -276,6 +276,16 @@ export function createEffects(deps: Deps): Effects {
 					);
 					return;
 				}
+				case "clearLink":
+					// Not location.replace: a URL without a fragment is a full navigation,
+					// which would reload the page just as sign-in leaves for GitHub.
+					// replaceState loads nothing, fires no hashchange and adds no entry.
+					history.replaceState(
+						null,
+						"",
+						`${location.pathname}${location.search}`,
+					);
+					return;
 				case "setLink":
 					// The browser keeps the history: setting the hash adds an entry, replace()
 					// does not. Writing the address it already shows would add a duplicate.

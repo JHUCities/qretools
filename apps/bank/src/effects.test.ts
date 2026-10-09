@@ -218,3 +218,29 @@ describe("a reveal in a file only now opening", () => {
 		]);
 	});
 });
+
+describe("taking the link out of the address", () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	it("replaces the history entry, never navigating (which would reload mid-sign-in)", () => {
+		const replaceState = vi.fn();
+		const replace = vi.fn();
+		const assign = vi.fn();
+		vi.stubGlobal("history", { replaceState });
+		vi.stubGlobal("location", {
+			pathname: "/app/",
+			search: "?x=1",
+			hash: "#repo=o%2Fr&branch=main",
+			replace,
+			assign,
+		});
+		const effects = createEffects({
+			makeStore: () => ({}) as Store,
+			credentialStore: { load: () => null, save: () => {}, clear: () => {} },
+		});
+		effects.exec({ kind: "clearLink" }, () => {});
+		expect(replaceState).toHaveBeenCalledWith(null, "", "/app/?x=1");
+		expect(replace).not.toHaveBeenCalled();
+		expect(assign).not.toHaveBeenCalled();
+	});
+});
