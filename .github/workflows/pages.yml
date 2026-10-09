@@ -31,14 +31,15 @@ jobs:
         uses: actions/configure-pages@v6
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
-      - run: pnpm --dir worker install --frozen-lockfile
+      - run: pnpm --dir worker install --frozen-lockfile --ignore-workspace
       - run: pnpm run check:worker
       # The path Pages serves from: "/qretools/" on github.io, "/" under a custom domain.
       - run: echo "base=[$BASE_PATH]" && pnpm run build
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+      # The app builds into its own package (apps/bank) since the monorepo split.
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: dist
+          path: apps/bank/dist
       - id: deployment
         uses: actions/deploy-pages@v5
