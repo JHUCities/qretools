@@ -6,6 +6,10 @@ import { parseSurface } from "./parse.ts";
 
 const env: Env = {
 	...EMPTY_ENV,
+	concepts: { tenure: { label: "Housing tenure" } },
+	universes: { renters: { text: "Respondents who rent" } },
+	instructions: { select_one: { text: "Select one" } },
+	units: { days: { label: "days" } },
 	scales: {
 		agree4: {
 			codes: [
@@ -76,5 +80,49 @@ describe("what the picker offers, and what choosing writes", () => {
 			label: "New shared scale…",
 			create: { scheme: "scale", name: "", text: "", path: "responses" },
 		});
+	});
+});
+
+describe("pickers for every field that names a shared entry", () => {
+	it("sit at a concept, universe and instruction, empty or named, never at prose", () => {
+		const text = `${HEAD}concept:\nuniverse: renters\ninstruction: Select one\nopen: {}\n`;
+		expect(at(text).map((l) => [l.kind, l.path, l.current])).toEqual([
+			["concept", "concept", undefined],
+			["universe", "universe", "renters"],
+		]);
+	});
+
+	it("sit at a unit inside `number:`, after its value", () => {
+		const text = `${HEAD}number:\n  min: 0\n  unit: days\n`;
+		expect(at(text)).toMatchObject([
+			{
+				kind: "unit",
+				path: "number.unit",
+				at: `${HEAD}number:\n  min: 0\n  unit: days`.length,
+				current: "days",
+			},
+		]);
+		const empty = `${HEAD}number:\n  unit:\n`;
+		expect(at(empty)).toMatchObject([
+			{
+				kind: "unit",
+				path: "number.unit",
+				at: `${HEAD}number:\n  unit:`.length,
+			},
+		]);
+	});
+
+	it("offer each kind's words, and write a nested name where it is", () => {
+		expect(choicesOf(env, "concept")).toEqual([
+			{ name: "tenure", detail: "Housing tenure" },
+		]);
+		expect(choicesOf(env, "universe")).toEqual([
+			{ name: "renters", detail: "Respondents who rent" },
+		]);
+		expect(choicesOf(env, "unit")).toEqual([{ name: "days", detail: "days" }]);
+		const fix = useName("number.unit", "days");
+		expect(
+			fix.kind === "edit" && applyEdits(`${HEAD}number:\n  unit:\n`, fix.edits),
+		).toBe(`${HEAD}number:\n  unit: days\n`);
 	});
 });

@@ -18,8 +18,14 @@ import {
 } from "./env.ts";
 import { scaleSummary } from "./schema.ts";
 
-/** The kinds a field can be picked for. Scales first; the others follow. */
-export const LIVELIT_KINDS: readonly NamedScheme[] = ["scale"];
+/** The kinds a field can be picked for: every field that names a shared entry. */
+export const LIVELIT_KINDS: readonly NamedScheme[] = [
+	"concept",
+	"universe",
+	"scale",
+	"unit",
+	"instruction",
+];
 
 export interface Livelit {
 	readonly kind: NamedScheme;
