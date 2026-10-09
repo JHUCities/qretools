@@ -62,8 +62,12 @@ describe("completion in an instrument, as CodeMirror asks for it", () => {
 describe("a coded answer's codes, as CodeMirror asks for them", () => {
 	const STOP = "uses:\n  hh: ./hh\nflow:\n  - stop: hh.own = ";
 
-	it("opens on its own once a quote is typed, not after the space, and replaces the quotes", () => {
-		expect(ask(STOP, false)).toBeNull();
+	it("opens on its own where a code goes, and replaces the quotes once one is typed", () => {
+		// Right after the operator (owner, 2026-10-09: it had waited for a quote).
+		expect(ask(STOP, false)?.options.map((o) => o.label)).toEqual([
+			'"1"',
+			'"2"',
+		]);
 		// closeBrackets pairs the quote: the caret is between them.
 		const doc = `${STOP}""`;
 		const paired = instrumentSource(() => ({ hh }))(
@@ -86,6 +90,15 @@ describe("a coded answer's codes, as CodeMirror asks for them", () => {
 		expect(narrows.test("hh.x")).toBe(false);
 		// Asked for, they're offered before the quote too.
 		expect(ask(STOP, true)?.options).toHaveLength(2);
+	});
+});
+
+describe("where no code goes", () => {
+	it("opens nothing unasked: a name that isn't coded, after a set's brace, or before one", () => {
+		const flow = "uses:\n  hh: ./hh\nflow:\n  - stop: ";
+		expect(ask(`${flow}hh.size = `, false)).toBeNull();
+		expect(ask(`${flow}'hh.own in {"1"} `, false)).toBeNull();
+		expect(ask(`${flow}hh.own in `, false)).toBeNull();
 	});
 });
 

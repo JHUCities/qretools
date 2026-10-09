@@ -34,12 +34,14 @@ export function instrumentSource(
 			context.pos,
 			banks(),
 		);
-		// Unasked, only once a word is being typed: never a list after every space. A
-		// code's word starts at its quote, so typing `"` opens the codes.
+		// Unasked, only once a word is being typed: never a list after every space. The
+		// one exception is where a code goes (after `=`, `<>`, `{` or `, ` beside a coded
+		// answer, owner 2026-10-09): the codes open there at once.
+		const codes = found?.options.every((o) => o.kind === "code") ?? false;
 		if (
 			found === undefined ||
 			found.options.length === 0 ||
-			(!context.explicit && found.from === context.pos)
+			(!context.explicit && found.from === context.pos && !codes)
 		)
 			return null;
 		return {
@@ -55,7 +57,7 @@ export function instrumentSource(
 			),
 			// CodeMirror narrows the list itself while a name or a code is typed, and
 			// asks again once the text is neither.
-			validFor: found.options.every((o) => o.kind === "code") ? CODE : NAME,
+			validFor: codes ? CODE : NAME,
 		};
 	};
 }
