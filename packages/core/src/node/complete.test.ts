@@ -141,6 +141,22 @@ describe("completion in an instrument", async () => {
 		expect(pick("  - stop: county = |\n", '"1"')).toBe(
 			'  - stop: county = "1"\n',
 		);
+		// Touching the operator or a comma, a code brings its own space; never a second one.
+		for (const text of [
+			"  - stop: hh.tenure =|\n",
+			'  - stop: hh.tenure ="|"\n',
+			'  - stop: hh.tenure ="|\n',
+		])
+			expect(pick(text)).toBe('  - stop: hh.tenure = "2"\n');
+		expect(pick("  - stop: 'hh.tenure in {\"1\",|}'\n")).toBe(
+			'  - stop: \'hh.tenure in {"1", "2"}\'\n',
+		);
+		expect(pick("  - stop: 'hh.tenure in {|}'\n")).toBe(
+			"  - stop: 'hh.tenure in {\"2\"}'\n",
+		);
+		expect(pick('  - stop: "hh.tenure in {\\"1\\",|}"\n')).toBe(
+			'  - stop: "hh.tenure in {\\"1\\", \\"2\\"}"\n',
+		);
 		// Inside a double-quoted value its quotes are escaped.
 		expect(pick('  - stop: "hh.tenure in {\\"1\\", |}"\n')).toBe(
 			'  - stop: "hh.tenure in {\\"1\\", \\"2\\"}"\n',

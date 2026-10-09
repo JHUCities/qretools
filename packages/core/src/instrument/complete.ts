@@ -80,6 +80,9 @@ export function instrumentCompletion(
 						banks,
 						word.codesOf,
 						isScalar(value) && value.type === "QUOTE_DOUBLE",
+						// Touching the operator or a comma (the list opens as `=` is typed): a
+						// space before the code, as it's written. After `{` or `(`, none.
+						/[^\s{(]/.test(source[word.from - 1] ?? " "),
 					);
 	return {
 		from: word.from,
@@ -261,27 +264,31 @@ function slotBefore(tokens: readonly Token[]): Slot | undefined {
 /**
  * The codes of the coded answer a slot names, each with its label, but those already in
  * its set; none for a name that isn't coded or that nothing has. A code is a string in
- * the condition language; inside a double-quoted YAML value its quotes are escaped.
+ * the condition language; inside a double-quoted YAML value its quotes are escaped, and
+ * where it would touch what comes before (`spaced`) a space goes first.
  */
 function codes(
 	source: string,
 	banks: Readonly<Record<string, BankScope>>,
 	{ name, taken }: Slot,
 	escaped: boolean,
+	spaced: boolean,
 ): readonly CompletionOption[] {
 	const parsed = parseInstrument(source, banks);
 	const type = (parsed.names.get(name) ?? parsed.scope.get(name))?.type;
 	if (type?.kind !== "code") return [];
 	return type.codes
 		.filter((c) => !taken.includes(c.code))
-		.map(
-			(c): CompletionOption => ({
+		.map((c): CompletionOption => {
+			const quoted = escaped ? `\\"${c.code}\\"` : `"${c.code}"`;
+			const apply = spaced ? ` ${quoted}` : quoted;
+			return {
 				label: `"${c.code}"`,
 				kind: "code",
 				detail: c.label,
-				...(escaped && { apply: `\\"${c.code}\\"` }),
-			}),
-		);
+				...(apply !== `"${c.code}"` && { apply }),
+			};
+		});
 }
 
 /** Every bank question, `alias.name`, with its title or text. */
