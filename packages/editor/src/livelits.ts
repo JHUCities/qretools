@@ -21,20 +21,22 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 import triangleDownSvg from "@primer/octicons/build/svg/triangle-down-16.svg?raw";
-import { type Fix, SCHEME_NAME } from "@qretools/core";
+import type { Fix } from "@qretools/core";
 import {
 	type Choice,
-	createFor,
 	type Livelit,
-	useName,
+	ownChoices,
+	type Source,
 } from "@qretools/core/editor";
 
 /** What the app gives the editor so it can offer livelits: read when a picker opens. */
 export interface LivelitHost {
-	/** What there is to choose for a kind, from the open file's environment as it is now. */
-	choices(kind: Livelit["kind"]): readonly Choice[];
-	/** Apply what was chosen, as a fix is applied. */
-	choose(fix: Fix): void;
+	/** What a source offers, from the open file's environment (or the app) as it is now. */
+	choices(source: Source): readonly Choice[];
+	/** Write `value` at the livelit, which the app finds again by its id in the text as it is. */
+	choose(livelit: Livelit, value: string): void;
+	/** One of the livelit's actions ("New shared scale…"), applied as a fix is. */
+	act(fix: Fix): void;
 }
 
 /** The fields that can be picked for, as the core gave them for the text as it is now. */
@@ -58,6 +60,10 @@ const livelitField = StateField.define<readonly Livelit[]>({
 			field: [
 				tr.changes.mapPos(l.field[0], -1),
 				tr.changes.mapPos(l.field[1], 1),
+			] as const,
+			span: [
+				tr.changes.mapPos(l.span[0], -1),
+				tr.changes.mapPos(l.span[1], 1),
 			] as const,
 		}));
 	},
@@ -84,8 +90,8 @@ class PickerButton extends WidgetType {
 	}
 	override eq(other: PickerButton): boolean {
 		return (
-			other.livelit.kind === this.livelit.kind &&
-			other.livelit.path === this.livelit.path &&
+			other.livelit.id === this.livelit.id &&
+			other.livelit.label === this.livelit.label &&
 			other.empty === this.empty &&
 			other.expanded === this.expanded
 		);
@@ -96,9 +102,8 @@ class PickerButton extends WidgetType {
 		button.className = this.empty
 			? "cm-livelit cm-livelit-empty"
 			: "cm-livelit";
-		const what = SCHEME_NAME[this.livelit.kind];
-		button.setAttribute("aria-label", `Choose a ${what}`);
-		button.title = `Choose a ${what} (${KEYS})`;
+		button.setAttribute("aria-label", this.livelit.label);
+		button.title = `${this.livelit.label} (${KEYS})`;
 		button.setAttribute("aria-haspopup", "dialog");
 		button.setAttribute("aria-expanded", String(this.expanded));
 		// The caret stays where it is: the button opens the picker, it isn't text.
@@ -106,9 +111,7 @@ class PickerButton extends WidgetType {
 		button.addEventListener("click", () => {
 			const livelit = view.state
 				.field(livelitField)
-				.find(
-					(l) => l.kind === this.livelit.kind && l.path === this.livelit.path,
-				);
+				.find((l) => l.id === this.livelit.id);
 			if (livelit !== undefined)
 				view.dispatch({ effects: openPicker.of(livelit) });
 		});
@@ -129,8 +132,8 @@ const buttons = EditorView.decorations.compute(
 					Decoration.widget({
 						widget: new PickerButton(
 							l,
-							l.current === undefined,
-							open !== null && open.kind === l.kind && open.path === l.path,
+							l.span[0] === l.span[1],
+							open !== null && open.id === l.id,
 						),
 						side: 1,
 					}).range(l.at),
@@ -157,19 +160,23 @@ function picker(host: LivelitHost) {
 const FILTER_FROM = 8;
 
 function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
-	const what = SCHEME_NAME[open.kind];
-	const choices = host.choices(open.kind);
+	const { source, current } = open.picker;
+	const choices = ownChoices(source) ?? host.choices(source);
 	const dom = document.createElement("div");
 	dom.className = "cm-livelit-picker";
 	dom.setAttribute("role", "dialog");
-	dom.setAttribute("aria-label", `Choose a ${what}`);
+	dom.setAttribute("aria-label", open.label);
 	const close = (refocus: boolean) => {
 		view.dispatch({ effects: openPicker.of(null) });
 		if (refocus) view.focus();
 	};
-	const choose = (fix: Fix) => {
+	const choose = (value: string) => {
 		close(false);
-		host.choose(fix);
+		host.choose(open, value);
+	};
+	const act = (fix: Fix) => {
+		close(false);
+		host.act(fix);
 	};
 	const list = document.createElement("ul");
 	list.className = "cm-livelit-list";
@@ -178,7 +185,7 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 		const button = document.createElement("button");
 		button.type = "button";
 		button.className = "cm-livelit-choice";
-		if (c.name === open.current) button.setAttribute("aria-current", "true");
+		if (c.name === current) button.setAttribute("aria-current", "true");
 		const name = document.createElement("span");
 		name.className = "cm-livelit-name";
 		name.textContent = c.name;
@@ -189,7 +196,7 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 			detail.textContent = c.detail;
 			button.append(detail);
 		}
-		button.addEventListener("click", () => choose(useName(open.path, c.name)));
+		button.addEventListener("click", () => choose(c.name));
 		li.append(button);
 		list.append(li);
 		return { choice: c, li, button };
@@ -200,8 +207,8 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 		filter = document.createElement("input");
 		filter.type = "search";
 		filter.className = "cm-livelit-filter";
-		filter.placeholder = `Filter ${what}s`;
-		filter.setAttribute("aria-label", `Filter ${what}s`);
+		filter.placeholder = "Filter";
+		filter.setAttribute("aria-label", `Filter: ${open.label}`);
 		const input = filter;
 		input.addEventListener("input", () => {
 			const q = input.value.trim().toLowerCase();
@@ -228,16 +235,18 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 	if (choices.length === 0) {
 		const none = document.createElement("p");
 		none.className = "cm-livelit-none";
-		none.textContent = `No ${what}s yet.`;
+		none.textContent = "Nothing to choose yet.";
 		dom.append(none);
 	} else dom.append(list);
-	const create = document.createElement("button");
-	create.type = "button";
-	create.className = "cm-action cm-livelit-create";
-	const fresh = createFor(open.kind, open.path);
-	create.textContent = fresh.label;
-	create.addEventListener("click", () => choose(fresh));
-	dom.append(create);
+	const actions = open.actions.map((fix) => {
+		const button = document.createElement("button");
+		button.type = "button";
+		button.className = "cm-action cm-livelit-create";
+		button.textContent = fix.label;
+		button.addEventListener("click", () => act(fix));
+		dom.append(button);
+		return button;
+	});
 	// A press on one of the picker's buttons keeps focus where it is: Safari and Firefox on
 	// a Mac don't focus a clicked button, so focus would leave for nowhere (a null
 	// `relatedTarget`), the picker would close, and the click would never land.
@@ -252,7 +261,7 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 			return;
 		}
 		if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-		const all = [...visible(), create];
+		const all = [...visible(), ...actions];
 		const at = all.indexOf(document.activeElement as HTMLButtonElement);
 		if (at === -1) return;
 		e.preventDefault();
@@ -268,8 +277,8 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 	return {
 		dom,
 		mount() {
-			const current = items.find((i) => i.choice.name === open.current);
-			(filter ?? current?.button ?? items[0]?.button ?? create).focus();
+			const named = items.find((i) => i.choice.name === current);
+			(filter ?? named?.button ?? items[0]?.button ?? actions[0])?.focus();
 		},
 	};
 }

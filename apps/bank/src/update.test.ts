@@ -329,6 +329,35 @@ describe("a quick fix", () => {
 		expect(cmds.some((c) => c.kind === "revealRange")).toBe(false);
 	});
 
+	it("writes a picker's choice where the picker is in the text as it is now, the caret after it", () => {
+		const m = update(fresh(), {
+			kind: "questionCreated",
+			text: "name: q\nresponses:\n",
+		})[0];
+		const chosen = (livelit: string, value = "agree4") =>
+			update(m, { kind: "livelitChosen", id: 1, livelit, value });
+		const [next, cmds] = chosen("responses");
+		expect(next.local.questions[1]?.source).toBe(
+			"name: q\nresponses: agree4\n",
+		);
+		const end = "name: q\nresponses: agree4".length;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [end, end] });
+		// No picker of that id in the text now: nothing changes.
+		expect(chosen("concept")[0]).toBe(m);
+		const inline = update(m, {
+			kind: "edited",
+			text: 'name: q\nresponses:\n  "1": Yes\n',
+		})[0];
+		expect(
+			update(inline, {
+				kind: "livelitChosen",
+				id: 1,
+				livelit: "responses",
+				value: "agree4",
+			})[0],
+		).toBe(inline);
+	});
+
 	it("makes a new shared entry from a field's picker, then names it there, for every kind", () => {
 		const cases = [
 			["concept", "concept", "concept:\n", "concept: fresh_one\n"],

@@ -18,7 +18,7 @@ import { KNOWN_KEYS } from "./schema.ts";
 export type { Edit, Fix } from "../findings.ts";
 
 /** A value as YAML writes it on one line, quoted only when it must be. */
-const scalar = (value: string): string =>
+export const scalar = (value: string): string =>
 	stringify(value, { lineWidth: 0 }).trimEnd();
 
 /**

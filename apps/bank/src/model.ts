@@ -336,6 +336,16 @@ export type Msg =
 	| { readonly kind: "themeChosen"; readonly theme: ThemeChoice }
 	/** A finding's quick fix, clicked: edits in the document's terms, applied to the text as it is now. */
 	| { readonly kind: "fixApplied"; readonly id: Id; readonly fix: Fix }
+	/**
+	 * A livelit's picker, chosen from: the file, the livelit by its place (its id), and
+	 * the value. `update` finds the livelit again in the text as it is now and writes there.
+	 */
+	| {
+			readonly kind: "livelitChosen";
+			readonly id: Id;
+			readonly livelit: string;
+			readonly value: string;
+	  }
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "cursorMoved"; readonly offset: number }
 	/** Go to definition (Mod-click or F12 on a shared name): open the file it names. */

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { EditorView } from "@codemirror/view";
-import { EMPTY_ENV, type Env, type Fix, parseSurface } from "@qretools/core";
+import { EMPTY_ENV, type Env, parseSurface } from "@qretools/core";
 import { choicesOf, livelitsOf } from "@qretools/core/editor";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "./editor.ts";
@@ -28,7 +28,7 @@ const TEXT = "name: q\ntext: Is it so?\nintent: To see why.\nresponses:\n";
 function open(text = TEXT, readOnly = false) {
 	const parent = document.createElement("div");
 	document.body.append(parent);
-	const chosen: Fix[] = [];
+	const chosen: unknown[] = [];
 	const editor = createEditor(
 		parent,
 		() => {},
@@ -36,8 +36,10 @@ function open(text = TEXT, readOnly = false) {
 		() => {},
 		{
 			livelit: {
-				choices: (kind) => choicesOf(env, kind),
-				choose: (fix) => chosen.push(fix),
+				choices: (source) =>
+					source.kind === "scheme" ? choicesOf(env, source.scheme) : [],
+				choose: (livelit, value) => chosen.push({ id: livelit.id, value }),
+				act: (fix) => chosen.push(fix),
 			},
 		},
 	);
@@ -46,7 +48,7 @@ function open(text = TEXT, readOnly = false) {
 		text,
 		diagnostics: [],
 		marks: [],
-		livelits: livelitsOf(parseSurface(text, env)),
+		livelits: livelitsOf(text, parseSurface(text, env)),
 		...(readOnly && { readOnly: true }),
 	});
 	const view = EditorView.findFromDOM(parent) as EditorView;
@@ -86,13 +88,7 @@ describe("a scale picker in the editor", () => {
 			"yes_no1 Yes · 2 No",
 		]);
 		(choices[1] as HTMLButtonElement).click();
-		expect(chosen).toEqual([
-			{
-				kind: "edit",
-				label: "Use `yes_no`",
-				edits: [{ path: "responses", value: "yes_no" }],
-			},
-		]);
+		expect(chosen).toEqual([{ id: "responses", value: "yes_no" }]);
 		expect(parent.querySelector('[role="dialog"]')).toBeNull();
 	});
 

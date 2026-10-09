@@ -29,13 +29,16 @@ export {
 	withFields,
 } from "./surface/edit.ts";
 export {
+	applyLivelit,
 	type Choice,
 	choicesOf,
 	createFor,
 	LIVELIT_KINDS,
 	type Livelit,
 	livelitsOf,
-	useName,
+	ownChoices,
+	type Picker,
+	type Source,
 } from "./surface/livelits.ts";
 export { marksOf } from "./surface/marks.ts";
 export { rangesOf } from "./surface/parse.ts";
