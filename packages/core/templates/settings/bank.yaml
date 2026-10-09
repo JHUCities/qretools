@@ -1,0 +1,15 @@
+# This bank's own settings, read with every question and shared file in it.
+
+# The DDI agency this bank's questions and shared files are published under:
+# the registered code of the organization that maintains the bank. Every URN
+# they export begins with it, as in urn:ddi:org.example:...
+# Write your organization's code here: letters, digits and hyphens, in parts
+# joined by dots, such as edu.example.dept.
+agency:
+
+# Fields every question in this bank must have, beyond name, text and intent:
+# any of title, concept, universe, instruction, source and note. A question
+# without one shows it as "to fill in", so adding one here marks every question
+# that lacks it. Remove the # at the start of these two lines to require a title:
+#required:
+#  - title

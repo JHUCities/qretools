@@ -32,6 +32,8 @@ import instrumentTemplate from "@qretools/core/templates/instrument.yaml?raw";
 import numberTemplate from "@qretools/core/templates/number.yaml?raw";
 import scaleTemplate from "@qretools/core/templates/scale.yaml?raw";
 import selectManyTemplate from "@qretools/core/templates/select-many.yaml?raw";
+import bankTemplate from "@qretools/core/templates/settings/bank.yaml?raw";
+import workspaceTemplate from "@qretools/core/templates/settings/workspace.yaml?raw";
 import type {
 	Access,
 	BankRef,
@@ -558,7 +560,8 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 	universe: "text:\n",
 	instruction: "text:\n",
 	missing: 'labels:\n  "-8":\n',
-	bank: "agency:\n",
+	// Its settings, explained as the template repository explains them.
+	bank: bankTemplate,
 };
 
 /**
@@ -568,8 +571,8 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 export const instrumentSource = (name: string): string =>
 	instrumentTemplate.replace(/^name:[ \t]*$/m, `name: ${name}`);
 
-/** What new workspace details start as: the agency, to fill in. */
-export const WORKSPACE_DETAILS_TEMPLATE = "agency:\n";
+/** What new workspace details start as: the agency, to fill in, explained. */
+export const WORKSPACE_DETAILS_TEMPLATE = workspaceTemplate;
 
 /** The core's starter scale files, keyed by file name, as a bank names a scale. */
 const SCALE_FILES: Readonly<Record<string, string>> = { agree4, satisfied5 };

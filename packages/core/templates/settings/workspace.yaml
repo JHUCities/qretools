@@ -1,0 +1,10 @@
+# This workspace's own settings. QREtools reads them when it exports an
+# instrument (instruments/*.yaml) to DDI.
+
+# The DDI agency this workspace's instruments are published under: the
+# registered code of the organization that maintains them. Every URN an
+# instrument exports begins with it, as in urn:ddi:org.example:...
+# Write your organization's code here: letters, digits and hyphens, in parts
+# joined by dots, such as edu.example.dept.
+# Questions are published under their own bank's agency (banks/*/bank.yaml).
+agency:

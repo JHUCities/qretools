@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
+import bankTemplate from "../../templates/settings/bank.yaml?raw";
+import workspaceTemplate from "../../templates/settings/workspace.yaml?raw";
 import { schemeEnv } from "../schemes.ts";
-import { parseBankFile, parseSettingsFile } from "./bankfile.ts";
+import {
+	AGENCY_RULE_TEXT,
+	parseBankFile,
+	parseSettingsFile,
+} from "./bankfile.ts";
 import { EMPTY_ENV } from "./env.ts";
 import { parseSurface } from "./parse.ts";
 
@@ -127,5 +133,35 @@ describe("the bank file", () => {
 		]);
 		// Elsewhere, an optional field: absent is fine.
 		expect(holes(q, EMPTY_ENV)).toEqual([]);
+	});
+});
+
+/*
+ * The template repository (JHUCities/qretools-template) carries these comments too, in
+ * its workspace.yaml and banks/local/bank.yaml, filled in with org.example: change both.
+ */
+describe("the settings templates a new bank or workspace starts from", () => {
+	it("leave only the agency to fill in, and a bank's required list ready to uncomment", () => {
+		const holes = (source: string, owner: "bank" | "workspace") =>
+			parseSettingsFile(source, owner).findings.map((f) => [
+				f.severity,
+				f.path,
+			]);
+		// The comment says the rule the parser enforces.
+		for (const t of [bankTemplate, workspaceTemplate])
+			expect(t.replace(/\n# /g, " ")).toContain(
+				"letters, digits and hyphens, in parts joined by dots",
+			);
+		expect(AGENCY_RULE_TEXT).toContain(
+			"Letters, digits and hyphens, up to 63 at a time, in parts joined by dots",
+		);
+		expect(holes(bankTemplate, "bank")).toEqual([["hole", "agency"]]);
+		expect(holes(workspaceTemplate, "workspace")).toEqual([["hole", "agency"]]);
+		const on = bankTemplate.replace(
+			"#required:\n#  - title",
+			"required:\n  - title",
+		);
+		expect(on).not.toBe(bankTemplate);
+		expect(parseBankFile(on).required).toEqual(["title"]);
 	});
 });

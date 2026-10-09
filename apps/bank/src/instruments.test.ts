@@ -17,6 +17,7 @@ import {
 	type Model,
 	type Msg,
 	type Question,
+	WORKSPACE_DETAILS_TEMPLATE,
 } from "./model.js";
 import { claimOf } from "./sync.js";
 import {
@@ -375,7 +376,10 @@ describe("the workspace details", () => {
 		const [start] = init({ work: ok(undefined), hasToken: false });
 		const [made] = update(start, { kind: "workspaceDetailsOpened" });
 		const [e] = Object.values(made.local.workspace);
-		expect(e).toMatchObject({ kind: "workspaceFile", source: "agency:\n" });
+		expect(e).toMatchObject({
+			kind: "workspaceFile",
+			source: WORKSPACE_DETAILS_TEMPLATE,
+		});
 		expect(made.screen).toEqual({ kind: "editing", id: e?.id });
 		const [again] = update(
 			{ ...made, screen: { kind: "blank" } },
