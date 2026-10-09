@@ -39,3 +39,4 @@ export {
 	textEntryJsonSchema,
 	workspaceFileJsonSchema,
 } from "./surface/schema.ts";
+export { domainSnippets, type FieldSnippet } from "./surface/snippets.ts";

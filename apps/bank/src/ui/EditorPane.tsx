@@ -5,7 +5,7 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
-import { newLineAfter } from "@qretools/core/editor";
+import { domainSnippets, newLineAfter } from "@qretools/core/editor";
 import {
 	createEditor,
 	type Editor,
@@ -23,14 +23,24 @@ import { useApp } from "./AppContext.js";
 export function EditorPane(
 	inputs: EditorInputs &
 		(
-			| { readonly schema: object; readonly instrument?: undefined }
-			| { readonly schema?: undefined; readonly instrument: true }
+			| {
+					readonly schema: object;
+					readonly instrument?: undefined;
+					/** A question: its response domains are offered written out too. */
+					readonly question?: true;
+			  }
+			| {
+					readonly schema?: undefined;
+					readonly instrument: true;
+					readonly question?: undefined;
+			  }
 		),
 ) {
 	const host = useRef<HTMLDivElement>(null);
 	const editor = useRef<Editor | null>(null);
 	const { dispatch, effects, evaluations, store } = useApp();
 	const instrument = inputs.instrument === true;
+	const question = inputs.question === true;
 	// The open file's id when completion asks: the editor outlives a change of file.
 	const open = useRef(inputs.id);
 	open.current = inputs.id;
@@ -48,7 +58,9 @@ export function EditorPane(
 			(id, offset) => dispatch({ kind: "definitionRequested", id, offset }),
 			instrument
 				? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
-				: {},
+				: question
+					? { snippets: domainSnippets }
+					: {},
 		);
 		editor.current = e;
 		effects.registerEditor(e);
@@ -57,7 +69,7 @@ export function EditorPane(
 			e.destroy();
 			editor.current = null;
 		};
-	}, [dispatch, effects, evaluations, store, instrument]);
+	}, [dispatch, effects, evaluations, store, instrument, question]);
 	const { id, text, diagnostics, marks, schema, readOnly, label } = inputs;
 	// Before paint: the first frame of a file already shows its text, never an empty
 	// editor that fills a frame later.

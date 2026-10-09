@@ -10,10 +10,11 @@
  * inspector's, once the field is written.
  */
 
-import type {
-	Completion,
-	CompletionContext,
-	CompletionResult,
+import {
+	type Completion,
+	type CompletionContext,
+	type CompletionResult,
+	snippetCompletion,
 } from "@codemirror/autocomplete";
 import { placeAt } from "@qretools/core/editor";
 import { getJSONSchema } from "codemirror-json-schema";
@@ -137,6 +138,59 @@ export function schemaCompletion(
 			// must be asked again (and step aside) rather than kept, or keys appear twice.
 			{ from: context.pos - typed.length, options };
 }
+
+/**
+ * A snippet from the core, written exactly as it should appear, in CodeMirror's form:
+ * CodeMirror indents each later line by the indent of the line it's inserted on, so
+ * that indent comes off each later line here (it starts every one).
+ */
+export function relativeSnippet(template: string, base: string): string {
+	return template
+		.split("\n")
+		.map((line, i) =>
+			i > 0 && line.startsWith(base) ? line.slice(base.length) : line,
+		)
+		.join("\n");
+}
+
+/** A field written out with its own fields, as the core offers it (a question's response domains). */
+export interface Snippet {
+	readonly label: string;
+	readonly detail: string;
+	/** As it lands, `${}` its places; made relative to its line here. */
+	readonly snippet: string;
+	/** Where it replaces from: the start of the word being typed. */
+	readonly from: number;
+}
+
+/**
+ * The given snippets, beside the schema's keys (same label, the detail says what comes
+ * with it). Unasked, only once a word is typed, as keys are.
+ */
+export const snippetSource =
+	(snippets: (source: string, offset: number) => readonly Snippet[]) =>
+	(context: CompletionContext): CompletionResult | null => {
+		const found = snippets(context.state.doc.toString(), context.pos);
+		const [first] = found;
+		if (
+			first === undefined ||
+			(first.from === context.pos && !context.explicit)
+		)
+			return null;
+		const base =
+			/^ */.exec(context.state.doc.lineAt(first.from).text)?.[0] ?? "";
+		return {
+			from: first.from,
+			options: found.map((s) =>
+				snippetCompletion(relativeSnippet(s.snippet, base), {
+					label: s.label,
+					detail: s.detail,
+					type: "text",
+				}),
+			),
+			validFor: /^\w*$/,
+		};
+	};
 
 /**
  * codemirror-json-schema completes a typed prefix, except for the first key under

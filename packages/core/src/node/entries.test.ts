@@ -108,6 +108,7 @@ describe("the entry points", () => {
 			    "addSpace",
 			    "applyEdits",
 			    "bankFileJsonSchema",
+			    "domainSnippets",
 			    "inspect",
 			    "instrumentCompletion",
 			    "labelledJsonSchema",

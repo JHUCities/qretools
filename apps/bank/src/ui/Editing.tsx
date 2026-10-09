@@ -247,6 +247,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						diagnostics={diagnostics}
 						marks={ev.marks}
 						schema={evaluations.schema(env)}
+						question
 						label={`Question ${ev.draft.name ?? UNNAMED}: source (YAML)`}
 					/>
 					<Inspector q={q} ev={ev} index={index} />

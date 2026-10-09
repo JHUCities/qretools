@@ -10,8 +10,10 @@ import {
 	type CompletionResult,
 	snippetCompletion,
 } from "@codemirror/autocomplete";
+
 import type { BankScope } from "@qretools/core";
 import { instrumentCompletion } from "@qretools/core/editor";
+import { relativeSnippet } from "./complete.ts";
 
 /** CodeMirror's icon for each kind of option. */
 const TYPE = {
@@ -23,20 +25,6 @@ const TYPE = {
 	step: "keyword",
 	snippet: "text",
 } as const;
-
-/**
- * A snippet from the core, written exactly as it should appear, in CodeMirror's form:
- * CodeMirror indents each later line by the indent of the line it's inserted on, so
- * that indent comes off each later line here (it starts every one).
- */
-export function relativeSnippet(template: string, base: string): string {
-	return template
-		.split("\n")
-		.map((line, i) =>
-			i > 0 && line.startsWith(base) ? line.slice(base.length) : line,
-		)
-		.join("\n");
-}
 
 /** A code being typed: its quotes and what is between them. */
 const CODE = /^"?[A-Za-z0-9_-]*"?$/;

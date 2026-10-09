@@ -44,7 +44,12 @@ import { spaceBefore } from "@qretools/core/editor";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
-import { schemaCompletion, withoutInfo } from "./complete.ts";
+import {
+	type Snippet,
+	schemaCompletion,
+	snippetSource,
+	withoutInfo,
+} from "./complete.ts";
 import { codeLine } from "./diagnostics.ts";
 
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
@@ -73,6 +78,8 @@ export interface EditorOptions {
 	 * it isn't the editor's own newline: an instrument's list item (core `newLineAfter`).
 	 */
 	readonly newLine?: (before: string, after: string) => string | undefined;
+	/** Fields written out, offered beside the schema's keys: a question's response domains (core `domainSnippets`). */
+	readonly snippets?: (source: string, offset: number) => readonly Snippet[];
 }
 
 export interface Editor {
@@ -104,7 +111,13 @@ export function createEditor(
 		// adds its own linter, which would double-report and call holes errors. An
 		// editor given its own completions (an instrument's) offers only those.
 		...(
-			options.completions ?? [withoutInfo(yamlCompletion()), schemaCompletion]
+			options.completions ?? [
+				withoutInfo(yamlCompletion()),
+				schemaCompletion,
+				...(options.snippets === undefined
+					? []
+					: [snippetSource(options.snippets)]),
+			]
 		).map((source) => yamlLanguage.data.of({ autocomplete: source })),
 		// No schema hover: the cursor inspector shows a field's description, and a
 		// finding's tooltip shows the finding; a third tooltip repeated both.
