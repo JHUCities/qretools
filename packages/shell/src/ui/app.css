@@ -42,17 +42,6 @@ body {
 	margin-inline-start: var(--base-size-4);
 }
 /*
- * A link that is a code chip shows hover on the chip, its border in the accent colour:
- * an underline would fall on the chip's own bottom border.
- */
-[class*="prc-Link-Link"]:has(> .code):hover {
-	text-decoration-line: none;
-}
-[class*="prc-Link-Link"]:hover > .code {
-	border-color: var(--borderColor-accent-emphasis);
-}
-/* A shared name's chip, in the editor's colour for one (green), linked or not. */
-/*
  * A response code's chip ("1", "-99"): its box trimmed to the cap height and baseline
  * (`text-box`), padded evenly, so the digits sit centred; an untrimmed box holds the
  * font's descender, which digits never use. Only codes, which are mostly digits: a
@@ -65,6 +54,7 @@ body {
 		padding-block: var(--base-size-2);
 	}
 }
+/* A shared name's chip, in the editor's colour for one (green), linked or not. */
 .code.code-ref {
 	color: var(--prettylights-syntax-stringRegexp);
 }
@@ -535,6 +525,16 @@ code,
 /* A chip sits within the text's line (the code face's own line height is taller). */
 .inspect .code {
 	line-height: 1;
+}
+/*
+ * A link that is a code chip shows hover on the chip, its border in the accent colour:
+ * an underline would fall on the chip's own bottom border.
+ */
+[class*="prc-Link-Link"]:has(> .code):hover {
+	text-decoration-line: none;
+}
+[class*="prc-Link-Link"]:hover > .code {
+	border-color: var(--borderColor-accent-emphasis);
 }
 .inspect dt {
 	color: var(--fgColor-muted);
