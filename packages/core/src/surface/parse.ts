@@ -126,7 +126,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	// Text that starts with a fill reads as a map: say that, not "must be text".
 	const leading = leadingFill(text, ranges.text, data.text);
 	for (const key of TEXT_KEYS) {
-		const read = readText(key, data[key]);
+		const read = readText(key, data[key], env.required);
 		if (read.value !== undefined) fields[key] = read.value;
 		fieldFindings.push(
 			...(key === "text" && leading !== undefined ? [leading] : read.findings),
@@ -214,11 +214,29 @@ function toJs(doc: Document): Read<unknown> {
 	}
 }
 
-function readText(key: TextKey, value: unknown): Read<string> {
-	const required = (REQUIRED_KEYS as readonly string[]).includes(key);
+/**
+ * A one-line field. Required by the language (`name`, `text`, `intent`) or by the bank
+ * (`bank.yaml`'s `required`), missing or empty it's a hole whose hint says what the field
+ * is for; optional and empty, the hint also offers removing the line.
+ */
+function readText(
+	key: TextKey,
+	value: unknown,
+	bankRequires: readonly string[],
+): Read<string> {
+	const always = (REQUIRED_KEYS as readonly string[]).includes(key);
+	const required = always || bankRequires.includes(key);
 	if (value === undefined) {
 		return required
-			? fail(hole(key, `\`${key}\` is required.`, describe(key)))
+			? fail(
+					hole(
+						key,
+						always
+							? `\`${key}\` is required.`
+							: `\`${key}\` is required in this bank.`,
+						describe(key),
+					),
+				)
 			: fail();
 	}
 	if (value === null || (typeof value === "string" && value.trim() === "")) {

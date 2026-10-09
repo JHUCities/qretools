@@ -18,6 +18,7 @@ import {
 	yamlErrors,
 } from "./read.ts";
 import type { Scale } from "./scales.ts";
+import type { RequirableKey } from "./schema.ts";
 
 export type Scheme<T> = Readonly<Record<string, T>>;
 
@@ -45,6 +46,8 @@ export interface Env {
 	readonly missing: readonly Code[];
 	/** The DDI agency the bank declares (`bank.yaml`); absent while it declares none. */
 	readonly agency?: string;
+	/** The fields the bank also requires of its questions (`bank.yaml`'s `required`). */
+	readonly required: readonly RequirableKey[];
 }
 
 /** A scheme a question can name. `missing` is not one: it is a list, never named. */
@@ -109,6 +112,7 @@ export const EMPTY_ENV: Env = {
 	universes: {},
 	instructions: {},
 	missing: [],
+	required: [],
 };
 
 export interface ParsedTextEntry {

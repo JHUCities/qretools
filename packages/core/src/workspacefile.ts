@@ -6,7 +6,7 @@
  */
 import { parseDocument } from "yaml";
 import type { Finding, Range } from "./findings.ts";
-import { parseAgencyFile } from "./surface/bankfile.ts";
+import { parseSettingsFile } from "./surface/bankfile.ts";
 import { indexDocument, pointAt } from "./surface/parse.ts";
 import { withSpacing } from "./surface/spacing.ts";
 
@@ -32,7 +32,7 @@ export interface WorkspaceFile {
 export function workspaceFileOf(source: string): WorkspaceFile {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
-	const { agency, findings } = parseAgencyFile(source, "workspace");
+	const { agency, findings } = parseSettingsFile(source, "workspace");
 	const written = doc.get("agency");
 	const given =
 		agency ??

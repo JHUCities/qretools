@@ -200,6 +200,23 @@ export const KNOWN_KEYS = Object.keys(
 ) as readonly SurfaceKey[];
 export const REQUIRED_KEYS = ["name", "text", "intent"] as const;
 export const DOMAIN_KEYS = ["responses", "number", "open"] as const;
+/**
+ * The fields a bank may also require of its questions (`required:` in `bank.yaml`), as a
+ * team's house rule: optional one-line fields only. A response domain is always required,
+ * and `select`, `legacy` and `variant_of` are never something to demand.
+ */
+export const REQUIRABLE_KEYS = [
+	"title",
+	"concept",
+	"universe",
+	"instruction",
+	"source",
+	"note",
+] as const satisfies readonly Exclude<
+	(typeof TEXT_KEYS)[number],
+	(typeof REQUIRED_KEYS)[number]
+>[];
+export type RequirableKey = (typeof REQUIRABLE_KEYS)[number];
 /** Fields whose value is one line of text (or a name); written empty, each is a hole. */
 export const TEXT_KEYS = [
 	"name",
@@ -247,6 +264,14 @@ export function questionJsonSchema(
 	const schema = z.toJSONSchema(QuestionSchema) as JsonNode;
 	const props = schema.properties;
 	if (!props) return schema;
+	// The bank's own required fields, as name and text are, for completion and the inspector.
+	if (env.required.length > 0)
+		schema.required = [
+			...new Set([
+				...((schema.required as string[] | undefined) ?? []),
+				...env.required,
+			]),
+		];
 	const responses = props.responses;
 	const branches = responses?.anyOf;
 	if (responses && Array.isArray(branches)) {
@@ -327,6 +352,12 @@ export const BankFileSchema = z.strictObject({
 		.string()
 		.describe(
 			"The DDI agency this bank's items are published under: the registered code of the organization that maintains it, such as `org.example`.",
+		),
+	required: z
+		.array(z.enum(REQUIRABLE_KEYS))
+		.optional()
+		.describe(
+			"Fields every question in this bank must have, beyond `name`, `text` and `intent`, such as `title`. A question without one has it to fill in.",
 		),
 });
 export const bankFileJsonSchema = (): Record<string, unknown> =>

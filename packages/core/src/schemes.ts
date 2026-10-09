@@ -24,6 +24,7 @@ import { labelMarksOf, type Mark } from "./surface/marks.ts";
 import { indexDocument, pointAt } from "./surface/parse.ts";
 import { hole } from "./surface/read.ts";
 import { parseScale, type Scale } from "./surface/scales.ts";
+import type { RequirableKey } from "./surface/schema.ts";
 import { withSpacing } from "./surface/spacing.ts";
 import { type Symbols, schemeSymbols } from "./symbols.ts";
 
@@ -221,9 +222,10 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	const instructions: Record<string, TextEntry> = {};
 	let missing: readonly Code[] = EMPTY_ENV.missing;
 	let agency: string | undefined;
+	let required: readonly RequirableKey[] = EMPTY_ENV.required;
 	for (const f of files) {
 		if (f.kind === "bank") {
-			agency = parseBankFile(f.text).agency;
+			({ agency, required } = parseBankFile(f.text));
 			continue;
 		}
 		if (f.kind === "concept" || f.kind === "unit") {
@@ -251,6 +253,7 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		universes,
 		instructions,
 		missing,
+		required,
 		...(agency !== undefined && { agency }),
 	};
 }
