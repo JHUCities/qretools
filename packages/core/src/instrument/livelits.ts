@@ -137,9 +137,11 @@ export function instrumentLivelits(
 			(w) => !w.includes("\n"),
 		).map((l) => ({ ...l, actions: bankActions(l.id) })),
 	);
-	return [...uses, ...steps(parsed.draft.flow), ...sets(parsed.conds)].sort(
-		(a, b) => a.field[0] - b.field[0],
-	);
+	return [
+		...uses,
+		...steps(parsed.draft.flow),
+		...sets(source, parsed.ranges, parsed.conds),
+	].sort((a, b) => a.field[0] - b.field[0]);
 }
 
 /**
@@ -149,10 +151,22 @@ export function instrumentLivelits(
  * and its order among that condition's sets, read left to right in the expression's
  * pre-order. None in a block scalar, which may rewrap the text written into it.
  */
-function sets(conds: readonly WrittenCond[]): Livelit[] {
+function sets(
+	source: string,
+	ranges: Readonly<Record<string, Range>>,
+	conds: readonly WrittenCond[],
+): Livelit[] {
 	return conds.flatMap(({ path, cond, form }) => {
 		if (form === "block") return [];
-		return membersOf(cond.expr).flatMap((m, n): Livelit[] => {
+		const members = membersOf(cond.expr);
+		// The button after the whole value when the condition has one set (never inside
+		// its closing quote), after each set's `}` when it has several.
+		const field = ranges[path];
+		const valueEnd =
+			members.length === 1 && field !== undefined
+				? valueSpan(source, field)[1]
+				: undefined;
+		return members.flatMap((m, n): Livelit[] => {
 			const { operand, setRange } = m;
 			const chosen = m.set.flatMap((e) =>
 				e.kind === "string" ? [e.value] : [],
@@ -167,7 +181,7 @@ function sets(conds: readonly WrittenCond[]): Livelit[] {
 				{
 					id: `${path}#${n}`,
 					label: `Choose the codes of ${operand.name}`,
-					at: setRange[1],
+					at: valueEnd ?? setRange[1],
 					field: m.range,
 					span: setRange,
 					picker: {

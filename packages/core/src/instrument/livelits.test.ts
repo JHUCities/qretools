@@ -195,6 +195,14 @@ describe("a checklist at each set of codes in a condition", () => {
 		}
 	});
 
+	it("draws a lone set's button after the whole value, never inside its quotes", () => {
+		const text = `${HEADER}  - stop: "bas.tenure in {\\"1\\"}"\n`;
+		const [lone] = sets(text);
+		expect(lone?.at).toBe(text.indexOf('}"') + 2);
+		const two = `${HEADER}  - stop: bas.tenure in {"1"} or bas.tenure in {"2"}\n`;
+		expect(sets(two).map((l) => two.slice(l.at - 1, l.at))).toEqual(["}", "}"]);
+	});
+
 	it("writes nothing when nothing changes, and nothing it can't escape", () => {
 		const text = `${HEADER}  - stop: bas.tenure in {"1", "2"}\n`;
 		expect(write(text, "flow.1.stop#0", ["1", "2"])).toBeUndefined();
