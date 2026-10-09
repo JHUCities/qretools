@@ -1,6 +1,7 @@
 /** The page: a split layout with the bank tree in the pane and the open file in the content. */
 
 import {
+	GearIcon,
 	GitBranchIcon,
 	GitPullRequestIcon,
 	LinkExternalIcon,
@@ -61,6 +62,7 @@ import { alsoSaves, isUnsaved, usersIn } from "../sync.js";
 import {
 	bankFolders,
 	banksShown,
+	detailsButton,
 	schemeSections,
 	treeOf,
 	workspaceLeaves,
@@ -305,6 +307,23 @@ export function App() {
 	]);
 	// A workspace whose files are all its own (instruments, details) has no bank to show
 	// or to make questions in: an empty repository still starts as one bank at its root.
+	// What the details' button says (unsaved, to fill in or fix, advice), as their tree
+	// item's marks did.
+	const details = useMemo(() => {
+		const file = evaluations.workspaceFile({
+			local,
+			remote: model.remote,
+			banks: model.banks,
+		});
+		return detailsButton(
+			treeInput,
+			file === undefined ? undefined : statusOf(file.findings),
+		);
+	}, [treeInput, evaluations, local, model.remote, model.banks]);
+	// The workspace's details are open: said on the button beside its name.
+	const detailsOpen =
+		screen.kind === "editing" &&
+		local.workspace[screen.id]?.kind === "workspaceFile";
 	const workspaceOnly =
 		shownBanks.length === 0 && Object.keys(local.workspace).length > 0;
 	const naming = model.browser.naming;
@@ -515,10 +534,29 @@ export function App() {
 							 * The landmark keeps a name of its own: the title holds a link.
 							 */}
 							<div className="band">
-								<Heading as="h2" variant="small" className="pane-title">
-									<VisuallyHidden>Question bank: </VisuallyHidden>
-									<Bank model={model} />
-								</Heading>
+								{/*
+								 * The workspace's details sit by its name, as a repository's settings
+								 * by its name on github.com: they are about the whole workspace.
+								 */}
+								<div className="band-row">
+									<Heading as="h2" variant="small" className="pane-title">
+										<VisuallyHidden>Question bank: </VisuallyHidden>
+										<Bank model={model} />
+									</Heading>
+									<IconButton
+										icon={GearIcon}
+										// Medium, as the pull-request button: at small the dot covers the icon.
+										variant="invisible"
+										aria-label={details.label}
+										{...(details.attention && {
+											notificationIndicator: "icon" as const,
+										})}
+										// No selected look on a button: the open file's header says it,
+										// and assistive technology hears it here.
+										aria-current={detailsOpen ? "page" : undefined}
+										onClick={() => dispatch({ kind: "workspaceDetailsOpened" })}
+									/>
+								</div>
 							</div>
 							{/* The branch, the filter and the foot stay put; the tree between scrolls. */}
 							<div className="sidebar-body">

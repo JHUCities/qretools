@@ -172,7 +172,18 @@ code,
  * The pane's title (Primer's small Heading, 16px semibold), one
  * control high so the band keeps its height and its rule still meets the file header's.
  */
+/* The band's one row: the title takes the room and truncates; the button keeps its size. */
+.band-row {
+	display: flex;
+	align-items: center;
+	gap: var(--base-size-4);
+}
+.band-row > :not(.pane-title) {
+	flex-shrink: 0;
+}
 .pane-title {
+	flex: 1;
+	min-width: 0;
 	margin: 0;
 	display: flex;
 	align-items: center;

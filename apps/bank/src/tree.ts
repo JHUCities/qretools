@@ -229,8 +229,8 @@ export function schemeSections(
 }
 
 /**
- * The workspace's own files, flat: its instruments by name, then its details. Empty
- * for a workspace that is one bank alone, which then shows no section for them.
+ * The workspace's instruments, flat, by name. Its details (`workspace.yaml`) are about
+ * the whole workspace, so they open from beside its name, never from this list.
  */
 export function workspaceLeaves(
 	model: TreeInput,
@@ -242,14 +242,38 @@ export function workspaceLeaves(
 		name: e.kind === "instrument" ? e.name : WORKSPACE_DETAILS,
 		status: evaluate(e),
 	});
-	const all = Object.values(model.local.workspace);
-	return [
-		...all
-			.filter((e) => e.kind === "instrument")
-			.map(leaf)
-			.sort((a, b) => a.name.localeCompare(b.name)),
-		...all.filter((e) => e.kind === "workspaceFile").map(leaf),
-	].filter((l) => filter === "" || l.name.toLowerCase().includes(filter));
+	return Object.values(model.local.workspace)
+		.filter((e) => e.kind === "instrument")
+		.map(leaf)
+		.sort((a, b) => a.name.localeCompare(b.name))
+		.filter((l) => filter === "" || l.name.toLowerCase().includes(filter));
+}
+
+/**
+ * What the button for the workspace's details says, now they're out of the tree: its
+ * name, and what the tree's marks said (unsaved changes, something to fill in or fix,
+ * advice), with whether that calls for its dot. `status` is the details' own, when
+ * the workspace has them.
+ */
+export function detailsButton(
+	model: TreeInput,
+	status: Status | undefined,
+): { readonly label: string; readonly attention: boolean } {
+	const details = Object.values(model.local.workspace).find(
+		(e) => e.kind === "workspaceFile",
+	);
+	const said = [
+		...(details !== undefined && isUnsaved(details) ? ["unsaved changes"] : []),
+		...(status?.kind === "incomplete" ? ["to fill in or fix"] : []),
+		...(status?.kind === "advice" ? ["has advice"] : []),
+	];
+	return {
+		label:
+			said.length === 0
+				? "Workspace details"
+				: `Workspace details (${said.join("; ")})`,
+		attention: said.length > 0,
+	};
 }
 
 /** The folders a bank has, for the save and move dialogs. Drafts do not count: they are not filed yet. */

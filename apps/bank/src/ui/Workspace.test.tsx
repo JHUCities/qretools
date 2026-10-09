@@ -158,7 +158,7 @@ describe("a workspace's instruments", () => {
 		URL.revokeObjectURL = revokeObjectURL;
 	});
 
-	it("come first, then each bank, with the workspace details last among them", async () => {
+	it("come first, then each bank, and hold only instruments", async () => {
 		renderWorkspace();
 		await act(async () => {});
 		const nav = screen.getByRole("navigation", { name: "Question bank" });
@@ -170,9 +170,41 @@ describe("a workspace's instruments", () => {
 		const items = within(tree)
 			.getAllByRole("treeitem")
 			.map((i) => i.textContent ?? "");
-		expect(items).toHaveLength(2);
+		expect(items).toHaveLength(1);
 		expect(items[0]).toMatch(/^wave1/);
-		expect(items[1]).toMatch(/^workspace details/);
+	});
+
+	it("leave the workspace's details to the button beside its name, which says when they're open", async () => {
+		const app = renderWorkspace();
+		await act(async () => {});
+		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		const gear = within(nav).getByRole("button", { name: "Workspace details" });
+		expect(gear.getAttribute("aria-current")).toBeNull();
+		fireEvent.click(gear);
+		await act(async () => {});
+		const { model } = app.store.getState();
+		const details = Object.values(model.local.workspace).find(
+			(e) => e.kind === "workspaceFile",
+		);
+		expect(model.screen).toEqual({ kind: "editing", id: details?.id });
+		expect(gear.getAttribute("aria-current")).toBe("page");
+	});
+
+	it("say on that button what the tree's marks said: unsaved, and something to fill in", async () => {
+		const app = renderWorkspace();
+		await act(async () => {});
+		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		fireEvent.click(
+			within(nav).getByRole("button", { name: "Workspace details" }),
+		);
+		await act(async () => {});
+		act(() => app.dispatch({ kind: "edited", text: "agency:\n" }));
+		await act(async () => {});
+		expect(
+			within(nav).getByRole("button", {
+				name: "Workspace details (unsaved changes; to fill in or fix)",
+			}),
+		).toBeTruthy();
 	});
 
 	it("open as their source, findings, outline and DDI", async () => {
