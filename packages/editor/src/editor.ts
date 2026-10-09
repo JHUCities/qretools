@@ -40,6 +40,7 @@ import {
 import { tags } from "@lezer/highlight";
 import issueDraftSvg from "@primer/octicons/build/svg/issue-draft-16.svg?raw";
 import type { Mark, Range } from "@qretools/core";
+import type { Livelit } from "@qretools/core/editor";
 import { spaceBefore } from "@qretools/core/editor";
 import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
@@ -51,6 +52,7 @@ import {
 	withoutInfo,
 } from "./complete.ts";
 import { codeLine } from "./diagnostics.ts";
+import { type LivelitHost, livelits, setLivelits } from "./livelits.ts";
 
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
 const external = Annotation.define<boolean>();
@@ -68,6 +70,8 @@ export interface EditorInputs {
 	readonly readOnly?: boolean;
 	/** The editor's accessible name, e.g. "Question source (YAML)". */
 	readonly label?: string;
+	/** The fields a picker can fill, for the text as it is now (with an `EditorOptions.livelit`). */
+	readonly livelits?: readonly Livelit[];
 }
 
 export interface EditorOptions {
@@ -78,6 +82,8 @@ export interface EditorOptions {
 	 * it isn't the editor's own newline: an instrument's list item (core `newLineAfter`).
 	 */
 	readonly newLine?: (before: string, after: string) => string | undefined;
+	/** Pickers at the fields that name a shared entry (livelits.ts): what they offer and do. */
+	readonly livelit?: LivelitHost;
 	/** Fields written out, offered beside the schema's keys: a question's response domains (core `domainSnippets`). */
 	readonly snippets?: (source: string, offset: number) => readonly Snippet[];
 }
@@ -126,6 +132,7 @@ export function createEditor(
 		quickFixKey,
 		spaceAfterColon,
 		...(options.newLine === undefined ? [] : [returnKey(options.newLine)]),
+		...(options.livelit === undefined ? [] : livelits(options.livelit)),
 		// The id `sync` last opened: a follow names the file it was reported against.
 		followDefinition((offset) => {
 			if (current !== undefined) onFollow(current, offset);
@@ -157,6 +164,7 @@ export function createEditor(
 			schema: next,
 			readOnly: lock = false,
 			label: name = "Source (YAML)",
+			livelits: fields = [],
 		}) {
 			if (id !== current) {
 				// A fresh state: new document, empty undo history, and the schema state
@@ -200,6 +208,10 @@ export function createEditor(
 				effects: [
 					...asArray(setDiagnostics(view.state, [...diagnostics]).effects),
 					setSemantics.of(marks),
+					// Another author's version is shown, never edited: no pickers there.
+					...(options.livelit === undefined
+						? []
+						: [setLivelits.of(lock ? [] : fields)]),
 				],
 			});
 		},
@@ -575,6 +587,10 @@ const macCompletionKeys = Prec.highest(
  */
 const primerTheme = EditorView.theme({
 	"&": {
+		// The hole's circle, its place and size named once: a livelit's button (livelits.ts)
+		// sits past it.
+		"--cm-hole-inset": "var(--base-size-4)",
+		"--cm-hole-size": "1em",
 		height: "100%",
 		color: "var(--codeMirror-fgColor)",
 		backgroundColor: "var(--codeMirror-bgColor)",
@@ -733,9 +749,9 @@ const primerTheme = EditorView.theme({
 		content: '""',
 		position: "absolute",
 		insetBlockStart: "0",
-		insetInlineStart: "var(--base-size-4)",
-		inlineSize: "1em",
-		blockSize: "1em",
+		insetInlineStart: "var(--cm-hole-inset)",
+		inlineSize: "var(--cm-hole-size)",
+		blockSize: "var(--cm-hole-size)",
 		backgroundColor: "currentColor",
 		mask: `url("data:image/svg+xml,${encodeURIComponent(issueDraftSvg)}") center / contain no-repeat`,
 	},

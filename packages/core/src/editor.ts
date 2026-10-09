@@ -28,6 +28,15 @@ export {
 	spaceBefore,
 	withFields,
 } from "./surface/edit.ts";
+export {
+	type Choice,
+	choicesOf,
+	createFor,
+	LIVELIT_KINDS,
+	type Livelit,
+	livelitsOf,
+	useName,
+} from "./surface/livelits.ts";
 export { marksOf } from "./surface/marks.ts";
 export { rangesOf } from "./surface/parse.ts";
 export { type Place, placeAt } from "./surface/place.ts";

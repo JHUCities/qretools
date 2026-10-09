@@ -37,13 +37,14 @@ import {
 import {
 	bankFileJsonSchema,
 	inspect,
+	LIVELIT_KINDS,
 	labelledJsonSchema,
 	labelsJsonSchema,
 	outlineOf,
 	textEntryJsonSchema,
 	workspaceFileJsonSchema,
 } from "@qretools/core/editor";
-import { toDiagnostics } from "@qretools/editor";
+import { PICK_KEY, toDiagnostics } from "@qretools/editor";
 import { bankText, formatLink } from "@qretools/shell";
 import {
 	Ddi,
@@ -251,6 +252,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						marks={ev.marks}
 						schema={evaluations.schema(env)}
 						question
+						livelits={ev.livelits}
 						label={`Question ${ev.draft.name ?? UNNAMED}: source (YAML)`}
 					/>
 					<Inspector q={q} ev={ev} index={index} />
@@ -929,6 +931,11 @@ function Inspector({
 			? 0
 			: new Set(usedBy(index, m.scheme, m.name).map((s) => s.key)).size;
 	const scheme = m?.scheme ?? at.scheme;
+	// Where a picker can fill the field, the inspector says how to open it from the keys.
+	const pick =
+		scheme !== undefined && LIVELIT_KINDS.includes(scheme)
+			? `Choose a shared one with ${PICK_KEY}`
+			: "Name a shared one";
 	const names =
 		at.names === undefined
 			? undefined
@@ -995,7 +1002,10 @@ function Inspector({
 									</Button>
 								</div>
 								{names !== undefined && (
-									<div className="quiet">Or name a shared one: {names}</div>
+									<div className="quiet">
+										Or {pick.charAt(0).toLowerCase()}
+										{pick.slice(1)}: {names}
+									</div>
 								)}
 							</dd>
 						)}
@@ -1006,7 +1016,9 @@ function Inspector({
 					(scheme !== undefined && names !== undefined ? (
 						<>
 							<dt>Value</dt>
-							<dd className="quiet">Name a shared one: {names}</dd>
+							<dd className="quiet">
+								{pick}: {names}
+							</dd>
 						</>
 					) : (
 						<>

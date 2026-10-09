@@ -29,6 +29,7 @@ import {
 } from "./schemes.ts";
 import type { Draft } from "./surface/draft.ts";
 import type { Env } from "./surface/env.ts";
+import { type Livelit, livelitsOf } from "./surface/livelits.ts";
 import type { Mark } from "./surface/marks.ts";
 import { parseSurface } from "./surface/parse.ts";
 import {
@@ -46,6 +47,8 @@ export interface Evaluation {
 	readonly ranges: Readonly<Record<string, Range>>;
 	/** What the editor colours by meaning (see marks.ts). */
 	readonly marks: readonly Mark[];
+	/** The fields a picker of shared entries can fill (see livelits.ts). */
+	readonly livelits: readonly Livelit[];
 	/** The question's DDI items, unkeyed, for an export of many questions to gather. */
 	readonly items: readonly Item[];
 	readonly ddi: DdiDocument;
@@ -82,6 +85,7 @@ export function evaluate(
 		),
 		ranges,
 		marks: parsed.marks,
+		livelits: livelitsOf(parsed),
 		items,
 		ddi: documentOf(items),
 		respondent: respondentView(draft),
