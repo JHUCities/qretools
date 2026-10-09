@@ -1747,6 +1747,17 @@ function openLink(model: Model, link: Link): Step {
 		];
 	if (!loaded || session === undefined)
 		return [{ ...model, pendingLink: link }, []];
+	// The bank's version is where your copy started, never someone else's: a link to the
+	// default branch (one written before your first save, say) opens your copy too.
+	if (own !== undefined && link.branch === session.defaultBranch)
+		return [
+			compact({
+				...model,
+				screen: { kind: "editing", id: own.id } as const,
+				pendingLink: undefined,
+			}),
+			[],
+		];
 	if (ownBranches.includes(link.branch))
 		return link.file === undefined
 			? [{ ...model, screen: { kind: "blank" } }, []]

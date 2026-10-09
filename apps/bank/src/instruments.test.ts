@@ -577,3 +577,77 @@ describe("a link to an instrument", () => {
 		expect(back.screen).toEqual({ kind: "editing", id: e.id });
 	});
 });
+
+describe("following an instrument's question, editing it, and coming back", () => {
+	it("is the author's own copy throughout, the instrument reading the edit, before and after a save", () => {
+		const [start] = init({
+			work: ok(undefined),
+			hasToken: true,
+			settings: { owner: "o", repo: "r", path: "", remember: false },
+		});
+		let [m] = update(start, {
+			kind: "connected",
+			result: ok({
+				login: "iain",
+				avatarUrl: "https://a/iain",
+				access: { kind: "write" },
+				defaultBranch: "main",
+			}),
+		});
+		// No branch of the author's yet: the workspace is read from main.
+		[m] = update(m, {
+			kind: "workspaceLoaded",
+			result: ok({
+				files: Object.entries(files).map(([path, text]) => ({
+					path,
+					sha: `sha-${path}`,
+					text,
+				})),
+				found: false,
+				from: "default" as const,
+				aheadBy: 0,
+				behindBy: 0,
+				unread: [],
+			}),
+		});
+		const e = at(m, HOUSEHOLDS) as InstrumentEntry;
+		[m] = update(m, { kind: "fileOpened", id: e.id });
+		const [followed, cmds] = update(m, {
+			kind: "definitionRequested",
+			id: e.id,
+			offset: e.source.indexOf("hh.consent") + 3,
+		});
+		const q = at(followed, CONSENT);
+		expect(followed.screen).toEqual({ kind: "editing", id: q.id });
+		const old = cmds.find(
+			(c): c is Extract<Cmd, { kind: "setLink" }> => c.kind === "setLink",
+		)?.hash;
+		expect(parseLink(old ?? "")).toMatchObject({
+			branch: "main",
+			file: CONSENT,
+		});
+		// Renamed here: the instrument reads it at once, before any save.
+		const renamed = q.source.replace(/^name: consent$/m, "name: agreed");
+		[m] = update(followed, { kind: "edited", text: renamed });
+		const evaluations = createEvaluations();
+		const said = (model: Model) =>
+			evaluations
+				.instrument(model, at(model, HOUSEHOLDS) as InstrumentEntry)
+				.instrument.findings.some((f) => /consent/.test(f.message));
+		expect(said(m)).toBe(true);
+		// Saved: the author's branch now exists, and holds a newer version than main.
+		const [saving, saved] = update(m, { kind: "saveRequested", id: q.id });
+		const commit = saved.find(
+			(c): c is Extract<Cmd, { kind: "commit" }> => c.kind === "commit",
+		);
+		[m] = update(saving, {
+			kind: "committed",
+			changes: commit?.changes ?? [],
+			result: ok({ shas: { [CONSENT]: "newer" } }),
+		});
+		// Back to the instrument, then Forward to the link written before the save.
+		[m] = update(m, { kind: "fileOpened", id: e.id });
+		const [forward] = update(m, { kind: "hashChanged", hash: old ?? "" });
+		expect(forward.screen).toEqual({ kind: "editing", id: q.id });
+	});
+});
