@@ -434,6 +434,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 						text={e.source}
 						diagnostics={diagnostics}
 						marks={marks}
+						livelits={instrument.livelits}
 						instrument
 						label={`Instrument ${e.name}: source (YAML)`}
 					/>

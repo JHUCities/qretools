@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressOf, joinFolder } from "./address.ts";
+import { addressOf, joinFolder, relativeFolder } from "./address.ts";
 
 describe("a bank's address", () => {
 	it("is a folder beside the instrument when it starts ./ or ../", () => {
@@ -75,5 +75,23 @@ describe("a folder from a folder", () => {
 
 	it("leads nowhere above the root", () => {
 		expect(joinFolder("instruments", "../../hh")).toBeUndefined();
+	});
+});
+
+describe("a folder written from a folder", () => {
+	it("is joinFolder's inverse, always local", () => {
+		const cases: [string, string, string][] = [
+			["instruments", "banks/hh", "../banks/hh"],
+			["instruments", "", "../"],
+			["", "hh", "./hh"],
+			["", "", "./"],
+			["p/instruments", "p/banks/x", "../banks/x"],
+			["a/b", "a/b/c", "./c"],
+		];
+		for (const [base, to, written] of cases) {
+			expect(relativeFolder(base, to)).toBe(written);
+			expect(joinFolder(base, written)).toBe(to);
+			expect(addressOf(written).kind).toBe("local");
+		}
 	});
 });

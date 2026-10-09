@@ -42,10 +42,16 @@ export interface Choice {
 	readonly codes?: readonly Code[];
 }
 
-/** Where a picker's choices come from: the core's environment, the livelit itself, or the app. */
+/**
+ * Where a picker's choices come from: the core's environment, the livelit itself, or the
+ * app: an instrument's banks' questions (`questionChoices`), the banks it can use
+ * (`bankChoices`).
+ */
 export type Source =
 	| { readonly kind: "scheme"; readonly scheme: NamedScheme }
-	| { readonly kind: "enum"; readonly values: readonly Choice[] };
+	| { readonly kind: "enum"; readonly values: readonly Choice[] }
+	| { readonly kind: "questions" }
+	| { readonly kind: "banks" };
 
 export type Picker =
 	| {
@@ -84,7 +90,7 @@ export interface Livelit {
  * character. A block value (a list on the lines below) starts at its newline, so writing
  * there replaces the whole block.
  */
-function valueSpan(source: string, field: Range): Range {
+export function valueSpan(source: string, field: Range): Range {
 	const text = source.slice(field[0], field[1]);
 	let start = text.indexOf(":") + 1;
 	while (text[start] === " " || text[start] === "\t") start++;
@@ -107,7 +113,7 @@ const FILL_TYPE: readonly Choice[] = [
 ];
 
 /** A picker of fixed values at a field written empty or as one word; none elsewhere. */
-function enumAt(
+export function enumAt(
 	source: string,
 	parsed: {
 		readonly ranges: Readonly<Record<string, Range>>;
