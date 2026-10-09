@@ -11,6 +11,7 @@ export {
 	type AddressKey,
 	addressOf,
 	joinFolder,
+	relativeFolder,
 } from "./address.ts";
 export {
 	type BankLocation,

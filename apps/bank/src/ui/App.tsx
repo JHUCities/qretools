@@ -67,6 +67,7 @@ import {
 	workspaceLeaves,
 } from "../tree.js";
 import {
+	bankAddProblem,
 	bankLoading,
 	compareUrl,
 	folderOfPath,
@@ -80,6 +81,7 @@ import {
 	writeBlocked,
 } from "../update.js";
 import { instrumentsUsing } from "../usedBy.js";
+import { AddBankDialog } from "./AddBankDialog.js";
 import {
 	SESSION_STATUS,
 	useApp,
@@ -133,6 +135,11 @@ function NewMenu({
 						}
 					>
 						Example instrument…
+					</ActionList.Item>
+					<ActionList.Item
+						onSelect={() => dispatch({ kind: "bankAddOpened", how: "new" })}
+					>
+						Bank…
 					</ActionList.Item>
 					<ActionList.Item
 						onSelect={() => dispatch({ kind: "workspaceDetailsOpened" })}
@@ -337,6 +344,7 @@ export function App() {
 		shownBanks.length === 0 && Object.keys(local.workspace).length > 0;
 	const naming = model.browser.naming;
 	const namingInstrument = model.browser.namingInstrument;
+	const addingBank = model.browser.addingBank;
 	const moving = model.browser.moving;
 	const movingQuestion =
 		moving === undefined ? undefined : model.local.questions[moving.id];
@@ -664,6 +672,13 @@ export function App() {
 						usersIn(indexFor(movingQuestion.bank)),
 						movingQuestion.bank,
 					)}
+					dispatch={dispatch}
+				/>
+			)}
+			{addingBank && (
+				<AddBankDialog
+					adding={addingBank}
+					problem={bankAddProblem(model, addingBank)}
 					dispatch={dispatch}
 				/>
 			)}

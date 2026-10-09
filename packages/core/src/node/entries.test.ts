@@ -88,6 +88,7 @@ describe("the entry points", () => {
 			    "readsInWorkspace",
 			    "refusalReason",
 			    "relIn",
+			    "relativeFolder",
 			    "remotesOf",
 			    "resolveUses",
 			    "respondentView",

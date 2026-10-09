@@ -5,9 +5,9 @@
  * they don't depend on the banks; what an `ask` or `uses` picker offers is the app's to
  * give, from these functions, as the banks it has are the app's.
  */
-import { relativeFolder } from "../address.ts";
+import { type Address, relativeFolder } from "../address.ts";
 import type { BankScope, Evaluation } from "../evaluate.ts";
-import type { Range } from "../findings.ts";
+import type { Fix, Range } from "../findings.ts";
 import {
 	type Choice,
 	enumAt,
@@ -130,12 +130,18 @@ export function instrumentLivelits(
 			"Choose a bank",
 			{ kind: "banks" },
 			(w) => !w.includes("\n"),
-		),
+		).map((l) => ({ ...l, actions: bankActions(l.id) })),
 	);
 	return [...uses, ...steps(parsed.draft.flow)].sort(
 		(a, b) => a.field[0] - b.field[0],
 	);
 }
+
+/** What a `uses` picker offers besides the banks there are: a new one, or one on GitHub. */
+const bankActions = (path: string): readonly Fix[] => [
+	{ kind: "bank", label: "New bank in this workspace…", how: "new", path },
+	{ kind: "bank", label: "Use a bank from GitHub…", how: "import", path },
+];
 
 /** What a question's answer is, in words: "select one, 5 options", "number", "open". */
 function answerOf(domain: Evaluation["draft"]["domain"]): string | undefined {
@@ -170,20 +176,22 @@ export function questionChoices(
 
 /**
  * The banks an instrument in `folder` can use: the workspace's own, written from there
- * (`../banks/hh`), then those in other repositories other instruments already use.
+ * (`../banks/hh`), then those in other repositories its instruments already use, each
+ * spelled as it was written there (`JHUCities/…`, not its lowercased key), so choosing
+ * one changes nothing another instrument's diff would show.
  */
 export function bankChoices(
 	folder: string,
 	local: readonly string[],
-	remote: readonly string[],
+	remote: readonly Extract<Address, { kind: "remote" }>[],
 ): readonly Choice[] {
 	return [
 		...local.map((bank) => ({
 			name: relativeFolder(folder, bank),
 			detail: bank === "" ? "This workspace's bank" : `The bank in ${bank}`,
 		})),
-		...remote.map((address) => ({
-			name: address,
+		...remote.map((a) => ({
+			name: `${a.owner}/${a.repo}${a.path === "" ? "" : `/${a.path}`}@${a.ref}`,
 			detail: "A bank on GitHub",
 		})),
 	];
