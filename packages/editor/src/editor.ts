@@ -583,10 +583,11 @@ const primerTheme = EditorView.theme({
 		color: "var(--fgColor-default)",
 		backgroundColor: "var(--bgColor-muted)",
 	},
-	// Problems by severity, told apart by line style as well as colour (so colour-
-	// vision deficiency never hides one): wavy for errors and warnings, dotted for
-	// info, dashed for holes (hint). Primer tokens replace CodeMirror's fixed-colour
-	// squiggle images. Where findings overlap, CodeMirror draws only the most severe, so
+	// Problems by severity: one thin wavy underline in the severity's colour, as native
+	// editors draw them (owner, 2026-10-09; they had differed in line style too). The
+	// hover and the Findings list name the severity in words; a hole keeps its tinted
+	// background as a second cue beside a warning's same hue. Primer tokens replace
+	// CodeMirror's fixed-colour squiggle images. Where findings overlap, CodeMirror draws only the most severe, so
 	// a hole inside an error shows as the error; an empty hole keeps its chip (a widget).
 	".cm-lintRange-error": {
 		backgroundImage: "none",
@@ -608,8 +609,8 @@ const primerTheme = EditorView.theme({
 	".cm-diagnostic-warning": { borderLeftColor: "var(--fgColor-attention)" },
 	".cm-lintRange-info": {
 		backgroundImage: "none",
-		textDecoration: "underline dotted var(--fgColor-accent)",
-		textDecorationThickness: "var(--borderWidth-thick)",
+		textDecoration: "underline wavy var(--fgColor-accent)",
+		textDecorationThickness: "var(--borderWidth-thin)",
 		textUnderlinePosition: "under",
 	},
 	".cm-lintPoint-info:after": { borderBottomColor: "var(--fgColor-accent)" },
@@ -650,34 +651,46 @@ const primerTheme = EditorView.theme({
 	},
 	// A hole: CodeMirror's own point marker (one per place, however many holes it holds),
 	// drawn as Primer's dashed circle (`IssueDraftIcon`), as in the Findings panel, so one
-	// shape means "to fill in" everywhere. One em square so it matches the glyphs and
-	// never grows the line; the icon is a mask, coloured by `currentColor`. Forced
-	// colours keep it visible (below).
+	// shape means "to fill in" everywhere. The point takes no room: the circle is drawn
+	// over the empty space after it, so nothing in the line moves when a hole comes or
+	// goes, and the caret has one place beside it (it had sat on either side of a 1em
+	// box, and the text jumped by it on the first keystroke). Holes sit at empty values,
+	// at a line's end; one inside a flow map (`{a: , b: 1}`) would cover what follows.
+	// The icon is a mask, coloured by `currentColor`. It stays the widget's for the
+	// pointer, since CodeMirror finds a hover's place by the widget (past the line's text
+	// it finds none); a click on it puts the caret at the hole. Forced colours keep it
+	// visible (below).
 	".cm-lintPoint-hint": {
+		position: "relative",
 		display: "inline-block",
-		inlineSize: "1em",
+		inlineSize: "0",
 		blockSize: "1em",
-		marginInlineStart: "var(--base-size-4)",
 		verticalAlign: "text-bottom",
 		color: "var(--fgColor-attention)",
+	},
+	".cm-lintPoint-hint:before": {
+		content: '""',
+		position: "absolute",
+		insetBlockStart: "0",
+		insetInlineStart: "var(--base-size-4)",
+		inlineSize: "1em",
+		blockSize: "1em",
 		backgroundColor: "currentColor",
 		mask: `url("data:image/svg+xml,${encodeURIComponent(issueDraftSvg)}") center / contain no-repeat`,
 	},
 	".cm-lintPoint-hint:after": { display: "none" },
 	// Forced colours override backgrounds, which would blank the mask: the text colour.
 	"@media (forced-colors: active)": {
-		".cm-lintPoint-hint": {
+		".cm-lintPoint-hint:before": {
 			forcedColorAdjust: "none",
 			backgroundColor: "CanvasText",
 		},
 	},
-	// A dashed underline, not a dashed border: a border spaces its dashes to fit its
-	// width, so every keystroke in the hole moved them all (measured: this holds still).
 	".cm-lintRange-hint": {
 		backgroundImage: "none",
 		backgroundColor: "var(--bgColor-attention-muted)",
-		textDecoration: "underline dashed var(--fgColor-attention)",
-		textDecorationThickness: "var(--borderWidth-thick)",
+		textDecoration: "underline wavy var(--fgColor-attention)",
+		textDecorationThickness: "var(--borderWidth-thin)",
 		textUnderlinePosition: "under",
 	},
 	".cm-diagnostic-hint": { borderLeftColor: "var(--fgColor-attention)" },

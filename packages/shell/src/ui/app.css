@@ -38,6 +38,16 @@ body {
 [class*="prc-Link-Link"][data-muted="true"]:hover {
 	color: var(--fgColor-muted);
 }
+/*
+ * A link written as a button (a finding's message, its fix, an outline's step) wraps
+ * and aligns like the text it's in: Primer keeps such a link on one line, so a long
+ * finding ran off its pane, and a button centres what wraps.
+ */
+button[class*="prc-Link-Link"] {
+	white-space: normal;
+	overflow-wrap: anywhere;
+	text-align: start;
+}
 .external-icon {
 	margin-inline-start: var(--base-size-4);
 }
