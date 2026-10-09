@@ -63,14 +63,21 @@ export function EditorPane(
 							snippets: domainSnippets,
 							// Pickers read the open question's bank as it is when one opens.
 							livelit: {
-								choices: (kind) => {
+								choices: (source) => {
 									const { model } = store.getState();
 									const q = model.local.questions[open.current];
-									return q === undefined
+									return q === undefined || source.kind !== "scheme"
 										? []
-										: choicesOf(evaluations.env(model, q.bank), kind);
+										: choicesOf(evaluations.env(model, q.bank), source.scheme);
 								},
-								choose: (fix) =>
+								choose: (livelit, value) =>
+									dispatch({
+										kind: "livelitChosen",
+										id: open.current,
+										livelit: livelit.id,
+										value,
+									}),
+								act: (fix) =>
 									dispatch({ kind: "fixApplied", id: open.current, fix }),
 							},
 						}
