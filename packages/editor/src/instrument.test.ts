@@ -37,11 +37,15 @@ describe("completion in an instrument, as CodeMirror asks for it", () => {
 		expect(asked).toMatchObject({
 			from: HEAD.length,
 			options: [
-				{ label: "hh.own", type: "class", detail: "Do you own your home?" },
+				{
+					label: "hh.own",
+					type: "class",
+					detail: "select one, 2 options · Do you own your home?",
+				},
 				{
 					label: "hh.size",
 					type: "class",
-					detail: "How many people live here?",
+					detail: "number · How many people live here?",
 				},
 			],
 		});

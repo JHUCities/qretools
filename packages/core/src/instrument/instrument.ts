@@ -9,9 +9,11 @@ import type { BankScope } from "../evaluate.ts";
 import { type Finding, inDocumentOrder, type Range } from "../findings.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
+import type { Livelit } from "../surface/livelits.ts";
 import { checkInstrument } from "./check.ts";
 import type { InstrumentDraft, Use } from "./draft.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
+import { instrumentLivelits } from "./livelits.ts";
 import { parseInstrument, type Unread } from "./parse.ts";
 import { type InstrumentRef, instrumentRefs } from "./refs.ts";
 
@@ -45,6 +47,8 @@ export interface Instrument {
 	readonly collisions: readonly Collision<string>[];
 	/** Where it names its banks' files, for go to definition (`instrumentRefs`). */
 	readonly refs: readonly InstrumentRef[];
+	/** Its pickers (`instrumentLivelits`): the same whatever banks it was given. */
+	readonly livelits: readonly Livelit[];
 }
 
 export function instrumentOf(
@@ -118,6 +122,7 @@ export function instrumentOf(
 		ddi: document,
 		collisions,
 		refs: instrumentRefs(parsed, source),
+		livelits: instrumentLivelits(source, parsed),
 	};
 }
 

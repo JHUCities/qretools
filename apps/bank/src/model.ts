@@ -180,6 +180,12 @@ export interface Remote {
 	readonly workspace: Readonly<Record<Path, Blob>>;
 }
 
+export interface AddingBank {
+	readonly how: "new" | "import";
+	readonly text: string;
+	readonly use?: { readonly id: Id; readonly path: string };
+}
+
 export type Screen =
 	| { readonly kind: "blank" }
 	| { readonly kind: "editing"; readonly id: Id }
@@ -212,6 +218,12 @@ export interface Browser {
 	 * the question it was asked from; or a draft shared file is renamed.
 	 */
 	readonly naming?: Naming;
+	/**
+	 * A bank being added: a new one in this workspace, its folder named (`banks/<text>`),
+	 * or one on GitHub, its address given. From an instrument's `uses` entry, `use` is
+	 * where its address is written once it's added.
+	 */
+	readonly addingBank?: AddingBank;
 	/** A new instrument is named before it exists, as a shared file is: its name is its file's. */
 	readonly namingInstrument?: {
 		readonly name: string;
@@ -326,6 +338,8 @@ export interface Naming {
 				readonly kind: "create";
 				/** The question that named it, and where: that reference is rewritten to the name chosen. */
 				readonly use?: { readonly id: Id; readonly path: string };
+				/** A scale made from the question's own options there, which its name replaces. */
+				readonly share?: true;
 		  }
 		| { readonly kind: "rename"; readonly id: Id };
 }
@@ -336,6 +350,17 @@ export type Msg =
 	| { readonly kind: "themeChosen"; readonly theme: ThemeChoice }
 	/** A finding's quick fix, clicked: edits in the document's terms, applied to the text as it is now. */
 	| { readonly kind: "fixApplied"; readonly id: Id; readonly fix: Fix }
+	/**
+	 * A livelit's picker, chosen from: the file, the livelit by its place (its id), and
+	 * the value. `update` finds the livelit again in the text as it is now and writes there.
+	 */
+	| {
+			readonly kind: "livelitChosen";
+			readonly id: Id;
+			readonly livelit: string;
+			/** One value, or a set chosen together. */
+			readonly value: string | readonly string[];
+	  }
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "cursorMoved"; readonly offset: number }
 	/** Go to definition (Mod-click or F12 on a shared name): open the file it names. */
@@ -392,6 +417,11 @@ export type Msg =
 	| { readonly kind: "instrumentNameChanged"; readonly name: string }
 	| { readonly kind: "instrumentNamingCancelled" }
 	| { readonly kind: "instrumentNamingConfirmed" }
+	/** A bank to add: a new one here (from New or a `uses` entry), or one on GitHub (from one). */
+	| { readonly kind: "bankAddOpened"; readonly how: "new" }
+	| { readonly kind: "bankAddChanged"; readonly text: string }
+	| { readonly kind: "bankAddCancelled" }
+	| { readonly kind: "bankAddConfirmed" }
 	/** The workspace details: opened if they exist, else started. One per workspace. */
 	| { readonly kind: "workspaceDetailsOpened" }
 	/** A read of a bank in another repository has started: now it is being read. */

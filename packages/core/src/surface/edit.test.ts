@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { applyEdits, renameEdits } from "./edit.ts";
+import {
+	addVariant,
+	applyEdits,
+	renameEdits,
+	sharedScaleSource,
+} from "./edit.ts";
 
 describe("applying edits", () => {
 	it("replaces a block map with the name, keeping the line that follows", () => {
@@ -96,5 +101,72 @@ describe("a unit inside a flow map", () => {
 				{ path: "number.unit", value: "days" },
 			]),
 		).toBe("number: { min: 0, unit: days }\n");
+	});
+});
+
+describe("naming a question as a variant", () => {
+	const add = (source: string, name = "other") => {
+		const r = addVariant(source, name);
+		return r.kind === "written"
+			? [r.text, r.text.slice(0, r.caret).split("\n").at(-1)]
+			: r.kind;
+	};
+
+	it("adds `variant_of` where the field order puts it, the caret at the empty reason", () => {
+		expect(add("name: q\ntext: Is it so?\nresponses: yn\nsource: X\n")).toEqual(
+			[
+				"name: q\ntext: Is it so?\nresponses: yn\nsource: X\nvariant_of:\n  other:\n",
+				"  other:",
+			],
+		);
+		expect(add("name: q\ntext: Is it so?")).toEqual([
+			"name: q\ntext: Is it so?\nvariant_of:\n  other:\n",
+			"  other:",
+		]);
+	});
+
+	it("adds an entry after the last, at its indent, past a comment between entries", () => {
+		const text =
+			"name: q\nvariant_of:\n    a: Why a.\n    # b is next\n    b: Why b.\nnote: n\n";
+		expect(add(text)).toEqual([
+			"name: q\nvariant_of:\n    a: Why a.\n    # b is next\n    b: Why b.\n    other:\nnote: n\n",
+			"    other:",
+		]);
+	});
+
+	it("writes under an empty `variant_of`, its comment kept on its line", () => {
+		expect(add("name: q\nvariant_of: # who\n")).toEqual([
+			"name: q\nvariant_of: # who\n  other:\n",
+			"  other:",
+		]);
+	});
+
+	it("says when it's named already, or can't be written as a line", () => {
+		expect(add("name: q\nvariant_of:\n  other: Why.\n")).toBe("named");
+		expect(add("name: q\nvariant_of: {a: b}\n")).toBe("unwritable");
+		expect(add("[a, b]")).toBe("unwritable");
+	});
+});
+
+describe("a shared scale from a question's own options", () => {
+	it("copies them as written, codes as spelled and comments kept, under `labels:`", () => {
+		expect(
+			sharedScaleSource(
+				'name: q\nresponses:\n    "010": Agree\n    # the middle\n    "020": Neither\n    030: Disagree\nnote: n\n',
+			),
+		).toBe(
+			'labels:\n  "010": Agree\n  # the middle\n  "020": Neither\n  030: Disagree\n',
+		);
+	});
+
+	it("is undefined for options a scale can't hold as they stand, or none written inline", () => {
+		for (const text of [
+			'responses:\n  "1": { label: Yes, title: YES }\n',
+			'responses: { "1": Yes }\n',
+			"responses: agree4\n",
+			'responses:\n  "1":\n',
+			"open: {}\n",
+		])
+			expect(sharedScaleSource(text), text).toBeUndefined();
 	});
 });

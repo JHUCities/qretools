@@ -1,4 +1,10 @@
-import { EMPTY_ENV, evaluate, ok } from "@qretools/core";
+import {
+	definedVariables,
+	EMPTY_ENV,
+	evaluate,
+	ok,
+	parseSurface,
+} from "@qretools/core";
 import { createFor, locate } from "@qretools/core/editor";
 import { toDiagnostics } from "@qretools/editor";
 import type { File } from "@qretools/shell";
@@ -25,6 +31,7 @@ import {
 	branchOwner,
 	movedPath,
 	moveProblem,
+	namingProblem,
 	ownBranch,
 	schemeNameProblem,
 	sessionStatus,
@@ -310,6 +317,87 @@ describe("a quick fix", () => {
 		expect(cmds[0]).toEqual({ kind: "revealRange", range: [at, at] });
 	});
 
+	it("names the other question under `variant_of`, the caret at the reason to write", () => {
+		const fix = { kind: "variant" as const, label: "", name: "b" };
+		const created = (text: string) =>
+			update(fresh(), { kind: "questionCreated", text })[0];
+		const m = created("name: q\ntext: Is it so?\n");
+		const [next, cmds] = update(m, { kind: "fixApplied", id: 1, fix });
+		const source = next.local.questions[1]?.source ?? "";
+		expect(source).toBe("name: q\ntext: Is it so?\nvariant_of:\n  b:\n");
+		const at = source.indexOf("b:") + 2;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [at, at] });
+		// A flow map it can't add a line to: the text stays, the caret goes there.
+		const flow = created("name: q\nvariant_of: {a: Why.}\n");
+		const [same, there] = update(flow, { kind: "fixApplied", id: 1, fix });
+		expect(same).toBe(flow);
+		const start = "name: q\n".length;
+		expect(there).toEqual([{ kind: "revealRange", range: [start, start] }]);
+	});
+
+	describe("making a question's own options a shared scale", () => {
+		const OPTIONS =
+			'name: q\ntext: Is it so?\nresponses:\n  "010": Yes\n  # or not\n  "020": No\nnote: n\n';
+		const share = { kind: "share" as const, label: "", path: "responses" };
+		const named = (text: string, name = "yn") => {
+			const m = update(fresh(), { kind: "questionCreated", text })[0];
+			const opened = update(m, { kind: "fixApplied", id: 1, fix: share })[0];
+			return update(opened, { kind: "schemeNameChanged", name })[0];
+		};
+
+		it("names the scale, writes the options into it as written, and the question names it", () => {
+			const m = named(OPTIONS);
+			expect(m.browser.naming).toMatchObject({
+				kind: "scale",
+				bank: m.local.questions[1]?.bank,
+				purpose: {
+					kind: "create",
+					use: { id: 1, path: "responses" },
+					share: true,
+				},
+			});
+			const [next] = update(m, { kind: "schemeNamingConfirmed" });
+			expect(next.local.questions[1]?.source).toBe(
+				"name: q\ntext: Is it so?\nresponses: yn\nnote: n\n",
+			);
+			const scale = Object.values(next.local.schemes).find(
+				(s) => s.kind === "scale" && s.name === "yn",
+			);
+			expect(scale?.source).toBe(
+				'labels:\n  "010": Yes\n  # or not\n  "020": No\n',
+			);
+			// The author stays on the question, now naming its scale.
+			expect(next.screen).toEqual({ kind: "editing", id: 1 });
+		});
+
+		it("writes nothing when the options changed so that they can't be shared", () => {
+			const m = named(OPTIONS);
+			const edited = update(m, {
+				kind: "edited",
+				text: OPTIONS.replace('"020": No', '"020": { label: No, title: NO }'),
+			})[0];
+			const naming = edited.browser.naming;
+			expect(naming && namingProblem(edited, naming)).toMatch(
+				/can't be shared/,
+			);
+			const [next] = update(edited, { kind: "schemeNamingConfirmed" });
+			expect(next).toBe(edited);
+		});
+
+		it("keeps a select-all question's option variables", () => {
+			const text =
+				"name: q\ntext: Which?\nselect: many\nresponses:\n  b: Bus\n  w: Walk\n";
+			const [next] = update(named(text, "modes"), {
+				kind: "schemeNamingConfirmed",
+			});
+			const vars = (m: Model) =>
+				definedVariables(
+					parseSurface(m.local.questions[1]?.source ?? "", envIn(m, "")).draft,
+				).map((v) => v.name);
+			expect(vars(next)).toEqual(["q_b", "q_w"]);
+		});
+	});
+
 	it("leaves focus to the name dialog when the fix creates a shared entry", () => {
 		const m = update(fresh(), {
 			kind: "questionCreated",
@@ -327,6 +415,58 @@ describe("a quick fix", () => {
 		};
 		const [, cmds] = update(m, { kind: "fixApplied", id: 1, fix: create });
 		expect(cmds.some((c) => c.kind === "revealRange")).toBe(false);
+	});
+
+	it("writes a picker's choice where the picker is in the text as it is now, the caret after it", () => {
+		const m = update(fresh(), {
+			kind: "questionCreated",
+			text: "name: q\nresponses:\n",
+		})[0];
+		const chosen = (livelit: string, value = "agree4") =>
+			update(m, { kind: "livelitChosen", id: 1, livelit, value });
+		const [next, cmds] = chosen("responses");
+		expect(next.local.questions[1]?.source).toBe(
+			"name: q\nresponses: agree4\n",
+		);
+		const end = "name: q\nresponses: agree4".length;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [end, end] });
+		// No picker of that id in the text now: nothing changes.
+		expect(chosen("concept")[0]).toBe(m);
+		const inline = update(m, {
+			kind: "edited",
+			text: 'name: q\nresponses:\n  "1": Yes\n',
+		})[0];
+		expect(
+			update(inline, {
+				kind: "livelitChosen",
+				id: 1,
+				livelit: "responses",
+				value: "agree4",
+			})[0],
+		).toBe(inline);
+	});
+
+	it("writes a bank's required fields chosen in its details' checklist", () => {
+		const m = update(fresh(), {
+			kind: "schemeCreateOpened",
+			scheme: "bank",
+			bank: "",
+		})[0];
+		const id = firstId(m);
+		const typed = update(m, {
+			kind: "edited",
+			text: "agency: org.example\nrequired:\n  - title\n",
+		})[0];
+		const [next] = update(typed, {
+			kind: "livelitChosen",
+			id,
+			livelit: "required",
+			value: ["title", "concept"],
+		});
+		// The block list stays a block.
+		expect(next.local.schemes[id]?.source).toBe(
+			"agency: org.example\nrequired:\n  - title\n  - concept\n",
+		);
 	});
 
 	it("makes a new shared entry from a field's picker, then names it there, for every kind", () => {

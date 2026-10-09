@@ -85,7 +85,7 @@ export function evaluate(
 		),
 		ranges,
 		marks: parsed.marks,
-		livelits: livelitsOf(parsed),
+		livelits: livelitsOf(source, parsed, env),
 		items,
 		ddi: documentOf(items),
 		respondent: respondentView(draft),

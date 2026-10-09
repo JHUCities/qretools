@@ -5,6 +5,7 @@ import {
 	banksIn,
 	compact,
 	EMPTY_ENV,
+	evaluateScheme,
 	exampleInstrument,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
@@ -23,23 +24,30 @@ import {
 	type Range,
 	type RemoteBank,
 	type Result,
+	relativeFolder,
 	relIn,
 	remotesOf,
 	SCHEME_NAME,
 	SHAPE,
 	saveableName,
 	UNNAMED,
+	WORKSPACE,
 	workspaceFileOf,
 } from "@qretools/core";
 import {
 	addSpace,
+	addVariant,
 	applyEdits,
+	applyLivelit,
+	type Livelit,
 	labelledSource,
+	livelitsOf,
 	locate,
 	mentionAt,
 	quoteCode,
 	rangesOf,
 	renameEdits,
+	sharedScaleSource,
 	textEntrySource,
 	withFields,
 } from "@qretools/core/editor";
@@ -67,6 +75,7 @@ import {
 import { createEvaluations } from "./evaluations.js";
 import {
 	type Activity,
+	type AddingBank,
 	allFiles,
 	type BankEntry,
 	type Blob,
@@ -246,6 +255,14 @@ function step(model: Model, msg: Msg): Step {
 						[{ kind: "applyTheme", theme: msg.theme }],
 					];
 
+		case "livelitChosen": {
+			// Like typing: only the open file, which the author can edit.
+			const q = current(model);
+			if (!q || q.id !== msg.id) return [model, []];
+			const written = writeLivelit(model, q.id, msg.livelit, msg.value);
+			return written === undefined ? [model, []] : persist(written);
+		}
+
 		case "fixApplied": {
 			// Like typing: only the open file, which the author can edit. A path the text
 			// no longer has (it changed since the fix was offered) changes nothing.
@@ -274,6 +291,22 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				];
 			}
+			// A bank for a `uses` entry: its dialog, pointed back at this place.
+			if (fix.kind === "bank")
+				return [
+					{
+						...model,
+						browser: {
+							...model.browser,
+							addingBank: {
+								how: fix.how,
+								text: "",
+								use: { id: q.id, path: fix.path },
+							},
+						},
+					},
+					[],
+				];
 			if (fix.kind === "space") {
 				const spaced = addSpace(q.source, fix.path, fix.word);
 				if (spaced === undefined) return [model, []];
@@ -283,6 +316,46 @@ function step(model: Model, msg: Msg): Step {
 				return persist([
 					withSource(model, q.id, spaced),
 					[{ kind: "revealRange", range: [at + 1, at + 1] }],
+				]);
+			}
+			// Options made a shared scale: its name dialog, in the question's bank, pointed
+			// back at the options it replaces.
+			if (fix.kind === "share") {
+				if (!isBankEntry(q)) return [model, []];
+				return [
+					{
+						...model,
+						browser: {
+							...model.browser,
+							naming: {
+								kind: "scale",
+								name: "",
+								text: "",
+								bank: q.bank,
+								purpose: {
+									kind: "create",
+									use: { id: q.id, path: fix.path },
+									share: true,
+								},
+							},
+						},
+					},
+					[],
+				];
+			}
+			if (fix.kind === "variant") {
+				const added = addVariant(q.source, fix.name);
+				// Named there already: the finding goes on the next evaluation.
+				if (added.kind === "named") return [model, []];
+				// Not a line it can add to (a flow map): the caret goes to `variant_of`, for
+				// the author to write it there; a fix never does nothing at all.
+				if (added.kind === "unwritable") {
+					const at = rangesOf(q.source).variant_of ?? [0, 0];
+					return [model, [{ kind: "revealRange", range: [at[0], at[0]] }]];
+				}
+				return persist([
+					withSource(model, q.id, added.text),
+					[{ kind: "revealRange", range: [added.caret, added.caret] }],
 				]);
 			}
 			if (fix.kind === "quote") {
@@ -632,6 +705,69 @@ function step(model: Model, msg: Msg): Step {
 			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
 		}
 
+		case "bankAddOpened":
+			return [
+				{
+					...model,
+					browser: { ...model.browser, addingBank: { how: msg.how, text: "" } },
+				},
+				[],
+			];
+
+		case "bankAddChanged": {
+			const adding = model.browser.addingBank;
+			return adding === undefined
+				? [model, []]
+				: [
+						{
+							...model,
+							browser: {
+								...model.browser,
+								addingBank: { ...adding, text: msg.text },
+							},
+						},
+						[],
+					];
+		}
+
+		case "bankAddCancelled":
+			return [{ ...model, browser: withoutAdding(model.browser) }, []];
+
+		case "bankAddConfirmed": {
+			const adding = model.browser.addingBank;
+			if (adding === undefined || bankAddProblem(model, adding) !== undefined)
+				return [model, []];
+			const closed = { ...model, browser: withoutAdding(model.browser) };
+			// A new bank is its `bank.yaml`, from the template; one on GitHub is its address.
+			const folder = newBankFolder(adding.text);
+			const [added, id] =
+				adding.how === "new"
+					? add(closed, {
+							kind: "bank",
+							name: "bank",
+							bank: folder,
+							source: SCHEME_TEMPLATES.bank,
+						})
+					: [closed, undefined];
+			const address =
+				adding.how === "new"
+					? relativeFolder(WORKSPACE.instruments, folder)
+					: adding.text.trim();
+			// Written where it was asked for, as the `uses` picker writes a bank chosen
+			// there, and the caret after it; from New, the new bank's details open.
+			const written =
+				adding.use === undefined
+					? undefined
+					: writeLivelit(added, adding.use.id, adding.use.path, address);
+			if (written !== undefined) return persist(written);
+			return persist([
+				id === undefined
+					? added
+					: { ...added, screen: { kind: "editing", id } },
+				[],
+			]);
+		}
+
 		case "workspaceDetailsOpened": {
 			// One per workspace: open it if it exists, else start it.
 			const existing = Object.values(model.local.workspace).find(
@@ -669,13 +805,23 @@ function step(model: Model, msg: Msg): Step {
 			}
 			const written = naming.text.trim() !== "";
 			const shape = SHAPE[naming.kind];
-			const source = !written
-				? SCHEME_TEMPLATES[naming.kind]
-				: shape === "labelled"
-					? labelledSource(naming.text)
-					: shape === "text"
-						? textEntrySource(naming.text)
-						: SCHEME_TEMPLATES[naming.kind];
+			// Shared from a question's options: those, as they are now (checked above).
+			const shared =
+				naming.purpose.share === true && naming.purpose.use !== undefined
+					? sharedScaleSource(
+							model.local.questions[naming.purpose.use.id]?.source ?? "",
+						)
+					: undefined;
+			const source =
+				shared !== undefined
+					? shared
+					: !written
+						? SCHEME_TEMPLATES[naming.kind]
+						: shape === "labelled"
+							? labelledSource(naming.text)
+							: shape === "text"
+								? textEntrySource(naming.text)
+								: SCHEME_TEMPLATES[naming.kind];
 			// The question that named it now names the file, whatever name was chosen.
 			const { use } = naming.purpose;
 			const [added, id] = add(closed, {
@@ -694,10 +840,13 @@ function step(model: Model, msg: Msg): Step {
 							applyEdits(q.source, [{ path: use.path, value: naming.name }]) ??
 								q.source,
 						);
-			// A universe or instruction is complete with its text: stay on the question.
-			// A scale needs its labels written, so it opens.
+			// A universe or instruction is complete with its text, and a scale made from the
+			// question's own options with them: stay on the question. A new scale needs its
+			// labels written, so it opens.
 			const stay =
-				use !== undefined && q !== undefined && naming.kind !== "scale";
+				use !== undefined &&
+				q !== undefined &&
+				(naming.kind !== "scale" || shared !== undefined);
 			return persist([
 				stay ? used : { ...used, screen: { kind: "editing", id } },
 				[],
@@ -2085,6 +2234,9 @@ const withoutSaving = (browser: Model["browser"]): Model["browser"] =>
 const withoutConfirm = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, confirmDelete: undefined });
 
+const withoutAdding = (browser: Model["browser"]): Model["browser"] =>
+	compact({ ...browser, addingBank: undefined });
+
 const withoutNaming = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, naming: undefined });
 
@@ -2097,7 +2249,27 @@ export function namingProblem(
 	naming: Naming,
 ): string | undefined {
 	const self = naming.purpose.kind === "rename" ? naming.purpose.id : undefined;
-	return schemeNameProblem(model, naming.kind, naming.name, naming.bank, self);
+	return (
+		schemeNameProblem(model, naming.kind, naming.name, naming.bank, self) ??
+		shareProblem(model, naming)
+	);
+}
+
+/**
+ * Why a question's options can't be made the shared scale being named, as they are now
+ * (they changed since the dialog opened): nothing is written then, rather than a scale
+ * without them that the question would name in their place.
+ */
+function shareProblem(model: Model, naming: Naming): string | undefined {
+	const { purpose } = naming;
+	if (purpose.kind !== "create" || purpose.share !== true) return undefined;
+	const q =
+		purpose.use === undefined
+			? undefined
+			: model.local.questions[purpose.use.id];
+	return q !== undefined && sharedScaleSource(q.source) !== undefined
+		? undefined
+		: "These responses can't be shared as they are now: each must be a plain `code: label` line, with no title, variable or note of its own.";
 }
 
 /** Every question of its bank in this tab that names the file by its old name now names the new one. */
@@ -2296,6 +2468,75 @@ function withFile(model: Model, f: Entry): Model {
 	}
 }
 
+/**
+ * A file's pickers in its text as it is now: a question's fields, a bank's details. One
+ * place, so a choice is always written where its picker is now.
+ */
+/**
+ * The pickers of a file as its text is now. An instrument's are read without its banks:
+ * they are the same either way (`instrumentLivelits`), and reading the banks is costly.
+ */
+function livelitsIn(model: Model, f: Entry): readonly Livelit[] {
+	if (f.kind === "instrument")
+		return instrumentOf(f.source, { banks: {} }).livelits;
+	if (!isBankEntry(f)) return [];
+	const env = envIn(model, f.bank);
+	return f.kind === "question"
+		? livelitsOf(f.source, parseSurface(f.source, env), env)
+		: evaluateScheme(f.kind, f.source, env, f.name).livelits;
+}
+
+/**
+ * `value` written at the picker `livelit` of file `id`, found in its text as it is now,
+ * and the caret after it, as focus follows a choice into the source; undefined when that
+ * picker isn't there any more.
+ */
+function writeLivelit(
+	model: Model,
+	id: Id,
+	livelit: string,
+	value: string | readonly string[],
+): Step | undefined {
+	const f = fileOf(model, id);
+	const l = f && livelitsIn(model, f).find((x) => x.id === livelit);
+	const written = f && l && applyLivelit(f.source, l, value);
+	return written === undefined
+		? undefined
+		: [
+				withSource(model, id, written.text),
+				[{ kind: "revealRange", range: [written.caret, written.caret] }],
+			];
+}
+
+/** Where a new bank named `name` goes: `banks/<name>`, as the template's layout has it. */
+export const newBankFolder = (name: string): string => `banks/${name.trim()}`;
+
+/**
+ * Why this bank can't be added, or undefined: a new one needs a folder name no bank has;
+ * one on GitHub needs an address in another repository at a version (a folder here is
+ * chosen from the `uses` picker's list instead).
+ */
+export function bankAddProblem(
+	model: Pick<Model, "banks">,
+	adding: AddingBank,
+): string | undefined {
+	const text = adding.text.trim();
+	if (adding.how === "new") {
+		if (text === "") return "Give it a name.";
+		if (!FOLDER_PATTERN.test(text)) return FOLDER_RULE_TEXT;
+		const folder = newBankFolder(text).toLowerCase();
+		return model.banks.some((b) => b.toLowerCase() === folder)
+			? `There's already a bank in \`${newBankFolder(text)}\`.`
+			: undefined;
+	}
+	if (text === "") return "Give its address.";
+	const address = addressOf(text);
+	if (address.kind === "invalid") return address.reason;
+	return address.kind === "local"
+		? "That's a folder in this workspace: choose it from the list instead."
+		: undefined;
+}
+
 function withSource(model: Model, id: Id, source: string): Model {
 	const f = fileOf(model, id);
 	return f === undefined || f.source === source
@@ -2348,6 +2589,10 @@ function withBlob(
 }
 
 function without(model: Model, id: Id): Model {
+	return withBanks(withoutFile(model, id));
+}
+
+function withoutFile(model: Model, id: Id): Model {
 	const { [id]: _q, ...questions } = model.local.questions;
 	const { [id]: _s, ...schemes } = model.local.schemes;
 	const { [id]: _w, ...workspace } = model.local.workspace;
@@ -2377,7 +2622,42 @@ type NewFile =
 
 function add(model: Model, file: NewFile): [Model, Id] {
 	const id = model.nextId;
-	return [{ ...withFile(model, { ...file, id }), nextId: id + 1 }, id];
+	return [
+		withBanks({ ...withFile(model, { ...file, id }), nextId: id + 1 }),
+		id,
+	];
+}
+
+/**
+ * The workspace's banks after a file is added or removed here, by the load's rule: those
+ * GitHub has (a bank of `model.banks` holding a file of `remote`), and those the working
+ * copies are in. A new bank's draft `bank.yaml` lists it; deleting the last file of a bank
+ * GitHub hasn't got unlists it. The same list (same reference) when nothing changes, so
+ * what is memoised on it holds.
+ */
+function withBanks(model: Model): Model {
+	const local = new Set(
+		allFiles(model.local).flatMap((f) => (isBankEntry(f) ? [f.bank] : [])),
+	);
+	const remote = [
+		...Object.keys(model.remote.questions),
+		...Object.keys(model.remote.schemes),
+	];
+	const onGitHub = new Set(
+		remote.flatMap((p) => {
+			const bank = bankAt(p, model.banks);
+			return bank === undefined ? [] : [bank];
+		}),
+	);
+	const kept = [
+		...new Set([...model.banks.filter((b) => onGitHub.has(b)), ...local]),
+	].sort();
+	// The root alone while there are none, as at the start (`banksOfLocal`).
+	const banks = kept.length === 0 ? [""] : kept;
+	const same =
+		banks.length === model.banks.length &&
+		banks.every((b, i) => b === model.banks[i]);
+	return same ? model : { ...model, banks };
 }
 
 /** Every change to what should survive a reload ends with a persist command. */

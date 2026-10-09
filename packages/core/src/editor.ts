@@ -14,6 +14,11 @@ export {
 	instrumentCompletion,
 } from "./instrument/complete.ts";
 export {
+	bankChoices,
+	codeChoices,
+	questionChoices,
+} from "./instrument/livelits.ts";
+export {
 	type OutlineItem,
 	type OutlinePart,
 	outlineOf,
@@ -22,20 +27,26 @@ export { LIST_FIELDS, newLineAfter } from "./instrument/parse.ts";
 export { labelledSource, textEntrySource } from "./schemes.ts";
 export {
 	addSpace,
+	addVariant,
 	applyEdits,
 	quoteCode,
 	renameEdits,
+	sharedScaleSource,
 	spaceBefore,
 	withFields,
 } from "./surface/edit.ts";
 export {
+	applyLivelit,
 	type Choice,
 	choicesOf,
 	createFor,
 	LIVELIT_KINDS,
 	type Livelit,
 	livelitsOf,
-	useName,
+	type Offered,
+	ownChoices,
+	type Picker,
+	type Source,
 } from "./surface/livelits.ts";
 export { marksOf } from "./surface/marks.ts";
 export { rangesOf } from "./surface/parse.ts";

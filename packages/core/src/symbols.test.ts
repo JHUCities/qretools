@@ -158,6 +158,37 @@ describe("duplication across the bank", () => {
 			others: ["b"],
 		});
 		expect(f?.message).toMatch(/^Reads like `b`: “How strongly/);
+		expect(f?.fix).toEqual({
+			kind: "variant",
+			label: "Mark as a variant of `b`",
+			name: "b",
+		});
+	});
+
+	it("offers no variant fix where the other's name isn't its alone, or this has none", () => {
+		const TEXT =
+			"How strongly do you agree that residents are treated fairly by police officers in your own neighborhood these days here?";
+		const files = {
+			a: symbols(`name: a\ntext: ${TEXT}\n`),
+			b: symbols(`name: b\ntext: ${TEXT.replace("here", "now")}\n`),
+			b2: symbols("name: b\nopen: {}\n"),
+			u: symbols(`text: ${TEXT.replace("here", "today")}\n`),
+		};
+		const index = indexed(files);
+		const similar = (key: keyof typeof files) =>
+			bankFindings(key, files[key], index, label).filter(
+				(f) => f.code === "similar-text",
+			);
+		// `b` is two questions' name: which one `variant_of: {b: …}` means is unclear.
+		const toB = similar("a").find((f) => f.others[0] === "b");
+		expect(toB?.code).toBe("similar-text");
+		expect(toB?.fix).toBeUndefined();
+		// An unnamed question can't be named back by the other.
+		expect(similar("u").length).toBeGreaterThan(0);
+		expect(similar("u").every((f) => f.fix === undefined)).toBe(true);
+		const toU = similar("a").find((f) => f.others[0] === "u");
+		expect(toU?.code).toBe("similar-text");
+		expect(toU?.fix).toBeUndefined();
 	});
 });
 

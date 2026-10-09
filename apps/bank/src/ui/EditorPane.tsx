@@ -5,7 +5,17 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
-import { choicesOf, domainSnippets, newLineAfter } from "@qretools/core/editor";
+import { type Fix, instrumentPath, remotesOf, WORKSPACE } from "@qretools/core";
+import {
+	bankChoices,
+	choicesOf,
+	codeChoices,
+	domainSnippets,
+	type Livelit,
+	newLineAfter,
+	questionChoices,
+	type Source,
+} from "@qretools/core/editor";
 import {
 	createEditor,
 	type Editor,
@@ -18,7 +28,8 @@ import { useApp } from "./AppContext.js";
 /**
  * A question or shared file has its schema, which completion reads. An instrument has
  * none: completion offers the questions and names of the banks it uses instead
- * (`instrument`), read from the store when it asks, never as they were at mount.
+ * (`instrument`), read from the store when it asks, never as they were at mount; its
+ * pickers offer the same questions, and the workspace's banks at `uses`.
  */
 export function EditorPane(
 	inputs: EditorInputs &
@@ -28,11 +39,14 @@ export function EditorPane(
 					readonly instrument?: undefined;
 					/** A question: its response domains are offered written out too. */
 					readonly question?: true;
+					/** A file with pickers of its own (a bank's details); a question always has them. */
+					readonly pickers?: true;
 			  }
 			| {
 					readonly schema?: undefined;
 					readonly instrument: true;
 					readonly question?: undefined;
+					readonly pickers?: undefined;
 			  }
 		),
 ) {
@@ -41,6 +55,7 @@ export function EditorPane(
 	const { dispatch, effects, evaluations, store } = useApp();
 	const instrument = inputs.instrument === true;
 	const question = inputs.question === true;
+	const pickers = question || inputs.pickers === true;
 	// The open file's id when completion asks: the editor outlives a change of file.
 	const open = useRef(inputs.id);
 	open.current = inputs.id;
@@ -56,25 +71,56 @@ export function EditorPane(
 			(text) => dispatch({ kind: "edited", text }),
 			(offset) => dispatch({ kind: "cursorMoved", offset }),
 			(id, offset) => dispatch({ kind: "definitionRequested", id, offset }),
-			instrument
-				? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
-				: question
-					? {
-							snippets: domainSnippets,
-							// Pickers read the open question's bank as it is when one opens.
-							livelit: {
-								choices: (kind) => {
-									const { model } = store.getState();
-									const q = model.local.questions[open.current];
-									return q === undefined
-										? []
-										: choicesOf(evaluations.env(model, q.bank), kind);
-								},
-								choose: (fix) =>
-									dispatch({ kind: "fixApplied", id: open.current, fix }),
-							},
-						}
-					: {},
+			{
+				...(instrument
+					? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
+					: question && { snippets: domainSnippets }),
+				// Pickers read the open file's bank (an instrument's, its banks) as they are
+				// when one opens.
+				...((pickers || instrument) && {
+					livelit: {
+						choices: (source: Source) => {
+							const { model } = store.getState();
+							if (source.kind === "questions") return questionChoices(scopes());
+							if (source.kind === "codes") {
+								const e = model.local.workspace[open.current];
+								return e?.kind === "instrument"
+									? codeChoices(e.source, scopes(), source.name)
+									: [];
+							}
+							if (source.kind === "banks")
+								return bankChoices(
+									WORKSPACE.instruments,
+									model.banks,
+									remotesOf(
+										Object.fromEntries(
+											Object.values(model.local.workspace).flatMap((w) =>
+												w.kind === "instrument"
+													? [[instrumentPath(w.name), w.source]]
+													: [],
+											),
+										),
+									),
+								);
+							const f =
+								model.local.questions[open.current] ??
+								model.local.schemes[open.current];
+							return f === undefined || source.kind !== "scheme"
+								? []
+								: choicesOf(evaluations.env(model, f.bank), source.scheme);
+						},
+						choose: (livelit: Livelit, value: string | readonly string[]) =>
+							dispatch({
+								kind: "livelitChosen",
+								id: open.current,
+								livelit: livelit.id,
+								value,
+							}),
+						act: (fix: Fix) =>
+							dispatch({ kind: "fixApplied", id: open.current, fix }),
+					},
+				}),
+			},
 		);
 		editor.current = e;
 		effects.registerEditor(e);
@@ -83,7 +129,7 @@ export function EditorPane(
 			e.destroy();
 			editor.current = null;
 		};
-	}, [dispatch, effects, evaluations, store, instrument, question]);
+	}, [dispatch, effects, evaluations, store, instrument, question, pickers]);
 	const { id, text, diagnostics, marks, schema, readOnly, label, livelits } =
 		inputs;
 	// Before paint: the first frame of a file already shows its text, never an empty

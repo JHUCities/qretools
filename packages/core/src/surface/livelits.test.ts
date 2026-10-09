@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { applyEdits } from "./edit.ts";
+import { parseDocument } from "yaml";
+import { parseBankFile } from "./bankfile.ts";
 import { EMPTY_ENV, type Env } from "./env.ts";
-import { choicesOf, createFor, livelitsOf, useName } from "./livelits.ts";
-import { parseSurface } from "./parse.ts";
+import {
+	applyLivelit,
+	choicesOf,
+	createFor,
+	type Livelit,
+	livelitsOf,
+	settingsLivelits,
+} from "./livelits.ts";
+import { indexDocument, parseSurface } from "./parse.ts";
 
 const env: Env = {
 	...EMPTY_ENV,
@@ -20,32 +28,88 @@ const env: Env = {
 	},
 };
 const HEAD = "name: q\ntext: Is it so?\nintent: To see why.\n";
-const at = (source: string) => livelitsOf(parseSurface(source, env));
+const at = (source: string) =>
+	livelitsOf(source, parseSurface(source, env), env);
+/** Each picker as `[id, at, the text it would replace, what is written there]`. */
+const summary = (source: string) =>
+	at(source).map((l) => [
+		l.id,
+		l.at,
+		source.slice(l.span[0], l.span[1]),
+		l.picker.kind === "one"
+			? l.picker.current
+			: l.picker.kind === "many"
+				? l.picker.chosen
+				: l.picker.kind,
+	]);
+const choose = (source: string, id: string, value: string) => {
+	const l = at(source).find((x) => x.id === id) as Livelit;
+	return applyLivelit(source, l, value);
+};
 
 describe("a scale picker", () => {
 	it("sits at an empty `responses:`, at the point the author types", () => {
 		const text = `${HEAD}responses:\n`;
-		expect(at(text)).toEqual([
-			{
-				kind: "scale",
-				path: "responses",
-				at: `${HEAD}responses:`.length,
-				field: expect.any(Array),
-			},
-		]);
+		const end = `${HEAD}responses:`.length;
+		expect(summary(text)).toEqual([["responses", end, "", undefined]]);
+		expect(at(text)[0]).toMatchObject({
+			label: "Choose a shared scale",
+			picker: { kind: "one", source: { kind: "scheme", scheme: "scale" } },
+			actions: [createFor("scale", "responses")],
+		});
 	});
 
-	it("sits after a scale's name, known or not, and says which", () => {
+	it("sits after a scale's name, known or not, and replaces exactly the name", () => {
 		const known = `${HEAD}responses: agree4\n`;
-		expect(at(known)).toMatchObject([
-			{ at: `${HEAD}responses: agree4`.length, current: "agree4" },
+		expect(summary(known)).toEqual([
+			["responses", `${HEAD}responses: agree4`.length, "agree4", "agree4"],
 		]);
-		expect(at(`${HEAD}responses: agre\n`)).toMatchObject([{ current: "agre" }]);
+		expect(summary(`${HEAD}responses: agre\n`)).toEqual([
+			["responses", `${HEAD}responses: agre`.length, "agre", "agre"],
+		]);
 	});
 
 	it("is absent where the options are written inline, or there's no `responses`", () => {
-		expect(at(`${HEAD}responses:\n  "1": Yes\n`)).toEqual([]);
+		// Inline options offer to be shared instead (below), never a scale over them.
+		expect(
+			at(`${HEAD}responses:\n  "1": Yes\n`).map((l) => l.picker.kind),
+		).toEqual(["actions"]);
 		expect(at(`${HEAD}open: {}\n`)).toEqual([]);
+	});
+});
+
+describe("an offer to share options written inline", () => {
+	it("sits after `responses:`, offering to make them a shared scale", () => {
+		const text = `${HEAD}responses:\n  "1": Yes\n  "2": No\n`;
+		const [share] = at(text);
+		expect(share).toMatchObject({
+			id: "responses",
+			label: "Share these responses",
+			at: `${HEAD}responses:`.length,
+			picker: { kind: "actions" },
+			actions: [
+				{
+					kind: "share",
+					label: "Make these a shared scale…",
+					path: "responses",
+				},
+			],
+		});
+	});
+
+	it("writes nothing through it: there is nothing to choose", () => {
+		const text = `${HEAD}responses:\n  "1": Yes\n`;
+		expect(choose(text, "responses", "agree4")).toBeUndefined();
+	});
+
+	it("isn't offered where a shared scale has these labels, or an option carries its own", () => {
+		// agree4's labels: `matches-scale` offers its name instead.
+		expect(at(`${HEAD}responses:\n  "1": Agree\n  "2": Disagree\n`)).toEqual(
+			[],
+		);
+		expect(
+			at(`${HEAD}responses:\n  "1": { label: Yes, title: YES }\n  "2": No\n`),
+		).toEqual([]);
 	});
 });
 
@@ -64,14 +128,22 @@ describe("what the picker offers, and what choosing writes", () => {
 		expect(choicesOf(EMPTY_ENV, "scale")).toEqual([]);
 	});
 
-	it("writes the name chosen over an empty value or another name", () => {
-		const fix = useName("responses", "agree4");
+	it("writes the name chosen over an empty value or another name, the caret after it", () => {
+		expect(choose(`${HEAD}responses:\n`, "responses", "agree4")).toEqual({
+			text: `${HEAD}responses: agree4\n`,
+			caret: `${HEAD}responses: agree4`.length,
+		});
 		expect(
-			fix.kind === "edit" && applyEdits(`${HEAD}responses:\n`, fix.edits),
+			choose(`${HEAD}responses: agre\n`, "responses", "agree4")?.text,
 		).toBe(`${HEAD}responses: agree4\n`);
-		expect(
-			fix.kind === "edit" && applyEdits(`${HEAD}responses: agre\n`, fix.edits),
-		).toBe(`${HEAD}responses: agree4\n`);
+		expect(choose(`${HEAD}responses:\n`, "responses", "")).toBeUndefined();
+		// Quoted where YAML would read it as something else.
+		expect(choose(`${HEAD}responses:\n`, "responses", "010")?.text).toBe(
+			`${HEAD}responses: "010"\n`,
+		);
+		expect(choose(`${HEAD}responses: x\n`, "responses", "yes: no")?.text).toBe(
+			`${HEAD}responses: "yes: no"\n`,
+		);
 	});
 
 	it("offers a new one, named in its dialog and written where it was asked for", () => {
@@ -86,29 +158,25 @@ describe("what the picker offers, and what choosing writes", () => {
 describe("pickers for every field that names a shared entry", () => {
 	it("sit at a concept, universe and instruction, empty or named, never at prose", () => {
 		const text = `${HEAD}concept:\nuniverse: renters\ninstruction: Select one\nopen: {}\n`;
-		expect(at(text).map((l) => [l.kind, l.path, l.current])).toEqual([
-			["concept", "concept", undefined],
-			["universe", "universe", "renters"],
+		expect(summary(text).map(([id, , , current]) => [id, current])).toEqual([
+			["concept", undefined],
+			["universe", "renters"],
 		]);
 	});
 
 	it("sit at a unit inside `number:`, after its value", () => {
 		const text = `${HEAD}number:\n  min: 0\n  unit: days\n`;
-		expect(at(text)).toMatchObject([
-			{
-				kind: "unit",
-				path: "number.unit",
-				at: `${HEAD}number:\n  min: 0\n  unit: days`.length,
-				current: "days",
-			},
+		expect(summary(text)).toEqual([
+			[
+				"number.unit",
+				`${HEAD}number:\n  min: 0\n  unit: days`.length,
+				"days",
+				"days",
+			],
 		]);
 		const empty = `${HEAD}number:\n  unit:\n`;
-		expect(at(empty)).toMatchObject([
-			{
-				kind: "unit",
-				path: "number.unit",
-				at: `${HEAD}number:\n  unit:`.length,
-			},
+		expect(summary(empty)).toEqual([
+			["number.unit", `${HEAD}number:\n  unit:`.length, "", undefined],
 		]);
 	});
 
@@ -120,9 +188,76 @@ describe("pickers for every field that names a shared entry", () => {
 			{ name: "renters", detail: "Respondents who rent" },
 		]);
 		expect(choicesOf(env, "unit")).toEqual([{ name: "days", detail: "days" }]);
-		const fix = useName("number.unit", "days");
 		expect(
-			fix.kind === "edit" && applyEdits(`${HEAD}number:\n  unit:\n`, fix.edits),
+			choose(`${HEAD}number:\n  unit:\n`, "number.unit", "days")?.text,
 		).toBe(`${HEAD}number:\n  unit: days\n`);
+	});
+});
+
+describe("pickers of fixed values", () => {
+	it("sit at `select` and at each fill's type, empty or one word, and offer their values", () => {
+		const text = `${HEAD}select:\nfills:\n  rent: number\nresponses:\n  "1": Yes\n`;
+		expect(summary(text).filter(([id]) => id !== "responses")).toEqual([
+			["select", `${HEAD}select:`.length, "", undefined],
+			[
+				"fills.rent",
+				`${HEAD}select:\nfills:\n  rent: number`.length,
+				"number",
+				"number",
+			],
+		]);
+		const select = at(text).find((l) => l.id === "select");
+		expect(select?.picker.kind !== "actions" && select?.picker.source).toEqual({
+			kind: "enum",
+			values: [
+				{ name: "one", detail: "The respondent picks one response" },
+				{ name: "many", detail: "Select all that apply" },
+			],
+		});
+		expect(choose(text, "select", "many")?.text).toBe(
+			`${HEAD}select: many\nfills:\n  rent: number\nresponses:\n  "1": Yes\n`,
+		);
+	});
+});
+
+describe("the checklist of a bank's required fields", () => {
+	const bank = (text: string) => {
+		const doc = parseDocument(text, { prettyErrors: false });
+		return settingsLivelits(
+			text,
+			indexDocument(doc, text.length),
+			parseBankFile(text).required,
+		);
+	};
+	const write = (text: string, value: readonly string[]) => {
+		const [l] = bank(text);
+		return l === undefined ? undefined : applyLivelit(text, l, value)?.text;
+	};
+
+	it("reads what is chosen, and writes the set in the form it was written", () => {
+		const block = "agency: org.example\nrequired:\n  - title\n";
+		expect(bank(block)[0]?.picker).toMatchObject({
+			kind: "many",
+			chosen: ["title"],
+		});
+		// A block list stays a block, at its indent.
+		expect(write(block, ["title", "concept"])).toBe(
+			"agency: org.example\nrequired:\n  - title\n  - concept\n",
+		);
+		expect(
+			write("agency: org.example\nrequired:\n    - note\n", ["title"]),
+		).toBe("agency: org.example\nrequired:\n    - title\n");
+		// Emptied, it is the empty list on its line.
+		expect(write(block, [])).toBe("agency: org.example\nrequired: []\n");
+		expect(write("agency: org.example\nrequired: [note]\n", [])).toBe(
+			"agency: org.example\nrequired: []\n",
+		);
+		expect(write("agency: org.example\nrequired:\n", ["note"])).toBe(
+			"agency: org.example\nrequired: [note]\n",
+		);
+	});
+
+	it("is absent where `required` isn't written, as a commented line isn't", () => {
+		expect(bank("agency: org.example\n#required:\n#  - title\n")).toEqual([]);
 	});
 });

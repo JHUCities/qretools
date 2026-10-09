@@ -21,6 +21,7 @@ import {
 } from "./model.js";
 import { claimOf } from "./sync.js";
 import {
+	bankAddProblem,
 	instrumentAlsoSaves,
 	instrumentDependencies,
 	instrumentNameProblem,
@@ -963,5 +964,153 @@ describe("a name from a bank in another repository", () => {
 				url: "https://github.com/Owner/Bank/blob/release/2026.1/banks/hh/questions/household/consent.yaml",
 			},
 		]);
+	});
+});
+
+describe("an instrument's pickers", () => {
+	it("write the question chosen at an ask, found again in the text as it is now", () => {
+		const m = loaded();
+		const id = at(m, HOUSEHOLDS).id;
+		const open: Model = { ...m, screen: { kind: "editing", id } };
+		const [next, cmds] = update(open, {
+			kind: "livelitChosen",
+			id,
+			livelit: "flow.1.ask",
+			value: "hh.tenure",
+		});
+		const source = next.local.workspace[id]?.source ?? "";
+		expect(source).toContain("  - ask: hh.tenure\n  - stop: hh.consent");
+		const end = source.indexOf("hh.tenure") + "hh.tenure".length;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [end, end] });
+		// The bank written at `uses` is a folder beside the instrument.
+		const [bank] = update(open, {
+			kind: "livelitChosen",
+			id,
+			livelit: "uses.hh",
+			value: "../banks/hh",
+		});
+		expect(bank.local.workspace[id]?.source).toContain("  hh: ../banks/hh\n");
+	});
+
+	it("write the codes ticked in a condition's set, escaped for its value", () => {
+		const m = loaded();
+		const id = at(m, HOUSEHOLDS).id;
+		const typed = update(
+			{ ...m, screen: { kind: "editing", id } },
+			{
+				kind: "edited",
+				text: (m.local.workspace[id]?.source ?? "").replace(
+					'stop: hh.consent = "2"',
+					'stop: "hh.consent in {\\"2\\"}"',
+				),
+			},
+		)[0];
+		const [next] = update(typed, {
+			kind: "livelitChosen",
+			id,
+			livelit: "flow.2.stop#0",
+			value: ["1", "2"],
+		});
+		expect(next.local.workspace[id]?.source).toContain(
+			'stop: "hh.consent in {\\"1\\", \\"2\\"}"',
+		);
+	});
+});
+
+describe("adding a bank", () => {
+	const fromUses = (how: "new" | "import") => {
+		const m = loaded();
+		const id = at(m, HOUSEHOLDS).id;
+		const open: Model = { ...m, screen: { kind: "editing", id } };
+		const fix = { kind: "bank" as const, label: "", how, path: "uses.hh" };
+		return { id, m: update(open, { kind: "fixApplied", id, fix })[0] };
+	};
+	const typed = (m: Model, text: string) =>
+		update(m, { kind: "bankAddChanged", text })[0];
+	const confirmed = (m: Model) => update(m, { kind: "bankAddConfirmed" });
+
+	it("makes a new one here, lists it, and writes its folder at the `uses` entry", () => {
+		const { id, m } = fromUses("new");
+		expect(m.browser.addingBank).toEqual({
+			how: "new",
+			text: "",
+			use: { id, path: "uses.hh" },
+		});
+		const [next, cmds] = confirmed(typed(m, "survey"));
+		expect(next.banks).toContain("banks/survey");
+		expect(next.browser.addingBank).toBeUndefined();
+		const bank = Object.values(next.local.schemes).find(
+			(s) => s.bank === "banks/survey",
+		);
+		expect(bank).toMatchObject({ kind: "bank", name: "bank" });
+		expect(next.local.workspace[id]?.source).toContain(
+			"  hh: ../banks/survey\n",
+		);
+		// The author stays in the instrument, the caret after what was written.
+		expect(next.screen).toEqual({ kind: "editing", id });
+		expect(cmds[0]?.kind).toBe("revealRange");
+		// Deleting its only file, a draft, unlists it; a bank GitHub has stays listed.
+		const gone = update(
+			update(next, { kind: "deleteRequested", id: bank?.id ?? 0 })[0],
+			{ kind: "deleteRequested", id: bank?.id ?? 0 },
+		)[0];
+		expect(gone.banks).not.toContain("banks/survey");
+		expect(gone.banks).toEqual(loaded().banks);
+	});
+
+	it("keeps a bank GitHub has when its files here are all gone", () => {
+		const m = loaded();
+		const inHouseholds = [
+			...Object.values(m.local.questions),
+			...Object.values(m.local.schemes),
+		].filter((f) => f.bank === "households");
+		const dropped = inHouseholds.reduce(
+			(acc, f) =>
+				update(update(acc, { kind: "deleteRequested", id: f.id })[0], {
+					kind: "deleteRequested",
+					id: f.id,
+				})[0],
+			m,
+		);
+		expect(dropped.banks).toContain("households");
+	});
+
+	it("refuses a folder no bank can be in, or one a bank has", () => {
+		const { m } = fromUses("new");
+		const problem = (text: string) => {
+			const next = typed(m, text);
+			return next.browser.addingBank === undefined
+				? "closed"
+				: bankAddProblem(next, next.browser.addingBank);
+		};
+		expect(problem("")).toBe("Give it a name.");
+		expect(problem("Has Space")).toBeDefined();
+		expect(problem("survey")).toBeUndefined();
+		const made = confirmed(typed(m, "survey"))[0];
+		expect(bankAddProblem(made, { how: "new", text: " survey " })).toMatch(
+			/already a bank/,
+		);
+	});
+
+	it("uses one on GitHub: its address written, and its read started at once", () => {
+		const { id, m } = fromUses("import");
+		expect(bankAddProblem(m, { how: "import", text: "../households" })).toMatch(
+			/choose it from the list/,
+		);
+		expect(bankAddProblem(m, { how: "import", text: "o/r" })).toMatch(
+			/no version/,
+		);
+		const [next, cmds] = confirmed(typed(m, "Owner/Bank@v2"));
+		expect(next.local.workspace[id]?.source).toContain("  hh: Owner/Bank@v2\n");
+		expect(cmds.some((c) => c.kind === "loadRemoteBanks" && c.now)).toBe(true);
+	});
+
+	it("from New, opens the new bank's details", () => {
+		const m = update(loaded(), { kind: "bankAddOpened", how: "new" })[0];
+		const [next] = confirmed(typed(m, "survey"));
+		const id = next.screen.kind === "editing" ? next.screen.id : undefined;
+		expect(id !== undefined && next.local.schemes[id]?.bank).toBe(
+			"banks/survey",
+		);
 	});
 });

@@ -11,7 +11,7 @@ import {
 	isScalar,
 	isSeq,
 	parseDocument,
-	type Scalar,
+	Scalar,
 	type YAMLMap,
 	type Node as YamlNode,
 } from "yaml";
@@ -53,12 +53,21 @@ export interface ParsedInstrument {
 	readonly findings: readonly Finding[];
 	/** Every path's range in the source, list items included (`flow.2.then.0`). */
 	readonly ranges: Readonly<Record<string, Range>>;
+	/** Where each value written empty sits (a key with nothing after it, a bare `- `). */
+	readonly empties: Readonly<Record<string, number>>;
 	/** The instrument's own names (inputs, computes, `as`), resolved. */
 	readonly scope: ReadonlyMap<string, Named>;
 	/** Every name its conditions, fills and placeholders read, with what it resolved to. */
 	readonly names: ReadonlyMap<string, Named>;
 	/** The banks in reach (those `uses` names), by alias. */
 	readonly banks: Readonly<Record<string, BankScope>>;
+	/**
+	 * Every condition and value written, in the order read, whatever its names resolve to:
+	 * its path, and how its YAML scalar is written (`form`), which says what text written
+	 * back into it must escape (inside double quotes `"` is `\"`; a block scalar may
+	 * rewrap it).
+	 */
+	readonly conds: readonly WrittenCond[];
 }
 
 const TOP = [
@@ -174,6 +183,12 @@ export const FILL_SOURCE = "value";
 const ORDERS: readonly Order[] = ["random", "rotate"];
 
 /**
+ * A bank's name as an instrument writes it, `alias.name` (`bas.nhd_sat`, `bas.renters`):
+ * the one rule for what reads as a name rather than prose, here and in its pickers.
+ */
+export const QUALIFIED = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/;
+
+/**
  * An instrument read against the banks it uses, each given by its alias (`bas`), already
  * evaluated (`bankOf`). Fetching them is the caller's: the core is given values.
  */
@@ -201,9 +216,11 @@ export function parseInstrument(
 			draft: empty,
 			findings,
 			ranges,
+			empties,
 			scope: new Map(),
 			names: new Map(),
 			banks: {},
+			conds: [],
 		};
 	}
 	const say = (f: Finding) => findings.push(f);
@@ -300,6 +317,7 @@ export function parseInstrument(
 		names: new Map(),
 		rosters: new Map(),
 		rows: [],
+		conds: [],
 	};
 	const universe = readUniverse(top.get("universe", true), "universe", ctx);
 	const flowNode = top.get("flow", true);
@@ -335,9 +353,11 @@ export function parseInstrument(
 		// question's is: one marker where the author types.
 		findings: findings.map(pointAt(empties)),
 		ranges,
+		empties,
 		scope,
 		names: ctx.names,
 		banks: available,
+		conds: ctx.conds,
 	};
 }
 
@@ -356,6 +376,8 @@ interface Context {
 	readonly rows: string[];
 	/** What each name read resolved to, for the checks. */
 	readonly names: Map<string, Named>;
+	/** Every condition and value read, with its path. */
+	readonly conds: WrittenCond[];
 	/** Computes' typing, run first, in the order they read each other. */
 	readonly computes: {
 		readonly name: string;
@@ -717,7 +739,7 @@ function readUniverse(
 	const text = readText(node, path, false, ctx.say);
 	if (text === undefined) return undefined;
 	// `bas.renters` is a bank's shared universe; anything else is prose.
-	const named = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/.exec(text);
+	const named = QUALIFIED.exec(text);
 	if (named === null) return { kind: "text", text };
 	const [, alias = "", name = ""] = named;
 	if (ungivenBank(alias, ctx)) return undefined;
@@ -1321,7 +1343,7 @@ function resolveQuestion(
 	path: string,
 	ctx: Context,
 ): QuestionRef | undefined {
-	const named = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/.exec(text.trim());
+	const named = QUALIFIED.exec(text.trim());
 	if (named === null) {
 		ctx.say(
 			problem(
@@ -1547,8 +1569,25 @@ function readCond(
 			reads: namesOf(expr).map((n) => n.name),
 			typeIt,
 		});
-	return { text, expr };
+	const cond: Cond = { text, expr };
+	ctx.conds.push({ path, cond, form: formOf(node as Scalar) });
+	return cond;
 }
+
+export interface WrittenCond {
+	readonly path: string;
+	readonly cond: Cond;
+	readonly form: "plain" | "double" | "single" | "block";
+}
+
+const formOf = (node: Scalar): WrittenCond["form"] =>
+	node.type === Scalar.QUOTE_DOUBLE
+		? "double"
+		: node.type === Scalar.QUOTE_SINGLE
+			? "single"
+			: node.type === Scalar.PLAIN
+				? "plain"
+				: "block";
 
 /** A condition's problem as a finding at its place, an unknown name with what fits here. */
 function report(
