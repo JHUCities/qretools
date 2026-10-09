@@ -889,7 +889,7 @@ describe("writing waits for this session's load", () => {
 				),
 			],
 		);
-		expect(writeBlocked(m)).toMatch(/Loading the bank/);
+		expect(writeBlocked(m)).toMatch(/Loading the workspace/);
 		expect(update(m, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
 		expect(
 			run(
@@ -1768,8 +1768,8 @@ describe("the app not installed on the repository", () => {
 			},
 		);
 		expect(after.session).toMatchObject({ access: { kind: "notInstalled" } });
-		expect(writeBlocked(after)).toMatch(/can't save to this bank/);
-		expect(sessionStatus(after)).toMatch(/can't save to this bank/);
+		expect(writeBlocked(after)).toMatch(/can't save to this workspace/);
+		expect(sessionStatus(after)).toMatch(/can't save to this workspace/);
 		expect(update(after, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
 	});
 });

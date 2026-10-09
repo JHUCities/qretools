@@ -116,7 +116,7 @@ describe("bringing the default branch into the author's", () => {
 		expect(m.failures.at(-1)).toEqual({
 			kind: "conflict",
 			message: "Your branch conflicts with updates to trunk.",
-			hint: "Open a pull request with your changes, and the bank's owner resolves the conflicts.",
+			hint: "Open a pull request with your changes, and the workspace's owner resolves the conflicts.",
 			link: {
 				label: "Open a pull request",
 				href: "https://github.com/o/r/compare/trunk...qretools-iain?expand=1",

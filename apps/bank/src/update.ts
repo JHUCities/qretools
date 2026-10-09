@@ -1211,7 +1211,7 @@ function step(model: Model, msg: Msg): Step {
 							{
 								kind: "conflict",
 								message: `Your branch conflicts with updates to ${defaultBranch}.`,
-								hint: "Open a pull request with your changes, and the bank's owner resolves the conflicts.",
+								hint: "Open a pull request with your changes, and the workspace's owner resolves the conflicts.",
 								link: {
 									label: "Open a pull request",
 									href: compareUrl(model.settings, model.session),
@@ -2140,11 +2140,11 @@ export function writeBlocked(model: Model): string | undefined {
 	if (model.session.kind !== "connected") return "Sign in to save";
 	if (model.session.access.kind === "readOnly") return "Read access only";
 	if (model.session.access.kind === "notInstalled")
-		return "The app can't save to this bank";
+		return "The app can't save to this workspace";
 	if (model.updating)
 		return `Bringing ${model.session.defaultBranch} into your branch…`;
-	if (model.loading.kind === "failed") return "The bank didn't load";
-	if (model.loading.kind !== "loaded") return "Loading the bank…";
+	if (model.loading.kind === "failed") return "The workspace didn't load";
+	if (model.loading.kind !== "loaded") return "Loading the workspace…";
 	// One commit at a time: two in flight naming the same file would make the second
 	// look stale for a save that worked. Commits to one branch are serial anyway.
 	if (
@@ -2182,7 +2182,7 @@ export function sessionStatus(model: Model): string | undefined {
 			return "Signing in…";
 		case "connected":
 			return loading.kind === "failed"
-				? `The bank didn't load: ${loading.failure.message.replace(/\.$/, "")}`
+				? `The workspace didn't load: ${loading.failure.message.replace(/\.$/, "")}`
 				: // What is happening now comes before a standing reason (read only).
 					model.screen.kind === "foreign" && model.screen.file === undefined
 					? `Loading ${model.screen.path} from ${model.screen.branch}…`

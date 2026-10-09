@@ -150,7 +150,7 @@ export const makeGitHubStore = (
 					});
 				return err({
 					kind: "unreadable",
-					message: "GitHub couldn't read the bank.",
+					message: "GitHub couldn't read the workspace.",
 					detail: e.message,
 				});
 			}
@@ -633,7 +633,7 @@ export const makeGitHubStore = (
 				return err({
 					kind: "unreadable",
 					message: `GitHub has no folder \`${folder}\` in ${owner}/${repo}.`,
-					hint: "Check the bank's folder, as it is on the repository's default branch.",
+					hint: "Check the workspace's folder, as it is on the repository's default branch.",
 				});
 			if (!installed.ok) return installed;
 			return ok({

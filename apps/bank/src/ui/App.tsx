@@ -631,8 +631,8 @@ export function App() {
 									<p className="quiet">
 										{model.pendingLink !== undefined &&
 										model.loading.kind === "failed"
-											? "The bank didn't load, so this link can't open yet."
-											: "Pick a question or a shared scale, universe or instruction in the bank, or create a new one."}
+											? "The workspace didn't load, so this link can't open yet."
+											: "Pick an instrument, a question or a shared file, or create one with New."}
 									</p>
 								</div>
 							) : (
