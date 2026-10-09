@@ -12,6 +12,8 @@ import { instrumentSource } from "./instrument.ts";
 
 const hh = bankOf({
 	"bank.yaml": "agency: org.example\n",
+	"questions/hh/own.yaml":
+		'name: own\ntext: Do you own your home?\nintent: Tenure.\nresponses:\n  "1": Yes\n  "2": No\n',
 	"questions/hh/size.yaml":
 		"name: size\ntext: How many people live here?\nintent: Household size.\nnumber:\n  min: 1\n",
 });
@@ -34,6 +36,7 @@ describe("completion in an instrument, as CodeMirror asks for it", () => {
 		expect(asked).toMatchObject({
 			from: HEAD.length,
 			options: [
+				{ label: "hh.own", type: "class", detail: "Do you own your home?" },
 				{
 					label: "hh.size",
 					type: "class",
@@ -53,6 +56,36 @@ describe("completion in an instrument, as CodeMirror asks for it", () => {
 		expect(ask(HEAD, false)).toBeNull();
 		expect(ask(`${HEAD}hh.s`, true, {})).toBeNull();
 		expect(ask("flow:\n  - say: x", true)).toBeNull();
+	});
+});
+
+describe("a coded answer's codes, as CodeMirror asks for them", () => {
+	const STOP = "uses:\n  hh: ./hh\nflow:\n  - stop: hh.own = ";
+
+	it("opens on its own once a quote is typed, not after the space, and replaces the quotes", () => {
+		expect(ask(STOP, false)).toBeNull();
+		// closeBrackets pairs the quote: the caret is between them.
+		const doc = `${STOP}""`;
+		const paired = instrumentSource(() => ({ hh }))(
+			new CompletionContext(EditorState.create({ doc }), doc.length - 1, false),
+		);
+		expect(paired).toMatchObject({
+			from: STOP.length,
+			to: STOP.length + 2,
+			options: [
+				{ label: '"1"', type: "enum", detail: "Yes" },
+				{ label: '"2"', type: "enum", detail: "No" },
+			],
+		});
+		const narrows = paired?.validFor instanceof RegExp ? paired.validFor : /$^/;
+		expect(['"', '"1', '"1"'].map((t) => narrows.test(t))).toEqual([
+			true,
+			true,
+			true,
+		]);
+		expect(narrows.test("hh.x")).toBe(false);
+		// Asked for, they're offered before the quote too.
+		expect(ask(STOP, true)?.options).toHaveLength(2);
 	});
 });
 

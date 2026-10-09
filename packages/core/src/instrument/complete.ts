@@ -1,7 +1,8 @@
 /**
  * Completion in an instrument: bank questions after `ask:`, and the names a condition
  * can read wherever the condition language is written (`EXPRESSIONS`, `FILL_SOURCE`,
- * the parser's own table). Pure, with no editor library in it: where the word being
+ * the parser's own table), and a coded answer's codes where one is compared with it or
+ * put in its set (`hh.tenure = "2"`, `hh.tenure in {"1", "2"}`). Pure, with no editor library in it: where the word being
  * typed starts, in source offsets, and what may go there, for an editor to filter and
  * insert.
  *
@@ -19,7 +20,7 @@ import {
 	type YAMLMap,
 	type Node as YamlNode,
 } from "yaml";
-import { tokenize } from "../cond/lex.ts";
+import { KEYWORDS, type Token, tokenize } from "../cond/lex.ts";
 import { NAME_KIND } from "../copy.ts";
 import type { BankScope } from "../evaluate.ts";
 import type { Node } from "./draft.ts";
@@ -30,12 +31,16 @@ export interface CompletionOption {
 	readonly label: string;
 	/** What it is: a question's title or text, or what kind of name it is. */
 	readonly detail?: string;
-	readonly kind: "question" | "variable" | "name";
+	readonly kind: "question" | "variable" | "name" | "code";
+	/** What to insert, where it differs from the label (a code inside a double-quoted value). */
+	readonly apply?: string;
 }
 
 export interface InstrumentCompletion {
 	/** Where the word being typed starts: an editor replaces from here to the caret. */
 	readonly from: number;
+	/** Where the replaced text ends, when past the caret (a string's closing quote). */
+	readonly to?: number;
 	readonly options: readonly CompletionOption[];
 }
 
@@ -65,9 +70,21 @@ export function instrumentCompletion(
 			? wordIn(source, value as Scalar, offset, field)
 			: { from: offset };
 	if (word === undefined) return undefined;
+	const options =
+		field === "question"
+			? questions(banks)
+			: word.codesOf === undefined
+				? names(source, banks)
+				: codes(
+						source,
+						banks,
+						word.codesOf,
+						isScalar(value) && value.type === "QUOTE_DOUBLE",
+					);
 	return {
 		from: word.from,
-		options: field === "question" ? questions(banks) : names(source, banks),
+		...(word.to !== undefined && { to: word.to }),
+		options,
 	};
 }
 
@@ -145,16 +162,29 @@ function fieldOf({ pair, map, segments }: At): Field | undefined {
 	return fields !== undefined && key in fields ? "expression" : undefined;
 }
 
+/** What a caret's place gives: where the word starts and ends, and, where a code goes, whose. */
+interface Word {
+	readonly from: number;
+	readonly to?: number;
+	readonly codesOf?: Slot;
+}
+
+/** A place a code of `name` goes: compared with it, or in its set, beside the codes `taken` there. */
+interface Slot {
+	readonly name: string;
+	readonly taken: readonly string[];
+}
+
 /**
  * The word being typed in a written value, or undefined where nothing is offered: the
- * caret inside a word (not at its end), or inside a condition's string.
+ * caret inside a word (not at its end), or inside a condition's string other than a code.
  */
 function wordIn(
 	source: string,
 	node: Scalar,
 	offset: number,
 	field: Field,
-): { from: number } | undefined {
+): Word | undefined {
 	const text = String(node.value);
 	const toSource = scalarMap(source, node, text);
 	// Past a quoted value's closing quote is outside the value: nothing goes there.
@@ -166,17 +196,92 @@ function wordIn(
 		// A question's name is one word: offered only at its end, never mid-word.
 		return offset >= end ? { from: start } : undefined;
 	}
-	for (const t of tokenize(text)) {
+	const tokens = tokenize(text);
+	for (const [i, t] of tokens.entries()) {
 		if (t.kind === "end") break;
 		const [a, b] = toSource(t.range);
 		if (offset < a || offset > b) continue;
-		if (t.kind === "string") return undefined;
+		if (t.kind === "string") {
+			// Inside a code's quotes (closed ones as closeBrackets pairs them, or open):
+			// the code replaces the whole string. Any other string offers nothing.
+			const inside = offset > a && (t.open === true || offset < b);
+			const slot = inside ? slotBefore(tokens.slice(0, i)) : undefined;
+			return slot === undefined
+				? undefined
+				: { from: a, to: t.open === true ? offset : b, codesOf: slot };
+		}
 		if (t.kind === "name")
 			// At the name's end: what it starts is completed; inside it, nothing.
 			return offset === b ? { from: a } : undefined;
 		if (offset > a && offset < b) return undefined;
 	}
-	return { from: offset };
+	const before = tokens.filter(
+		(t) => t.kind !== "end" && toSource(t.range)[1] <= offset,
+	);
+	const slot = slotBefore(before);
+	return slot === undefined
+		? { from: offset }
+		: { from: offset, codesOf: slot };
+}
+
+const EQUALS = new Set(["=", "<>", "==", "!="]);
+
+/**
+ * Whether a code goes after these tokens, and whose: after `name =` (or `<>`, and the
+ * mistakes the parser tells), or after `{` or `,` in `name in {…` (or `not_in`).
+ */
+function slotBefore(tokens: readonly Token[]): Slot | undefined {
+	const last = tokens.at(-1);
+	if (last === undefined) return undefined;
+	if (last.kind === "op" && EQUALS.has(last.text)) {
+		const name = tokens.at(-2);
+		return name?.kind === "name" && !KEYWORDS.has(name.text)
+			? { name: name.text, taken: [] }
+			: undefined;
+	}
+	if (last.kind !== "{" && last.kind !== ",") return undefined;
+	// Back over the set's codes so far to its opening brace.
+	const taken: string[] = [];
+	let i = tokens.length - 1;
+	for (; i >= 0 && tokens[i]?.kind !== "{"; i--) {
+		const t = tokens[i];
+		if (t?.kind === "string") taken.push(t.text);
+		else if (t?.kind !== ",") return undefined;
+	}
+	const keyword = tokens[i - 1];
+	const name = tokens[i - 2];
+	return (keyword?.text === "in" || keyword?.text === "not_in") &&
+		keyword.kind === "name" &&
+		name?.kind === "name" &&
+		!KEYWORDS.has(name.text)
+		? { name: name.text, taken }
+		: undefined;
+}
+
+/**
+ * The codes of the coded answer a slot names, each with its label, but those already in
+ * its set; none for a name that isn't coded or that nothing has. A code is a string in
+ * the condition language; inside a double-quoted YAML value its quotes are escaped.
+ */
+function codes(
+	source: string,
+	banks: Readonly<Record<string, BankScope>>,
+	{ name, taken }: Slot,
+	escaped: boolean,
+): readonly CompletionOption[] {
+	const parsed = parseInstrument(source, banks);
+	const type = (parsed.names.get(name) ?? parsed.scope.get(name))?.type;
+	if (type?.kind !== "code") return [];
+	return type.codes
+		.filter((c) => !taken.includes(c.code))
+		.map(
+			(c): CompletionOption => ({
+				label: `"${c.code}"`,
+				kind: "code",
+				detail: c.label,
+				...(escaped && { apply: `\\"${c.code}\\"` }),
+			}),
+		);
 }
 
 /** Every bank question, `alias.name`, with its title or text. */

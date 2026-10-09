@@ -93,12 +93,92 @@ describe("completion in an instrument", async () => {
 	});
 
 	it("offers nothing inside a condition's string, or past a quoted value's closing quote", () => {
-		expect(at('  - stop: hh.tenure = "2|"\n')).toBeUndefined();
+		expect(at('  - stop: "hh.tenure and \\"x|\\""\n')).toBeUndefined();
+		expect(at('  - say: x\n    stop: hh.tenure > "2|"\n')).toBeUndefined();
 		expect(at('  - ask: "hh.co"|\n')).toBeUndefined();
 		expect(at("  - ask: 'hh.co'|\n")).toBeUndefined();
 		expect(at('  - if: "renter and hh"|\n    then: []\n')).toBeUndefined();
 		// Inside the quotes it still completes.
 		expect(at('  - ask: "hh.co|"\n')?.typed).toBe("hh.co");
+	});
+
+	it("offers a coded answer's codes where one is compared, each with its label", () => {
+		/** The text a pick of `"2"` leaves, as CodeMirror would apply it. */
+		const pick = (text: string, code = '"2"') => {
+			const source = HEAD + text;
+			const offset = source.indexOf("|");
+			const clean = source.replace("|", "");
+			const r = instrumentCompletion(clean, offset, banks);
+			const o = r?.options.find((x) => x.label === code);
+			if (r === undefined || o === undefined) return undefined;
+			return (
+				clean.slice(0, r.from) +
+				(o.apply ?? o.label) +
+				clean.slice(r.to ?? offset)
+			).slice(HEAD.length);
+		};
+		const r = at("  - stop: hh.tenure = |\n");
+		expect(r?.options).toEqual([
+			{ label: '"1"', kind: "code", detail: "Own" },
+			{ label: '"2"', kind: "code", detail: "Rent" },
+			{ label: '"3"', kind: "code", detail: "Neither" },
+			// The bank's missing codes are answers too.
+			{ label: '"-8"', kind: "code", detail: "Refused" },
+			{ label: '"-9"', kind: "code", detail: "Don't know" },
+		]);
+		// Closed quotes (as closeBrackets pairs them), open, inside a code, or none:
+		// one well-formed code each time.
+		for (const text of [
+			'  - stop: hh.tenure = "|"\n',
+			'  - stop: hh.tenure = "1|"\n',
+			'  - stop: hh.tenure = "|\n',
+			"  - stop: hh.tenure = |\n",
+		])
+			expect(pick(text)).toBe('  - stop: hh.tenure = "2"\n');
+		expect(pick("  - stop: hh.tenure <> |\n")).toBe(
+			'  - stop: hh.tenure <> "2"\n',
+		);
+		expect(pick("  - stop: county = |\n", '"1"')).toBe(
+			'  - stop: county = "1"\n',
+		);
+		// Inside a double-quoted value its quotes are escaped.
+		expect(pick('  - stop: "hh.tenure in {\\"1\\", |}"\n')).toBe(
+			'  - stop: "hh.tenure in {\\"1\\", \\"2\\"}"\n',
+		);
+	});
+
+	it("offers a select-all option's codes: chosen or not, and the bank's missing ones", () => {
+		const b = bankOf({
+			"bank.yaml": "agency: org.example\n",
+			"missing.yaml": 'labels:\n  "-9": Don\'t know\n',
+			"questions/t/q.yaml":
+				'name: q\ntext: Which?\nintent: Which.\nselect: many\nresponses:\n  "1": A\n  "2": B\n',
+		});
+		const source = 'uses:\n  b: ./b\nflow:\n  - stop: b.q_1 = ""\n';
+		const r = instrumentCompletion(source, source.length - 2, { b });
+		expect(r?.options.map((o) => [o.label, o.detail])).toEqual([
+			['"0"', "No"],
+			['"1"', "Yes"],
+			['"-9"', "Don't know"],
+		]);
+	});
+
+	it("offers a set's codes but those already in it", () => {
+		expect(at("  - stop: 'hh.tenure in {|}'\n")?.labels.slice(0, 3)).toEqual([
+			'"1"',
+			'"2"',
+			'"3"',
+		]);
+		expect(
+			at("  - stop: 'hh.tenure not_in {\"1\", |}'\n")?.labels.slice(0, 2),
+		).toEqual(['"2"', '"3"']);
+	});
+
+	it("offers no codes for a name that isn't coded, or that nothing has", () => {
+		expect(at("  - stop: hh.size = |\n")?.labels).toEqual([]);
+		expect(at("  - stop: hh.nope = |\n")?.labels).toEqual([]);
+		// Not after a keyword or a value: names, as before.
+		expect(at("  - stop: hh.size > |\n")?.labels).toContain("renter");
 	});
 
 	it("finds every place the parser reads a condition or value", () => {
