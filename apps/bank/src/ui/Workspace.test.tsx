@@ -129,6 +129,7 @@ describe("a workspace of several banks", () => {
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
 			"Instrument…",
 			"Example instrument…",
+			"Bank…",
 			"Workspace details",
 			"banks/a",
 			"banks/b",
@@ -294,7 +295,7 @@ describe("a workspace's instruments", () => {
 		).toContain("wave2");
 	});
 
-	it("are all a workspace with no bank of its own shows, and New makes only them", async () => {
+	it("are all a workspace with no bank of its own shows, and New makes them, or a bank", async () => {
 		renderWorkspace([
 			file("workspace.yaml", "agency: org.example\n"),
 			file(
@@ -313,8 +314,44 @@ describe("a workspace's instruments", () => {
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
 			"Instrument…",
 			"Example instrument…",
+			"Bank…",
 			"Workspace details",
 		]);
+	});
+
+	it("draw their pickers: a question at each ask, a bank at each use", async () => {
+		renderWorkspace();
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1/ }));
+		await act(async () => {});
+		const labels = [...document.querySelectorAll(".cm-livelit")].map((b) =>
+			b.getAttribute("aria-label"),
+		);
+		expect(labels).toEqual(["Choose a bank", "Choose a question"]);
+	});
+
+	it("add a new bank from New: named, listed, its details open", async () => {
+		const app = renderWorkspace();
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Bank…" }));
+		const dialog = await screen.findByRole("dialog", { name: "New bank" });
+		fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), {
+			target: { value: "survey" },
+		});
+		expect(within(dialog).getByText("banks/survey")).toBeTruthy();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+		await act(async () => {});
+		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		expect(
+			within(nav).getByRole("region", { name: "banks/survey" }),
+		).toBeTruthy();
+		const { model } = app.store.getState();
+		const id = model.screen.kind === "editing" ? model.screen.id : undefined;
+		expect(id !== undefined && model.local.schemes[id]).toMatchObject({
+			kind: "bank",
+			bank: "banks/survey",
+		});
 	});
 
 	it("leave an empty repository as it was: one bank to start, at its root", async () => {

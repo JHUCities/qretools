@@ -180,6 +180,12 @@ export interface Remote {
 	readonly workspace: Readonly<Record<Path, Blob>>;
 }
 
+export interface AddingBank {
+	readonly how: "new" | "import";
+	readonly text: string;
+	readonly use?: { readonly id: Id; readonly path: string };
+}
+
 export type Screen =
 	| { readonly kind: "blank" }
 	| { readonly kind: "editing"; readonly id: Id }
@@ -212,6 +218,12 @@ export interface Browser {
 	 * the question it was asked from; or a draft shared file is renamed.
 	 */
 	readonly naming?: Naming;
+	/**
+	 * A bank being added: a new one in this workspace, its folder named (`banks/<text>`),
+	 * or one on GitHub, its address given. From an instrument's `uses` entry, `use` is
+	 * where its address is written once it's added.
+	 */
+	readonly addingBank?: AddingBank;
 	/** A new instrument is named before it exists, as a shared file is: its name is its file's. */
 	readonly namingInstrument?: {
 		readonly name: string;
@@ -403,6 +415,11 @@ export type Msg =
 	| { readonly kind: "instrumentNameChanged"; readonly name: string }
 	| { readonly kind: "instrumentNamingCancelled" }
 	| { readonly kind: "instrumentNamingConfirmed" }
+	/** A bank to add: a new one here (from New or a `uses` entry), or one on GitHub (from one). */
+	| { readonly kind: "bankAddOpened"; readonly how: "new" }
+	| { readonly kind: "bankAddChanged"; readonly text: string }
+	| { readonly kind: "bankAddCancelled" }
+	| { readonly kind: "bankAddConfirmed" }
 	/** The workspace details: opened if they exist, else started. One per workspace. */
 	| { readonly kind: "workspaceDetailsOpened" }
 	/** A read of a bank in another repository has started: now it is being read. */

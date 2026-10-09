@@ -24,12 +24,14 @@ import {
 	type Range,
 	type RemoteBank,
 	type Result,
+	relativeFolder,
 	relIn,
 	remotesOf,
 	SCHEME_NAME,
 	SHAPE,
 	saveableName,
 	UNNAMED,
+	WORKSPACE,
 	workspaceFileOf,
 } from "@qretools/core";
 import {
@@ -71,6 +73,7 @@ import {
 import { createEvaluations } from "./evaluations.js";
 import {
 	type Activity,
+	type AddingBank,
 	allFiles,
 	type BankEntry,
 	type Blob,
@@ -254,17 +257,8 @@ function step(model: Model, msg: Msg): Step {
 			// Like typing: only the open file, which the author can edit.
 			const q = current(model);
 			if (!q || q.id !== msg.id) return [model, []];
-			const livelit = livelitsIn(model, q).find((l) => l.id === msg.livelit);
-			const written =
-				livelit === undefined
-					? undefined
-					: applyLivelit(q.source, livelit, msg.value);
-			if (written === undefined) return [model, []];
-			// Focus follows the choice into the source: the caret after what was written.
-			return persist([
-				withSource(model, q.id, written.text),
-				[{ kind: "revealRange", range: [written.caret, written.caret] }],
-			]);
+			const written = writeLivelit(model, q.id, msg.livelit, msg.value);
+			return written === undefined ? [model, []] : persist(written);
 		}
 
 		case "fixApplied": {
@@ -295,6 +289,22 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				];
 			}
+			// A bank for a `uses` entry: its dialog, pointed back at this place.
+			if (fix.kind === "bank")
+				return [
+					{
+						...model,
+						browser: {
+							...model.browser,
+							addingBank: {
+								how: fix.how,
+								text: "",
+								use: { id: q.id, path: fix.path },
+							},
+						},
+					},
+					[],
+				];
 			if (fix.kind === "space") {
 				const spaced = addSpace(q.source, fix.path, fix.word);
 				if (spaced === undefined) return [model, []];
@@ -651,6 +661,69 @@ function step(model: Model, msg: Msg): Step {
 				},
 			);
 			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
+		}
+
+		case "bankAddOpened":
+			return [
+				{
+					...model,
+					browser: { ...model.browser, addingBank: { how: msg.how, text: "" } },
+				},
+				[],
+			];
+
+		case "bankAddChanged": {
+			const adding = model.browser.addingBank;
+			return adding === undefined
+				? [model, []]
+				: [
+						{
+							...model,
+							browser: {
+								...model.browser,
+								addingBank: { ...adding, text: msg.text },
+							},
+						},
+						[],
+					];
+		}
+
+		case "bankAddCancelled":
+			return [{ ...model, browser: withoutAdding(model.browser) }, []];
+
+		case "bankAddConfirmed": {
+			const adding = model.browser.addingBank;
+			if (adding === undefined || bankAddProblem(model, adding) !== undefined)
+				return [model, []];
+			const closed = { ...model, browser: withoutAdding(model.browser) };
+			// A new bank is its `bank.yaml`, from the template; one on GitHub is its address.
+			const folder = newBankFolder(adding.text);
+			const [added, id] =
+				adding.how === "new"
+					? add(closed, {
+							kind: "bank",
+							name: "bank",
+							bank: folder,
+							source: SCHEME_TEMPLATES.bank,
+						})
+					: [closed, undefined];
+			const address =
+				adding.how === "new"
+					? relativeFolder(WORKSPACE.instruments, folder)
+					: adding.text.trim();
+			// Written where it was asked for, as the `uses` picker writes a bank chosen
+			// there, and the caret after it; from New, the new bank's details open.
+			const written =
+				adding.use === undefined
+					? undefined
+					: writeLivelit(added, adding.use.id, adding.use.path, address);
+			if (written !== undefined) return persist(written);
+			return persist([
+				id === undefined
+					? added
+					: { ...added, screen: { kind: "editing", id } },
+				[],
+			]);
 		}
 
 		case "workspaceDetailsOpened": {
@@ -2106,6 +2179,9 @@ const withoutSaving = (browser: Model["browser"]): Model["browser"] =>
 const withoutConfirm = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, confirmDelete: undefined });
 
+const withoutAdding = (browser: Model["browser"]): Model["browser"] =>
+	compact({ ...browser, addingBank: undefined });
+
 const withoutNaming = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, naming: undefined });
 
@@ -2335,6 +2411,57 @@ function livelitsIn(model: Model, f: Entry): readonly Livelit[] {
 		: evaluateScheme(f.kind, f.source, env, f.name).livelits;
 }
 
+/**
+ * `value` written at the picker `livelit` of file `id`, found in its text as it is now,
+ * and the caret after it, as focus follows a choice into the source; undefined when that
+ * picker isn't there any more.
+ */
+function writeLivelit(
+	model: Model,
+	id: Id,
+	livelit: string,
+	value: string | readonly string[],
+): Step | undefined {
+	const f = fileOf(model, id);
+	const l = f && livelitsIn(model, f).find((x) => x.id === livelit);
+	const written = f && l && applyLivelit(f.source, l, value);
+	return written === undefined
+		? undefined
+		: [
+				withSource(model, id, written.text),
+				[{ kind: "revealRange", range: [written.caret, written.caret] }],
+			];
+}
+
+/** Where a new bank named `name` goes: `banks/<name>`, as the template's layout has it. */
+export const newBankFolder = (name: string): string => `banks/${name.trim()}`;
+
+/**
+ * Why this bank can't be added, or undefined: a new one needs a folder name no bank has;
+ * one on GitHub needs an address in another repository at a version (a folder here is
+ * chosen from the `uses` picker's list instead).
+ */
+export function bankAddProblem(
+	model: Pick<Model, "banks">,
+	adding: AddingBank,
+): string | undefined {
+	const text = adding.text.trim();
+	if (adding.how === "new") {
+		if (text === "") return "Give it a name.";
+		if (!FOLDER_PATTERN.test(text)) return FOLDER_RULE_TEXT;
+		const folder = newBankFolder(text).toLowerCase();
+		return model.banks.some((b) => b.toLowerCase() === folder)
+			? `There's already a bank in \`${newBankFolder(text)}\`.`
+			: undefined;
+	}
+	if (text === "") return "Give its address.";
+	const address = addressOf(text);
+	if (address.kind === "invalid") return address.reason;
+	return address.kind === "local"
+		? "That's a folder in this workspace: choose it from the list instead."
+		: undefined;
+}
+
 function withSource(model: Model, id: Id, source: string): Model {
 	const f = fileOf(model, id);
 	return f === undefined || f.source === source
@@ -2387,6 +2514,10 @@ function withBlob(
 }
 
 function without(model: Model, id: Id): Model {
+	return withBanks(withoutFile(model, id));
+}
+
+function withoutFile(model: Model, id: Id): Model {
 	const { [id]: _q, ...questions } = model.local.questions;
 	const { [id]: _s, ...schemes } = model.local.schemes;
 	const { [id]: _w, ...workspace } = model.local.workspace;
@@ -2416,7 +2547,42 @@ type NewFile =
 
 function add(model: Model, file: NewFile): [Model, Id] {
 	const id = model.nextId;
-	return [{ ...withFile(model, { ...file, id }), nextId: id + 1 }, id];
+	return [
+		withBanks({ ...withFile(model, { ...file, id }), nextId: id + 1 }),
+		id,
+	];
+}
+
+/**
+ * The workspace's banks after a file is added or removed here, by the load's rule: those
+ * GitHub has (a bank of `model.banks` holding a file of `remote`), and those the working
+ * copies are in. A new bank's draft `bank.yaml` lists it; deleting the last file of a bank
+ * GitHub hasn't got unlists it. The same list (same reference) when nothing changes, so
+ * what is memoised on it holds.
+ */
+function withBanks(model: Model): Model {
+	const local = new Set(
+		allFiles(model.local).flatMap((f) => (isBankEntry(f) ? [f.bank] : [])),
+	);
+	const remote = [
+		...Object.keys(model.remote.questions),
+		...Object.keys(model.remote.schemes),
+	];
+	const onGitHub = new Set(
+		remote.flatMap((p) => {
+			const bank = bankAt(p, model.banks);
+			return bank === undefined ? [] : [bank];
+		}),
+	);
+	const kept = [
+		...new Set([...model.banks.filter((b) => onGitHub.has(b)), ...local]),
+	].sort();
+	// The root alone while there are none, as at the start (`banksOfLocal`).
+	const banks = kept.length === 0 ? [""] : kept;
+	const same =
+		banks.length === model.banks.length &&
+		banks.every((b, i) => b === model.banks[i]);
+	return same ? model : { ...model, banks };
 }
 
 /** Every change to what should survive a reload ends with a persist command. */
