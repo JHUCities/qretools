@@ -236,13 +236,20 @@ const semantics = StateField.define<DecorationSet>({
 
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
+/**
+ * Colour classes say what a thing is (`cm-ref` a shared name, `cm-name` the file's own,
+ * `cm-code` a code); `cm-followable` alone says it can be followed, which Cmd-click, F12
+ * and the hover key on. So a code can be followed and stay a code's colour.
+ */
 const MARK_CLASS = {
-	ref: Decoration.mark({ class: "cm-ref" }),
+	ref: Decoration.mark({ class: "cm-ref cm-followable" }),
 	// Followable as a shared name is, but drawn as a link out: it opens elsewhere.
-	external: Decoration.mark({ class: "cm-ref cm-external" }),
+	external: Decoration.mark({ class: "cm-ref cm-external cm-followable" }),
 	// An instrument's own name, read: followed to where it's declared.
-	name: Decoration.mark({ class: "cm-ref cm-name" }),
+	name: Decoration.mark({ class: "cm-name cm-followable" }),
 	code: Decoration.mark({ class: "cm-code" }),
+	// A code in a condition: followed to where its list says it.
+	codeRef: Decoration.mark({ class: "cm-code cm-followable" }),
 	legacy: Decoration.mark({ class: "cm-legacy" }),
 	fill: Decoration.mark({ class: "cm-fill" }),
 } as const;
@@ -286,7 +293,7 @@ export function refRangeAt(
 		| { from: number; to: number; href?: string; about?: string }
 		| undefined;
 	state.field(semantics).between(pos, pos, (from, to, value) => {
-		if (!String(value.spec.class).split(" ").includes("cm-ref")) return;
+		if (!String(value.spec.class).split(" ").includes("cm-followable")) return;
 		if ((from === pos && side < 0) || (to === pos && side > 0)) return;
 		const { href, about } = value.spec as { href?: unknown; about?: unknown };
 		found = {
@@ -397,7 +404,7 @@ function followDefinition(onFollow: (offset: number) => void) {
 			mousedown(e, view) {
 				if (!isMod(e) || e.button !== 0 || view.state.readOnly) return false;
 				const target = e.target instanceof Element ? e.target : null;
-				const name = target?.closest(".cm-ref");
+				const name = target?.closest(".cm-followable");
 				if (!name) return false;
 				e.preventDefault();
 				onFollow(view.posAtDOM(name));
@@ -613,8 +620,8 @@ const primerTheme = EditorView.theme({
 	".cm-ref, .cm-ref *": {
 		color: "var(--prettylights-syntax-stringRegexp)",
 	},
-	// With Cmd (Ctrl) held, a shared name is a link, underlined as the app's links are.
-	".cm-content.cm-follow .cm-ref:hover, .cm-content.cm-follow .cm-ref:hover *":
+	// With Cmd (Ctrl) held, what can be followed is a link, underlined as the app's links are.
+	".cm-content.cm-follow .cm-followable:hover, .cm-content.cm-follow .cm-followable:hover *":
 		{
 			cursor: "pointer",
 			textDecorationLine: "underline",

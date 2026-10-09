@@ -603,6 +603,23 @@ describe("go to definition in an instrument", () => {
 		expect(m.screen).toEqual({ kind: "editing", id: at(m, TENURE).id });
 	});
 
+	it("opens the list a code is on, at that code, waiting for its editor", () => {
+		// `hh.consent = "2"`: consent's answers are on the shared scale yes_no.
+		const [m, cmds] = follow('= "2"');
+		const scale = at(m, YES_NO);
+		expect(m.screen).toEqual({ kind: "editing", id: scale.id });
+		const from = scale.source.indexOf('"2"');
+		expect(cmds).toContainEqual({
+			kind: "revealRange",
+			range: [from, expect.any(Number)],
+			id: scale.id,
+		});
+		// The condition names the question, not its scale: no use of yes_no.
+		expect(
+			instrumentsUsing(instrumentUses(m, createEvaluations()), claimOf(scale)),
+		).toEqual([]);
+	});
+
 	it("goes to where the instrument declares a name, in place", () => {
 		/** F12 on `word` puts the caret on `name`, as the line `line` writes it. */
 		const reveal = (word: string, line: string, name: string) => {

@@ -322,9 +322,21 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const marks = useMemo(
 		(): readonly Mark[] =>
 			instrument.refs.map((r): Mark => {
+				// A code stays a code's colour, followable; a name its own or a shared one's.
 				if (r.kind === "here")
-					return { kind: "name", range: r.range, about: r.about };
+					return {
+						kind: r.code ? "codeRef" : "name",
+						range: r.range,
+						about: r.about,
+					};
 				const href = externalUrl(read, r);
+				if (r.kind === "code")
+					return {
+						kind: "codeRef",
+						range: r.range,
+						about: r.about,
+						...(href !== undefined && { href }),
+					};
 				return href === undefined
 					? { kind: "ref", range: r.range }
 					: { kind: "external", range: r.range, href };

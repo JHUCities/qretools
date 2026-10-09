@@ -188,6 +188,42 @@ describe("go to definition in the editor", () => {
 		editor.destroy();
 	});
 
+	it("draws a code in a condition as a code, and follows it with Cmd held", () => {
+		const { editor, view, followed, from, parent } = setup();
+		editor.sync({
+			id: 1,
+			text: view.state.doc.toString(),
+			diagnostics: [],
+			marks: [
+				{
+					kind: "codeRef",
+					range: [from, from + 6],
+					about: "`Very satisfied`, on the shared scale `satisfied5`.",
+				},
+			],
+			schema: {},
+		});
+		const code = parent.querySelector(".cm-code") as HTMLElement;
+		// A code's colour, never a shared name's green; followable all the same.
+		expect(code.classList.contains("cm-followable")).toBe(true);
+		expect(code.classList.contains("cm-ref")).toBe(false);
+		expect(refRangeAt(view.state, from + 3)).toEqual({
+			from,
+			to: from + 6,
+			about: "`Very satisfied`, on the shared scale `satisfied5`.",
+		});
+		code.dispatchEvent(
+			new MouseEvent("mousedown", {
+				bubbles: true,
+				cancelable: true,
+				button: 0,
+				...mod,
+			}),
+		);
+		expect(followed).toEqual([from]);
+		editor.destroy();
+	});
+
 	it("finds the name under the pointer, and not one that only touches it on the other side", () => {
 		const { editor, view, from } = setup();
 		const to = from + 6;

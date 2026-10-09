@@ -7,7 +7,8 @@
  * editor marks. Pure.
  */
 
-import { namesOf } from "../cond/ast.ts";
+import { BINARY_SCALE } from "../binary.ts";
+import { type Expr, namesOf } from "../cond/ast.ts";
 import { NAME_KIND } from "../copy.ts";
 import type { Range } from "../findings.ts";
 import { schemePath } from "../kinds.ts";
@@ -32,6 +33,24 @@ export type InstrumentRef =
 			/** Where it's declared: its name there, in this source. */
 			readonly declared: Range;
 			/** What it is, in words: what the hover says. */
+			readonly about: string;
+			/** A code of an input's own list, not a name: drawn as a code. */
+			readonly code?: true;
+	  }
+	| {
+			/**
+			 * A code a condition compares a bank answer with (`= "4"`, `in {"4", "5"}`), read
+			 * where it's written, quotes and all: followed to where its list says it. Not a
+			 * use of that file: the condition names the question, not its scale.
+			 */
+			readonly kind: "code";
+			readonly range: Range;
+			readonly alias: string;
+			/** The file whose list holds it, by its path in that bank. */
+			readonly path: string;
+			/** Its place in that file (`labels.4`, `responses.4`). */
+			readonly at: string;
+			/** Its label and its list, in words: what the hover says. */
 			readonly about: string;
 	  };
 
@@ -118,6 +137,41 @@ function* condsOf(node: Node): Generator<Cond> {
 	}
 }
 
+/**
+ * Where a condition compares a name with a code: `name = "x"` or `name <> "x"` (either
+ * way round), and each code in `name in {…}`. The string keeps its source range.
+ */
+function* codesIn(e: Expr): Generator<{
+	readonly name: string;
+	readonly code: Expr & { kind: "string" };
+}> {
+	switch (e.kind) {
+		case "binary":
+			if (e.op === "=" || e.op === "<>") {
+				if (e.left.kind === "name" && e.right.kind === "string")
+					yield { name: e.left.name, code: e.right };
+				else if (e.right.kind === "name" && e.left.kind === "string")
+					yield { name: e.right.name, code: e.left };
+			}
+			yield* codesIn(e.left);
+			yield* codesIn(e.right);
+			return;
+		case "member":
+			if (e.operand.kind === "name")
+				for (const x of e.set)
+					if (x.kind === "string") yield { name: e.operand.name, code: x };
+			return;
+		case "unary":
+			yield* codesIn(e.operand);
+			return;
+		case "call":
+			for (const a of e.args) yield* codesIn(a);
+			return;
+		default:
+			return;
+	}
+}
+
 /** The `{{placeholders}}` a step says. */
 function placeholdersOf(node: Node): readonly Placeholder[] {
 	switch (node.kind) {
@@ -192,6 +246,71 @@ export function instrumentRefs(
 		if (declared !== undefined && about !== undefined)
 			refs.push({ kind: "here", range, name, declared, about });
 	};
+	// A code compared with a name: followed to the list it's on, its label in the hover.
+	const code = (name: string, written: Expr & { kind: "string" }) => {
+		const named = parsed.names.get(name);
+		const value = written.value;
+		if (named === undefined || named.type.kind !== "code") return;
+		const known = named.type.codes.find((c) => c.code === value);
+		if (known === undefined) return;
+		const label = `\`${known.label}\``;
+		if (named.kind === "input") {
+			const domain = named.input.domain;
+			if (domain?.kind !== "responses") return;
+			const shared = domain.scale;
+			const dot = shared?.indexOf(".") ?? -1;
+			if (shared !== undefined && dot > 0) {
+				const scale = shared.slice(dot + 1);
+				refs.push({
+					kind: "code",
+					range: written.range,
+					alias: shared.slice(0, dot),
+					path: schemePath("scale", scale),
+					at: `labels.${value}`,
+					about: `${label}, on the shared scale \`${scale}\`.`,
+				});
+				return;
+			}
+			const declared = parsed.ranges[`${named.input.path}.responses.${value}`];
+			if (declared !== undefined)
+				refs.push({
+					kind: "here",
+					range: written.range,
+					name,
+					declared,
+					about: `${label}, one of \`${named.input.name}\`'s codes.`,
+					code: true,
+				});
+			return;
+		}
+		if (named.kind !== "bank") return;
+		const { alias, question } = named;
+		const missing = parsed.banks[alias]?.env.missing ?? [];
+		const domain = question.evaluation.draft.domain;
+		const on = (path: string, at: string, about: string) =>
+			refs.push({ kind: "code", range: written.range, alias, path, at, about });
+		if (missing.some((c) => c.code === value))
+			on("missing.yaml", `labels.${value}`, `${label}, a missing value.`);
+		// A select-all option's variable is coded on the binary scale, not its list.
+		else if (domain?.kind === "responses" && domain.select === "many")
+			on(
+				schemePath("scale", BINARY_SCALE),
+				`labels.${value}`,
+				`${label}, on the shared scale \`${BINARY_SCALE}\`.`,
+			);
+		else if (domain?.kind === "responses" && domain.scale !== undefined)
+			on(
+				schemePath("scale", domain.scale),
+				`labels.${value}`,
+				`${label}, on the shared scale \`${domain.scale}\`.`,
+			);
+		else
+			on(
+				question.path,
+				`responses.${value}`,
+				`${label}, in \`${question.name}\`'s own list.`,
+			);
+	};
 	const universe = parsed.draft.universe;
 	if (universe?.kind === "ref")
 		add("universe", {
@@ -210,8 +329,10 @@ export function instrumentRefs(
 			});
 	}
 	for (const node of flow) {
-		for (const cond of condsOf(node))
+		for (const cond of condsOf(node)) {
 			for (const n of namesOf(cond.expr)) read(n.name, n.range);
+			for (const c of codesIn(cond.expr)) code(c.name, c.code);
+		}
 		// A placeholder's range holds its braces: the name is what's followed.
 		for (const p of placeholdersOf(node)) {
 			const written = source.slice(p.range[0], p.range[1]);
@@ -233,7 +354,7 @@ export function instrumentRefs(
 	return refs.sort((a, b) => a.range[0] - b.range[0]);
 }
 
-/** The bank file named at `offset`, if a name is written there. */
+/** The bank file, own name or code named at `offset`, if one is written there. */
 export const instrumentRefAt = (
 	refs: readonly InstrumentRef[],
 	offset: number,

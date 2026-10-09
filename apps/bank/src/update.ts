@@ -422,9 +422,28 @@ function step(model: Model, msg: Msg): Step {
 					ref === undefined || use?.kind !== "local"
 						? undefined
 						: bankFileClaiming(model, inBank(use.folder, ref.path));
-				return target === undefined
-					? [model, []]
-					: step(model, { kind: "fileOpened", id: target.id });
+				if (target === undefined) return [model, []];
+				const [opened, cmds] = step(model, {
+					kind: "fileOpened",
+					id: target.id,
+				});
+				// A code opens its list at it: the reveal waits for that file's editor.
+				return ref?.kind === "code"
+					? [
+							opened,
+							[
+								...cmds,
+								{
+									kind: "revealRange",
+									range: locate(
+										{ path: ref.at, severity: "info" },
+										placesOf(target),
+									),
+									id: target.id,
+								},
+							],
+						]
+					: [opened, cmds];
 			}
 			if (q.kind !== "question") return [model, []];
 			// The names written, resolved or not; the file decides whether there is one.
@@ -1468,7 +1487,8 @@ export function externalUrl(
 	read: InstrumentIn,
 	ref: InstrumentRef,
 ): string | undefined {
-	if (ref.kind !== "bank" || read.uses[ref.alias]?.kind !== "remote")
+	// A code is followed into its list as a name is into its file.
+	if (ref.kind === "here" || read.uses[ref.alias]?.kind !== "remote")
 		return undefined;
 	const written = read.instrument.draft.uses.find(
 		(u) => u.alias === ref.alias,

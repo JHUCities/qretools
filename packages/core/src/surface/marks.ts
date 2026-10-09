@@ -14,9 +14,17 @@ import { clampRange } from "./read.ts";
  * `external` is a name in a bank of another repository (an instrument's import): it
  * resolves, but opens where that bank is, never in place. `name` is a name an
  * instrument declares itself (an input, a compute, an `as`, a roster's row number), read
- * in a condition or a placeholder: it follows to its declaration.
+ * in a condition or a placeholder: it follows to its declaration. `codeRef` is a code
+ * in an instrument's condition: coloured as a code, followed to its list.
  */
-export type MarkKind = "ref" | "external" | "name" | "code" | "legacy" | "fill";
+export type MarkKind =
+	| "ref"
+	| "external"
+	| "name"
+	| "code"
+	| "codeRef"
+	| "legacy"
+	| "fill";
 
 export interface Mark {
 	readonly kind: MarkKind;
