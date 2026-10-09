@@ -991,6 +991,30 @@ describe("an instrument's pickers", () => {
 		});
 		expect(bank.local.workspace[id]?.source).toContain("  hh: ../banks/hh\n");
 	});
+
+	it("write the codes ticked in a condition's set, escaped for its value", () => {
+		const m = loaded();
+		const id = at(m, HOUSEHOLDS).id;
+		const typed = update(
+			{ ...m, screen: { kind: "editing", id } },
+			{
+				kind: "edited",
+				text: (m.local.workspace[id]?.source ?? "").replace(
+					'stop: hh.consent = "2"',
+					'stop: "hh.consent in {\\"2\\"}"',
+				),
+			},
+		)[0];
+		const [next] = update(typed, {
+			kind: "livelitChosen",
+			id,
+			livelit: "flow.2.stop#0",
+			value: ["1", "2"],
+		});
+		expect(next.local.workspace[id]?.source).toContain(
+			'stop: "hh.consent in {\\"1\\", \\"2\\"}"',
+		);
+	});
 });
 
 describe("adding a bank", () => {

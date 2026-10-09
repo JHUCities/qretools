@@ -13,7 +13,11 @@ export {
 	type InstrumentCompletion,
 	instrumentCompletion,
 } from "./instrument/complete.ts";
-export { bankChoices, questionChoices } from "./instrument/livelits.ts";
+export {
+	bankChoices,
+	codeChoices,
+	questionChoices,
+} from "./instrument/livelits.ts";
 export {
 	type OutlineItem,
 	type OutlinePart,
@@ -37,6 +41,7 @@ export {
 	LIVELIT_KINDS,
 	type Livelit,
 	livelitsOf,
+	type Offered,
 	ownChoices,
 	type Picker,
 	type Source,

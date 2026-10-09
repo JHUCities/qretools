@@ -11,7 +11,7 @@ import {
 	isScalar,
 	isSeq,
 	parseDocument,
-	type Scalar,
+	Scalar,
 	type YAMLMap,
 	type Node as YamlNode,
 } from "yaml";
@@ -61,6 +61,13 @@ export interface ParsedInstrument {
 	readonly names: ReadonlyMap<string, Named>;
 	/** The banks in reach (those `uses` names), by alias. */
 	readonly banks: Readonly<Record<string, BankScope>>;
+	/**
+	 * Every condition and value written, in the order read, whatever its names resolve to:
+	 * its path, and how its YAML scalar is written (`form`), which says what text written
+	 * back into it must escape (inside double quotes `"` is `\"`; a block scalar may
+	 * rewrap it).
+	 */
+	readonly conds: readonly WrittenCond[];
 }
 
 const TOP = [
@@ -213,6 +220,7 @@ export function parseInstrument(
 			scope: new Map(),
 			names: new Map(),
 			banks: {},
+			conds: [],
 		};
 	}
 	const say = (f: Finding) => findings.push(f);
@@ -309,6 +317,7 @@ export function parseInstrument(
 		names: new Map(),
 		rosters: new Map(),
 		rows: [],
+		conds: [],
 	};
 	const universe = readUniverse(top.get("universe", true), "universe", ctx);
 	const flowNode = top.get("flow", true);
@@ -348,6 +357,7 @@ export function parseInstrument(
 		scope,
 		names: ctx.names,
 		banks: available,
+		conds: ctx.conds,
 	};
 }
 
@@ -366,6 +376,8 @@ interface Context {
 	readonly rows: string[];
 	/** What each name read resolved to, for the checks. */
 	readonly names: Map<string, Named>;
+	/** Every condition and value read, with its path. */
+	readonly conds: WrittenCond[];
 	/** Computes' typing, run first, in the order they read each other. */
 	readonly computes: {
 		readonly name: string;
@@ -1557,8 +1569,25 @@ function readCond(
 			reads: namesOf(expr).map((n) => n.name),
 			typeIt,
 		});
-	return { text, expr };
+	const cond: Cond = { text, expr };
+	ctx.conds.push({ path, cond, form: formOf(node as Scalar) });
+	return cond;
 }
+
+export interface WrittenCond {
+	readonly path: string;
+	readonly cond: Cond;
+	readonly form: "plain" | "double" | "single" | "block";
+}
+
+const formOf = (node: Scalar): WrittenCond["form"] =>
+	node.type === Scalar.QUOTE_DOUBLE
+		? "double"
+		: node.type === Scalar.QUOTE_SINGLE
+			? "single"
+			: node.type === Scalar.PLAIN
+				? "plain"
+				: "block";
 
 /** A condition's problem as a finding at its place, an unknown name with what fits here. */
 function report(

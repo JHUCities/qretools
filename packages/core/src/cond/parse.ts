@@ -85,6 +85,7 @@ export function parseCondition(text: string): ParsedCondition {
 					negated: op === "not_in",
 					operand: left,
 					set: set.items,
+					...(set.braces !== undefined && { setRange: set.braces }),
 					range: span(left.range, set.range),
 				};
 				continue;
@@ -248,7 +249,8 @@ export function parseCondition(text: string): ParsedCondition {
 		return { kind: "call", fn, args, range };
 	}
 
-	function valueSet(): { items: Expr[]; range: Range } {
+	/** A set's values and where it is; `braces` only when both were written. */
+	function valueSet(): { items: Expr[]; range: Range; braces?: Range } {
 		const open = peek();
 		if (open.kind !== "{") {
 			problems.push({
@@ -283,7 +285,10 @@ export function parseCondition(text: string): ParsedCondition {
 			});
 		const end =
 			close.kind === "}" ? close.range : (items.at(-1)?.range ?? open.range);
-		return { items, range: [open.range[0], end[1]] };
+		const range: Range = [open.range[0], end[1]];
+		return close.kind === "}"
+			? { items, range, braces: range }
+			: { items, range };
 	}
 
 	const parsed = expr(0);

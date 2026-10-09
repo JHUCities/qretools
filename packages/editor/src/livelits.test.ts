@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { EditorView } from "@codemirror/view";
 import { EMPTY_ENV, type Env, parseSurface } from "@qretools/core";
-import { choicesOf, livelitsOf } from "@qretools/core/editor";
+import { choicesOf, livelitsOf, type Offered } from "@qretools/core/editor";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "./editor.ts";
 
@@ -186,6 +186,108 @@ describe("a checklist picker", () => {
 		(parent.querySelector(".cm-livelit-apply") as HTMLButtonElement).click();
 		expect(chosen).toEqual([{ id: "required", value: ["title", "note"] }]);
 		expect(parent.querySelector('[role="dialog"]')).toBeNull();
+		editor.destroy();
+	});
+
+	/** A checklist of codes over `{"1", "9"}`, whose source offers what `offered` says. */
+	function codes(offered: Offered) {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const chosen: unknown[] = [];
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+			() => {},
+			{
+				livelit: {
+					choices: () => offered,
+					choose: (livelit, value) => chosen.push({ id: livelit.id, value }),
+					act: () => {},
+				},
+			},
+		);
+		const text = 'stop: x in {"1", "9"}\n';
+		const set: readonly [number, number] = [11, text.length - 1];
+		editor.sync({
+			id: 1,
+			text,
+			diagnostics: [],
+			marks: [],
+			livelits: [
+				{
+					id: "flow.0.stop#0",
+					label: "Choose the codes of x",
+					at: set[1],
+					field: [6, set[1]],
+					span: set,
+					picker: {
+						kind: "many",
+						source: { kind: "codes", name: "x" },
+						chosen: ["1", "9"],
+						min: 1,
+					},
+					actions: [],
+					set: "plain",
+				},
+			],
+		});
+		(parent.querySelector("button.cm-livelit") as HTMLButtonElement).click();
+		return { parent, chosen, editor };
+	}
+
+	it("keeps what is written but isn't a choice now, ticked, last", () => {
+		const { parent, chosen, editor } = codes([
+			{ name: "1", detail: "Yes" },
+			{ name: "2", detail: "No" },
+		]);
+		const boxes = [
+			...parent.querySelectorAll<HTMLInputElement>(
+				'[role="dialog"] input[type="checkbox"]',
+			),
+		];
+		expect(boxes.map((b) => [b.value, b.checked])).toEqual([
+			["1", true],
+			["2", false],
+			["9", true],
+		]);
+		(parent.querySelector(".cm-livelit-apply") as HTMLButtonElement).click();
+		expect(chosen).toEqual([{ id: "flow.0.stop#0", value: ["1", "9"] }]);
+		editor.destroy();
+	});
+
+	it("won't apply fewer than the fewest allowed, and says so on Apply", () => {
+		const { parent, chosen, editor } = codes([{ name: "1", detail: "Yes" }]);
+		const apply = parent.querySelector(
+			".cm-livelit-apply",
+		) as HTMLButtonElement;
+		expect(apply.getAttribute("aria-disabled")).toBe("false");
+		for (const b of parent.querySelectorAll<HTMLInputElement>(
+			'[role="dialog"] input[type="checkbox"]',
+		)) {
+			b.checked = false;
+			b.dispatchEvent(new Event("change", { bubbles: true }));
+		}
+		expect(apply.getAttribute("aria-disabled")).toBe("true");
+		const why = document.getElementById(
+			apply.getAttribute("aria-describedby") ?? "",
+		);
+		expect(why?.textContent).toBe("Choose at least one.");
+		apply.click();
+		expect(chosen).toEqual([]);
+		editor.destroy();
+	});
+
+	it("says why there is nothing to choose, with only Close", () => {
+		const { parent, chosen, editor } = codes({
+			reason: "`x` is a number: it has no codes.",
+		});
+		const dialog = parent.querySelector('[role="dialog"]') as HTMLElement;
+		expect(dialog.textContent).toBe("x is a number: it has no codes.Close");
+		expect(dialog.querySelector("input")).toBeNull();
+		(dialog.querySelector("button") as HTMLButtonElement).click();
+		expect(parent.querySelector('[role="dialog"]')).toBeNull();
+		expect(chosen).toEqual([]);
 		editor.destroy();
 	});
 });
