@@ -476,6 +476,11 @@ export type Cmd =
 	| {
 			readonly kind: "revealRange";
 			readonly range: Range;
+			/**
+			 * The file it's in, when that file is only now opening: the reveal waits for its
+			 * editor. Absent means the file the editor shows now.
+			 */
+			readonly id?: Id;
 			/** Open completion there: the place is a value still to fill in. */
 			readonly complete?: boolean;
 	  }

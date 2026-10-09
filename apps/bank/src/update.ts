@@ -21,6 +21,7 @@ import {
 	NAME_RULE_TEXT,
 	type NamedScheme,
 	parseSurface,
+	type Range,
 	type RemoteBank,
 	type Result,
 	relIn,
@@ -318,15 +319,7 @@ function step(model: Model, msg: Msg): Step {
 			// against the text as it is now.
 			const q = current(model);
 			if (!q) return [model, []];
-			// Each kind of file names its places by its own reading of the YAML; an
-			// instrument's don't depend on its banks.
-			const ranges =
-				q.kind === "instrument"
-					? instrumentOf(q.source, { banks: {} }).ranges
-					: q.kind === "workspaceFile"
-						? workspaceFileOf(q.source).ranges
-						: rangesOf(q.source);
-			const range = locate(msg.target, ranges);
+			const range = locate(msg.target, placesOf(q));
 			// A hole at an empty value is a point where the value goes (its own zero-width
 			// range, from the parser): offer what can go there (completion writes the space
 			// after the colon, never the click). A field not written at all has no range.
@@ -1768,13 +1761,19 @@ export function linkOf(model: Model): string | undefined {
  * (not connected, not loaded) or for a draft, which is not on GitHub. The same rule as
  * `linkOf`: the branch the file was read from.
  */
-export function hrefOf(model: Model, f: Entry): string | undefined {
+export function hrefOf(
+	model: Model,
+	f: Entry,
+	/** A place in it to open at, as a path in its own terms. */
+	at?: string,
+): string | undefined {
 	const branch = linkBranch(model);
 	if (branch === undefined || f.base === undefined) return undefined;
 	return formatLink({
 		repo: bankText(model.settings),
 		branch,
 		file: f.base.path,
+		...(at !== undefined && { at }),
 	});
 }
 
@@ -1807,6 +1806,31 @@ const claimant = (model: Model, path: Path): Entry | undefined =>
  * Another branch shows that author's version, read only, unless it is exactly the
  * version you started from. What cannot be resolved yet waits for the bank.
  */
+/**
+ * Where each place in a file is, by path: each kind of file names its places by its own
+ * reading of the YAML (an instrument's don't depend on its banks).
+ */
+function placesOf(f: Entry): Readonly<Record<string, Range>> {
+	return f.kind === "instrument"
+		? instrumentOf(f.source, { banks: {} }).ranges
+		: f.kind === "workspaceFile"
+			? workspaceFileOf(f.source).ranges
+			: rangesOf(f.source);
+}
+
+/** Open your own copy `f` from a link, at the place it names, if any. */
+function openOwn(model: Model, f: Entry, at: string | undefined): Step {
+	const opened = compact({
+		...model,
+		screen: { kind: "editing", id: f.id } as const,
+		pendingLink: undefined,
+	});
+	if (at === undefined) return [opened, []];
+	// The file's editor isn't drawn yet: the reveal names the file, and waits for it.
+	const range = locate({ path: at, severity: "info" }, placesOf(f));
+	return [opened, [{ kind: "revealRange", range, id: f.id }]];
+}
+
 function openLink(model: Model, link: Link): Step {
 	const repo = bankText(model.settings);
 	// One bank: GitHub's names ignore case, a folder's doesn't.
@@ -1843,27 +1867,13 @@ function openLink(model: Model, link: Link): Step {
 	// any other branch (the default one included) waits, since whose version it is
 	// cannot be known until their blob is.
 	if (own !== undefined && ownBranches.includes(link.branch))
-		return [
-			compact({
-				...model,
-				screen: { kind: "editing", id: own.id } as const,
-				pendingLink: undefined,
-			}),
-			[],
-		];
+		return openOwn(model, own, link.at);
 	if (!loaded || session === undefined)
 		return [{ ...model, pendingLink: link }, []];
 	// The bank's version is where your copy started, never someone else's: a link to the
 	// default branch (one written before your first save, say) opens your copy too.
 	if (own !== undefined && link.branch === session.defaultBranch)
-		return [
-			compact({
-				...model,
-				screen: { kind: "editing", id: own.id } as const,
-				pendingLink: undefined,
-			}),
-			[],
-		];
+		return openOwn(model, own, link.at);
 	if (ownBranches.includes(link.branch))
 		return link.file === undefined
 			? [{ ...model, screen: { kind: "blank" } }, []]

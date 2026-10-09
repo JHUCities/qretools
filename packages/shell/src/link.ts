@@ -1,6 +1,6 @@
 /**
- * Links to what is open: the bank, the branch it was read from, and the file,
- * in the URL's hash (`#repo=…&branch=…&file=…`). Pure; encoding by URLSearchParams,
+ * Links to what is open: the bank, the branch it was read from, the file, and a place
+ * in it, in the URL's hash (`#repo=…&branch=…&file=…&at=…`). Pure; encoding by URLSearchParams,
  * since branch names and paths both contain `/`. The browser keeps the history.
  */
 
@@ -12,11 +12,15 @@ export interface Link {
 	readonly branch: string;
 	/** A path in the bank; absent for a link to the branch alone. */
 	readonly file?: string;
+	/** A place in the file, in its own terms (a path such as `flow.3.ask`): opened there. */
+	readonly at?: string;
 }
 
 export function formatLink(link: Link): string {
 	const params = new URLSearchParams({ repo: link.repo, branch: link.branch });
 	if (link.file !== undefined) params.set("file", link.file);
+	if (link.file !== undefined && link.at !== undefined)
+		params.set("at", link.at);
 	return `#${params.toString()}`;
 }
 
@@ -26,6 +30,8 @@ export function parseLink(hash: string): Link | undefined {
 	const repo = params.get("repo");
 	const branch = params.get("branch");
 	const file = params.get("file");
+	const at = params.get("at");
 	if (!repo || !branch || !parseBank(repo).ok) return undefined;
-	return file ? { repo, branch, file } : { repo, branch };
+	if (!file) return { repo, branch };
+	return at ? { repo, branch, file, at } : { repo, branch, file };
 }

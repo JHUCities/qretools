@@ -455,6 +455,30 @@ describe("the instruments a question is used by", () => {
 		});
 	});
 
+	it("links each to its first place, which a link opens it at", () => {
+		const m = loaded();
+		const [use] = instrumentsUsing(
+			m,
+			createEvaluations(),
+			at(m, CONSENT) as Question,
+		);
+		expect(use?.at).toBe("flow.1.ask");
+		const households = at(m, HOUSEHOLDS) as InstrumentEntry;
+		const [opened, cmds] = update(m, {
+			kind: "hashChanged",
+			hash: `#repo=o%2Fr&branch=qretools-iain&file=${encodeURIComponent(HOUSEHOLDS)}&at=flow.1.ask`,
+		});
+		expect(opened.screen).toEqual({ kind: "editing", id: households.id });
+		// The step that asks it, as a finding there is revealed; the reveal names the
+		// instrument, whose editor isn't drawn yet.
+		const from = households.source.indexOf("ask: hh.consent");
+		expect(cmds).toContainEqual({
+			kind: "revealRange",
+			range: [from, from + "ask: hh.consent".length],
+			id: households.id,
+		});
+	});
+
 	it("counts an option variable read in a condition, by any alias for the bank", () => {
 		const m = withInstrument(
 			loaded(),

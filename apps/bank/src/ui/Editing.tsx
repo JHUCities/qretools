@@ -1120,6 +1120,7 @@ function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
 				<li key={u.id}>
 					<FileLink
 						id={u.id}
+						at={u.at}
 						onOpen={() => dispatch({ kind: "fileOpened", id: u.id })}
 					>
 						{u.name}
@@ -1133,16 +1134,19 @@ function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
 
 function FileLink({
 	id,
+	at,
 	onOpen,
 	children,
 }: {
 	id: Id;
+	/** A place in the file to open at (a path in its own terms). */
+	at?: string;
 	onOpen: () => void;
 	children: ReactNode;
 }) {
 	const href = useModel((m) => {
 		const f = fileOf(m, id);
-		return f === undefined ? undefined : hrefOf(m, f);
+		return f === undefined ? undefined : hrefOf(m, f, at);
 	});
 	return href !== undefined ? (
 		<Link href={href}>{children}</Link>

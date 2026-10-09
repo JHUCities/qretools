@@ -15,6 +15,26 @@ describe("links", () => {
 		});
 	});
 
+	it("carry a place in the file, and only with a file; links without one still read", () => {
+		const link = {
+			repo: "o/r",
+			branch: "main",
+			file: "instruments/wave1.yaml",
+			at: "flow.3.ask",
+		};
+		expect(parseLink(formatLink(link))).toEqual(link);
+		expect(formatLink({ repo: "o/r", branch: "main", at: "flow.1" })).toBe(
+			"#repo=o%2Fr&branch=main",
+		);
+		expect(parseLink("#repo=o%2Fr&branch=main&at=flow.1")).toEqual({
+			repo: "o/r",
+			branch: "main",
+		});
+		expect(
+			parseLink("#repo=o%2Fr&branch=main&file=instruments%2Fwave1.yaml"),
+		).toEqual({ repo: "o/r", branch: "main", file: "instruments/wave1.yaml" });
+	});
+
 	it("anything the app did not write is no link", () => {
 		for (const hash of ["", "#", "#top", "#repo=o&branch=b", "#repo=o/r"])
 			expect(parseLink(hash)).toBeUndefined();

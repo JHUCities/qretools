@@ -21,9 +21,11 @@ import {
 	createCredentials,
 	type Failure,
 	type File,
+	formatLink,
 	NO_TOKEN,
+	parseLink,
 } from "@qretools/shell";
-import type { Cmd, Dispatch, RemoteAddress } from "./model.js";
+import type { Cmd, Dispatch, Id, RemoteAddress } from "./model.js";
 import {
 	SETTINGS_KEY,
 	setAsideWork,
@@ -38,10 +40,20 @@ export type Deps = CredentialsDeps;
 export interface Effects {
 	exec(cmd: Cmd, dispatch: Dispatch): void;
 	registerEditor(editor: Editor | undefined): void;
+	/** The editor now shows file `id`: a reveal waiting for it is applied, any other dropped. */
+	editorSynced(id: Id): void;
 	/** Set the token the next connect uses; also remembers it per the setting. */
 	setToken(token: string, remember: boolean): void;
 	hasToken(): boolean;
 	validate(ddi: DdiDocument): readonly Finding[] | undefined;
+}
+
+/** The address with any place in its file left out, as the app writes a file's link. */
+function withoutPlace(hash: string): string | undefined {
+	const link = parseLink(hash);
+	if (link?.at === undefined) return undefined;
+	const { at: _, ...file } = link;
+	return formatLink(file);
 }
 
 /** How long an address must stay as typed before its bank is read. */
@@ -52,6 +64,10 @@ export function createEffects(deps: Deps): Effects {
 	const storeFor = credentials.storeFor;
 	let validator: Validator | undefined;
 	let editor: Editor | undefined;
+	/** The file the editor shows, as it last synced. */
+	let shown: Id | undefined;
+	/** A reveal in a file only now opening: applied once its editor has its text. */
+	let waitingReveal: Extract<Cmd, { kind: "revealRange" }> | undefined;
 	const persist = debouncedPersist();
 	/** Banks in other repositories being read now, by address: never asked for twice at once. */
 	const inFlight = new Set<string>();
@@ -85,6 +101,15 @@ export function createEffects(deps: Deps): Effects {
 	return {
 		registerEditor: (e) => {
 			editor = e;
+			if (e === undefined) shown = undefined;
+		},
+		editorSynced: (id) => {
+			shown = id;
+			const reveal = waitingReveal;
+			waitingReveal = undefined;
+			// Another file opened meanwhile: its place no longer applies.
+			if (reveal !== undefined && reveal.id === id)
+				editor?.reveal(reveal.range, reveal.complete);
 		},
 		setToken: credentials.setToken,
 		hasToken: credentials.hasToken,
@@ -93,7 +118,9 @@ export function createEffects(deps: Deps): Effects {
 		exec(cmd, dispatch) {
 			switch (cmd.kind) {
 				case "revealRange":
-					editor?.reveal(cmd.range, cmd.complete);
+					// A reveal in a file the editor doesn't show yet waits for it to sync.
+					if (cmd.id !== undefined && cmd.id !== shown) waitingReveal = cmd;
+					else editor?.reveal(cmd.range, cmd.complete);
 					return;
 				case "loadDdiSchema":
 					import("@qretools/core/schema.json?raw")
@@ -253,6 +280,9 @@ export function createEffects(deps: Deps): Effects {
 					// The browser keeps the history: setting the hash adds an entry, replace()
 					// does not. Writing the address it already shows would add a duplicate.
 					if (location.hash === cmd.hash) return;
+					// A link to a place opened its file there: the address keeps the place it
+					// was opened at, rather than a second entry for the file alone.
+					if (withoutPlace(location.hash) === cmd.hash) return;
 					if (cmd.push) location.hash = cmd.hash;
 					else
 						location.replace(

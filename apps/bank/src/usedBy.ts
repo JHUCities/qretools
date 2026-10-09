@@ -5,6 +5,7 @@
  * on the question: a use is a fact about the instrument (AGENTS: "asked" is derived).
  */
 import { inBank, type Range } from "@qretools/core";
+import { pathAt } from "@qretools/core/editor";
 import type { Evaluations } from "./evaluations.js";
 import type { Id, InstrumentEntry, Question } from "./model.js";
 
@@ -15,6 +16,8 @@ export interface InstrumentUse {
 	readonly places: number;
 	/** The first of them, in document order. */
 	readonly first: Range;
+	/** The same place in the instrument's own terms (`flow.1.ask`), for a link to it. */
+	readonly at: string;
 }
 
 type Slices = Parameters<Evaluations["instrument"]>[0];
@@ -45,6 +48,14 @@ export function instrumentsUsing(
 			const [first] = here;
 			return first === undefined
 				? []
-				: [{ id: e.id, name: e.name, places: here.length, first: first.range }];
+				: [
+						{
+							id: e.id,
+							name: e.name,
+							places: here.length,
+							first: first.range,
+							at: pathAt(read.instrument.ranges, first.range[0]),
+						},
+					];
 		});
 }

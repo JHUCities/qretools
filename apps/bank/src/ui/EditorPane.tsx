@@ -68,6 +68,7 @@ export function EditorPane(
 			...(readOnly !== undefined && { readOnly }),
 			...(label !== undefined && { label }),
 		});
-	}, [id, text, diagnostics, marks, schema, readOnly, label]);
+		if (editor.current) effects.editorSynced(id);
+	}, [id, text, diagnostics, marks, schema, readOnly, label, effects]);
 	return <div ref={host} className="editor" />;
 }

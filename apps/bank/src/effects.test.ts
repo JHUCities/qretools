@@ -1,4 +1,5 @@
 import { ok } from "@qretools/core";
+import type { Editor } from "@qretools/editor";
 import type {
 	CredentialStore,
 	Credentials,
@@ -169,5 +170,51 @@ describe("reading the banks in other repositories that instruments use", () => {
 			dispatch,
 		);
 		expect(read).toEqual(["bank@v1"]);
+	});
+});
+
+describe("a reveal in a file only now opening", () => {
+	/** Effects with an editor that records what it was asked to reveal. */
+	function revealing() {
+		const effects = createEffects({
+			makeStore: () => ({}) as Store,
+			credentialStore: { load: () => null, save: () => {}, clear: () => {} },
+		});
+		const revealed: (readonly [number, number])[] = [];
+		effects.registerEditor({
+			reveal: (range: readonly [number, number]) => {
+				revealed.push(range);
+			},
+		} as unknown as Editor);
+		return { effects, revealed };
+	}
+	const none = () => {};
+
+	it("waits for that file's editor, then is applied once", () => {
+		const { effects, revealed } = revealing();
+		effects.editorSynced(1);
+		effects.exec({ kind: "revealRange", range: [5, 9], id: 2 }, none);
+		expect(revealed).toEqual([]);
+		effects.editorSynced(2);
+		expect(revealed).toEqual([[5, 9]]);
+		// A later sync of the same file (typing) doesn't jump back there.
+		effects.editorSynced(2);
+		expect(revealed).toEqual([[5, 9]]);
+	});
+
+	it("is dropped when another file opens first, and runs at once in the file shown", () => {
+		const { effects, revealed } = revealing();
+		effects.editorSynced(1);
+		effects.exec({ kind: "revealRange", range: [5, 9], id: 2 }, none);
+		effects.editorSynced(3);
+		effects.editorSynced(2);
+		expect(revealed).toEqual([]);
+		// The editor shows file 2 now: a reveal in it, or naming no file, runs at once.
+		effects.exec({ kind: "revealRange", range: [1, 2], id: 2 }, none);
+		effects.exec({ kind: "revealRange", range: [3, 4] }, none);
+		expect(revealed).toEqual([
+			[1, 2],
+			[3, 4],
+		]);
 	});
 });
