@@ -80,6 +80,7 @@ import {
 	linkBranch,
 	writeBlocked,
 } from "../update.js";
+import { type InstrumentUse, instrumentsUsing } from "../usedBy.js";
 import { useApp, useEnv, useModel } from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
@@ -166,6 +167,14 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const { dispatch, onTarget, onFix, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, env);
+	// The instruments here that use it: rebuilt only when an instrument or this one changes.
+	const remoteBanks = useModel((m) => m.remoteBanks);
+	const banks = useModel((m) => m.banks);
+	const instruments = useMemo(
+		() =>
+			instrumentsUsing({ local, remote, banks, remoteBanks }, evaluations, q),
+		[local, remote, banks, remoteBanks, evaluations, q],
+	);
 	// Until the bank declares its agency, say so beside its DDI (not while it loads).
 	const loading = useModel(bankLoading);
 	const declare = useCallback(
@@ -245,7 +254,10 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 					<Panes
 						kind="question"
 						readOnly={false}
-						badge={{ findings: <StatusBadge status={status(findings)} /> }}
+						badge={{
+							findings: <StatusBadge status={status(findings)} />,
+							usedBy: <CounterLabel>{instruments.length}</CounterLabel>,
+						}}
 						body={(pane) =>
 							pane === "findings" ? (
 								<SettledFindings
@@ -259,6 +271,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 								<Respondent view={ev.respondent} onTarget={onTarget} />
 							) : pane === "codebook" ? (
 								<Codebook view={ev.codebook} onTarget={onTarget} />
+							) : pane === "usedBy" ? (
+								<InstrumentsUsing uses={instruments} />
 							) : null
 						}
 					/>
@@ -1095,6 +1109,28 @@ export function ForeignView({
  * hashchange opens, and which can open in a new tab). A draft has no address on GitHub
  * yet, so it opens with a button instead.
  */
+/** The instruments here that use a question, each once, as links to them. */
+function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
+	const { dispatch } = useApp();
+	return uses.length === 0 ? (
+		<p className="quiet">No instrument in this workspace uses it.</p>
+	) : (
+		<ul className="used-by">
+			{uses.map((u) => (
+				<li key={u.id}>
+					<FileLink
+						id={u.id}
+						onOpen={() => dispatch({ kind: "fileOpened", id: u.id })}
+					>
+						{u.name}
+					</FileLink>
+					{u.places > 1 && <span className="quiet"> ({u.places} places)</span>}
+				</li>
+			))}
+		</ul>
+	);
+}
+
 function FileLink({
 	id,
 	onOpen,

@@ -25,7 +25,8 @@ export type PaneId =
 
 /**
  * The preview panes a file shows, in order. Another author's version (read only) has
- * no "Used by": who names a shared file is known only for your own bank.
+ * no "Used by": who names a shared file, or which instruments use a question, is known
+ * only for your own workspace.
  */
 export function panesOf(
 	kind: FileKind,
@@ -36,6 +37,7 @@ export function panesOf(
 			{ id: "findings", title: "Findings" },
 			{ id: "respondent", title: "As the respondent sees it" },
 			{ id: "codebook", title: "As the codebook lists it" },
+			...(readOnly ? [] : [{ id: "usedBy" as const, title: "Used by" }]),
 		];
 	if (kind === "instrument")
 		return [

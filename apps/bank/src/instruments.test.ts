@@ -24,6 +24,7 @@ import {
 	signOutPlan,
 	update,
 } from "./update.js";
+import { instrumentsUsing } from "./usedBy.js";
 
 let files: Record<string, string>;
 beforeAll(async () => {
@@ -416,6 +417,63 @@ describe("the example instrument", () => {
 			name: "demo",
 			example: true,
 		});
+	});
+});
+
+describe("the instruments a question is used by", () => {
+	/** `instrumentsUsing` for the question at `path`, with the workspace as `m` holds it. */
+	const usesOf = (m: Model, path: string) =>
+		instrumentsUsing(m, createEvaluations(), at(m, path) as Question).map(
+			(u) => ({ name: u.name, places: u.places, first: u.first[0] }),
+		);
+	/** The workspace with an instrument of this source added, as a saved file would be. */
+	const withInstrument = (m: Model, name: string, source: string): Model => {
+		const [added] = update(m, { kind: "instrumentCreateOpened" });
+		const [named] = update(added, { kind: "instrumentNameChanged", name });
+		const [made] = update(named, { kind: "instrumentNamingConfirmed" });
+		const e = Object.values(made.local.workspace).find(
+			(f) => f.kind === "instrument" && f.name === name,
+		) as InstrumentEntry;
+		return {
+			...made,
+			local: {
+				...made.local,
+				workspace: { ...made.local.workspace, [e.id]: { ...e, source } },
+			},
+		};
+	};
+
+	it("lists each instrument once, with its places, the first an ask", () => {
+		const m = loaded();
+		const households = at(m, HOUSEHOLDS) as InstrumentEntry;
+		const [use] = usesOf(m, CONSENT);
+		// Asked, then read in `stop:`: two places, the first the ask.
+		expect(use).toEqual({
+			name: "households",
+			places: 2,
+			first: households.source.indexOf("hh.consent"),
+		});
+	});
+
+	it("counts an option variable read in a condition, by any alias for the bank", () => {
+		const m = withInstrument(
+			loaded(),
+			"news",
+			'name: news\nuses:\n  b: ../bank\n  again: ../bank\nflow:\n  - if: again.news_sources_1 = "1"\n    then:\n      - say: Reads the paper.\n',
+		);
+		expect(usesOf(m, "bank/questions/examples/news_sources.yaml")).toEqual([
+			{ name: "news", places: 1, first: expect.any(Number) },
+		]);
+	});
+
+	it("is none for a question no instrument here names, or one never saved", () => {
+		const m = loaded();
+		expect(usesOf(m, "bank/questions/examples/library_visits.yaml")).toEqual(
+			[],
+		);
+		const draft = { ...(at(m, CONSENT) as Question) };
+		delete (draft as { base?: unknown }).base;
+		expect(instrumentsUsing(m, createEvaluations(), draft)).toEqual([]);
 	});
 });
 

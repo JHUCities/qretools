@@ -206,6 +206,20 @@ describe("a workspace's instruments", () => {
 		).toBeTruthy();
 	});
 
+	it("are listed on a question they use, as links to them", async () => {
+		const app = renderWorkspace();
+		await act(async () => {});
+		const alpha = Object.values(
+			app.store.getState().model.local.questions,
+		).find((q) => q.base?.path === "banks/a/questions/t/alpha.yaml");
+		act(() => app.dispatch({ kind: "fileOpened", id: alpha?.id ?? -1 }));
+		await act(async () => {});
+		const heading = screen.getByRole("heading", { name: /^Used by/ });
+		expect(heading.textContent).toMatch(/^Used by\s*1\b/);
+		// The tree's wave1 is a tree item; the pane's is a link.
+		expect(screen.getByRole("link", { name: "wave1" })).toBeTruthy();
+	});
+
 	it("open as their source, findings, outline and DDI", async () => {
 		renderWorkspace();
 		await act(async () => {});
