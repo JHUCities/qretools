@@ -25,6 +25,7 @@ import { KEYWORDS, type Token, tokenize } from "../cond/lex.ts";
 import { NAME_KIND } from "../copy.ts";
 import type { BankScope } from "../evaluate.ts";
 import type { Node } from "./draft.ts";
+import { questionChoices } from "./livelits.ts";
 import {
 	CHECK_FIELDS,
 	CONSTRUCTS,
@@ -476,26 +477,15 @@ function codes(
 		});
 }
 
-/** Every bank question, `alias.name`, with its title or text. */
-function questions(
+/** Every bank question, `alias.name`, as its picker lists it (`questionChoices`). */
+const questions = (
 	banks: Readonly<Record<string, BankScope>>,
-): readonly CompletionOption[] {
-	return Object.entries(banks).flatMap(([alias, bank]) =>
-		[...bank.index.names.entries()].flatMap(([name, paths]) => {
-			const [path] = [...paths].sort();
-			const draft =
-				path === undefined ? undefined : bank.questions[path]?.draft;
-			const detail = draft?.title ?? draft?.text;
-			return [
-				{
-					label: `${alias}.${name}`,
-					kind: "question" as const,
-					...(detail !== undefined && { detail }),
-				},
-			];
-		}),
-	);
-}
+): readonly CompletionOption[] =>
+	questionChoices(banks).map((c) => ({
+		label: c.name,
+		kind: "question" as const,
+		...(c.detail !== "" && { detail: c.detail }),
+	}));
 
 /**
  * Every name a condition can read, in the order they are declared: the instrument's own

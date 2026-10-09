@@ -13,6 +13,7 @@ export {
 	type InstrumentCompletion,
 	instrumentCompletion,
 } from "./instrument/complete.ts";
+export { bankChoices, questionChoices } from "./instrument/livelits.ts";
 export {
 	type OutlineItem,
 	type OutlinePart,

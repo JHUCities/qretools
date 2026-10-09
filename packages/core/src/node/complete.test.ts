@@ -59,7 +59,7 @@ describe("completion in an instrument", async () => {
 		const size = at("  - ask: |")?.options.find((o) => o.label === "hh.size");
 		expect(size).toMatchObject({
 			kind: "question",
-			detail: "How many people live in your household, including you?",
+			detail: "number · How many people live in your household, including you?",
 		});
 	});
 

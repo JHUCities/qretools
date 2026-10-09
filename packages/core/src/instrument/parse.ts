@@ -53,6 +53,8 @@ export interface ParsedInstrument {
 	readonly findings: readonly Finding[];
 	/** Every path's range in the source, list items included (`flow.2.then.0`). */
 	readonly ranges: Readonly<Record<string, Range>>;
+	/** Where each value written empty sits (a key with nothing after it, a bare `- `). */
+	readonly empties: Readonly<Record<string, number>>;
 	/** The instrument's own names (inputs, computes, `as`), resolved. */
 	readonly scope: ReadonlyMap<string, Named>;
 	/** Every name its conditions, fills and placeholders read, with what it resolved to. */
@@ -174,6 +176,12 @@ export const FILL_SOURCE = "value";
 const ORDERS: readonly Order[] = ["random", "rotate"];
 
 /**
+ * A bank's name as an instrument writes it, `alias.name` (`bas.nhd_sat`, `bas.renters`):
+ * the one rule for what reads as a name rather than prose, here and in its pickers.
+ */
+export const QUALIFIED = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/;
+
+/**
  * An instrument read against the banks it uses, each given by its alias (`bas`), already
  * evaluated (`bankOf`). Fetching them is the caller's: the core is given values.
  */
@@ -201,6 +209,7 @@ export function parseInstrument(
 			draft: empty,
 			findings,
 			ranges,
+			empties,
 			scope: new Map(),
 			names: new Map(),
 			banks: {},
@@ -335,6 +344,7 @@ export function parseInstrument(
 		// question's is: one marker where the author types.
 		findings: findings.map(pointAt(empties)),
 		ranges,
+		empties,
 		scope,
 		names: ctx.names,
 		banks: available,
@@ -717,7 +727,7 @@ function readUniverse(
 	const text = readText(node, path, false, ctx.say);
 	if (text === undefined) return undefined;
 	// `bas.renters` is a bank's shared universe; anything else is prose.
-	const named = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/.exec(text);
+	const named = QUALIFIED.exec(text);
 	if (named === null) return { kind: "text", text };
 	const [, alias = "", name = ""] = named;
 	if (ungivenBank(alias, ctx)) return undefined;
@@ -1321,7 +1331,7 @@ function resolveQuestion(
 	path: string,
 	ctx: Context,
 ): QuestionRef | undefined {
-	const named = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/.exec(text.trim());
+	const named = QUALIFIED.exec(text.trim());
 	if (named === null) {
 		ctx.say(
 			problem(

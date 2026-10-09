@@ -253,7 +253,7 @@ function step(model: Model, msg: Msg): Step {
 		case "livelitChosen": {
 			// Like typing: only the open file, which the author can edit.
 			const q = current(model);
-			if (!q || q.id !== msg.id || !isBankEntry(q)) return [model, []];
+			if (!q || q.id !== msg.id) return [model, []];
 			const livelit = livelitsIn(model, q).find((l) => l.id === msg.livelit);
 			const written =
 				livelit === undefined
@@ -2321,7 +2321,14 @@ function withFile(model: Model, f: Entry): Model {
  * A file's pickers in its text as it is now: a question's fields, a bank's details. One
  * place, so a choice is always written where its picker is now.
  */
-function livelitsIn(model: Model, f: BankEntry): readonly Livelit[] {
+/**
+ * The pickers of a file as its text is now. An instrument's are read without its banks:
+ * they are the same either way (`instrumentLivelits`), and reading the banks is costly.
+ */
+function livelitsIn(model: Model, f: Entry): readonly Livelit[] {
+	if (f.kind === "instrument")
+		return instrumentOf(f.source, { banks: {} }).livelits;
+	if (!isBankEntry(f)) return [];
 	const env = envIn(model, f.bank);
 	return f.kind === "question"
 		? livelitsOf(f.source, parseSurface(f.source, env))

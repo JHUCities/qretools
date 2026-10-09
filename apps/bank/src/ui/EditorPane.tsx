@@ -5,12 +5,14 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
-import type { Fix } from "@qretools/core";
+import { type Fix, WORKSPACE } from "@qretools/core";
 import {
+	bankChoices,
 	choicesOf,
 	domainSnippets,
 	type Livelit,
 	newLineAfter,
+	questionChoices,
 	type Source,
 } from "@qretools/core/editor";
 import {
@@ -25,7 +27,8 @@ import { useApp } from "./AppContext.js";
 /**
  * A question or shared file has its schema, which completion reads. An instrument has
  * none: completion offers the questions and names of the banks it uses instead
- * (`instrument`), read from the store when it asks, never as they were at mount.
+ * (`instrument`), read from the store when it asks, never as they were at mount; its
+ * pickers offer the same questions, and the workspace's banks at `uses`.
  */
 export function EditorPane(
 	inputs: EditorInputs &
@@ -67,34 +70,42 @@ export function EditorPane(
 			(text) => dispatch({ kind: "edited", text }),
 			(offset) => dispatch({ kind: "cursorMoved", offset }),
 			(id, offset) => dispatch({ kind: "definitionRequested", id, offset }),
-			instrument
-				? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
-				: {
-						...(question && { snippets: domainSnippets }),
-						// Pickers read the open file's bank as it is when one opens.
-						...(pickers && {
-							livelit: {
-								choices: (source: Source) => {
-									const { model } = store.getState();
-									const f =
-										model.local.questions[open.current] ??
-										model.local.schemes[open.current];
-									return f === undefined || source.kind !== "scheme"
-										? []
-										: choicesOf(evaluations.env(model, f.bank), source.scheme);
-								},
-								choose: (livelit: Livelit, value: string | readonly string[]) =>
-									dispatch({
-										kind: "livelitChosen",
-										id: open.current,
-										livelit: livelit.id,
-										value,
-									}),
-								act: (fix: Fix) =>
-									dispatch({ kind: "fixApplied", id: open.current, fix }),
-							},
-						}),
+			{
+				...(instrument
+					? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
+					: question && { snippets: domainSnippets }),
+				// Pickers read the open file's bank (an instrument's, its banks) as they are
+				// when one opens.
+				...((pickers || instrument) && {
+					livelit: {
+						choices: (source: Source) => {
+							const { model } = store.getState();
+							if (source.kind === "questions") return questionChoices(scopes());
+							if (source.kind === "banks")
+								return bankChoices(
+									WORKSPACE.instruments,
+									model.banks,
+									Object.keys(model.remoteBanks),
+								);
+							const f =
+								model.local.questions[open.current] ??
+								model.local.schemes[open.current];
+							return f === undefined || source.kind !== "scheme"
+								? []
+								: choicesOf(evaluations.env(model, f.bank), source.scheme);
+						},
+						choose: (livelit: Livelit, value: string | readonly string[]) =>
+							dispatch({
+								kind: "livelitChosen",
+								id: open.current,
+								livelit: livelit.id,
+								value,
+							}),
+						act: (fix: Fix) =>
+							dispatch({ kind: "fixApplied", id: open.current, fix }),
 					},
+				}),
+			},
 		);
 		editor.current = e;
 		effects.registerEditor(e);
