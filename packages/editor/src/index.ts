@@ -13,3 +13,4 @@ export {
 	type EditorOptions,
 } from "./editor.ts";
 export { instrumentSource } from "./instrument.ts";
+export { type LivelitHost, PICK_KEY } from "./livelits.ts";

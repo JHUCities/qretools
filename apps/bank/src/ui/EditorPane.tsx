@@ -5,7 +5,7 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
-import { domainSnippets, newLineAfter } from "@qretools/core/editor";
+import { choicesOf, domainSnippets, newLineAfter } from "@qretools/core/editor";
 import {
 	createEditor,
 	type Editor,
@@ -59,7 +59,21 @@ export function EditorPane(
 			instrument
 				? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
 				: question
-					? { snippets: domainSnippets }
+					? {
+							snippets: domainSnippets,
+							// Pickers read the open question's bank as it is when one opens.
+							livelit: {
+								choices: (kind) => {
+									const { model } = store.getState();
+									const q = model.local.questions[open.current];
+									return q === undefined
+										? []
+										: choicesOf(evaluations.env(model, q.bank), kind);
+								},
+								choose: (fix) =>
+									dispatch({ kind: "fixApplied", id: open.current, fix }),
+							},
+						}
 					: {},
 		);
 		editor.current = e;
@@ -70,7 +84,8 @@ export function EditorPane(
 			editor.current = null;
 		};
 	}, [dispatch, effects, evaluations, store, instrument, question]);
-	const { id, text, diagnostics, marks, schema, readOnly, label } = inputs;
+	const { id, text, diagnostics, marks, schema, readOnly, label, livelits } =
+		inputs;
 	// Before paint: the first frame of a file already shows its text, never an empty
 	// editor that fills a frame later.
 	useLayoutEffect(() => {
@@ -82,8 +97,19 @@ export function EditorPane(
 			...(schema !== undefined && { schema }),
 			...(readOnly !== undefined && { readOnly }),
 			...(label !== undefined && { label }),
+			...(livelits !== undefined && { livelits }),
 		});
 		if (editor.current) effects.editorSynced(id);
-	}, [id, text, diagnostics, marks, schema, readOnly, label, effects]);
+	}, [
+		id,
+		text,
+		diagnostics,
+		marks,
+		schema,
+		readOnly,
+		label,
+		livelits,
+		effects,
+	]);
 	return <div ref={host} className="editor" />;
 }
