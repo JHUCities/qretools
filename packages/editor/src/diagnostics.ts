@@ -7,6 +7,7 @@ import {
 	type Fix,
 	plainText,
 	type Range,
+	SEVERITY_LABEL,
 	type Severity,
 } from "@qretools/core";
 import { locate } from "@qretools/core/editor";
@@ -70,7 +71,11 @@ export function codeLine(text: string, className: string): HTMLElement {
 function messageNode(f: Finding): Node {
 	const line = codeLine;
 	const node = document.createElement("div");
-	node.append(line(f.message, "cm-finding-message"));
+	// The severity in words first: the underline says it by colour alone.
+	const severity = document.createElement("div");
+	severity.className = "cm-finding-severity";
+	severity.textContent = SEVERITY_LABEL[f.severity];
+	node.append(severity, line(f.message, "cm-finding-message"));
 	if (f.hint !== undefined) node.append(line(f.hint, "cm-finding-hint"));
 	if (f.detail !== undefined) {
 		const detail = document.createElement("div");

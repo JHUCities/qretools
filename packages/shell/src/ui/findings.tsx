@@ -16,6 +16,7 @@ import {
 	codeSpans,
 	type Finding,
 	type Fix,
+	SEVERITY_LABEL,
 	type Status,
 	type Target,
 	toFillIn,
@@ -103,14 +104,6 @@ const SEVERITY = {
 	warning: { Icon: AlertIcon, className: "fg-attention" },
 	info: { Icon: InfoIcon, className: "fg-accent" },
 } as const;
-
-/** A severity as the author reads it: "hole" is the tool's word, not theirs. */
-const SEVERITY_LABEL: Readonly<Record<Finding["severity"], string>> = {
-	hole: "to fill in",
-	error: "error",
-	warning: "warning",
-	info: "info",
-};
 
 /**
  * The findings: one list, editable or not; severity is an icon with its name, never

@@ -740,6 +740,11 @@ const primerTheme = EditorView.theme({
 	".cm-diagnostic:has(.cm-quickFix) ~ .cm-diagnostic .cm-quickFix::after": {
 		content: "none",
 	},
+	// The severity in words, above the message: muted and small, as a label is.
+	".cm-finding-severity": {
+		color: "var(--fgColor-muted)",
+		fontSize: "var(--text-body-size-small)",
+	},
 	".cm-finding-hint": { color: "var(--fgColor-muted)" },
 	".cm-finding-detail": {
 		color: "var(--fgColor-muted)",

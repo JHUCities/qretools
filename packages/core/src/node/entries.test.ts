@@ -28,6 +28,7 @@ describe("the entry points", () => {
 			    "SCHEME_LABELS",
 			    "SCHEME_NAME",
 			    "SCHEME_SINGULAR",
+			    "SEVERITY_LABEL",
 			    "SHAPE",
 			    "UNDECLARED_AGENCY",
 			    "UNNAMED",

@@ -53,6 +53,17 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 /** The workspace's own file, `workspace.yaml`, in running text: as "bank details" is a bank's. */
 export const WORKSPACE_DETAILS = "workspace details";
 
+/**
+ * A finding's severity as the author reads it ("hole" is the tool's word, not theirs):
+ * what the Findings list's icon is named and what the editor's hover says first.
+ */
+export const SEVERITY_LABEL = {
+	hole: "to fill in",
+	error: "error",
+	warning: "warning",
+	info: "info",
+} as const;
+
 /** A quick fix's label: what the click will write. */
 export const fixLabel = (value: string): string => `Use \`${value}\``;
 
