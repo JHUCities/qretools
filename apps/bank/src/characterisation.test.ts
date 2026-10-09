@@ -120,7 +120,7 @@ const effects = ([, cmds]: Step): Record<string, unknown>[] =>
 	);
 
 /** A committed change set, as GitHub would answer it: each path at a new sha. */
-function committed(m: Model, step: Step): Model {
+function committed(step: Step): Model {
 	const commit = step[1].find((c) => c.kind === "commit");
 	if (commit?.kind !== "commit") return step[0];
 	return update(step[0], {
@@ -147,7 +147,7 @@ function transcript(path: string) {
 			step = update(step[0], msg);
 			acts.push({ msg: msg.kind, effects: effects(step) });
 		}
-		m = committed(m, step);
+		m = committed(step);
 		return step;
 	};
 	const idOf = (p: string): number => {
