@@ -54,6 +54,7 @@ describe("the entry points", () => {
 			    "err",
 			    "evaluate",
 			    "evaluateScheme",
+			    "exampleInstrument",
 			    "exportRefusal",
 			    "fileAt",
 			    "fileFindings",

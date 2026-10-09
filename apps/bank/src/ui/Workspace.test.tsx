@@ -129,6 +129,7 @@ describe("a workspace of several banks", () => {
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
 			"Instrument…",
+			"Example instrument…",
 			"Workspace details",
 			"banks/a",
 			"banks/b",
@@ -231,6 +232,7 @@ describe("a workspace's instruments", () => {
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
 			"Instrument…",
+			"Example instrument…",
 			"Workspace details",
 		]);
 	});
@@ -314,13 +316,30 @@ describe("a workspace's instruments", () => {
 		expect(away.map((e) => e.textContent)).toEqual(["far.far"]);
 	});
 
-	it("aren't shown for a workspace that is one bank alone", async () => {
-		renderWorkspace([
+	// The owner's reversal (2026-10-09): the section stays with none yet, a bank at the
+	// root included, so instruments are found where a team starts.
+	it("say there are none yet in a workspace that is one bank alone, and offer both ways to start one", async () => {
+		const app = renderWorkspace([
 			file("bank.yaml", "agency: org.example\n"),
 			file("questions/t/alpha.yaml", QUESTION("alpha")),
 		]);
 		await act(async () => {});
-		expect(screen.queryByRole("heading", { name: "Instruments" })).toBeNull();
+		expect(screen.getByRole("heading", { name: "Instruments" })).toBeTruthy();
 		expect(screen.queryByRole("tree", { name: "Instruments" })).toBeNull();
+		expect(screen.getByText("No instruments yet.")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Example instrument" }));
+		expect(app.store.getState().model.browser.namingInstrument).toEqual({
+			name: "example",
+			example: true,
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Create" }));
+		await act(async () => {});
+		const made = Object.values(app.store.getState().model.local.workspace).find(
+			(e) => e.kind === "instrument",
+		);
+		// The bank is at the root: the example reads it as `../`, built from its question.
+		expect(made?.source).toContain("uses:\n  bank: ../\n");
+		expect(made?.source).toMatch(/^name: example$/m);
+		expect(screen.queryByText("No instruments yet.")).toBeNull();
 	});
 });

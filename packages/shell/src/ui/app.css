@@ -373,6 +373,11 @@ code,
 	font-weight: var(--base-text-weight-semibold);
 	color: var(--fgColor-muted);
 }
+/* A section with nothing in it yet: one line, in the body's size, the Stack's gap around it. */
+.browser-empty {
+	margin: 0;
+	font-size: var(--text-body-size-medium);
+}
 /* Where a workspace has several banks: each bank's own heading, above its two trees. */
 .browser-bank {
 	margin: 0;

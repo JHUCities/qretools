@@ -31,13 +31,7 @@ import { hasOwnWork, type Model } from "../model.js";
 import { useApp } from "./AppContext.js";
 
 export function SignIn({ model }: { model: Model }) {
-	const {
-		dispatch,
-		effects,
-		signIn: config,
-		template,
-		workspaceTemplate,
-	} = useApp();
+	const { dispatch, effects, signIn: config, template } = useApp();
 	const { settings, session } = model;
 	const [text, setText] = useState(
 		model.pendingLink?.repo ?? bankText(settings),
@@ -199,21 +193,11 @@ export function SignIn({ model }: { model: Model }) {
 					</Stack>
 				</form>
 				{/* As github.com offers "New to GitHub?" under its form. */}
-				{workspaceTemplate !== undefined && (
-					<p className="quiet signin-note">
-						New workspace?{" "}
-						<Link href={workspaceTemplate} target="_blank" rel="noreferrer">
-							Start a workspace from the template
-							<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-						</Link>
-						: an example instrument and the bank it uses.
-					</p>
-				)}
 				{template !== undefined && (
 					<p className="quiet signin-note">
-						New bank?{" "}
+						New here?{" "}
 						<Link href={template} target="_blank" rel="noreferrer">
-							Start a bank from the template
+							Start a workspace from the template
 							<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
 						</Link>
 						{config?.appSlug !== undefined && (
@@ -229,7 +213,8 @@ export function SignIn({ model }: { model: Model }) {
 								</Link>
 							</>
 						)}
-						.
+						: a bank of examples to copy, edit or delete, and an example
+						instrument one click away in New.
 					</p>
 				)}
 				{elsewhere && (

@@ -383,6 +383,42 @@ describe("the workspace details", () => {
 	});
 });
 
+describe("the example instrument", () => {
+	it("is named already, never over one taken, and reads the bank New makes questions in", () => {
+		const m = loaded();
+		const [asked] = update(m, {
+			kind: "instrumentCreateOpened",
+			example: true,
+		});
+		expect(asked.browser.namingInstrument).toEqual({
+			name: "example",
+			example: true,
+		});
+		const [made] = update(asked, { kind: "instrumentNamingConfirmed" });
+		const e = Object.values(made.local.workspace).find(
+			(f) => f.kind === "instrument" && f.name === "example",
+		);
+		expect(e?.source).toContain("uses:\n  bank: ../bank\n");
+		expect(made.screen).toEqual({ kind: "editing", id: e?.id });
+		const [again] = update(made, {
+			kind: "instrumentCreateOpened",
+			example: true,
+		});
+		expect(again.browser.namingInstrument?.name).toBe("example_2");
+		// A blank one starts unnamed, as before, and renaming keeps what it is.
+		const [blank] = update(m, { kind: "instrumentCreateOpened" });
+		expect(blank.browser.namingInstrument).toEqual({ name: "" });
+		const [renamed] = update(asked, {
+			kind: "instrumentNameChanged",
+			name: "demo",
+		});
+		expect(renamed.browser.namingInstrument).toEqual({
+			name: "demo",
+			example: true,
+		});
+	});
+});
+
 describe("go to definition in an instrument", () => {
 	/** The open instrument, with `universe: hh.renters` added, and F12 at a word of it. */
 	const follow = (word: string) => {

@@ -5,6 +5,7 @@ import {
 	banksIn,
 	compact,
 	EMPTY_ENV,
+	exampleInstrument,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
 	type InstrumentIn,
@@ -555,7 +556,14 @@ function step(model: Model, msg: Msg): Step {
 			return [
 				{
 					...model,
-					browser: { ...model.browser, namingInstrument: { name: "" } },
+					browser: {
+						...model.browser,
+						// The example is named already, so Create is one press: `example`, or the
+						// first `example_<n>` not taken.
+						namingInstrument: msg.example
+							? { name: freeExampleName(model), example: true }
+							: { name: "" },
+					},
 				},
 				[],
 			];
@@ -568,7 +576,10 @@ function step(model: Model, msg: Msg): Step {
 							...model,
 							browser: {
 								...model.browser,
-								namingInstrument: { name: msg.name },
+								namingInstrument: {
+									...model.browser.namingInstrument,
+									name: msg.name,
+								},
 							},
 						},
 						[],
@@ -598,7 +609,9 @@ function step(model: Model, msg: Msg): Step {
 				{
 					kind: "instrument",
 					name: naming.name,
-					source: instrumentSource(naming.name),
+					source: naming.example
+						? exampleSource(model, naming.name)
+						: instrumentSource(naming.name),
 				},
 			);
 			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
@@ -1871,6 +1884,27 @@ const taken = (model: Model, path: Path, self?: Id): boolean =>
  * (`instruments/<name>.yaml`), compared ignoring case, as two files differing only in
  * case collide in a checkout on macOS or Windows and read as one to an author.
  */
+/** `example`, or the first `example_<n>` no instrument has. */
+function freeExampleName(model: Model): string {
+	for (let n = 1; ; n++) {
+		const name = n === 1 ? "example" : `example_${n}`;
+		if (instrumentNameProblem(model, name) === undefined) return name;
+	}
+}
+
+/**
+ * The example instrument named `name`, reading the bank New makes questions in: its
+ * folder beside the instrument's (`../banks/x`, or `../` for a bank at the root).
+ */
+function exampleSource(model: Model, name: string): string {
+	const bank = newBank(model);
+	return exampleInstrument(
+		name,
+		bank === "" ? "../" : `../${bank}`,
+		createEvaluations().scope(model, bank),
+	);
+}
+
 export function instrumentNameProblem(
 	model: Pick<Model, "local" | "remote">,
 	name: string,

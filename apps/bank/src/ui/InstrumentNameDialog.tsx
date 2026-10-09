@@ -14,10 +14,13 @@ const EXAMPLE = "wave1";
 
 export function InstrumentNameDialog({
 	name,
+	example,
 	problem,
 	dispatch,
 }: {
 	readonly name: string;
+	/** The example instrument: said in the title, and what it holds in the caption. */
+	readonly example: boolean;
 	readonly problem: string | undefined;
 	readonly dispatch: Dispatch;
 }) {
@@ -27,7 +30,7 @@ export function InstrumentNameDialog({
 	const shown = name === "" ? undefined : problem;
 	return (
 		<Dialog
-			title="New instrument"
+			title={example ? "New example instrument" : "New instrument"}
 			onClose={close}
 			footerButtons={[
 				{ buttonType: "default", content: "Cancel", onClick: close },
@@ -64,6 +67,8 @@ export function InstrumentNameDialog({
 					<FormControl.Caption>
 						It's saved as{" "}
 						<code className="code">{instrumentPath(name || EXAMPLE)}</code>.
+						{example &&
+							" It asks questions of the bank, to show how an instrument reads: copy it or delete it."}
 					</FormControl.Caption>
 					{shown !== undefined && (
 						<FormControl.Validation variant="error">

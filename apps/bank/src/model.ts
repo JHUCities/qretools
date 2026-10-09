@@ -210,7 +210,11 @@ export interface Browser {
 	 */
 	readonly naming?: Naming;
 	/** A new instrument is named before it exists, as a shared file is: its name is its file's. */
-	readonly namingInstrument?: { readonly name: string };
+	readonly namingInstrument?: {
+		readonly name: string;
+		/** The example instrument, built for the bank it reads, rather than a blank one. */
+		readonly example?: true;
+	};
 	/**
 	 * Signing out with unsaved work: asking what to do with it, or saving it first. A
 	 * failed save comes back here, never on a file.
@@ -375,7 +379,8 @@ export type Msg =
 	| { readonly kind: "schemeNamingConfirmed" }
 	| { readonly kind: "schemeNamingCancelled" }
 	/** New instrument: its name first, in its own dialog. */
-	| { readonly kind: "instrumentCreateOpened" }
+	/** A new instrument: blank, or the example (`exampleInstrument`), named first. */
+	| { readonly kind: "instrumentCreateOpened"; readonly example?: true }
 	| { readonly kind: "instrumentNameChanged"; readonly name: string }
 	| { readonly kind: "instrumentNamingCancelled" }
 	| { readonly kind: "instrumentNamingConfirmed" }

@@ -17,16 +17,13 @@ export interface App {
 	readonly evaluations: Evaluations;
 	/** Sign-in with GitHub for this build, if configured: read once, at startup. */
 	readonly signIn?: SignInConfig;
-	/** "Use this template" for a new bank, if configured. */
-	readonly template?: string;
 	/** "Use this template" for a new workspace, if configured. */
-	readonly workspaceTemplate?: string;
+	readonly template?: string;
 }
 
 /** What the view needs beyond the effects' dependencies: read once, at startup. */
 export interface ViewConfig {
 	readonly template?: string;
-	readonly workspaceTemplate?: string;
 }
 
 export function createApp(
@@ -48,8 +45,5 @@ export function createApp(
 		evaluations: createEvaluations(),
 		...(deps.signIn !== undefined && { signIn: deps.signIn.config }),
 		...(view.template !== undefined && { template: view.template }),
-		...(view.workspaceTemplate !== undefined && {
-			workspaceTemplate: view.workspaceTemplate,
-		}),
 	};
 }

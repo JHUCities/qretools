@@ -7,6 +7,7 @@
 
 import { SearchIcon } from "@primer/octicons-react";
 import {
+	Button,
 	CounterLabel,
 	FormControl,
 	Label,
@@ -50,6 +51,7 @@ export function Browser({
 	banks,
 	workspace = [],
 	workspaceOnly = false,
+	noInstruments = false,
 	filter,
 	open,
 	dispatch,
@@ -60,6 +62,8 @@ export function Browser({
 	workspace?: readonly SchemeLeaf[];
 	/** The workspace has no bank of its own: only its instruments and details are shown. */
 	workspaceOnly?: boolean;
+	/** The workspace has no instrument at all: its section offers to start one. */
+	noInstruments?: boolean;
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
@@ -79,11 +83,18 @@ export function Browser({
 		);
 	const [only] = banks;
 	// What is asked comes first, then what it is asked from.
-	const instruments = workspace.length > 0 && (
-		<Instruments leaves={workspace} open={open} dispatch={dispatch} />
+	// Shown in every workspace, a bank at the root included: with none yet, it says so and
+	// offers to start one, so instruments are found where a team starts.
+	const none = noInstruments && filter === "";
+	const instruments = (workspace.length > 0 || none) && (
+		<Instruments
+			leaves={workspace}
+			none={none}
+			open={open}
+			dispatch={dispatch}
+		/>
 	);
-	if (workspaceOnly)
-		return <Instruments leaves={workspace} open={open} dispatch={dispatch} />;
+	if (workspaceOnly) return instruments || null;
 	// One bank, as a bank has always been shown: its questions, then its shared files.
 	if (banks.length <= 1) {
 		const trees = (
@@ -124,10 +135,13 @@ export function Browser({
 /** The workspace's instruments and its details: one flat tree, named by its heading. */
 function Instruments({
 	leaves,
+	none,
 	open,
 	dispatch,
 }: {
 	leaves: readonly SchemeLeaf[];
+	/** No instrument yet: a line saying so, and the two ways to start one. */
+	none: boolean;
 	open: Id | undefined;
 	dispatch: Dispatch;
 }) {
@@ -137,21 +151,44 @@ function Instruments({
 			<h3 id={id} className="browser-heading">
 				Instruments
 			</h3>
-			<TreeView aria-labelledby={id}>
-				{leaves.map((leaf) => (
-					<TreeView.Item
-						key={leaf.id}
-						id={`w:${leaf.id}`}
-						current={leaf.id === open}
-						onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
-					>
-						{leaf.name}
-						<TreeView.TrailingVisual label={marksLabel(leaf)}>
-							<Marks leaf={leaf} />
-						</TreeView.TrailingVisual>
-					</TreeView.Item>
-				))}
-			</TreeView>
+			{none && (
+				<>
+					<p className="quiet browser-empty">No instruments yet.</p>
+					<Stack direction="horizontal" gap="condensed" wrap="wrap">
+						<Button
+							size="small"
+							onClick={() => dispatch({ kind: "instrumentCreateOpened" })}
+						>
+							New instrument
+						</Button>
+						<Button
+							size="small"
+							onClick={() =>
+								dispatch({ kind: "instrumentCreateOpened", example: true })
+							}
+						>
+							Example instrument
+						</Button>
+					</Stack>
+				</>
+			)}
+			{leaves.length > 0 && (
+				<TreeView aria-labelledby={id}>
+					{leaves.map((leaf) => (
+						<TreeView.Item
+							key={leaf.id}
+							id={`w:${leaf.id}`}
+							current={leaf.id === open}
+							onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
+						>
+							{leaf.name}
+							<TreeView.TrailingVisual label={marksLabel(leaf)}>
+								<Marks leaf={leaf} />
+							</TreeView.TrailingVisual>
+						</TreeView.Item>
+					))}
+				</TreeView>
+			)}
 		</Stack>
 	);
 }

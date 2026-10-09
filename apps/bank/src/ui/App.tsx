@@ -120,6 +120,13 @@ function NewMenu({
 						Instrument…
 					</ActionList.Item>
 					<ActionList.Item
+						onSelect={() =>
+							dispatch({ kind: "instrumentCreateOpened", example: true })
+						}
+					>
+						Example instrument…
+					</ActionList.Item>
+					<ActionList.Item
 						onSelect={() => dispatch({ kind: "workspaceDetailsOpened" })}
 					>
 						Workspace details
@@ -528,6 +535,11 @@ export function App() {
 										banks={trees}
 										workspace={workspace}
 										workspaceOnly={workspaceOnly}
+										noInstruments={
+											!Object.values(local.workspace).some(
+												(e) => e.kind === "instrument",
+											)
+										}
 										loading={loading}
 										filter={model.browser.filter}
 										open={open}
@@ -596,6 +608,7 @@ export function App() {
 			{namingInstrument && (
 				<InstrumentNameDialog
 					name={namingInstrument.name}
+					example={namingInstrument.example === true}
 					problem={instrumentNameProblem(model, namingInstrument.name)}
 					dispatch={dispatch}
 				/>

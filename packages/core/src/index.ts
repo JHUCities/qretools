@@ -82,6 +82,7 @@ export type {
 	Node as InstrumentNode,
 	Use as InstrumentUse,
 } from "./instrument/draft.ts";
+export { exampleInstrument } from "./instrument/example.ts";
 export {
 	type Instrument,
 	type InstrumentContext,
