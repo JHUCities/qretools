@@ -9,9 +9,9 @@ import { parseSurface } from "./surface/parse.ts";
 const base =
 	"name: q\ntext: How often do you take the bus?\nintent: Prevalence of bus use among adults\n";
 const lintOf = (source: string) =>
-	lint(parseSurface(source, EMPTY_ENV).draft, EMPTY_ENV).map(
-		(f) => `${f.severity}:${f.code}@${f.path}`,
-	);
+	((parsed) => lint(parsed.draft, EMPTY_ENV, parsed.findings))(
+		parseSurface(source, EMPTY_ENV),
+	).map((f) => `${f.severity}:${f.code}@${f.path}`);
 
 describe("lint", () => {
 	it("has nothing to say about the examples but their concepts, written as prose rather than shared", () => {
@@ -29,6 +29,16 @@ describe("lint", () => {
 			"one response is not a choice",
 			`${base}responses:\n  1: Often\n`,
 			["warning:too-few-responses@responses"],
+		],
+		[
+			"a response still to fill in: its hole says so, not the warning",
+			`${base}responses:\n  1: Often\n  2:\n`,
+			[],
+		],
+		[
+			"two labelled responses are a choice",
+			`${base}responses:\n  1: Often\n  2: Rarely\n`,
+			[],
 		],
 		[
 			"select-all without a none option",

@@ -26,7 +26,12 @@ import {
 import { withoutFills } from "./surface/fills.ts";
 import { nameFrom } from "./surface/schema.ts";
 
-type Rule = (draft: Draft, env: Env) => readonly Finding[];
+/** A rule reads the draft, the environment, and what the parse already said about the text. */
+type Rule = (
+	draft: Draft,
+	env: Env,
+	said: readonly Finding[],
+) => readonly Finding[];
 
 const advise = (
 	code: LintCode,
@@ -80,8 +85,12 @@ const duplicateLabels: Rule = ({ domain }) => {
 	});
 };
 
-const tooFewResponses: Rule = ({ domain }) =>
-	domain?.kind === "responses" && domain.codes.length < 2
+// Quiet while a response is still to fill in: the Draft leaves it out, and its hole
+// already says what's missing.
+const tooFewResponses: Rule = ({ domain }, _env, said) =>
+	domain?.kind === "responses" &&
+	domain.codes.length < 2 &&
+	!said.some((f) => f.severity === "hole" && f.path.startsWith("responses."))
 		? [
 				advise(
 					"too-few-responses",
@@ -391,5 +400,8 @@ const RULES: readonly Rule[] = [
 	missingCode,
 ];
 
-export const lint = (draft: Draft, env: Env): readonly Finding[] =>
-	RULES.flatMap((rule) => rule(draft, env));
+export const lint = (
+	draft: Draft,
+	env: Env,
+	said: readonly Finding[] = [],
+): readonly Finding[] => RULES.flatMap((rule) => rule(draft, env, said));

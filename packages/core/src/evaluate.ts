@@ -76,7 +76,10 @@ export function evaluate(
 	const { draft, findings, ranges } = parsed;
 	return {
 		draft,
-		findings: inDocumentOrder([...findings, ...lint(draft, env)], ranges),
+		findings: inDocumentOrder(
+			[...findings, ...lint(draft, env, findings)],
+			ranges,
+		),
 		ranges,
 		marks: parsed.marks,
 		items,
