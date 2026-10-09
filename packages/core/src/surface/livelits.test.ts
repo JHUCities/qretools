@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
+import { parseBankFile } from "./bankfile.ts";
 import { EMPTY_ENV, type Env } from "./env.ts";
 import {
 	applyLivelit,
@@ -6,8 +8,9 @@ import {
 	createFor,
 	type Livelit,
 	livelitsOf,
+	settingsLivelits,
 } from "./livelits.ts";
-import { parseSurface } from "./parse.ts";
+import { indexDocument, parseSurface } from "./parse.ts";
 
 const env: Env = {
 	...EMPTY_ENV,
@@ -32,7 +35,7 @@ const summary = (source: string) =>
 		l.id,
 		l.at,
 		source.slice(l.span[0], l.span[1]),
-		l.picker.current,
+		l.picker.kind === "one" ? l.picker.current : l.picker.chosen,
 	]);
 const choose = (source: string, id: string, value: string) => {
 	const l = at(source).find((x) => x.id === id) as Livelit;
@@ -145,5 +148,73 @@ describe("pickers for every field that names a shared entry", () => {
 		expect(
 			choose(`${HEAD}number:\n  unit:\n`, "number.unit", "days")?.text,
 		).toBe(`${HEAD}number:\n  unit: days\n`);
+	});
+});
+
+describe("pickers of fixed values", () => {
+	it("sit at `select` and at each fill's type, empty or one word, and offer their values", () => {
+		const text = `${HEAD}select:\nfills:\n  rent: number\nresponses:\n  "1": Yes\n`;
+		expect(summary(text)).toEqual([
+			["select", `${HEAD}select:`.length, "", undefined],
+			[
+				"fills.rent",
+				`${HEAD}select:\nfills:\n  rent: number`.length,
+				"number",
+				"number",
+			],
+		]);
+		const [select] = at(text);
+		expect(select?.picker.source).toEqual({
+			kind: "enum",
+			values: [
+				{ name: "one", detail: "The respondent picks one response" },
+				{ name: "many", detail: "Select all that apply" },
+			],
+		});
+		expect(choose(text, "select", "many")?.text).toBe(
+			`${HEAD}select: many\nfills:\n  rent: number\nresponses:\n  "1": Yes\n`,
+		);
+	});
+});
+
+describe("the checklist of a bank's required fields", () => {
+	const bank = (text: string) => {
+		const doc = parseDocument(text, { prettyErrors: false });
+		return settingsLivelits(
+			text,
+			indexDocument(doc, text.length),
+			parseBankFile(text).required,
+		);
+	};
+	const write = (text: string, value: readonly string[]) => {
+		const [l] = bank(text);
+		return l === undefined ? undefined : applyLivelit(text, l, value)?.text;
+	};
+
+	it("reads what is chosen, and writes the set in the form it was written", () => {
+		const block = "agency: org.example\nrequired:\n  - title\n";
+		expect(bank(block)[0]?.picker).toMatchObject({
+			kind: "many",
+			chosen: ["title"],
+		});
+		// A block list stays a block, at its indent.
+		expect(write(block, ["title", "concept"])).toBe(
+			"agency: org.example\nrequired:\n  - title\n  - concept\n",
+		);
+		expect(
+			write("agency: org.example\nrequired:\n    - note\n", ["title"]),
+		).toBe("agency: org.example\nrequired:\n    - title\n");
+		// Emptied, it is the empty list on its line.
+		expect(write(block, [])).toBe("agency: org.example\nrequired: []\n");
+		expect(write("agency: org.example\nrequired: [note]\n", [])).toBe(
+			"agency: org.example\nrequired: []\n",
+		);
+		expect(write("agency: org.example\nrequired:\n", ["note"])).toBe(
+			"agency: org.example\nrequired: [note]\n",
+		);
+	});
+
+	it("is absent where `required` isn't written, as a commented line isn't", () => {
+		expect(bank("agency: org.example\n#required:\n#  - title\n")).toEqual([]);
 	});
 });

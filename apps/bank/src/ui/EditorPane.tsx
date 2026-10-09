@@ -5,7 +5,14 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
-import { choicesOf, domainSnippets, newLineAfter } from "@qretools/core/editor";
+import type { Fix } from "@qretools/core";
+import {
+	choicesOf,
+	domainSnippets,
+	type Livelit,
+	newLineAfter,
+	type Source,
+} from "@qretools/core/editor";
 import {
 	createEditor,
 	type Editor,
@@ -28,11 +35,14 @@ export function EditorPane(
 					readonly instrument?: undefined;
 					/** A question: its response domains are offered written out too. */
 					readonly question?: true;
+					/** A file with pickers of its own (a bank's details); a question always has them. */
+					readonly pickers?: true;
 			  }
 			| {
 					readonly schema?: undefined;
 					readonly instrument: true;
 					readonly question?: undefined;
+					readonly pickers?: undefined;
 			  }
 		),
 ) {
@@ -41,6 +51,7 @@ export function EditorPane(
 	const { dispatch, effects, evaluations, store } = useApp();
 	const instrument = inputs.instrument === true;
 	const question = inputs.question === true;
+	const pickers = question || inputs.pickers === true;
 	// The open file's id when completion asks: the editor outlives a change of file.
 	const open = useRef(inputs.id);
 	open.current = inputs.id;
@@ -58,30 +69,32 @@ export function EditorPane(
 			(id, offset) => dispatch({ kind: "definitionRequested", id, offset }),
 			instrument
 				? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
-				: question
-					? {
-							snippets: domainSnippets,
-							// Pickers read the open question's bank as it is when one opens.
+				: {
+						...(question && { snippets: domainSnippets }),
+						// Pickers read the open file's bank as it is when one opens.
+						...(pickers && {
 							livelit: {
-								choices: (source) => {
+								choices: (source: Source) => {
 									const { model } = store.getState();
-									const q = model.local.questions[open.current];
-									return q === undefined || source.kind !== "scheme"
+									const f =
+										model.local.questions[open.current] ??
+										model.local.schemes[open.current];
+									return f === undefined || source.kind !== "scheme"
 										? []
-										: choicesOf(evaluations.env(model, q.bank), source.scheme);
+										: choicesOf(evaluations.env(model, f.bank), source.scheme);
 								},
-								choose: (livelit, value) =>
+								choose: (livelit: Livelit, value: string | readonly string[]) =>
 									dispatch({
 										kind: "livelitChosen",
 										id: open.current,
 										livelit: livelit.id,
 										value,
 									}),
-								act: (fix) =>
+								act: (fix: Fix) =>
 									dispatch({ kind: "fixApplied", id: open.current, fix }),
 							},
-						}
-					: {},
+						}),
+					},
 		);
 		editor.current = e;
 		effects.registerEditor(e);
@@ -90,7 +103,7 @@ export function EditorPane(
 			e.destroy();
 			editor.current = null;
 		};
-	}, [dispatch, effects, evaluations, store, instrument, question]);
+	}, [dispatch, effects, evaluations, store, instrument, question, pickers]);
 	const { id, text, diagnostics, marks, schema, readOnly, label, livelits } =
 		inputs;
 	// Before paint: the first frame of a file already shows its text, never an empty

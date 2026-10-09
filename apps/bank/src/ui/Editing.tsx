@@ -648,6 +648,8 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						diagnostics={diagnostics}
 						marks={ev.marks}
 						schema={SCHEME_SCHEMAS[SHAPE[e.kind]]}
+						pickers
+						livelits={ev.livelits}
 						label={`${SINGULAR[e.kind]} ${e.name}: source (YAML)`}
 					/>
 				</section>

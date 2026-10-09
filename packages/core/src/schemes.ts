@@ -20,6 +20,7 @@ import {
 	parseTextEntry,
 	type TextEntry,
 } from "./surface/env.ts";
+import { type Livelit, settingsLivelits } from "./surface/livelits.ts";
 import { labelMarksOf, type Mark } from "./surface/marks.ts";
 import { indexDocument, pointAt } from "./surface/parse.ts";
 import { hole } from "./surface/read.ts";
@@ -101,6 +102,8 @@ export interface SchemeEvaluation {
 	readonly value?: SchemeValue;
 	/** What it writes that another shared file may repeat, for the bank index. */
 	readonly symbols: Symbols;
+	/** Its pickers: a bank's details have one, for the fields every question must have. */
+	readonly livelits: readonly Livelit[];
 }
 
 /** A scheme file, read as its kind. Total: any text evaluates. */
@@ -112,7 +115,18 @@ export function evaluateScheme(
 	name: string,
 ): SchemeEvaluation {
 	const read = readScheme(kind, source, env, name);
-	return { ...read, symbols: schemeSymbols(kind, read.value) };
+	const livelits =
+		SHAPE[kind] === "bank"
+			? settingsLivelits(
+					source,
+					indexDocument(
+						parseDocument(source, { prettyErrors: false }),
+						source.length,
+					),
+					parseBankFile(source).required,
+				)
+			: [];
+	return { ...read, symbols: schemeSymbols(kind, read.value), livelits };
 }
 
 /**
@@ -144,7 +158,7 @@ function readScheme(
 	source: string,
 	env: Env,
 	name: string,
-): Omit<SchemeEvaluation, "symbols"> {
+): Omit<SchemeEvaluation, "symbols" | "livelits"> {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
 	if (SHAPE[kind] === "bank") {

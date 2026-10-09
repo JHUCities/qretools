@@ -358,6 +358,29 @@ describe("a quick fix", () => {
 		).toBe(inline);
 	});
 
+	it("writes a bank's required fields chosen in its details' checklist", () => {
+		const m = update(fresh(), {
+			kind: "schemeCreateOpened",
+			scheme: "bank",
+			bank: "",
+		})[0];
+		const id = firstId(m);
+		const typed = update(m, {
+			kind: "edited",
+			text: "agency: org.example\nrequired:\n  - title\n",
+		})[0];
+		const [next] = update(typed, {
+			kind: "livelitChosen",
+			id,
+			livelit: "required",
+			value: ["title", "concept"],
+		});
+		// The block list stays a block.
+		expect(next.local.schemes[id]?.source).toBe(
+			"agency: org.example\nrequired:\n  - title\n  - concept\n",
+		);
+	});
+
 	it("makes a new shared entry from a field's picker, then names it there, for every kind", () => {
 		const cases = [
 			["concept", "concept", "concept:\n", "concept: fresh_one\n"],

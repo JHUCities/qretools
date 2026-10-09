@@ -344,7 +344,8 @@ export type Msg =
 			readonly kind: "livelitChosen";
 			readonly id: Id;
 			readonly livelit: string;
-			readonly value: string;
+			/** One value, or a set chosen together. */
+			readonly value: string | readonly string[];
 	  }
 	| { readonly kind: "locationClicked"; readonly target: Target }
 	| { readonly kind: "cursorMoved"; readonly offset: number }
