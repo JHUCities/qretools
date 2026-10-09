@@ -38,6 +38,10 @@ describe("completion in an instrument", async () => {
 			: {
 					typed: source.slice(result.from, offset),
 					labels: result.options.map((o) => o.label),
+					// The options but the snippets that follow their keys.
+					plain: result.options
+						.filter((o) => o.kind !== "snippet")
+						.map((o) => o.label),
 					options: result.options,
 				};
 	};
@@ -199,7 +203,7 @@ describe("completion in an instrument", async () => {
 
 	it("offers a list's items after its dash: a flow's steps, a check's ensure", () => {
 		const steps = at("  - |\n");
-		expect(steps?.labels).toEqual([
+		expect(steps?.plain).toEqual([
 			"ask",
 			"say",
 			"section",
@@ -210,8 +214,8 @@ describe("completion in an instrument", async () => {
 			"each",
 		]);
 		expect(steps?.options[0]).toMatchObject({ kind: "step", apply: "ask: " });
-		expect(at("  - s|\n")?.labels).toEqual(["say", "section", "stop"]);
-		expect(at("  - ask: hh.size\n    checks:\n      - |\n")?.labels).toEqual([
+		expect(at("  - s|\n")?.plain).toEqual(["say", "section", "stop"]);
+		expect(at("  - ask: hh.size\n    checks:\n      - |\n")?.plain).toEqual([
 			"ensure",
 		]);
 	});
@@ -219,7 +223,7 @@ describe("completion in an instrument", async () => {
 	it("offers a step's unwritten fields at its column, and new steps beside it", () => {
 		const ask = "  - ask: hh.size\n    universe: x\n    |\n";
 		const r = at(ask);
-		expect(r?.labels).toEqual([
+		expect(r?.plain).toEqual([
 			"as",
 			"options",
 			"seconds",
@@ -247,17 +251,48 @@ describe("completion in an instrument", async () => {
 		expect(apply("- ask")).toBe("  - ask: ");
 		expect(apply("checks")).toBe("    checks:\n      - ");
 		// Typing narrows both: `c` is checks and compute; `a` is as and a new ask.
-		expect(at("  - ask: hh.size\n    c|\n")?.labels).toEqual([
+		expect(at("  - ask: hh.size\n    c|\n")?.plain).toEqual([
 			"checks",
 			"- compute",
 		]);
-		expect(at("  - ask: hh.size\n    a|\n")?.labels).toEqual(["as", "- ask"]);
+		expect(at("  - ask: hh.size\n    a|\n")?.plain).toEqual(["as", "- ask"]);
 		// A check's own fields after its ensure.
 		expect(
 			at(
 				"  - ask: hh.size\n    checks:\n      - ensure: hh.size > 0\n        |\n",
-			)?.labels,
+			)?.plain,
 		).toEqual(["severity", "message", "name"]);
+	});
+
+	it("offers each construct written out with its required fields, at the item's indent", () => {
+		const after = at("  - ro|\n")?.options;
+		expect(after?.map((o) => [o.label, o.kind])).toEqual([
+			["roster", "step"],
+			["roster", "snippet"],
+		]);
+		expect(after?.[1]).toMatchObject({
+			detail: "with count and flow",
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: the snippet syntax, as written
+			snippet: "roster: ${name}\n    count: ${}\n    flow:\n      - ${}",
+		});
+		// Beside a step: the new step written out at its dash, its fields under it.
+		const beside = at("  - ask: hh.size\n    ro|\n")?.options.find(
+			(o) => o.kind === "snippet",
+		);
+		expect(beside).toMatchObject({
+			label: "- roster",
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: the snippet syntax, as written
+			snippet: "  - roster: ${name}\n    count: ${}\n    flow:\n      - ${}",
+		});
+		// A check's ensure, with what a check requires.
+		expect(
+			at("  - ask: hh.size\n    checks:\n      - |\n")?.options.find(
+				(o) => o.kind === "snippet",
+			)?.snippet,
+		).toBe(
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: the snippet syntax, as written
+			"ensure: ${}\n        severity: ${warning}\n        message: ${}",
+		);
 	});
 
 	it("finds every place the parser reads a condition or value", () => {

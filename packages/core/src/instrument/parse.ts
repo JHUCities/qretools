@@ -117,6 +117,33 @@ export function newLineAfter(
 /** What a check may carry, in the order a check is written: read by this table, offered by completion. */
 export const CHECK_FIELDS = ["ensure", "severity", "message", "name"] as const;
 
+/**
+ * Each construct with the fields the parser requires of it, as completion offers it
+ * written out: placeholders in the common snippet syntax (`${name}`; `${}` an empty
+ * stop), the text exactly as it should appear, its later lines at `field`, the step's
+ * field column (an editor turns that into its own relative form). A step's list starts
+ * with an empty `- `, a hole until a step is written. Constructs needing no more than
+ * their own key (`ask`, `say`, `stop`) have none. A test fills each in and parses it.
+ */
+export const SNIPPETS: Readonly<Record<string, (field: string) => string>> = {
+	section: (f) => `section: \${title}\n${f}flow:\n${f}  - \${}`,
+	if: (f) => `if: \${}\n${f}then:\n${f}  - \${}`,
+	compute: (f) => `compute: \${name}\n${f}value: \${}`,
+	roster: (f) => `roster: \${name}\n${f}count: \${}\n${f}flow:\n${f}  - \${}`,
+	each: (f) => `each: \${}\n${f}flow:\n${f}  - \${}`,
+	check: (f) => `ensure: \${}\n${f}severity: \${warning}\n${f}message: \${}`,
+};
+
+/** In words, what each snippet writes beyond its key: its option's detail. */
+export const SNIPPET_DETAIL: Readonly<Record<string, string>> = {
+	section: "with its flow",
+	if: "with then",
+	compute: "with its value",
+	roster: "with count and flow",
+	each: "with its flow",
+	check: "with severity and message",
+};
+
 /** What each construct may carry besides its own key: what completion offers in a step. */
 export const FIELDS: Readonly<Record<string, readonly string[]>> = {
 	ask: ["as", "universe", "options", "seconds", "fill", "checks"],
@@ -742,6 +769,10 @@ function readFlow(
 	return node.items.map((item, i) => readStep(item, `${path}.${i}`, ctx, top));
 }
 
+/** A list item written as a bare `- `: opened and not yet written, as an empty value is. */
+const openedItem = (item: unknown): boolean =>
+	isScalar(item) && item.value === null && item.source === "";
+
 function readStep(
 	item: unknown,
 	path: string,
@@ -749,6 +780,18 @@ function readStep(
 	top: boolean,
 ): Node {
 	const hole: Node = { kind: "hole", path };
+	if (openedItem(item)) {
+		ctx.say(
+			problem(
+				"hole",
+				"hole",
+				path,
+				"This step is still to be written.",
+				"Start it with `ask`, `say`, `section`, `if`, `stop` or `compute`.",
+			),
+		);
+		return hole;
+	}
 	if (!isMap(item)) {
 		ctx.say(
 			problem(
@@ -1727,12 +1770,20 @@ function readChecks(
 		const at = `${path}.${i}`;
 		if (!isMap(item)) {
 			ctx.say(
-				problem(
-					"wrong-type",
-					"error",
-					at,
-					"A check has `ensure`, `severity` and `message`.",
-				),
+				openedItem(item)
+					? problem(
+							"hole",
+							"hole",
+							at,
+							"This check is still to be written.",
+							"A check has `ensure`, `severity` and `message`.",
+						)
+					: problem(
+							"wrong-type",
+							"error",
+							at,
+							"A check has `ensure`, `severity` and `message`.",
+						),
 			);
 			return { path: at, messageReads: [] };
 		}
@@ -1878,6 +1929,9 @@ function indexInstrument(
 				const n = item as YamlNode | null;
 				const path = `${prefix}.${i}`;
 				if (n?.range) ranges[path] = clampRange(n.range[0], n.range[1], length);
+				// A bare `- `: its hole is drawn where the author types, as an empty value's.
+				if (openedItem(n) && n?.range)
+					empties[path] = clampRange(n.range[0], n.range[0], length)[0];
 				walk(n, path);
 			});
 	};

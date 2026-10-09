@@ -99,7 +99,12 @@ describe("a step's fields and new steps, as CodeMirror asks for them", () => {
 	it("open once a letter is typed at its column, never on the bare indent", () => {
 		expect(ask(STEP, false)).toBeNull();
 		const c = ask(`${STEP}c`, false);
-		expect(c?.options.map((o) => o.label)).toEqual(["checks", "- compute"]);
+		expect(c?.options.map((o) => [o.label, o.type])).toEqual([
+			["checks", "property"],
+			["- compute", "keyword"],
+			// The same step written out with its fields (a snippet).
+			["- compute", "text"],
+		]);
 		expect(c?.filter).toBe(false);
 		const a = ask(`${STEP}a`, false);
 		expect(a?.options.map((o) => [o.label, o.apply])).toEqual([
@@ -108,6 +113,56 @@ describe("a step's fields and new steps, as CodeMirror asks for them", () => {
 		]);
 		// Asked for, they're there before a letter.
 		expect(ask(STEP, true)?.options.length).toBeGreaterThan(2);
+	});
+});
+
+describe("a construct written out, as picked in the editor", () => {
+	/** An editor with `doc`, the snippet option `label` picked at its end: the text after. */
+	const pick = (doc: string, label: string) => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+			() => {},
+			{ completions: [] },
+		);
+		editor.sync({ id: 1, text: doc, diagnostics: [], marks: [] });
+		const view = EditorView.findFromDOM(parent) as EditorView;
+		const found = instrumentSource(() => ({ hh }))(
+			new CompletionContext(view.state, doc.length, true),
+		);
+		const option = found?.options.find(
+			(o) => o.label === label && o.type === "text",
+		);
+		if (found == null || typeof option?.apply !== "function")
+			throw new Error(`no snippet ${label}`);
+		option.apply(view, option, found.from, found.to ?? doc.length);
+		const text = view.state.doc.toString();
+		const { from, to } = view.state.selection.main;
+		editor.destroy();
+		return { text, selected: text.slice(from, to) };
+	};
+
+	it("lands with every line at its column, the first place selected", () => {
+		const head = "uses:\n  hh: ./hh\nflow:\n";
+		expect(pick(`${head}  - ro`, "roster")).toEqual({
+			text: `${head}  - roster: name\n    count: \n    flow:\n      - `,
+			selected: "name",
+		});
+		// A new step from a step's field column: the dash goes back to the step's.
+		expect(pick(`${head}  - ask: hh.size\n    r`, "- roster")).toEqual({
+			text: `${head}  - ask: hh.size\n  - roster: name\n    count: \n    flow:\n      - `,
+			selected: "name",
+		});
+		// A check under checks, deeper.
+		expect(
+			pick(`${head}  - ask: hh.size\n    checks:\n      - en`, "ensure"),
+		).toEqual({
+			text: `${head}  - ask: hh.size\n    checks:\n      - ensure: \n        severity: warning\n        message: `,
+			selected: "",
+		});
 	});
 });
 

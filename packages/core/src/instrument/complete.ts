@@ -32,6 +32,8 @@ import {
 	FIELDS,
 	LIST_FIELDS,
 	parseInstrument,
+	SNIPPET_DETAIL,
+	SNIPPETS,
 } from "./parse.ts";
 import { scalarMap } from "./scalar.ts";
 
@@ -39,9 +41,21 @@ export interface CompletionOption {
 	readonly label: string;
 	/** What it is: a question's title or text, or what kind of name it is. */
 	readonly detail?: string;
-	readonly kind: "question" | "variable" | "name" | "code" | "field" | "step";
+	readonly kind:
+		| "question"
+		| "variable"
+		| "name"
+		| "code"
+		| "field"
+		| "step"
+		| "snippet";
 	/** What to insert, where it differs from the label (a code inside a double-quoted value). */
 	readonly apply?: string;
+	/**
+	 * A construct written out with its required fields, in the common snippet syntax
+	 * (`${name}` a placeholder, `${}` a stop), exactly as it should appear from `from`.
+	 */
+	readonly snippet?: string;
 }
 
 export interface InstrumentCompletion {
@@ -146,13 +160,31 @@ function keyCompletion(
 		)
 			return undefined;
 		const items = parent.name === "checks" ? ["ensure"] : CONSTRUCTS;
+		// The item's fields go at the column after its dash.
+		const column = " ".repeat(indent + dash.length);
 		return {
 			from: offset - word.length,
-			options: matching(items).map((name) => ({
-				label: name,
-				kind: parent.name === "checks" ? "field" : "step",
-				apply: `${name}: `,
-			})),
+			options: matching(items).flatMap((name): CompletionOption[] => {
+				const key = parent.name === "checks" ? "check" : name;
+				const written = SNIPPETS[key];
+				return [
+					{
+						label: name,
+						kind: parent.name === "checks" ? "field" : "step",
+						apply: `${name}: `,
+					},
+					...(written === undefined
+						? []
+						: [
+								{
+									label: name,
+									kind: "snippet" as const,
+									detail: SNIPPET_DETAIL[key] ?? "",
+									snippet: written(column),
+								},
+							]),
+				];
+			}),
 		};
 	}
 	// A field of the map whose keys are at this column, if it hasn't ended since.
@@ -182,17 +214,31 @@ function keyCompletion(
 		detail: construct === undefined ? "check" : `${construct} field`,
 	});
 	// Beside a step, a new step: at the step's dash, one level out.
+	const dashAt = " ".repeat(Math.max(indent - 2, 0));
 	const steps =
 		construct === undefined || !last.item || indent < 2
 			? []
-			: matching(CONSTRUCTS).map(
-					(name): CompletionOption => ({
-						label: `- ${name}`,
-						kind: "step",
-						apply: `${" ".repeat(indent - 2)}- ${name}: `,
-						detail: "new step",
-					}),
-				);
+			: matching(CONSTRUCTS).flatMap((name): CompletionOption[] => {
+					const written = SNIPPETS[name];
+					return [
+						{
+							label: `- ${name}`,
+							kind: "step",
+							apply: `${dashAt}- ${name}: `,
+							detail: "new step",
+						},
+						...(written === undefined
+							? []
+							: [
+									{
+										label: `- ${name}`,
+										kind: "snippet" as const,
+										detail: `new step ${SNIPPET_DETAIL[name] ?? ""}`.trim(),
+										snippet: `${dashAt}- ${written(pad)}`,
+									},
+								]),
+					];
+				});
 	return {
 		from: lineStart,
 		to: offset,
