@@ -310,6 +310,24 @@ describe("a quick fix", () => {
 		expect(cmds[0]).toEqual({ kind: "revealRange", range: [at, at] });
 	});
 
+	it("names the other question under `variant_of`, the caret at the reason to write", () => {
+		const fix = { kind: "variant" as const, label: "", name: "b" };
+		const created = (text: string) =>
+			update(fresh(), { kind: "questionCreated", text })[0];
+		const m = created("name: q\ntext: Is it so?\n");
+		const [next, cmds] = update(m, { kind: "fixApplied", id: 1, fix });
+		const source = next.local.questions[1]?.source ?? "";
+		expect(source).toBe("name: q\ntext: Is it so?\nvariant_of:\n  b:\n");
+		const at = source.indexOf("b:") + 2;
+		expect(cmds[0]).toEqual({ kind: "revealRange", range: [at, at] });
+		// A flow map it can't add a line to: the text stays, the caret goes there.
+		const flow = created("name: q\nvariant_of: {a: Why.}\n");
+		const [same, there] = update(flow, { kind: "fixApplied", id: 1, fix });
+		expect(same).toBe(flow);
+		const start = "name: q\n".length;
+		expect(there).toEqual([{ kind: "revealRange", range: [start, start] }]);
+	});
+
 	it("leaves focus to the name dialog when the fix creates a shared entry", () => {
 		const m = update(fresh(), {
 			kind: "questionCreated",

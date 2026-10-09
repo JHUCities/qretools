@@ -11,7 +11,12 @@
  * lists, codes ignored); and, for question text only, similar wording (word overlap),
  * computed for one file at a time against the index, never for every pair.
  */
-import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
+import {
+	type Finding,
+	type Fix,
+	inDocumentOrder,
+	type Range,
+} from "./findings.ts";
 import { fold, labelsKey } from "./fold.ts";
 import { isRoot } from "./kinds.ts";
 import type { SchemeKind, SchemeValue } from "./schemes.ts";
@@ -424,14 +429,28 @@ export function bankFindings<K>(
 					if (t.key === key || t.folded === text.key || deliberate(t.key))
 						return [];
 					if (overlap(mine, t.words) < SIMILAR) return [];
+					// Named under `variant_of` by its name: only where that name is its alone,
+					// and this question has one to be named back by.
+					const other = index.files.get(t.key)?.name;
+					const fix: Fix | undefined =
+						other !== undefined &&
+						symbols.name !== undefined &&
+						(index.names.get(other) ?? []).length === 1
+							? {
+									kind: "variant",
+									label: `Mark as a variant of \`${other}\``,
+									name: other,
+								}
+							: undefined;
 					return [
 						{
 							code: "similar-text",
 							severity: "info",
 							path: "text",
 							message: `Reads like \`${label(t.key)}\`: ${quote(t.raw)}`,
-							hint: "If they ask the same thing, keep one. If both are meant, add `variant_of:` naming the other.",
+							hint: "If they ask the same thing, keep one. If both are meant, add `variant_of:` naming the other, with why they differ.",
 							others: [t.key],
+							...(fix !== undefined && { fix }),
 						},
 					];
 				});
