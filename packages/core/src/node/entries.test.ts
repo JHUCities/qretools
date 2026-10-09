@@ -108,6 +108,7 @@ describe("the entry points", () => {
 			    "LIST_FIELDS",
 			    "LIVELIT_KINDS",
 			    "addSpace",
+			    "addVariant",
 			    "applyEdits",
 			    "applyLivelit",
 			    "bankChoices",

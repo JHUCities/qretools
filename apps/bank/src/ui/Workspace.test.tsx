@@ -460,3 +460,36 @@ describe("a workspace's instruments", () => {
 		expect(screen.queryByText("No instruments yet.")).toBeNull();
 	});
 });
+
+describe("a fix in the Findings list", () => {
+	it("marks a similar question as a variant, into the text as it is now", async () => {
+		const LONG =
+			"How strongly do you agree that residents are treated fairly by police officers in your own neighborhood these days";
+		const app = renderWorkspace([
+			file("workspace.yaml", "agency: org.example\n"),
+			file("banks/a/bank.yaml", "agency: org.example\n"),
+			file(
+				"banks/a/questions/t/alpha.yaml",
+				`name: alpha\ntext: ${LONG} here?\nintent: To see.\nopen: {}\n`,
+			),
+			file(
+				"banks/a/questions/t/beta.yaml",
+				`name: beta\ntext: ${LONG} now?\nintent: To see.\nopen: {}\n`,
+			),
+		]);
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^t\b/ }));
+		fireEvent.click(screen.getByRole("treeitem", { name: /^alpha/ }));
+		await act(async () => {});
+		const fix = await screen.findByRole("button", {
+			name: "Mark as a variant of beta",
+		});
+		fireEvent.click(fix);
+		await act(async () => {});
+		const { model } = app.store.getState();
+		const alpha = Object.values(model.local.questions).find((q) =>
+			q.source.startsWith("name: alpha"),
+		);
+		expect(alpha?.source).toMatch(/\nvariant_of:\n {2}beta:\n$/);
+	});
+});

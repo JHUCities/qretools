@@ -160,6 +160,12 @@ export type Fix =
 			readonly path: string;
 	  }
 	| {
+			/** This question named as a deliberate variant of question `name` (`addVariant`). */
+			readonly kind: "variant";
+			readonly label: string;
+			readonly name: string;
+	  }
+	| {
 			/** Quotes around the response code `code`, at the key `path` names, as spelled. */
 			readonly kind: "quote";
 			readonly label: string;

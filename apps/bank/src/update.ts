@@ -36,6 +36,7 @@ import {
 } from "@qretools/core";
 import {
 	addSpace,
+	addVariant,
 	applyEdits,
 	applyLivelit,
 	type Livelit,
@@ -314,6 +315,21 @@ function step(model: Model, msg: Msg): Step {
 				return persist([
 					withSource(model, q.id, spaced),
 					[{ kind: "revealRange", range: [at + 1, at + 1] }],
+				]);
+			}
+			if (fix.kind === "variant") {
+				const added = addVariant(q.source, fix.name);
+				// Named there already: the finding goes on the next evaluation.
+				if (added.kind === "named") return [model, []];
+				// Not a line it can add to (a flow map): the caret goes to `variant_of`, for
+				// the author to write it there; a fix never does nothing at all.
+				if (added.kind === "unwritable") {
+					const at = rangesOf(q.source).variant_of ?? [0, 0];
+					return [model, [{ kind: "revealRange", range: [at[0], at[0]] }]];
+				}
+				return persist([
+					withSource(model, q.id, added.text),
+					[{ kind: "revealRange", range: [added.caret, added.caret] }],
 				]);
 			}
 			if (fix.kind === "quote") {
