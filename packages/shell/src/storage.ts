@@ -127,7 +127,7 @@ export function parseBank(text: string): Result<BankRef, string> {
 		.split("/")
 		.map((s) => (pasted ? safeDecode(s) : s));
 	const problem =
-		"Write the bank as owner/name, or owner/name/folder for a bank in a folder, for example octo-org/surveys/banks/main.";
+		"Write the workspace as owner/name, or owner/name/folder for one in a folder, for example octo-org/surveys/qretools.";
 	const named = parseRepo(
 		`${owner ?? ""}/${(repo ?? "").replace(/\.git$/, "")}`,
 	);

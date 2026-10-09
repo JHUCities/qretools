@@ -759,7 +759,7 @@ function step(model: Model, msg: Msg): Step {
 								model,
 								msg.id,
 								`\`${path}\` already exists${isBankEntry(q) ? " in the bank" : ""}.`,
-								"Open the bank's copy to change it.",
+								"Open the one already there to change it.",
 							),
 							[],
 						]
@@ -821,7 +821,7 @@ function step(model: Model, msg: Msg): Step {
 						closed,
 						saving.id,
 						`A question already exists at \`${inBank(q.bank, where.value.path)}\`.`,
-						"Open the bank's copy to change it, or choose another name or folder.",
+						"Open that question to change it, or choose another name or folder.",
 					),
 					[],
 				];

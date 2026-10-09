@@ -9,7 +9,7 @@
  * transient input, so component state; the token goes to the effects, never a Msg.
  */
 
-import { LinkExternalIcon, MarkGithubIcon } from "@primer/octicons-react";
+import { MarkGithubIcon } from "@primer/octicons-react";
 import {
 	Banner,
 	Button,
@@ -67,7 +67,7 @@ export function SignIn({ model }: { model: Model }) {
 		<main className="signin" aria-labelledby={headingId}>
 			<Stack gap="normal" className="signin-column">
 				<h2 id={headingId} className="signin-heading">
-					Sign in to your question bank
+					Sign in to your workspace
 				</h2>
 				{session.kind === "failed" && (
 					<Banner
@@ -81,7 +81,6 @@ export function SignIn({ model }: { model: Model }) {
 									href={`https://github.com/${settings.owner}/${settings.repo}`}
 									target="_blank"
 									rel="noreferrer"
-									trailingVisual={LinkExternalIcon}
 								>
 									Open on GitHub
 									<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
@@ -126,9 +125,9 @@ export function SignIn({ model }: { model: Model }) {
 								onChange={(e) => setText(e.target.value)}
 							/>
 							<FormControl.Caption>
-								The GitHub repository that holds the bank, or a workspace of
-								banks and instruments, as owner/name, or owner/name/folder for
-								one in a folder.
+								The GitHub repository that holds your workspace (its banks and
+								instruments), as owner/name, or owner/name/folder for a
+								workspace in a folder.
 							</FormControl.Caption>
 							{problem !== undefined && (
 								<FormControl.Validation variant="error">
@@ -171,8 +170,8 @@ export function SignIn({ model }: { model: Model }) {
 									onChange={(e) => setToken(e.target.value)}
 								/>
 								<FormControl.Caption>
-									A fine-grained token limited to the bank repository, with
-									Contents read and write.
+									A fine-grained token limited to the workspace's repository,
+									with Contents read and write.
 								</FormControl.Caption>
 								{tokenTried && token.trim() === "" && (
 									<FormControl.Validation variant="error">
@@ -220,7 +219,7 @@ export function SignIn({ model }: { model: Model }) {
 				{elsewhere && (
 					<p className="quiet signin-note">
 						Your unsaved work in this tab is for {bankText(settings)}. Signing
-						in to another bank sets it aside.
+						in to another workspace sets it aside.
 					</p>
 				)}
 				{/* A failed sign-in still holds the GitHub sign-in: a way to let it go. */}
@@ -234,7 +233,7 @@ export function SignIn({ model }: { model: Model }) {
 				)}
 				{/* Last, as github.com's sign-in page ends with its own links. */}
 				<p className="quiet signin-note">
-					<ExternalLink href={SOURCE_URL} muted icon={false}>
+					<ExternalLink href={SOURCE_URL} muted>
 						About QREtools
 					</ExternalLink>
 				</p>

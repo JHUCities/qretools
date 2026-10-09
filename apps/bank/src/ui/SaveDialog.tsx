@@ -40,7 +40,7 @@ export function SaveDialog({
 	const problem = !where.ok
 		? where.error.message
 		: path !== undefined && taken(path)
-			? "A question already exists there. Choose another folder, or open the bank's copy to change it."
+			? "A question already exists there. Choose another folder, or open that question to change it."
 			: undefined;
 	const close = () => dispatch({ kind: "saveCancelled" });
 	return (

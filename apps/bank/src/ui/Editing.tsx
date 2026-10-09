@@ -451,7 +451,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 														: followOf(slices, read, item.question);
 												if (follow === undefined) return undefined;
 												return follow.kind === "external" ? (
-													<ExternalLink href={follow.url} muted icon={false}>
+													<ExternalLink href={follow.url} muted>
 														{words}
 													</ExternalLink>
 												) : (

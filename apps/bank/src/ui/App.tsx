@@ -4,7 +4,6 @@ import {
 	GearIcon,
 	GitBranchIcon,
 	GitPullRequestIcon,
-	LinkExternalIcon,
 	PlusIcon,
 } from "@primer/octicons-react";
 import {
@@ -454,7 +453,6 @@ export function App() {
 									href={installUrl(signInConfig.appSlug)}
 									target="_blank"
 									rel="noreferrer"
-									trailingVisual={LinkExternalIcon}
 								>
 									Install the app
 									<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
@@ -611,7 +609,7 @@ export function App() {
 									/>
 								</div>
 								<div className="sidebar-foot">
-									<ExternalLink href={SOURCE_URL} muted icon={false}>
+									<ExternalLink href={SOURCE_URL} muted>
 										{/* Named in full for a list of links heard out of context. */}
 										<VisuallyHidden>QREtools on </VisuallyHidden>GitHub
 									</ExternalLink>
@@ -752,7 +750,9 @@ export function App() {
 					{/* Where the deletion goes: the author's branch, never the bank directly. */}
 					{confirm.base === undefined
 						? `${confirmName ?? "This draft"} exists only in this browser and can't be recovered.`
-						: `It's removed from your branch${model.session.kind === "connected" ? `, ${ownBranch(model.session.login)}` : ""}. The bank is unchanged until your pull request is merged.`}
+						: model.session.kind === "connected"
+							? `It's removed from your branch, ${ownBranch(model.session.login)}. ${model.session.defaultBranch} is unchanged until your pull request is merged.`
+							: "It's removed from your branch. The default branch is unchanged until your pull request is merged."}
 					{confirm.base !== undefined &&
 						isUnsaved(confirm) &&
 						" Your unsaved changes to it are discarded."}
@@ -894,7 +894,7 @@ function BranchLine({ model }: { model: Model }) {
 						icon={GitPullRequestIcon}
 						variant="invisible"
 						aria-label="Open pull request (opens in a new tab)"
-						description="Your saved work isn't in the bank yet. Open a pull request to propose it."
+						description={`Your saved work isn't on ${session.defaultBranch} yet. Open a pull request to propose it.`}
 						notificationIndicator="icon"
 					/>
 				)}

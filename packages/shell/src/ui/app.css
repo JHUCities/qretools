@@ -48,9 +48,6 @@ button[class*="prc-Link-Link"] {
 	overflow-wrap: anywhere;
 	text-align: start;
 }
-.external-icon {
-	margin-inline-start: var(--base-size-4);
-}
 /*
  * A response code's chip ("1", "-99"): its box trimmed to the cap height and baseline
  * (`text-box`), padded evenly, so the digits sit centred; an untrimmed box holds the
