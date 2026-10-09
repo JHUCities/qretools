@@ -5,6 +5,7 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
+import { newListItem } from "@qretools/core/editor";
 import {
 	createEditor,
 	type Editor,
@@ -45,7 +46,9 @@ export function EditorPane(
 			(text) => dispatch({ kind: "edited", text }),
 			(offset) => dispatch({ kind: "cursorMoved", offset }),
 			(id, offset) => dispatch({ kind: "definitionRequested", id, offset }),
-			instrument ? { completions: [instrumentSource(scopes)] } : {},
+			instrument
+				? { completions: [instrumentSource(scopes)], newLine: newListItem }
+				: {},
 		);
 		editor.current = e;
 		effects.registerEditor(e);

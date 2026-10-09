@@ -10,6 +10,7 @@
 
 import {
 	type CompletionSource,
+	completionStatus,
 	startCompletion,
 } from "@codemirror/autocomplete";
 import { isolateHistory } from "@codemirror/commands";
@@ -67,6 +68,11 @@ export interface EditorInputs {
 export interface EditorOptions {
 	/** Completion sources in place of the schema's: what an instrument offers, say. */
 	readonly completions?: readonly CompletionSource[];
+	/**
+	 * What Return writes after the line up to the caret (and the rest of that line), when
+	 * it isn't the editor's own newline: an instrument's list item (core `newListItem`).
+	 */
+	readonly newLine?: (before: string, after: string) => string | undefined;
 }
 
 export interface Editor {
@@ -106,6 +112,7 @@ export function createEditor(
 		macCompletionKeys,
 		quickFixKey,
 		spaceAfterColon,
+		...(options.newLine === undefined ? [] : [returnKey(options.newLine)]),
 		// The id `sync` last opened: a follow names the file it was reported against.
 		followDefinition((offset) => {
 			if (current !== undefined) onFollow(current, offset);
@@ -455,6 +462,47 @@ const spaceAfterColon = EditorState.transactionFilter.of((tr) => {
 	// After the typed text is in, a space at the same place goes before it.
 	return [tr, { changes: { from: insert.at, insert: " " }, sequential: true }];
 });
+
+/**
+ * Return, where the file's language says what goes on the next line (after `flow:`, the
+ * first item's dash). Left to CodeMirror while completion is open (Return takes the
+ * option), while an input method composes (Return commits it), in another author's
+ * version, and with a selection or several carets.
+ */
+const returnKey = (newLine: NonNullable<EditorOptions["newLine"]>) =>
+	Prec.high(
+		keymap.of([
+			{
+				key: "Enter",
+				run: (view) => {
+					const { state } = view;
+					const sel = state.selection;
+					if (
+						view.composing ||
+						state.readOnly ||
+						completionStatus(state) === "active" ||
+						sel.ranges.length !== 1 ||
+						!sel.main.empty
+					)
+						return false;
+					const head = sel.main.head;
+					const line = state.doc.lineAt(head);
+					const before = state.sliceDoc(line.from, head);
+					const insert = newLine(before, state.sliceDoc(head, line.to));
+					if (insert === undefined) return false;
+					// Spaces left before the caret go: the new line starts the item.
+					const from = line.from + before.trimEnd().length;
+					view.dispatch({
+						changes: { from, to: head, insert },
+						selection: { anchor: from + insert.length },
+						userEvent: "input",
+						scrollIntoView: true,
+					});
+					return true;
+				},
+			},
+		]),
+	);
 
 /**
  * Quick fix, with VS Code's key: Cmd-. (Ctrl-. elsewhere) applies the fix of the first

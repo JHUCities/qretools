@@ -6,6 +6,7 @@ import {
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { type Bank, bankOf } from "@qretools/core";
+import { newListItem } from "@qretools/core/editor";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "./editor.ts";
 import { instrumentSource } from "./instrument.ts";
@@ -139,5 +140,65 @@ describe("an editor given its own completions", () => {
 		});
 		expect(view.state.doc.toString()).toBe("flow:\n  - ask: h");
 		editor.destroy();
+	});
+});
+
+describe("Return in an instrument", () => {
+	/** An editor with `text`, the caret at its `|`, and Return pressed: the text after. */
+	const press = (
+		text: string,
+		options: { newLine?: boolean; readOnly?: boolean } = { newLine: true },
+	) => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+			() => {},
+			{
+				completions: [],
+				...(options.newLine && { newLine: newListItem }),
+			},
+		);
+		const at = text.indexOf("|");
+		editor.sync({
+			id: 1,
+			text: text.replace("|", ""),
+			diagnostics: [],
+			marks: [],
+			...(options.readOnly && { readOnly: true }),
+		});
+		const view = EditorView.findFromDOM(parent) as EditorView;
+		view.dispatch({ selection: { anchor: at } });
+		const enter = new KeyboardEvent("keydown", {
+			key: "Enter",
+			keyCode: 13,
+			bubbles: true,
+			cancelable: true,
+		});
+		view.contentDOM.dispatchEvent(enter);
+		const after = view.state.doc.toString();
+		const caret = view.state.selection.main.head;
+		editor.destroy();
+		return `${after.slice(0, caret)}|${after.slice(caret)}`;
+	};
+
+	it("opens a list field's first item, two past its key", () => {
+		expect(press("name: x\nflow:|\n")).toBe("name: x\nflow:\n  - |\n");
+		expect(press("flow:\n  - if: x\n    then:  |\n")).toBe(
+			"flow:\n  - if: x\n    then:\n      - |\n",
+		);
+	});
+
+	it("leaves Return alone elsewhere, in another author's version, and in a question", () => {
+		// CodeMirror's own newline (with its indentation) in each case: no dash.
+		for (const [text, options] of [
+			["name:|\n", undefined],
+			["flow:| []\n", undefined],
+			["flow:|\n", { readOnly: true }],
+			["flow:|\n", { newLine: false }],
+		] as const)
+			expect(press(text, options ?? { newLine: true })).not.toContain("- ");
 	});
 });

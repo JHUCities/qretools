@@ -18,6 +18,7 @@ export {
 	type OutlinePart,
 	outlineOf,
 } from "./instrument/outline.ts";
+export { LIST_FIELDS, newListItem } from "./instrument/parse.ts";
 export { labelledSource, textEntrySource } from "./schemes.ts";
 export {
 	addSpace,

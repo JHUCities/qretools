@@ -81,6 +81,30 @@ export const CONSTRUCTS = [
 	"roster",
 	"each",
 ] as const;
+/**
+ * The fields whose value is a list of items: a flow's steps (the instrument's own, a
+ * section's, a roster's, an `each`'s, an `if`'s `then` and `else`) and an ask's checks.
+ * `readFlow` and `readChecks` read them; Return after one opens its first item
+ * (`newListItem`). A test (lists.test.ts) gives each a scalar and expects the parser's
+ * `wrong-type`: it is what holds this table to the parser, so add a field here only
+ * with it.
+ */
+export const LIST_FIELDS = ["flow", "then", "else", "checks"] as const;
+
+/**
+ * What Return writes after `before` (the line up to the caret), with `after` (the rest
+ * of that line): after a list field's key, the first item's dash, two past the key's
+ * column (`flow:` gives `  - `, `    then:` gives `      - `); else undefined, the
+ * editor's own newline. The key's column counts any list markers before it.
+ */
+export function newListItem(before: string, after: string): string | undefined {
+	if (after.trim() !== "") return undefined;
+	const m = /^( *(?:- +)*)([A-Za-z_]+):[ \t]*$/.exec(before);
+	if (m === null || !(LIST_FIELDS as readonly string[]).includes(m[2] ?? ""))
+		return undefined;
+	return `\n${" ".repeat((m[1]?.length ?? 0) + 2)}- `;
+}
+
 /** What each construct may carry besides its own key. */
 const FIELDS: Readonly<Record<string, readonly string[]>> = {
 	ask: ["as", "universe", "options", "seconds", "fill", "checks"],

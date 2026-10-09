@@ -104,6 +104,7 @@ describe("the entry points", () => {
 			    "workspaceOf",
 			  ],
 			  "editor": [
+			    "LIST_FIELDS",
 			    "addSpace",
 			    "applyEdits",
 			    "bankFileJsonSchema",
@@ -116,6 +117,7 @@ describe("the entry points", () => {
 			    "marksOf",
 			    "mentionAt",
 			    "nameFrom",
+			    "newListItem",
 			    "outlineOf",
 			    "pathAt",
 			    "placeAt",
