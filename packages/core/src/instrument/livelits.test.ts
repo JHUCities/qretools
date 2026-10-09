@@ -3,7 +3,8 @@ import { addressOf, joinFolder } from "../address.ts";
 import { bankOf } from "../evaluate.ts";
 import { applyLivelit } from "../surface/livelits.ts";
 import { instrumentOf } from "./instrument.ts";
-import { bankChoices, questionChoices } from "./livelits.ts";
+import { bankChoices, codeChoices, questionChoices } from "./livelits.ts";
+import { parseInstrument } from "./parse.ts";
 
 const BAS = bankOf({
 	"bank.yaml": "agency: org.example\n",
@@ -139,5 +140,88 @@ describe("what the pickers offer", () => {
 				bank,
 			);
 		}
+	});
+});
+
+describe("a checklist at each set of codes in a condition", () => {
+	const HEADER =
+		"name: demo\nuses:\n  bas: ../banks/bas\nflow:\n  - ask: bas.tenure\n";
+	const sets = (source: string) =>
+		instrumentOf(source, { banks: {} }).livelits.filter((l) => l.set);
+	const write = (source: string, id: string, codes: readonly string[]) => {
+		const l = sets(source).find((x) => x.id === id);
+		return l === undefined ? undefined : applyLivelit(source, l, codes)?.text;
+	};
+	/** The sets the condition at `path` tests, as the parser reads them back. */
+	const readBack = (source: string, path: string) =>
+		parseInstrument(source, {})
+			.conds.filter((c) => c.path === path)
+			.map((c) =>
+				JSON.stringify(c.cond.expr)
+					.match(/"value":"[^"]*"/g)
+					?.join(","),
+			);
+
+	it("sits at each set, in the order its condition reads, and each writes its own", () => {
+		const text = `${HEADER}  - if: (bas.tenure in {"1"}) or (bas.tenure not_in {"2", "3"})\n    then:\n      - say: Hi\n`;
+		const found = sets(text);
+		expect(found.map((l) => [l.id, text.slice(l.span[0], l.span[1])])).toEqual([
+			["flow.1.if#0", '{"1"}'],
+			["flow.1.if#1", '{"2", "3"}'],
+		]);
+		expect(found[1]?.picker).toEqual({
+			kind: "many",
+			source: { kind: "codes", name: "bas.tenure" },
+			chosen: ["2", "3"],
+			min: 1,
+		});
+		expect(write(text, "flow.1.if#1", ["1", "-8"])).toBe(
+			text.replace('{"2", "3"}', '{"1", "-8"}'),
+		);
+	});
+
+	it("writes into a plain, double- or single-quoted value, and reads back the same set", () => {
+		for (const value of [
+			'bas.tenure in {"1"}',
+			'"bas.tenure in {\\"1\\"}"',
+			"'bas.tenure in {\"1\"}'",
+		]) {
+			const text = `${HEADER}  - stop: ${value}\n`;
+			const after = write(text, "flow.1.stop#0", ["1", "2"]);
+			expect(after, value).toBeDefined();
+			expect(readBack(after ?? "", "flow.1.stop")).toEqual([
+				'"value":"1","value":"2"',
+			]);
+		}
+	});
+
+	it("writes nothing when nothing changes, and nothing it can't escape", () => {
+		const text = `${HEADER}  - stop: bas.tenure in {"1", "2"}\n`;
+		expect(write(text, "flow.1.stop#0", ["1", "2"])).toBeUndefined();
+		expect(write(text, "flow.1.stop#0", ['a"b'])).toBeUndefined();
+	});
+
+	it("is absent from a set holding more than codes, an unclosed one, and a block scalar", () => {
+		for (const value of [
+			'bas.tenure in {"1", x}',
+			'bas.tenure in {"1"',
+			'>\n      bas.tenure in {"1"}',
+		])
+			expect(sets(`${HEADER}  - stop: ${value}\n`), value).toEqual([]);
+	});
+
+	it("offers the name's codes with their labels, or says why there are none", () => {
+		// The names a set's checklist asks about are those its conditions read.
+		const text = `${HEADER}  - ask: bas.rent\n  - stop: bas.tenure in {"1"} or bas.rent in {"1"}\n`;
+		expect(codeChoices(text, { bas: BAS }, "bas.tenure")).toEqual([
+			{ name: "1", detail: "Own" },
+			{ name: "2", detail: "Rent" },
+		]);
+		expect(codeChoices(text, { bas: BAS }, "bas.rent")).toEqual({
+			reason: "`bas.rent` is a number: it has no codes.",
+		});
+		expect(codeChoices(text, { bas: BAS }, "nope")).toEqual({
+			reason: "Nothing is named `nope` here.",
+		});
 	});
 });

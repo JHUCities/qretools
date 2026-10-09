@@ -6,17 +6,19 @@
  * give, from these functions, as the banks it has are the app's.
  */
 import { type Address, relativeFolder } from "../address.ts";
+import type { Expr } from "../cond/ast.ts";
 import type { BankScope, Evaluation } from "../evaluate.ts";
 import type { Fix, Range } from "../findings.ts";
 import {
 	type Choice,
 	enumAt,
 	type Livelit,
+	type Offered,
 	type Source,
 	valueSpan,
 } from "../surface/livelits.ts";
 import type { InstrumentDraft, Node } from "./draft.ts";
-import { QUALIFIED } from "./parse.ts";
+import { parseInstrument, QUALIFIED, type WrittenCond } from "./parse.ts";
 
 const ORDER: readonly Choice[] = [
 	{ name: "random", detail: "A new order for each respondent" },
@@ -76,7 +78,10 @@ interface Indexed {
  */
 export function instrumentLivelits(
 	source: string,
-	parsed: Indexed & { readonly draft: InstrumentDraft },
+	parsed: Indexed & {
+		readonly draft: InstrumentDraft;
+		readonly conds: readonly WrittenCond[];
+	},
 ): readonly Livelit[] {
 	const steps = (flow: readonly Node[]): Livelit[] =>
 		flow.flatMap((n): Livelit[] => {
@@ -132,9 +137,100 @@ export function instrumentLivelits(
 			(w) => !w.includes("\n"),
 		).map((l) => ({ ...l, actions: bankActions(l.id) })),
 	);
-	return [...uses, ...steps(parsed.draft.flow)].sort(
+	return [...uses, ...steps(parsed.draft.flow), ...sets(parsed.conds)].sort(
 		(a, b) => a.field[0] - b.field[0],
 	);
+}
+
+/**
+ * A checklist at each set of codes a condition tests a name against (`x in {"1", "2"}`,
+ * `not_in`), once its braces are both written and it holds only codes: anything else in
+ * it (a name, a number) would be lost to a rewrite. Each is named by its condition's path
+ * and its order among that condition's sets, read left to right in the expression's
+ * pre-order. None in a block scalar, which may rewrap the text written into it.
+ */
+function sets(conds: readonly WrittenCond[]): Livelit[] {
+	return conds.flatMap(({ path, cond, form }) => {
+		if (form === "block") return [];
+		return membersOf(cond.expr).flatMap((m, n): Livelit[] => {
+			const { operand, setRange } = m;
+			const chosen = m.set.flatMap((e) =>
+				e.kind === "string" ? [e.value] : [],
+			);
+			if (
+				operand.kind !== "name" ||
+				setRange === undefined ||
+				chosen.length !== m.set.length
+			)
+				return [];
+			return [
+				{
+					id: `${path}#${n}`,
+					label: `Choose the codes of ${operand.name}`,
+					at: setRange[1],
+					field: m.range,
+					span: setRange,
+					picker: {
+						kind: "many",
+						source: { kind: "codes", name: operand.name },
+						chosen,
+						// The condition language has no empty set.
+						min: 1,
+					},
+					actions: [],
+					set: form,
+				},
+			];
+		});
+	});
+}
+
+type Member = Extract<Expr, { kind: "member" }>;
+
+/** Every `in` and `not_in` of an expression, in pre-order, left to right. */
+function membersOf(e: Expr): Member[] {
+	switch (e.kind) {
+		case "member":
+			return [e, ...membersOf(e.operand), ...e.set.flatMap(membersOf)];
+		case "unary":
+			return membersOf(e.operand);
+		case "binary":
+			return [...membersOf(e.left), ...membersOf(e.right)];
+		case "call":
+			return e.args.flatMap(membersOf);
+		default:
+			return [];
+	}
+}
+
+/**
+ * The codes a condition's name can be tested against, each with its label (a bank's
+ * missing codes included), or why it has none: what a set's checklist offers, read from
+ * the instrument with its banks as the condition's own type is.
+ */
+export function codeChoices(
+	source: string,
+	banks: Readonly<Record<string, BankScope>>,
+	name: string,
+): Offered {
+	const parsed = parseInstrument(source, banks);
+	const type = (parsed.names.get(name) ?? parsed.scope.get(name))?.type;
+	switch (type?.kind) {
+		case "code":
+			return type.codes.map((c) => ({ name: c.code, detail: c.label }));
+		case undefined:
+			return { reason: `Nothing is named \`${name}\` here.` };
+		case "unknown":
+			return { reason: `What \`${name}\` holds isn't known yet.` };
+		case "number":
+			return { reason: `\`${name}\` is a number: it has no codes.` };
+		case "string":
+			return { reason: `\`${name}\` is text: it has no codes.` };
+		case "boolean":
+			return { reason: `\`${name}\` is true or false: it has no codes.` };
+		default:
+			return type satisfies never;
+	}
 }
 
 /** What a `uses` picker offers besides the banks there are: a new one, or one on GitHub. */
