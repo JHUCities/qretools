@@ -302,10 +302,13 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const read = evaluations.instrument(slices, e);
 	const { instrument } = read;
 	// A name is marked exactly where it can be followed: green where its bank is this
-	// workspace's (it opens in place), blue where it's another repository's (GitHub).
+	// workspace's (it opens in place), green italic where it's another repository's
+	// (GitHub), orange where the instrument declares it (the caret goes there).
 	const marks = useMemo(
 		(): readonly Mark[] =>
 			instrument.refs.map((r): Mark => {
+				if (r.kind === "here")
+					return { kind: "name", range: r.range, about: r.about };
 				const href = externalUrl(read, r);
 				return href === undefined
 					? { kind: "ref", range: r.range }

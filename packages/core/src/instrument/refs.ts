@@ -1,22 +1,39 @@
 /**
- * Where an instrument names a bank's files: each `ask:` its question, and each
- * `universe:` that names a bank's shared universe, by the place in the source where the
- * name is written and the file it names, in its bank's terms. What go to definition
- * follows, and what the editor colours as a reference. Pure.
+ * Where an instrument names something defined elsewhere, by the place in the source
+ * where the name is written: a bank's file (an `ask:`'s question, a `universe:`, an
+ * input's shared scale, a bank answer a condition reads), or a name the instrument
+ * declares itself (an input, a compute, an `as`, a roster's row number) that a
+ * condition or `{{placeholder}}` reads. What go to definition follows, and what the
+ * editor marks. Pure.
  */
+
+import { namesOf } from "../cond/ast.ts";
+import { NAME_KIND } from "../copy.ts";
 import type { Range } from "../findings.ts";
 import { schemePath } from "../kinds.ts";
-import type { Node } from "./draft.ts";
+import type { Cond, Named, Node, Placeholder } from "./draft.ts";
 import type { ParsedInstrument } from "./parse.ts";
 
-export interface InstrumentRef {
-	/** Where the name is written: the value alone, not its key. */
-	readonly range: Range;
-	/** The bank, by the alias `uses` gives it. */
-	readonly alias: string;
-	/** The file it names, by its path in that bank. */
-	readonly path: string;
-}
+export type InstrumentRef =
+	| {
+			readonly kind: "bank";
+			/** Where the name is written: the value alone, not its key. */
+			readonly range: Range;
+			/** The bank, by the alias `uses` gives it. */
+			readonly alias: string;
+			/** The file it names, by its path in that bank. */
+			readonly path: string;
+	  }
+	| {
+			/** A name this instrument declares, read where it's written. */
+			readonly kind: "here";
+			readonly range: Range;
+			readonly name: string;
+			/** Where it's declared: its name there, in this source. */
+			readonly declared: Range;
+			/** What it is, in words: what the hover says. */
+			readonly about: string;
+	  };
 
 /** The value of `key: value` at `path`: its own range, from where it starts to its end. */
 function valueAt(
@@ -51,7 +68,71 @@ function* steps(flow: readonly Node[]): Generator<Node> {
 	}
 }
 
-/** Every place the instrument names a file of one of its banks, in document order. */
+/** What a name the instrument declares is, as its hover says it. */
+function aboutOf(named: Named): string | undefined {
+	switch (named.kind) {
+		case "input": {
+			const { description } = named.input;
+			return `From outside${description === undefined ? "." : `: ${description}`}`;
+		}
+		case "compute":
+			return `${capitalised(NAME_KIND.compute)} in this instrument.`;
+		case "as":
+			return named.question === undefined
+				? `${capitalised(NAME_KIND.as)}.`
+				: `${capitalised(NAME_KIND.as)}: \`${named.question.alias}.${named.question.name}\`.`;
+		case "index":
+			return `The ${NAME_KIND.index} of \`${named.roster}\`.`;
+		case "bank":
+			return undefined;
+	}
+}
+
+const capitalised = (s: string): string =>
+	s.slice(0, 1).toUpperCase() + s.slice(1);
+
+/** The conditions a step reads: each `if`, `stop`, value, count, `ensure` and fill. */
+function* condsOf(node: Node): Generator<Cond> {
+	switch (node.kind) {
+		case "if":
+			for (const b of node.branches) if (b.cond !== undefined) yield b.cond;
+			return;
+		case "stop":
+			if (node.cond !== undefined) yield node.cond;
+			return;
+		case "compute":
+			if (node.value !== undefined) yield node.value;
+			return;
+		case "roster":
+			if (node.end?.kind === "count" && node.end.value !== undefined)
+				yield node.end.value;
+			if (node.end?.kind === "more" && node.end.cond !== undefined)
+				yield node.end.cond;
+			return;
+		case "ask":
+			for (const c of node.checks) if (c.ensure !== undefined) yield c.ensure;
+			for (const f of node.fills) if (f.source !== undefined) yield f.source;
+			return;
+		default:
+			return;
+	}
+}
+
+/** The `{{placeholders}}` a step says. */
+function placeholdersOf(node: Node): readonly Placeholder[] {
+	switch (node.kind) {
+		case "say":
+			return node.reads;
+		case "stop":
+			return node.sayReads;
+		case "ask":
+			return node.checks.flatMap((c) => c.messageReads);
+		default:
+			return [];
+	}
+}
+
+/** Every place the instrument names something defined elsewhere, in document order. */
 export function instrumentRefs(
 	parsed: ParsedInstrument,
 	source: string,
@@ -64,7 +145,52 @@ export function instrumentRefs(
 		const range =
 			named === undefined ? undefined : valueAt(parsed, source, path);
 		if (named !== undefined && range !== undefined)
-			refs.push({ range, alias: named.alias, path: named.path });
+			refs.push({ kind: "bank", range, alias: named.alias, path: named.path });
+	};
+	const flow = [...steps(parsed.draft.flow)];
+	// Where a name is declared: the name itself, so the caret lands on it.
+	const declaredAt = (named: Named): Range | undefined => {
+		switch (named.kind) {
+			case "input": {
+				// An input is declared by its key under `inputs:`.
+				const at = parsed.ranges[named.input.path];
+				return at === undefined
+					? undefined
+					: [at[0], at[0] + named.input.name.length];
+			}
+			case "compute":
+				return valueAt(parsed, source, `${named.path}.compute`);
+			case "as":
+				return valueAt(parsed, source, `${named.path}.as`);
+			case "index": {
+				const roster = flow.find(
+					(n) => n.kind === "roster" && n.name === named.roster,
+				);
+				return roster === undefined
+					? undefined
+					: valueAt(parsed, source, `${roster.path}.roster`);
+			}
+			case "bank":
+				return undefined;
+		}
+	};
+	// A name read where it's written: a bank's answer (its question), or the instrument's own.
+	const read = (name: string, range: Range) => {
+		const named = parsed.names.get(name);
+		if (named === undefined) return;
+		if (named.kind === "bank") {
+			refs.push({
+				kind: "bank",
+				range,
+				alias: named.question.alias,
+				path: named.question.path,
+			});
+			return;
+		}
+		const declared = declaredAt(named);
+		const about = aboutOf(named);
+		if (declared !== undefined && about !== undefined)
+			refs.push({ kind: "here", range, name, declared, about });
 	};
 	const universe = parsed.draft.universe;
 	if (universe?.kind === "ref")
@@ -72,7 +198,30 @@ export function instrumentRefs(
 			alias: universe.alias,
 			path: schemePath("universe", universe.name),
 		});
-	for (const node of steps(parsed.draft.flow)) {
+	// An input's shared scale, as `responses: alias.scale` names it.
+	for (const input of parsed.draft.inputs) {
+		const scale =
+			input.domain?.kind === "responses" ? input.domain.scale : undefined;
+		const dot = scale?.indexOf(".") ?? -1;
+		if (scale !== undefined && dot > 0)
+			add(`${input.path}.responses`, {
+				alias: scale.slice(0, dot),
+				path: schemePath("scale", scale.slice(dot + 1)),
+			});
+	}
+	for (const node of flow) {
+		for (const cond of condsOf(node))
+			for (const n of namesOf(cond.expr)) read(n.name, n.range);
+		// A placeholder's range holds its braces: the name is what's followed.
+		for (const p of placeholdersOf(node)) {
+			const written = source.slice(p.range[0], p.range[1]);
+			const at = /[A-Za-z][A-Za-z0-9_.]*/.exec(written);
+			if (at !== null)
+				read(p.name, [
+					p.range[0] + at.index,
+					p.range[0] + at.index + at[0].length,
+				]);
+		}
 		if (node.kind !== "ask") continue;
 		add(`${node.path}.ask`, node.question);
 		if (node.universe?.kind === "ref")

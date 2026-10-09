@@ -414,6 +414,11 @@ function step(model: Model, msg: Msg): Step {
 			if (q.kind === "instrument") {
 				const read = createEvaluations().instrument(model, q);
 				const ref = instrumentRefAt(read.instrument.refs, msg.offset);
+				// A name declared in this instrument (an input, a computed value, a roster's
+				// row number): the caret goes to its declaration, in place, as a jump within
+				// a file makes no history entry in an editor.
+				if (ref?.kind === "here")
+					return [model, [{ kind: "revealRange", range: ref.declared }]];
 				// A bank in another repository opens where it is, on GitHub, in a new tab.
 				const away = ref === undefined ? undefined : externalUrl(read, ref);
 				if (away !== undefined)
@@ -1344,6 +1349,8 @@ export function instrumentDependencies(
 			blocked.set(f.id, f);
 	};
 	for (const ref of read.instrument.refs) {
+		// A name declared in the instrument itself is no bank file to take along.
+		if (ref.kind !== "bank") continue;
 		const use = read.uses[ref.alias];
 		if (use?.kind !== "local") continue;
 		const f = claims.get(inBank(use.folder, ref.path));
@@ -1393,7 +1400,8 @@ export function externalUrl(
 	read: InstrumentIn,
 	ref: InstrumentRef,
 ): string | undefined {
-	if (read.uses[ref.alias]?.kind !== "remote") return undefined;
+	if (ref.kind !== "bank" || read.uses[ref.alias]?.kind !== "remote")
+		return undefined;
 	const written = read.instrument.draft.uses.find(
 		(u) => u.alias === ref.alias,
 	)?.address;

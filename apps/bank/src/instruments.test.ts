@@ -256,6 +256,29 @@ describe("an open instrument", () => {
 		);
 	});
 
+	it("takes along the unsaved shared scale an input names", () => {
+		const loadedModel = loaded();
+		const e = at(loadedModel, HOUSEHOLDS) as InstrumentEntry;
+		// Only an input reads the scale: no question it asks is changed.
+		const source =
+			"name: households\nuses:\n  hh: ../households\ninputs:\n  eligible:\n    responses: hh.yes_no\nflow:\n  - say: Hello.\n";
+		const m = edit(
+			{
+				...loadedModel,
+				local: {
+					...loadedModel.local,
+					workspace: {
+						...loadedModel.local.workspace,
+						[e.id]: { ...e, source },
+					},
+				},
+			},
+			YES_NO,
+		);
+		const commit = commitOf(save(m, HOUSEHOLDS)[1]);
+		expect(commit?.changes.map((c) => c.path)).toEqual([HOUSEHOLDS, YES_NO]);
+	});
+
 	it("says what its save takes along, by name", () => {
 		const m = edit(edit(edit(loaded(), HOUSEHOLDS), CONSENT), YES_NO);
 		const evaluations = createEvaluations();
@@ -398,6 +421,28 @@ describe("go to definition in an instrument", () => {
 			kind: "editing",
 			id: at(m, "households/universes/renters.yaml").id,
 		});
+	});
+
+	it("opens the question a condition reads", () => {
+		const [m] = follow("hh.tenure = ");
+		expect(m.screen).toEqual({ kind: "editing", id: at(m, TENURE).id });
+	});
+
+	it("goes to where the instrument declares a name, in place", () => {
+		/** F12 on `word` puts the caret on `name`, as the line `line` writes it. */
+		const reveal = (word: string, line: string, name: string) => {
+			const [m, cmds] = follow(word);
+			const e = at(m, HOUSEHOLDS) as InstrumentEntry;
+			const from = e.source.indexOf(line) + line.indexOf(name);
+			// No other file opens, and no history entry: the caret moves within this one.
+			expect(m.screen).toEqual({ kind: "editing", id: e.id });
+			expect(cmds).toEqual([
+				{ kind: "revealRange", range: [from, from + name.length] },
+			]);
+		};
+		reveal("{{county", "  county:\n", "county");
+		reveal("f: renter", "compute: renter", "renter");
+		reveal("{{index", "roster: members", "members");
 	});
 
 	it("does nothing on an ask its bank doesn't resolve, or a bank in another repository", () => {

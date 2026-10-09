@@ -51,21 +51,24 @@ export const toDiagnostics = (
 		};
 	});
 
-/** The tooltip's content: message and hint, backticked names as code, as in the Findings list. */
+/** A line of a tooltip, backticked names as code, as in the Findings list; never markup. */
+export function codeLine(text: string, className: string): HTMLElement {
+	const div = document.createElement("div");
+	div.className = className;
+	for (const s of codeSpans(text)) {
+		if (s.code) {
+			const code = document.createElement("code");
+			code.className = "code";
+			code.textContent = s.text;
+			div.append(code);
+		} else div.append(s.text);
+	}
+	return div;
+}
+
+/** The tooltip's content: message and hint, as in the Findings list. */
 function messageNode(f: Finding): Node {
-	const line = (text: string, className: string): HTMLElement => {
-		const div = document.createElement("div");
-		div.className = className;
-		for (const s of codeSpans(text)) {
-			if (s.code) {
-				const code = document.createElement("code");
-				code.className = "code";
-				code.textContent = s.text;
-				div.append(code);
-			} else div.append(s.text);
-		}
-		return div;
-	};
+	const line = codeLine;
 	const node = document.createElement("div");
 	node.append(line(f.message, "cm-finding-message"));
 	if (f.hint !== undefined) node.append(line(f.hint, "cm-finding-hint"));

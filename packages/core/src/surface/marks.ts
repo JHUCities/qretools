@@ -12,15 +12,19 @@ import { clampRange } from "./read.ts";
 
 /**
  * `external` is a name in a bank of another repository (an instrument's import): it
- * resolves, but opens where that bank is, never in place.
+ * resolves, but opens where that bank is, never in place. `name` is a name an
+ * instrument declares itself (an input, a compute, an `as`, a roster's row number), read
+ * in a condition or a placeholder: it follows to its declaration.
  */
-export type MarkKind = "ref" | "external" | "code" | "legacy" | "fill";
+export type MarkKind = "ref" | "external" | "name" | "code" | "legacy" | "fill";
 
 export interface Mark {
 	readonly kind: MarkKind;
 	readonly range: Range;
 	/** Where an `external` name's file is, as a web address: the shell's to make. */
 	readonly href?: string;
+	/** What a `name` is, in words, for its hover (backticked names as code). */
+	readonly about?: string;
 }
 
 /** A question's marks by meaning: resolved names, response codes, the `legacy` block. */

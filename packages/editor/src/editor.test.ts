@@ -166,6 +166,28 @@ describe("go to definition in the editor", () => {
 		editor.destroy();
 	});
 
+	it("knows what an instrument's own name is, for its hover", () => {
+		const { editor, view, from } = setup();
+		editor.sync({
+			id: 1,
+			text: view.state.doc.toString(),
+			diagnostics: [],
+			marks: [
+				{ kind: "name", range: [from, from + 6], about: "From outside: `x`." },
+			],
+			schema: {},
+		});
+		expect(refRangeAt(view.state, from + 3)).toEqual({
+			from,
+			to: from + 6,
+			about: "From outside: `x`.",
+		});
+		expect(view.contentDOM.querySelector(".cm-name")?.textContent).toBe(
+			"agree4",
+		);
+		editor.destroy();
+	});
+
 	it("finds the name under the pointer, and not one that only touches it on the other side", () => {
 		const { editor, view, from } = setup();
 		const to = from + 6;

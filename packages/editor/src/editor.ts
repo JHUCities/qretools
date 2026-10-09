@@ -44,6 +44,7 @@ import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import { schemaCompletion, withoutInfo } from "./complete.ts";
+import { codeLine } from "./diagnostics.ts";
 
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
 const external = Annotation.define<boolean>();
@@ -239,6 +240,8 @@ const MARK_CLASS = {
 	ref: Decoration.mark({ class: "cm-ref" }),
 	// Followable as a shared name is, but drawn as a link out: it opens elsewhere.
 	external: Decoration.mark({ class: "cm-ref cm-external" }),
+	// An instrument's own name, read: followed to where it's declared.
+	name: Decoration.mark({ class: "cm-ref cm-name" }),
 	code: Decoration.mark({ class: "cm-code" }),
 	legacy: Decoration.mark({ class: "cm-legacy" }),
 	fill: Decoration.mark({ class: "cm-fill" }),
@@ -247,14 +250,19 @@ const MARK_CLASS = {
 /** Clamped to the document as it is now: a mark past its end is dropped, never thrown. */
 function decorationsOf(marks: readonly Mark[], length: number): DecorationSet {
 	const list: Ranged<Decoration>[] = [];
-	for (const { kind, range, href } of marks) {
+	for (const { kind, range, href, about } of marks) {
 		const from = Math.min(Math.max(0, range[0]), length);
 		const to = Math.min(Math.max(from, range[1]), length);
 		if (to <= from) continue;
 		// An external name carries where it opens, for its hover's link.
+		// A name carries what its hover shows: where it opens, and what it is.
 		const mark =
-			kind === "external" && href !== undefined
-				? Decoration.mark({ class: "cm-ref cm-external", href })
+			href !== undefined || about !== undefined
+				? Decoration.mark({
+						class: MARK_CLASS[kind].spec.class,
+						...(href !== undefined && { href }),
+						...(about !== undefined && { about }),
+					})
 				: MARK_CLASS[kind];
 		list.push(mark.range(from, to));
 	}
@@ -273,13 +281,20 @@ export function refRangeAt(
 	state: EditorState,
 	pos: number,
 	side = 0,
-): { from: number; to: number; href?: string } | undefined {
-	let found: { from: number; to: number; href?: string } | undefined;
+): { from: number; to: number; href?: string; about?: string } | undefined {
+	let found:
+		| { from: number; to: number; href?: string; about?: string }
+		| undefined;
 	state.field(semantics).between(pos, pos, (from, to, value) => {
 		if (!String(value.spec.class).split(" ").includes("cm-ref")) return;
 		if ((from === pos && side < 0) || (to === pos && side > 0)) return;
-		const href: unknown = value.spec.href;
-		found = typeof href === "string" ? { from, to, href } : { from, to };
+		const { href, about } = value.spec as { href?: unknown; about?: unknown };
+		found = {
+			from,
+			to,
+			...(typeof href === "string" && { href }),
+			...(typeof about === "string" && { about }),
+		};
 	});
 	return found;
 }
@@ -344,6 +359,9 @@ function followDefinition(onFollow: (offset: number) => void) {
 					create: () => {
 						const dom = document.createElement("div");
 						dom.className = "cm-follow-tip";
+						// What the name is, above where it goes.
+						if (ref.about !== undefined)
+							dom.append(codeLine(ref.about, "cm-follow-about"));
 						// A name from another repository opens there: a real link, so
 						// middle-click, copying it and the browser's preview all work.
 						const go =
@@ -364,7 +382,9 @@ function followDefinition(onFollow: (offset: number) => void) {
 						const keys = document.createElement("span");
 						keys.className = "cm-action-keys";
 						keys.textContent = FOLLOW_KEYS;
-						dom.append(go, keys);
+						const row = document.createElement("div");
+						row.append(go, keys);
+						dom.append(row);
 						return { dom };
 					},
 				};
@@ -606,6 +626,11 @@ const primerTheme = EditorView.theme({
 	".cm-external, .cm-external *": {
 		fontStyle: "italic",
 	},
+	// An instrument's own name (an input, a compute, an `as`, a row number) read in a
+	// condition: a value named in this file, as a fill is in a question, so its colour.
+	".cm-name, .cm-name *": {
+		color: "var(--prettylights-syntax-variable)",
+	},
 	".cm-code, .cm-code *": {
 		color: "var(--prettylights-syntax-constant)",
 	},
@@ -675,6 +700,8 @@ const primerTheme = EditorView.theme({
 	},
 	// Go to definition's tooltip: padded as a finding's, so the two read as one family;
 	// its link inline, its keys after it.
+	// What a name is, above its link, as a finding's message is above its hint.
+	".cm-follow-about": { marginBottom: "var(--base-size-4)" },
 	".cm-follow-tip": {
 		padding: "var(--base-size-4) var(--base-size-8)",
 	},
