@@ -150,6 +150,16 @@ export type Fix =
 			readonly word: string;
 	  }
 	| {
+			/**
+			 * A bank for an instrument's `uses` entry at `path`: a new one in this workspace
+			 * (its folder named in a dialog), or one on GitHub (its address given in one).
+			 */
+			readonly kind: "bank";
+			readonly label: string;
+			readonly how: "new" | "import";
+			readonly path: string;
+	  }
+	| {
 			/** Quotes around the response code `code`, at the key `path` names, as spelled. */
 			readonly kind: "quote";
 			readonly label: string;

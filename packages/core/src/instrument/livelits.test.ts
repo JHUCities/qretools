@@ -69,6 +69,24 @@ describe("an instrument's pickers", () => {
 		);
 	});
 
+	it("offer a new bank here, or one from GitHub, at each use", () => {
+		const uses = ids({}).find((l) => l.id === "uses.other");
+		expect(uses?.actions).toEqual([
+			{
+				kind: "bank",
+				label: "New bank in this workspace…",
+				how: "new",
+				path: "uses.other",
+			},
+			{
+				kind: "bank",
+				label: "Use a bank from GitHub…",
+				how: "import",
+				path: "uses.other",
+			},
+		]);
+	});
+
 	it("are the same whether the banks resolve or not, so a choice finds its picker", () => {
 		expect(ids({})).toEqual(ids({ bas: BAS }));
 	});
@@ -100,11 +118,17 @@ describe("what the pickers offer", () => {
 	});
 
 	it("lists the workspace's banks as written from the instrument, then GitHub's", () => {
-		const choices = bankChoices("instruments", ["", "banks/hh"], ["o/r@v1"]);
+		const remote = addressOf("JHUCities/Bank/banks/hh@v1");
+		const choices = bankChoices(
+			"instruments",
+			["", "banks/hh"],
+			remote.kind === "remote" ? [remote] : [],
+		);
 		expect(choices.map((c) => c.name)).toEqual([
 			"../",
 			"../banks/hh",
-			"o/r@v1",
+			// As written, not the lowercased key.
+			"JHUCities/Bank/banks/hh@v1",
 		]);
 		for (const [c, bank] of [
 			[choices[0], ""],

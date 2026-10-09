@@ -5,7 +5,7 @@
  * registered with the effects so `revealRange` can reach it.
  */
 
-import { type Fix, WORKSPACE } from "@qretools/core";
+import { type Fix, instrumentPath, remotesOf, WORKSPACE } from "@qretools/core";
 import {
 	bankChoices,
 	choicesOf,
@@ -85,7 +85,15 @@ export function EditorPane(
 								return bankChoices(
 									WORKSPACE.instruments,
 									model.banks,
-									Object.keys(model.remoteBanks),
+									remotesOf(
+										Object.fromEntries(
+											Object.values(model.local.workspace).flatMap((w) =>
+												w.kind === "instrument"
+													? [[instrumentPath(w.name), w.source]]
+													: [],
+											),
+										),
+									),
 								);
 							const f =
 								model.local.questions[open.current] ??
