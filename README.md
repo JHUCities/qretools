@@ -71,9 +71,10 @@ written by hand: identifiers, versions and references are the tool's.
 
 Create one from the [template](https://github.com/JHUCities/qretools-template)
 ("Use this template"): a workspace with one bank of example questions. Install the
-QREtools GitHub App on it, and sign in at the site above with the repository's
-`owner/name`. New, Example instrument, writes an instrument asking the bank's questions.
-The template's README walks through it, including protecting `main`.
+[QREtools GitHub App](https://github.com/apps/qretools) on it, and sign in at the site
+above with the repository's `owner/name`. New, Example instrument, writes an instrument
+asking the bank's questions. The template's README walks through it, including
+protecting `main`.
 
 ## Develop
 
