@@ -31,6 +31,7 @@ export {
 	applyEdits,
 	quoteCode,
 	renameEdits,
+	sharedScaleSource,
 	spaceBefore,
 	withFields,
 } from "./surface/edit.ts";

@@ -338,6 +338,8 @@ export interface Naming {
 				readonly kind: "create";
 				/** The question that named it, and where: that reference is rewritten to the name chosen. */
 				readonly use?: { readonly id: Id; readonly path: string };
+				/** A scale made from the question's own options there, which its name replaces. */
+				readonly share?: true;
 		  }
 		| { readonly kind: "rename"; readonly id: Id };
 }

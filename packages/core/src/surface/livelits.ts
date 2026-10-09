@@ -13,8 +13,9 @@
  */
 import { SCHEME_NAME } from "../copy.ts";
 import type { Fix, Range } from "../findings.ts";
-import type { Code } from "./draft.ts";
-import { scalar } from "./edit.ts";
+import { labelsKey } from "../fold.ts";
+import type { Code, Draft } from "./draft.ts";
+import { scalar, sharedScaleSource } from "./edit.ts";
 import {
 	type Env,
 	FIELD_OF,
@@ -68,6 +69,13 @@ export type Picker =
 			readonly source: Source;
 			/** What is written there now, whether or not it is one of the choices. */
 			readonly current?: string;
+	  }
+	| {
+			/**
+			 * Nothing to choose, only things to do with what is written (its actions), as an
+			 * editor's code actions: inline options offer to become a shared scale.
+			 */
+			readonly kind: "actions";
 	  }
 	| {
 			/** A set of values, chosen together: applying writes them all as a list. */
@@ -182,14 +190,17 @@ export function livelitsOf(
 		readonly ranges: Readonly<Record<string, Range>>;
 		readonly empties: Readonly<Record<string, number>>;
 		readonly mentions: readonly Mention[];
+		readonly draft: Draft;
 	},
-	kinds: readonly NamedScheme[] = LIVELIT_KINDS,
+	/** What it was read against: options a shared scale already has aren't offered to share. */
+	env: Env,
 ): readonly Livelit[] {
 	const fills = Object.keys(parsed.ranges).filter((p) =>
 		/^fills\.[^.]+$/.test(p),
 	);
 	return [
-		...namedLivelits(source, parsed, kinds),
+		...namedLivelits(source, parsed, LIVELIT_KINDS),
+		...shareLivelit(source, parsed, env),
 		...enumAt(
 			source,
 			parsed,
@@ -200,6 +211,52 @@ export function livelitsOf(
 		...fills.flatMap((id) =>
 			enumAt(source, parsed, id, "Choose the fill's type", FILL_TYPE),
 		),
+	];
+}
+
+/**
+ * At options written inline, an offer to make them a shared scale, when that loses
+ * nothing (plain `code: label` lines, `sharedScaleSource`) and no shared scale already has
+ * these labels: then `matches-scale` offers its name instead, and only that is offered.
+ */
+function shareLivelit(
+	source: string,
+	parsed: {
+		readonly ranges: Readonly<Record<string, Range>>;
+		readonly draft: Draft;
+	},
+	env: Env,
+): Livelit[] {
+	const field = parsed.ranges.responses;
+	const { domain } = parsed.draft;
+	if (
+		field === undefined ||
+		domain?.kind !== "responses" ||
+		domain.scale !== undefined ||
+		sharedScaleSource(source) === undefined
+	)
+		return [];
+	const key = labelsKey(domain.codes);
+	if (Object.values(env.scales).some((s) => labelsKey(s.codes) === key))
+		return [];
+	// The button after the field's key, on its own line: the options are below it.
+	const keyEnd = field[0] + "responses:".length;
+	return [
+		{
+			id: "responses",
+			label: "Share these responses",
+			at: keyEnd,
+			field,
+			span: [keyEnd, keyEnd],
+			picker: { kind: "actions" },
+			actions: [
+				{
+					kind: "share",
+					label: "Make these a shared scale…",
+					path: "responses",
+				},
+			],
+		},
 	];
 }
 
@@ -296,7 +353,8 @@ export function applyLivelit(
 	livelit: Livelit,
 	value: string | readonly string[],
 ): { readonly text: string; readonly caret: number } | undefined {
-	if (value === "") return undefined;
+	// An actions picker has nothing to choose: nothing is ever written through it.
+	if (value === "" || livelit.picker.kind === "actions") return undefined;
 	const [from, to] = livelit.span;
 	// Quoted only where YAML needs it (`010`, `yes: no`), as a fix writes a value. A list
 	// keeps the author's form: a block list stays a block at its indent (a comment on an

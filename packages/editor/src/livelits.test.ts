@@ -48,7 +48,7 @@ function open(text = TEXT, readOnly = false) {
 		text,
 		diagnostics: [],
 		marks: [],
-		livelits: livelitsOf(text, parseSurface(text, env)),
+		livelits: livelitsOf(text, parseSurface(text, env), env),
 		...(readOnly && { readOnly: true }),
 	});
 	const view = EditorView.findFromDOM(parent) as EditorView;

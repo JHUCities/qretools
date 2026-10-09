@@ -305,3 +305,44 @@ export function addVariant(
 	while (end > 0 && /\s/.test(source[end - 1] ?? "")) end--;
 	return after(end, indent);
 }
+
+/**
+ * A shared scale's text from a question's options written inline, copied as written (its
+ * codes as spelled, its order, its comments) under `labels:`, or undefined when they
+ * aren't options a scale can hold as they stand: a block of plain `code: label` lines.
+ * An option written as a map (`{label: …, title: …}`) carries what is the question's own.
+ */
+export function sharedScaleSource(source: string): string | undefined {
+	const top = parseDocument(source, { prettyErrors: false }).contents;
+	const pair = isMap(top)
+		? top.items.find((p) => isScalar(p.key) && p.key.value === "responses")
+		: undefined;
+	const options = pair?.value;
+	if (!isMap(options) || options.flow || options.items.length === 0)
+		return undefined;
+	if (
+		!options.items.every(
+			(p) =>
+				isScalar(p.key) &&
+				isScalar(p.value) &&
+				typeof p.value.value === "string" &&
+				p.value.value !== "",
+		)
+	)
+		return undefined;
+	// Every key is a scalar (checked above), and there is at least one.
+	const first = (options.items[0]?.key as Scalar | undefined)?.range?.[0] ?? 0;
+	const from = source.lastIndexOf("\n", first - 1) + 1;
+	const indent = first - from;
+	let to = options.range?.[1] ?? first;
+	while (to > from && /\s/.test(source[to - 1] ?? "")) to--;
+	// Each line moved from the options' indent to two spaces; a less indented line (a
+	// comment at column 0) keeps its own.
+	const lines = source
+		.slice(from, to)
+		.split("\n")
+		.map((line) =>
+			line.slice(0, indent).trim() === "" ? `  ${line.slice(indent)}` : line,
+		);
+	return `labels:\n${lines.join("\n")}\n`;
+}

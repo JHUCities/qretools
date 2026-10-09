@@ -137,6 +137,7 @@ describe("the entry points", () => {
 			    "quoteCode",
 			    "rangesOf",
 			    "renameEdits",
+			    "sharedScaleSource",
 			    "spaceBefore",
 			    "textEntryJsonSchema",
 			    "textEntrySource",
