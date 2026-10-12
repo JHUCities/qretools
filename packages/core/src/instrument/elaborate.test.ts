@@ -38,6 +38,8 @@ const BAS = bankOf({
 	),
 	"questions/a/util.yaml":
 		'name: util\ntext: "You pay {{rent}}. Utilities included?"\nintent: i\nopen: {}\nfills:\n  rent: number\n',
+	"questions/a/echo.yaml":
+		'name: echo\ntext: "You selected {{neighborhood}}."\nintent: i\nopen: {}\nfills:\n  neighborhood: text\n',
 });
 
 const SOURCE = `name: demo
@@ -249,6 +251,54 @@ describe("an instrument as DDI", () => {
 				"why_end",
 			].map((n) => `instrument-demo.var-${n}`),
 		);
+	});
+
+	it("lowers label(source) to an instrument-owned text variable before its ask", () => {
+		const parsed = parseInstrument(
+			`name: labels
+uses:
+  bas: here
+flow:
+  - ask: bas.tenure
+    as: selected_neighborhood
+  - ask: bas.echo
+    fill:
+      neighborhood: label(selected_neighborhood)
+`,
+			{ bas: BAS },
+		);
+		expect([...parsed.findings, ...checkInstrument(parsed)]).toEqual([]);
+		const { document } = instrumentDocument(
+			elaborateInstrument(parsed, { agency: "org.example" }),
+		);
+		expect(validator.ok && validator.value(document)).toEqual([]);
+		const computation = Object.values(document.ComputationItem ?? {}).find(
+			(item) => String(item.ID).includes("label-selected_neighborhood"),
+		);
+		expect(computation?.CommandCode).toMatchObject({
+			Command: [
+				{
+					CommandContent:
+						'{"1": "Own", "2": "Rent", "-8": "Refused"}.get(selected_neighborhood)',
+				},
+			],
+		});
+		const displayVariable = Object.values(document.Variable ?? {}).find(
+			(item) => String(item.ID).endsWith("var-display_label_1"),
+		);
+		expect(displayVariable?.VariableRepresentation).toEqual({
+			ValueRepresentation: { $type: "TextDomain" },
+		});
+		const echo = Object.values(document.QuestionConstruct ?? {}).find((item) =>
+			String(item.ID).endsWith("ask-echo"),
+		);
+		expect(echo?.Binding).toMatchObject([
+			{
+				SourceParameterReference: {
+					ID: "instrument-labels.out-display_label_1",
+				},
+			},
+		]);
 	});
 
 	it("says nothing it doesn't know: no severity guessed, no binding to what isn't recorded", () => {
