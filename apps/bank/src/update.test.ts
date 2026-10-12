@@ -148,7 +148,7 @@ describe("init", () => {
 		expect(model.remote.questions["questions/q/q.yaml"]?.sha).toBe("abc");
 		expect(model.nextId).toBe(9);
 		expect(model.session.kind).toBe("connecting");
-		expect(cmds.at(-1)).toEqual({
+		expect(cmds.at(-1)).toMatchObject({
 			kind: "connect",
 			repo: { owner: "JHUCities", repo: "bas-question-bank", path: "" },
 		});
@@ -759,13 +759,80 @@ describe("deleting", () => {
 });
 
 describe("connecting", () => {
+	it("drops a delayed connection for a repository the author has since replaced", () => {
+		const [first, firstCmds] = update(fresh(), {
+			kind: "connectRequested",
+			settings: SETTINGS,
+		});
+		const firstRequest = firstCmds.find((c) => c.kind === "connect")?.request;
+		const other = { ...SETTINGS, repo: "other-bank" };
+		const [second, secondCmds] = update(first, {
+			kind: "connectRequested",
+			settings: other,
+		});
+		const secondRequest = secondCmds.find((c) => c.kind === "connect")?.request;
+		expect(firstRequest).not.toBe(secondRequest);
+		expect(firstRequest).toBeTypeOf("number");
+		expect(secondRequest).toBeTypeOf("number");
+		const reply = (request: number, defaultBranch: string): Msg => ({
+			kind: "connected",
+			request,
+			result: ok({
+				login: "iain",
+				avatarUrl: "https://a/iain",
+				access: { kind: "write" },
+				defaultBranch,
+			}),
+		});
+		expect(update(second, reply(firstRequest as number, "from-first"))).toEqual(
+			[second, []],
+		);
+		const [accepted, cmds] = update(
+			second,
+			reply(secondRequest as number, "from-second"),
+		);
+		expect(accepted.session).toMatchObject({ defaultBranch: "from-second" });
+		expect(cmds.find((c) => c.kind === "loadWorkspace")).toMatchObject({
+			kind: "loadWorkspace",
+			target: { repo: "other-bank", defaultBranch: "from-second" },
+		});
+	});
+
+	it("drops an older workspace load when a later reload is underway", () => {
+		const [first, firstCmds] = update(connected(fresh()), {
+			kind: "bankReloadRequested",
+		});
+		const firstRequest =
+			firstCmds[0]?.kind === "loadWorkspace" ? firstCmds[0].request : undefined;
+		const [second, secondCmds] = update(first, { kind: "bankReloadRequested" });
+		const secondRequest =
+			secondCmds[0]?.kind === "loadWorkspace"
+				? secondCmds[0].request
+				: undefined;
+		expect(firstRequest).toBeTypeOf("number");
+		expect(secondRequest).toBeTypeOf("number");
+		expect(
+			update(second, {
+				kind: "workspaceLoaded",
+				request: firstRequest as number,
+				result: loadOf([]),
+			}),
+		).toEqual([second, []]);
+		const [accepted] = update(second, {
+			kind: "workspaceLoaded",
+			request: secondRequest as number,
+			result: loadOf([]),
+		});
+		expect(accepted.loading.kind).toBe("loaded");
+	});
+
 	it("connect, then load the bank, then merge it: every file becomes an entry of the kind its path says", () => {
 		const [m1, c1] = update(fresh(), {
 			kind: "connectRequested",
 			settings: SETTINGS,
 		});
 		expect(m1.session.kind).toBe("connecting");
-		expect(c1.find((c) => c.kind === "connect")).toEqual({
+		expect(c1.find((c) => c.kind === "connect")).toMatchObject({
 			kind: "connect",
 			repo: { owner: "octo-org", repo: "survey-bank", path: "" },
 		});
@@ -902,7 +969,8 @@ describe("connecting", () => {
 		expect(Object.keys(m.local.questions)).toEqual(["2"]);
 		expect(cmds.some((c) => c.kind === "persist")).toBe(true);
 		const [kept] = init({ work: ok(stored), hasToken: true });
-		expect(Object.keys(kept.local.questions)).toHaveLength(2);
+		// Recovery storage now keeps only the author's dirty copy; GitHub reloads clean files.
+		expect(Object.keys(kept.local.questions)).toHaveLength(1);
 	});
 
 	it("messages and the model are plain data", () => {
@@ -1162,7 +1230,7 @@ describe("the author's own branch", () => {
 		expect(m.session).toMatchObject({
 			defaultBranch: "main",
 		});
-		expect(cmds[0]).toEqual({
+		expect(cmds[0]).toMatchObject({
 			kind: "loadWorkspace",
 			target: {
 				owner: "JHUCities",
@@ -1937,7 +2005,7 @@ describe("signing in", () => {
 		const [after, cmds] = update(m, { kind: "bankReloadRequested" });
 		expect(after.session).toBe(m.session);
 		expect(after.loading).toEqual({ kind: "loading" });
-		expect(cmds).toEqual([
+		expect(cmds).toMatchObject([
 			{
 				kind: "loadWorkspace",
 				target: {
@@ -2316,6 +2384,18 @@ describe("work belongs to this tab", () => {
 		});
 		expect(m.author).toBe("iain");
 		expect(toWork(m)).toEqual(work);
+	});
+
+	it("keeps only drafts and changed files in recovery storage", () => {
+		const clean = bankQuestion(1, "questions/q/q.yaml", "name: q\n");
+		const changed = bankQuestion(
+			2,
+			"questions/r/r.yaml",
+			"name: r\n",
+			"name: r\ntext: changed\n",
+		);
+		const work = toWork(withBank(connected(fresh()), [clean, changed]));
+		expect(work.questions.map((q) => q.id)).toEqual([2]);
 	});
 
 	it("someone else signing in sets the work aside, said once, never dropped", () => {

@@ -22,6 +22,7 @@ import {
 	type Failure,
 	type File,
 	formatLink,
+	type LoadedWorkspace,
 	NO_TOKEN,
 	parseLink,
 	type Who,
@@ -153,7 +154,7 @@ export function createEffects(deps: Deps): Effects {
 						);
 					return;
 				case "persist":
-					persist(JSON.stringify(cmd.work));
+					persist(cmd.work, () => dispatch({ kind: "persistenceFailed" }));
 					return;
 				case "applyTheme":
 					// The page shows it at once; the inline script in index.html shows it
@@ -183,8 +184,14 @@ export function createEffects(deps: Deps): Effects {
 					return;
 				case "connect": {
 					const s = storeFor(cmd.repo);
-					if (!s) return dispatch({ kind: "connected", result: err(NO_TOKEN) });
-					s.whoAmI().then((result) => dispatch({ kind: "connected", result }));
+					const reply = (result: Result<Who, Failure>) =>
+						dispatch({
+							kind: "connected",
+							result,
+							...(cmd.request !== undefined && { request: cmd.request }),
+						});
+					if (!s) return reply(err(NO_TOKEN));
+					s.whoAmI().then(reply);
 					return;
 				}
 				case "checkAccess": {
@@ -216,11 +223,14 @@ export function createEffects(deps: Deps): Effects {
 					return;
 				case "loadWorkspace": {
 					const s = storeFor(cmd.target);
-					if (!s)
-						return dispatch({ kind: "workspaceLoaded", result: err(NO_TOKEN) });
-					s.loadWorkspace(cmd.target).then((result) =>
-						dispatch({ kind: "workspaceLoaded", result }),
-					);
+					const reply = (result: Result<LoadedWorkspace, Failure>) =>
+						dispatch({
+							kind: "workspaceLoaded",
+							result,
+							...(cmd.request !== undefined && { request: cmd.request }),
+						});
+					if (!s) return reply(err(NO_TOKEN));
+					s.loadWorkspace(cmd.target).then(reply);
 					return;
 				}
 				case "updateFromDefault": {
@@ -336,21 +346,34 @@ export function createEffects(deps: Deps): Effects {
  * Persist this tab's work at most every 300 ms, and flush when the page is hidden, or
  * on demand. Session storage: the work outlives a reload, never the tab.
  */
-function debouncedPersist(): ((json: string) => void) & { flush(): void } {
-	let pending: string | undefined;
+function debouncedPersist(): ((
+	work: Extract<Cmd, { kind: "persist" }>["work"],
+	failed: () => void,
+) => void) & {
+	flush(): void;
+} {
+	let pending:
+		| {
+				readonly work: Extract<Cmd, { kind: "persist" }>["work"];
+				readonly failed: () => void;
+		  }
+		| undefined;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const flush = () => {
 		if (pending === undefined) return;
 		try {
-			sessionStorage.setItem(WORK_KEY, pending);
+			sessionStorage.setItem(WORK_KEY, JSON.stringify(pending.work));
 		} catch {
-			// Storage unavailable (private window, quota): the Model is still correct; drafts are just not kept.
+			pending.failed();
 		}
 		pending = undefined;
 	};
 	if (typeof window !== "undefined") window.addEventListener("pagehide", flush);
-	const write = (json: string) => {
-		pending = json;
+	const write = (
+		work: Extract<Cmd, { kind: "persist" }>["work"],
+		failed: () => void,
+	) => {
+		pending = { work, failed };
 		if (timer !== undefined) clearTimeout(timer);
 		timer = setTimeout(flush, 300);
 	};

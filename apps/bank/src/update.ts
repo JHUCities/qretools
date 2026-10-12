@@ -124,6 +124,32 @@ import { openFolder } from "./tree.js";
 
 type Step = readonly [Model, readonly Cmd[]];
 
+/** Start an effect whose answer must belong to the current intent, not merely arrive late. */
+function requested(model: Model, key: string): readonly [Model, number] {
+	const request = model.nextRequest;
+	return [
+		{
+			...model,
+			nextRequest: request + 1,
+			requests: { ...model.requests, [key]: request },
+		},
+		request,
+	];
+}
+
+/** Direct reducer tests may omit an identity; effects never do. */
+const answers = (
+	model: Model,
+	key: string,
+	request: number | undefined,
+): boolean => request === undefined || model.requests[key] === request;
+
+/** An accepted answer no longer owns its request slot. */
+function answered(model: Model, key: string): Model {
+	const { [key]: _, ...requests } = model.requests;
+	return { ...model, requests };
+}
+
 /**
  * Pure. Every state change in the app is one case of `step`; this wrapper keeps the
  * address bar naming what is open, and the open file's folder in view. A different
@@ -1250,8 +1276,13 @@ function step(model: Model, msg: Msg): Step {
 
 		case "connectRequested": {
 			const [chosen, cmds] = withSettings(model, msg.settings);
+			// A new connection supersedes every outstanding reply from the former bank.
+			const [connecting, request] = requested(
+				{ ...chosen, requests: {} },
+				"connect",
+			);
 			return persist([
-				{ ...chosen, session: { kind: "connecting" }, failures: [] },
+				{ ...connecting, session: { kind: "connecting" }, failures: [] },
 				[
 					...cmds,
 					{
@@ -1261,6 +1292,7 @@ function step(model: Model, msg: Msg): Step {
 							repo: msg.settings.repo,
 							path: msg.settings.path,
 						},
+						request,
 					},
 				],
 			]);
@@ -1279,12 +1311,14 @@ function step(model: Model, msg: Msg): Step {
 			]);
 		}
 
-		case "connected":
+		case "connected": {
+			if (!answers(model, "connect", msg.request)) return [model, []];
+			const connectedModel = answered(model, "connect");
 			// Signed out, whatever the reason: only the author's own work stays.
 			if (!msg.result.ok)
 				return persist([
 					{
-						...signedOut(model),
+						...signedOut(connectedModel),
 						session: { kind: "failed", failure: msg.result.error },
 					},
 					[],
@@ -1300,15 +1334,16 @@ function step(model: Model, msg: Msg): Step {
 				};
 				// This person's work, never another's, before the load: someone else's
 				// unsaved work in this tab is set aside, never shown to them or dropped.
-				const [theirs, aside] = otherAuthor(model, login)
+				const [theirs, aside] = otherAuthor(connectedModel, login)
 					? setAside(
-							model,
-							`Unsaved work in this tab belonged to ${model.author} and was set aside.`,
+							connectedModel,
+							`Unsaved work in this tab belonged to ${connectedModel.author} and was set aside.`,
 						)
-					: [model, []];
+					: [connectedModel, []];
+				const [loading, request] = requested(theirs, "workspace");
 				return persist([
 					{
-						...theirs,
+						...loading,
 						author: login,
 						session,
 						loading: { kind: "loading" },
@@ -1317,17 +1352,21 @@ function step(model: Model, msg: Msg): Step {
 						...aside,
 						{
 							kind: "loadWorkspace",
-							target: targetOf(model.settings, session),
+							target: targetOf(loading.settings, session),
+							request,
 						},
 					],
 				]);
 			}
+		}
 
 		case "workspaceLoaded": {
+			if (!answers(model, "workspace", msg.request)) return [model, []];
+			const loadedRequest = answered(model, "workspace");
 			if (!msg.result.ok)
 				return [
 					compact({
-						...model,
+						...loadedRequest,
 						loading: { kind: "failed", failure: msg.result.error } as const,
 						pendingLink: undefined,
 						updating: undefined,
@@ -1347,22 +1386,22 @@ function step(model: Model, msg: Msg): Step {
 						banksIn(Object.fromEntries(files.map((f) => [f.path, f.text])))
 							.banks,
 					),
-					...allFiles(model.local).flatMap((f) =>
+					...allFiles(loadedRequest.local).flatMap((f) =>
 						isBankEntry(f) ? [f.bank] : [],
 					),
 				]),
 			].sort();
-			const remote = remoteOf(model.remote, files, banks);
+			const remote = remoteOf(loadedRequest.remote, files, banks);
 			const { local, nextId } = rebase(
-				model.local,
+				loadedRequest.local,
 				remote,
-				model.nextId,
+				loadedRequest.nextId,
 				banks,
 			);
 			const loaded: Model = compact({
-				...model,
+				...loadedRequest,
 				banks,
-				remoteBanks: keptRemote(model.remoteBanks),
+				remoteBanks: keptRemote(loadedRequest.remoteBanks),
 				local,
 				remote,
 				nextId,
@@ -1373,15 +1412,15 @@ function step(model: Model, msg: Msg): Step {
 				// What GitHub wouldn't give as text is left out, and said once: this load's
 				// notice replaces an earlier load's, and a load with none clears it.
 				failures: [
-					...model.failures.filter((f) => f.hint !== UNREAD_HINT),
+					...loadedRequest.failures.filter((f) => f.hint !== UNREAD_HINT),
 					...(unread.length === 0 ? [] : [unreadNotice(unread)]),
 				],
 			});
 			// A link that waited for the bank opens now.
 			const [opened, cmds] =
-				model.pendingLink === undefined
+				loadedRequest.pendingLink === undefined
 					? [loaded, []]
-					: openLink(loaded, model.pendingLink);
+					: openLink(loaded, loadedRequest.pendingLink);
 			return persist([opened, cmds]);
 		}
 
@@ -1441,21 +1480,24 @@ function step(model: Model, msg: Msg): Step {
 			return step(model, { kind: "bankReloadRequested" });
 		}
 
-		case "bankReloadRequested":
+		case "bankReloadRequested": {
 			if (model.session.kind !== "connected") return [model, []];
+			const [reloading, request] = requested(model, "workspace");
 			return [
 				{
-					...model,
+					...reloading,
 					loading: { kind: "loading" },
-					remoteBanks: keptRemote(model.remoteBanks),
+					remoteBanks: keptRemote(reloading.remoteBanks),
 				},
 				[
 					{
 						kind: "loadWorkspace",
-						target: targetOf(model.settings, model.session),
+						target: targetOf(reloading.settings, model.session),
+						request,
 					},
 				],
 			];
+		}
 
 		case "disconnected":
 			return signOut(model);
@@ -1511,6 +1553,27 @@ function step(model: Model, msg: Msg): Step {
 				},
 				[],
 			];
+
+		case "persistenceFailed": {
+			const message =
+				"This browser couldn't keep a recovery copy of your unsaved work.";
+			return model.failures.some((f) => f.message === message)
+				? [model, []]
+				: [
+						{
+							...model,
+							failures: [
+								...model.failures,
+								{
+									kind: "unreadable",
+									message,
+									hint: "Keep this tab open and save to GitHub before reloading it.",
+								},
+							],
+						},
+						[],
+					];
+		}
 
 		case "remoteBankStarted":
 			return [
@@ -1965,7 +2028,6 @@ function stale(model: Model, msg: Msg): boolean {
 	const out =
 		model.session.kind === "anonymous" || model.session.kind === "failed";
 	switch (msg.kind) {
-		case "workspaceLoaded":
 		case "updatedFromDefault":
 		case "committed":
 		case "fileReloaded":
@@ -1976,7 +2038,12 @@ function stale(model: Model, msg: Msg): boolean {
 		case "accessChecked":
 			return out;
 		case "connected":
-			return model.session.kind !== "connecting";
+			return (
+				model.session.kind !== "connecting" ||
+				!answers(model, "connect", msg.request)
+			);
+		case "workspaceLoaded":
+			return out || !answers(model, "workspace", msg.request);
 		default:
 			return false;
 	}
