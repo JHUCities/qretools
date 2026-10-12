@@ -14,6 +14,7 @@ export {
 	instrumentCompletion,
 } from "./instrument/complete.ts";
 export {
+	addInstrumentFill,
 	bankChoices,
 	codeChoices,
 	questionChoices,

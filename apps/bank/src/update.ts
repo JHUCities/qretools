@@ -36,6 +36,7 @@ import {
 } from "@qretools/core";
 import {
 	addSpace,
+	addInstrumentFill,
 	addVariant,
 	applyEdits,
 	applyLivelit,
@@ -343,6 +344,14 @@ function step(model: Model, msg: Msg): Step {
 				return persist([
 					withSource(model, q.id, spaced),
 					[{ kind: "revealRange", range: [at + 1, at + 1] }],
+				]);
+			}
+			if (fix.kind === "fill") {
+				const added = addInstrumentFill(q.source, fix.path, fix.name);
+				if (added === undefined) return [model, []];
+				return persist([
+					withSource(model, q.id, added.text),
+					[{ kind: "revealRange", range: [added.caret, added.caret] }],
 				]);
 			}
 			// Options made a shared scale: its name dialog, in the question's bank, pointed

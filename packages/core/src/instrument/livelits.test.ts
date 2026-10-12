@@ -3,7 +3,12 @@ import { addressOf, joinFolder } from "../address.ts";
 import { bankOf } from "../evaluate.ts";
 import { applyLivelit } from "../surface/livelits.ts";
 import { instrumentOf } from "./instrument.ts";
-import { bankChoices, codeChoices, questionChoices } from "./livelits.ts";
+import {
+	addInstrumentFill,
+	bankChoices,
+	codeChoices,
+	questionChoices,
+} from "./livelits.ts";
 import { parseInstrument } from "./parse.ts";
 
 const BAS = bankOf({
@@ -95,6 +100,31 @@ flow:
 		expect(
 			fill && applyLivelit(text, fill, "label(bas.tenure)")?.text,
 		).toContain("neighborhood: label(bas.tenure)");
+	});
+
+	it("adds a declared missing fill, then exposes its ordinary picker", () => {
+		const text = `name: demo
+uses:
+  bas: here
+flow:
+  - ask: bas.tenure
+  - ask: bas.echo
+`;
+		const action = instrumentOf(text, { banks: { bas: BAS } }).livelits.find(
+			(l) => l.id === "flow.1.fill",
+		);
+		expect(action?.actions).toMatchObject([
+			{ kind: "fill", path: "flow.1", name: "neighborhood" },
+		]);
+		const added = addInstrumentFill(text, "flow.1", "neighborhood");
+		expect(added?.text).toContain(
+			"  - ask: bas.echo\n    fill:\n      neighborhood:",
+		);
+		expect(
+			instrumentOf(added?.text ?? "", { banks: { bas: BAS } }).livelits.some(
+				(l) => l.id === "flow.1.fill.neighborhood",
+			),
+		).toBe(true);
 	});
 
 	it("sit at each use, each ask naming a question or empty, and each order, at any depth", () => {

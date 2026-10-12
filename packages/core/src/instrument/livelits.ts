@@ -89,7 +89,29 @@ export function instrumentLivelits(
 		flow.flatMap((n): Livelit[] => {
 			switch (n.kind) {
 				case "ask":
+					const missing = (n.question?.evaluation.draft.fills ?? []).filter(
+						(declared) => !n.fills.some((fill) => fill.name === declared.name),
+					);
+					const askField = parsed.ranges[`${n.path}.ask`];
 					return [
+						...(askField === undefined || missing.length === 0
+							? []
+							: [
+									{
+										id: `${n.path}.fill`,
+										label: "Add a question fill",
+										at: askField[1],
+										field: askField,
+										span: [askField[1], askField[1]] as Range,
+										picker: { kind: "actions" as const },
+										actions: missing.map((fill) => ({
+											kind: "fill" as const,
+											label: `Fill \`${fill.name}\`…`,
+											path: n.path,
+											name: fill.name,
+										})),
+									},
+								]),
 						...pickerAt(
 							source,
 							parsed,
@@ -171,6 +193,28 @@ export function instrumentLivelits(
 		...steps(parsed.draft.flow),
 		...sets(source, parsed.ranges, parsed.conds),
 	].sort((a, b) => a.field[0] - b.field[0]);
+}
+
+/** Add an empty fill below one `ask`, preserving the author's surrounding indentation. */
+export function addInstrumentFill(
+	source: string,
+	path: string,
+	name: string,
+): { readonly text: string; readonly caret: number } | undefined {
+	const parsed = parseInstrument(source, {});
+	const range = parsed.ranges[path];
+	const ask = parsed.ranges[`${path}.ask`];
+	if (range === undefined || ask === undefined) return undefined;
+	const marker = source.lastIndexOf("- ask:", range[1]);
+	const line = source.lastIndexOf("\n", marker) + 1;
+	const indent = marker < 0 ? undefined : /^([ \t]*)/.exec(source.slice(line))?.[1];
+	if (indent === undefined) return undefined;
+	const lead = source[range[1] - 1] === "\n" ? "" : "\n";
+	const inserted = `${lead}${indent}  fill:\n${indent}    ${name}:`;
+	return {
+		text: source.slice(0, range[1]) + inserted + source.slice(range[1]),
+		caret: range[1] + inserted.length,
+	};
 }
 
 /**
