@@ -47,7 +47,7 @@ export interface Instrument {
 	readonly collisions: readonly Collision<string>[];
 	/** Where it names its banks' files, for go to definition (`instrumentRefs`). */
 	readonly refs: readonly InstrumentRef[];
-	/** Its pickers (`instrumentLivelits`): the same whatever banks it was given. */
+	/** Its pickers (`instrumentLivelits`), including resolved, compatible fill sources. */
 	readonly livelits: readonly Livelit[];
 }
 
