@@ -147,6 +147,14 @@ flow:
 		expect(
 			addInstrumentFill(text, "flow.1", "neighborhood", "bas.tenure"),
 		).toBeUndefined();
+		expect(
+			addInstrumentFill(
+				text.replace("bas.echo", "bas.echo_more"),
+				"flow.1",
+				"neighborhood",
+				"bas.echo",
+			),
+		).toBeUndefined();
 	});
 
 	it("sit at each use, each ask naming a question or empty, and each order, at any depth", () => {
