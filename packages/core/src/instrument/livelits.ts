@@ -17,6 +17,7 @@ import {
 	type Source,
 	valueSpan,
 } from "../surface/livelits.ts";
+import type { FillSource } from "./check.ts";
 import type { InstrumentDraft, Node } from "./draft.ts";
 import { parseInstrument, QUALIFIED, type WrittenCond } from "./parse.ts";
 
@@ -82,6 +83,7 @@ export function instrumentLivelits(
 		readonly draft: InstrumentDraft;
 		readonly conds: readonly WrittenCond[];
 	},
+	fills: Readonly<Record<string, readonly FillSource[]>> = {},
 ): readonly Livelit[] {
 	const steps = (flow: readonly Node[]): Livelit[] =>
 		flow.flatMap((n): Livelit[] => {
@@ -102,6 +104,27 @@ export function instrumentLivelits(
 							`${n.path}.options`,
 							"Choose the order of the options",
 							ORDER,
+						),
+						...n.fills.flatMap((fill) =>
+							pickerAt(
+								source,
+								parsed,
+								fill.path,
+								`Choose a value for ${fill.name}`,
+								{
+									kind: "enum",
+									values: (fills[fill.path] ?? []).map((value) => ({
+										name: value.name,
+										detail:
+											value.type.kind === "code"
+												? "coded response"
+												: value.type.kind === "string"
+													? "text"
+													: value.type.kind,
+									})),
+								},
+								(w) => /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)?$/.test(w),
+							),
 						),
 					];
 				case "section":

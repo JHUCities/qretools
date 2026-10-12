@@ -43,6 +43,33 @@ const ids = (banks: Parameters<typeof instrumentOf>[1]["banks"]) =>
 	instrumentOf(SOURCE, { banks }).livelits;
 
 describe("an instrument's pickers", () => {
+	it("offers only checked sources at an existing fill", () => {
+		const text = `name: demo
+uses:
+  bas: here
+inputs:
+  rent_input:
+    number: {}
+flow:
+  - ask: bas.util
+    fill:
+      rent:
+`;
+		const fill = instrumentOf(text, { banks: { bas: BAS } }).livelits.find(
+			(l) => l.id === "flow.0.fill.rent",
+		);
+		expect(fill?.picker).toMatchObject({
+			kind: "one",
+			source: {
+				kind: "enum",
+				values: [{ name: "rent_input", detail: "number" }],
+			},
+		});
+		expect(fill && applyLivelit(text, fill, "rent_input")?.text).toContain(
+			"rent: rent_input",
+		);
+	});
+
 	it("sit at each use, each ask naming a question or empty, and each order, at any depth", () => {
 		const shown = ids({ bas: BAS }).map((l) => [
 			l.id,
