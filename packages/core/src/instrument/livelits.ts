@@ -109,6 +109,7 @@ export function instrumentLivelits(
 											label: `Fill \`${fill.name}\`…`,
 											path: n.path,
 											name: fill.name,
+											question: `${n.question?.alias}.${n.question?.name}`,
 										})),
 									},
 								]),
@@ -200,17 +201,23 @@ export function addInstrumentFill(
 	source: string,
 	path: string,
 	name: string,
+	question: string,
 ): { readonly text: string; readonly caret: number } | undefined {
 	const parsed = parseInstrument(source, {});
 	const range = parsed.ranges[path];
 	const ask = parsed.ranges[`${path}.ask`];
 	if (range === undefined || ask === undefined) return undefined;
-	const marker = source.lastIndexOf("- ask:", range[1]);
+	if (!source.slice(ask[0], ask[1]).includes(question)) return undefined;
+	const marker = source.lastIndexOf(`ask: ${question}`, range[1]);
 	const line = source.lastIndexOf("\n", marker) + 1;
-	const indent = marker < 0 ? undefined : /^([ \t]*)/.exec(source.slice(line))?.[1];
-	if (indent === undefined) return undefined;
+	const base =
+		marker < 0 ? undefined : /^([ \t]*)/.exec(source.slice(line))?.[1];
+	if (base === undefined) return undefined;
+	const fillIndent = /^\s*-\s+ask:/.test(source.slice(line))
+		? `${base}  `
+		: base;
 	const lead = source[range[1] - 1] === "\n" ? "" : "\n";
-	const inserted = `${lead}${indent}  fill:\n${indent}    ${name}:`;
+	const inserted = `${lead}${fillIndent}fill:\n${fillIndent}  ${name}:`;
 	return {
 		text: source.slice(0, range[1]) + inserted + source.slice(range[1]),
 		caret: range[1] + inserted.length,

@@ -114,9 +114,14 @@ flow:
 			(l) => l.id === "flow.1.fill",
 		);
 		expect(action?.actions).toMatchObject([
-			{ kind: "fill", path: "flow.1", name: "neighborhood" },
+			{
+				kind: "fill",
+				path: "flow.1",
+				name: "neighborhood",
+				question: "bas.echo",
+			},
 		]);
-		const added = addInstrumentFill(text, "flow.1", "neighborhood");
+		const added = addInstrumentFill(text, "flow.1", "neighborhood", "bas.echo");
 		expect(added?.text).toContain(
 			"  - ask: bas.echo\n    fill:\n      neighborhood:",
 		);
@@ -125,6 +130,23 @@ flow:
 				(l) => l.id === "flow.1.fill.neighborhood",
 			),
 		).toBe(true);
+		expect(
+			addInstrumentFill(
+				`name: demo
+uses:
+  bas: here
+flow:
+  -
+    ask: bas.echo
+`,
+				"flow.0",
+				"neighborhood",
+				"bas.echo",
+			)?.text,
+		).toContain("    ask: bas.echo\n    fill:\n      neighborhood:");
+		expect(
+			addInstrumentFill(text, "flow.1", "neighborhood", "bas.tenure"),
+		).toBeUndefined();
 	});
 
 	it("sit at each use, each ask naming a question or empty, and each order, at any depth", () => {

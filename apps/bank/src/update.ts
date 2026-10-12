@@ -347,7 +347,12 @@ function step(model: Model, msg: Msg): Step {
 				]);
 			}
 			if (fix.kind === "fill") {
-				const added = addInstrumentFill(q.source, fix.path, fix.name);
+				const added = addInstrumentFill(
+					q.source,
+					fix.path,
+					fix.name,
+					fix.question,
+				);
 				if (added === undefined) return [model, []];
 				return persist([
 					withSource(model, q.id, added.text),

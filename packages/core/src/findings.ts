@@ -182,6 +182,7 @@ export type Fix =
 			readonly label: string;
 			readonly path: string;
 			readonly name: string;
+			readonly question: string;
 	  };
 
 export const holes = (findings: readonly Finding[]): readonly Finding[] =>
