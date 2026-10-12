@@ -447,7 +447,12 @@ function available(
 			? [{ name: nameOf(v.named), type: v.named.type }]
 			: [],
 	);
-	return [...inputs, ...values].sort((a, b) => a.name.localeCompare(b.name));
+	const all = [...inputs, ...values];
+	return all
+		.filter(
+			(value) => all.filter((other) => other.name === value.name).length === 1,
+		)
+		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function outputs(
