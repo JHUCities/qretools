@@ -224,6 +224,11 @@ export interface Browser {
 	 * where its address is written once it's added.
 	 */
 	readonly addingBank?: AddingBank;
+	/**
+	 * The author tried a write that a standing blockage refuses (`blockage`): a dialog says
+	 * why, and what to do. Never set while there is none: `update` clears it.
+	 */
+	readonly blockedNotice?: true;
 	/** A new instrument is named before it exists, as a shared file is: its name is its file's. */
 	readonly namingInstrument?: {
 		readonly name: string;
@@ -417,6 +422,9 @@ export type Msg =
 	| { readonly kind: "instrumentNameChanged"; readonly name: string }
 	| { readonly kind: "instrumentNamingCancelled" }
 	| { readonly kind: "instrumentNamingConfirmed" }
+	/** An inactive write button was pressed: say why, when the reason is one that stands. */
+	| { readonly kind: "blockedActionTried" }
+	| { readonly kind: "blockedNoticeClosed" }
 	/** A bank to add: a new one here (from New or a `uses` entry), or one on GitHub (from one). */
 	| { readonly kind: "bankAddOpened"; readonly how: "new" }
 	| { readonly kind: "bankAddChanged"; readonly text: string }

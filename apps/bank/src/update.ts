@@ -134,7 +134,7 @@ export function update(model: Model, msg: Msg): Step {
 	const lapsed = authFailure(msg);
 	const [stepped, cmds] =
 		lapsed === undefined ? step(model, msg) : sessionLapsed(model, lapsed);
-	const next = revealOpen(model, stepped);
+	const next = withoutStaleNotice(revealOpen(model, stepped));
 	const before = linkOf(model);
 	const after = linkOf(next);
 	const linked: Step =
@@ -767,6 +767,22 @@ function step(model: Model, msg: Msg): Step {
 				[],
 			]);
 		}
+
+		case "blockedActionTried":
+			// A brief reason passes by itself (the button's tooltip says it); one that stands
+			// is explained, with what to do.
+			return blockage(model)?.kind === "standing"
+				? [{ ...model, browser: { ...model.browser, blockedNotice: true } }, []]
+				: [model, []];
+
+		case "blockedNoticeClosed":
+			return [
+				{
+					...model,
+					browser: compact({ ...model.browser, blockedNotice: undefined }),
+				},
+				[],
+			];
 
 		case "workspaceDetailsOpened": {
 			// One per workspace: open it if it exists, else start it.
@@ -2234,6 +2250,19 @@ const withoutSaving = (browser: Model["browser"]): Model["browser"] =>
 const withoutConfirm = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, confirmDelete: undefined });
 
+/**
+ * The blocked notice is open only while a standing blockage holds: once it lifts (the app
+ * was installed, the workspace loaded) the notice goes with it, so a later blockage never
+ * opens a dialog nobody asked for.
+ */
+const withoutStaleNotice = (model: Model): Model =>
+	model.browser.blockedNotice === true && blockage(model)?.kind !== "standing"
+		? {
+				...model,
+				browser: compact({ ...model.browser, blockedNotice: undefined }),
+			}
+		: model;
+
 const withoutAdding = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, addingBank: undefined });
 
@@ -2329,20 +2358,55 @@ const current = (model: Model): Entry | undefined =>
 	model.screen.kind === "editing" ? fileOf(model, model.screen.id) : undefined;
 
 /**
- * Why nothing can be written to GitHub right now, or undefined when it can. One rule
- * for `update`, which refuses on it, and for the view, which says it on the buttons.
+ * Why nothing can be changed on GitHub right now: brief (the app is doing something, and
+ * it will pass) or standing (it stays until someone acts), with what to do about it.
+ * A reason puts its cause first, so a line cut short keeps the useful half, and says
+ * what is true of every write (save, move, delete, update), as it is shown at each.
+ */
+export type Blockage =
+	| { readonly kind: "brief"; readonly reason: string }
+	| {
+			readonly kind: "standing";
+			readonly reason: string;
+			/** What the author can do, in a sentence; absent when the fix says it all. */
+			readonly hint?: string;
+			/** What the app can offer: installing the GitHub App, or loading again. */
+			readonly fix?: "install" | "retryLoad";
+	  };
+
+/**
+ * What blocks writing now, or undefined when nothing does. One rule for `update`, which
+ * refuses on it, and for the view, which says it at the buttons and in the top bar.
  * Before this session's load, `remote` is only "last known, as of each base": a file
  * in conflict would look merely unsaved, so a save then would act on a wrong picture.
  */
-export function writeBlocked(model: Model): string | undefined {
-	if (model.session.kind !== "connected") return "Sign in to save";
-	if (model.session.access.kind === "readOnly") return "Read access only";
+export function blockage(model: Model): Blockage | undefined {
+	const brief = (reason: string): Blockage => ({ kind: "brief", reason });
+	if (model.session.kind !== "connected") return brief("Sign in to save");
+	if (model.session.access.kind === "readOnly")
+		return {
+			kind: "standing",
+			reason:
+				"You have read access only to this repository, so this workspace can't be changed",
+			hint: "Ask its owner for write access.",
+		};
 	if (model.session.access.kind === "notInstalled")
-		return "The app can't save to this workspace";
+		return {
+			kind: "standing",
+			reason:
+				"The QREtools app isn't installed on this repository, so this workspace can't be changed",
+			hint: "Install it there, then try again.",
+			fix: "install",
+		};
 	if (model.updating)
-		return `Bringing ${model.session.defaultBranch} into your branch…`;
-	if (model.loading.kind === "failed") return "The workspace didn't load";
-	if (model.loading.kind !== "loaded") return "Loading the workspace…";
+		return brief(`Bringing ${model.session.defaultBranch} into your branch…`);
+	if (model.loading.kind === "failed")
+		return {
+			kind: "standing",
+			reason: "The workspace didn't load, so it can't be changed",
+			fix: "retryLoad",
+		};
+	if (model.loading.kind !== "loaded") return brief("Loading the workspace…");
 	// One commit at a time: two in flight naming the same file would make the second
 	// look stale for a save that worked. Commits to one branch are serial anyway.
 	if (
@@ -2350,9 +2414,13 @@ export function writeBlocked(model: Model): string | undefined {
 			(a) => a.kind === "saving" || a.kind === "deleting",
 		)
 	)
-		return "Saving…";
+		return brief("Saving…");
 	return undefined;
 }
+
+/** Why nothing can be written to GitHub right now (`blockage`'s reason), or undefined. */
+export const writeBlocked = (model: Model): string | undefined =>
+	blockage(model)?.reason;
 
 /**
  * The bank is on its way from GitHub: what this browser holds is only last known, so
