@@ -8,8 +8,9 @@
  */
 import { type Expr, namesOf } from "../cond/ast.ts";
 import { evaluateCondition, UNKNOWN } from "../cond/eval.ts";
-import { typeOf } from "../cond/type.ts";
+import { type Type, typeOf } from "../cond/type.ts";
 import type { Finding, Range } from "../findings.ts";
+import { selectAllCodes } from "../selectAll.ts";
 import { type Named as BankNamed, definedVariables } from "../surface/draft.ts";
 import type { TextEntry } from "../surface/env.ts";
 import type {
@@ -28,13 +29,43 @@ import type { ParsedInstrument } from "./parse.ts";
 interface Seen {
 	readonly definite: ReadonlySet<string>;
 	readonly possible: ReadonlySet<string>;
+	/** Values that exist on every path, and the roster row they belong to when any. */
+	readonly values: ReadonlyMap<string, Available>;
 }
 
-const NONE: Seen = { definite: new Set(), possible: new Set() };
+interface Available {
+	readonly named: Named;
+	readonly row?: string;
+}
 
-const add = (s: Seen, keys: readonly string[]): Seen => ({
+export interface FillSource {
+	readonly name: string;
+	readonly type: Type;
+}
+
+export interface InstrumentCheck {
+	readonly findings: readonly Finding[];
+	/** Values a fill may read at its exact point in the flow. */
+	readonly fills: Readonly<Record<string, readonly FillSource[]>>;
+}
+
+const NONE: Seen = {
+	definite: new Set(),
+	possible: new Set(),
+	values: new Map(),
+};
+
+const add = (
+	s: Seen,
+	keys: readonly string[],
+	values: readonly Available[] = [],
+): Seen => ({
 	definite: new Set([...s.definite, ...keys]),
 	possible: new Set([...s.possible, ...keys]),
+	values: new Map<string, Available>([
+		...s.values,
+		...values.map((v) => [nameOf(v.named), v] as const),
+	]),
 });
 
 /** After branches: certain only where every branch is, possible where any is. */
@@ -46,6 +77,11 @@ const merge = (branches: readonly Seen[]): Seen => {
 			[...first.definite].filter((k) => rest.every((b) => b.definite.has(k))),
 		),
 		possible: new Set(branches.flatMap((b) => [...b.possible])),
+		values: new Map(
+			[...first.values].filter(([name]) =>
+				rest.every((b) => b.values.has(name)),
+			),
+		),
 	};
 };
 
@@ -56,9 +92,10 @@ const askedKey = (q: QuestionRef): string => `ask:${q.alias}.${q.name}`;
 const recorded = (q: QuestionRef): readonly string[] =>
 	definedVariables(q.evaluation.draft).map((d) => `${q.alias}.${d.name}`);
 
-export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
+export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 	const { draft, names } = parsed;
 	const findings: Finding[] = [];
+	const fills: Record<string, readonly FillSource[]> = {};
 	const say = (f: Finding) => findings.push(f);
 	/** The rosters a step is within, innermost last, and the roster each row's answer belongs to. */
 	const rows: string[] = [];
@@ -160,6 +197,16 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 		switch (node.kind) {
 			case "ask": {
 				const q = node.question;
+				for (const fill of node.fills) {
+					const want = q?.evaluation.draft.fills?.find(
+						(f) => f.name === fill.name,
+					)?.type;
+					fills[fill.path] = available(seen, parsed, rows).flatMap((source) =>
+						fillCompatibility(want, source.type).kind === "compatible"
+							? [source]
+							: [],
+					);
+				}
 				for (const fill of node.fills) read(fill.source, fill.path, seen);
 				// Unresolved, it still records its `as`: the hole already says what's wrong.
 				if (q === undefined)
@@ -187,7 +234,11 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 				// Asked within a roster, the answer is one per row of the innermost.
 				const inner = rows.at(-1);
 				if (inner !== undefined) for (const k of keys) rowOf.set(k, inner);
-				const after = add(seen, keys);
+				const after = add(
+					seen,
+					keys,
+					q === undefined ? [] : outputs(q, parsed, node.as, inner),
+				);
 				// A check reads the answer just given, and what came before.
 				for (const check of node.checks) {
 					read(check.ensure, `${check.path}.ensure`, after);
@@ -343,7 +394,84 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 
 	flow(draft.flow, NONE, false);
 	variableNames(draft, say);
-	return findings;
+	return { findings, fills };
+}
+
+/** Backwards-compatible findings-only view for existing callers. */
+export const checkInstrument = (parsed: ParsedInstrument): readonly Finding[] =>
+	inspectInstrument(parsed).findings;
+
+const nameOf = (named: Named): string => {
+	switch (named.kind) {
+		case "bank":
+			return `${named.alias}.${named.variable}`;
+		case "input":
+			return named.input.name;
+		default:
+			return named.name;
+	}
+};
+
+function available(
+	seen: Seen,
+	parsed: ParsedInstrument,
+	rows: readonly string[],
+): readonly FillSource[] {
+	const inputs = [...parsed.scope.values()].flatMap((n) =>
+		n.kind === "input" ? [{ name: n.input.name, type: n.type }] : [],
+	);
+	const values = [...seen.values.values()].flatMap((v) =>
+		v.row === undefined || rows.includes(v.row)
+			? [{ name: nameOf(v.named), type: v.named.type }]
+			: [],
+	);
+	return [...inputs, ...values].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function outputs(
+	q: QuestionRef,
+	parsed: ParsedInstrument,
+	as: string | undefined,
+	row: string | undefined,
+): readonly Available[] {
+	const bank = parsed.banks[q.alias];
+	const domain = q.evaluation.draft.domain;
+	const type: Type =
+		domain === undefined
+			? { kind: "unknown" }
+			: domain.kind === "number"
+				? { kind: "number" }
+				: domain.kind === "open"
+					? { kind: "string" }
+					: {
+							kind: "code",
+							codes: [...domain.codes, ...(bank?.env.missing ?? [])],
+						};
+	const named = (name: string, valueType: Type): Available => ({
+		named: {
+			kind: "bank",
+			alias: q.alias,
+			variable: name,
+			question: q,
+			type: valueType,
+		},
+		...(row !== undefined && { row }),
+	});
+	if (as !== undefined) return [named(as, type)];
+	return definedVariables(q.evaluation.draft).map((d) =>
+		named(
+			d.name,
+			d.option === undefined
+				? type
+				: {
+						kind: "code",
+						codes: [
+							...(bank === undefined ? [] : selectAllCodes(bank.env.selectAll)),
+							...(bank?.env.missing ?? []),
+						],
+					},
+		),
+	);
 }
 
 /** The key a name is asked or computed under. */
