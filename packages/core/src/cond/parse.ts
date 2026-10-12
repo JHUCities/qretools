@@ -40,7 +40,10 @@ const INFIX: Readonly<Record<string, number>> = {
 };
 const PREFIX = 6;
 
-export function parseCondition(text: string): ParsedCondition {
+export function parseCondition(
+	text: string,
+	functions: readonly Fn[] = FUNCTIONS,
+): ParsedCondition {
 	const tokens = tokenize(text);
 	const problems: Problem[] = [];
 	let at = 0;
@@ -223,17 +226,17 @@ export function parseCondition(text: string): ParsedCondition {
 			name.range,
 			close.kind === ")" ? close.range : (args.at(-1)?.range ?? open.range),
 		);
-		if (!(FUNCTIONS as readonly string[]).includes(name.text)) {
+		if (!(functions as readonly string[]).includes(name.text)) {
 			problems.push({
 				kind: "syntax",
 				message: `\`${name.text}\` isn't a function conditions can use.`,
-				hint: `Functions: ${FUNCTIONS.join(", ")}.`,
+				hint: `Functions: ${functions.join(", ")}.`,
 				range: name.range,
 			});
 			return { kind: "hole", range };
 		}
 		const fn = name.text as Fn;
-		const arity = fn === "isnull" ? 1 : 3;
+		const arity = fn === "isnull" || fn === "label" ? 1 : 3;
 		// Too few is still being written: holes. Too many is a mistake.
 		while (args.length < arity)
 			args.push({ kind: "hole", range: [range[1], range[1]] });
@@ -243,7 +246,9 @@ export function parseCondition(text: string): ParsedCondition {
 				message:
 					fn === "isnull"
 						? "`isnull` takes one value: `isnull(bas.x)`."
-						: "`between` takes a value and two bounds: `between(bas.n, 18, 64)`.",
+						: fn === "label"
+							? "`label` takes one coded answer: `label(selected_neighborhood)`."
+							: "`between` takes a value and two bounds: `between(bas.n, 18, 64)`.",
 				range,
 			});
 		return { kind: "call", fn, args, range };

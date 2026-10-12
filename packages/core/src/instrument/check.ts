@@ -8,6 +8,7 @@
  */
 import { type Expr, namesOf } from "../cond/ast.ts";
 import { evaluateCondition, UNKNOWN } from "../cond/eval.ts";
+import { printCondition } from "../cond/print.ts";
 import { type Type, typeOf } from "../cond/type.ts";
 import type { Finding, Range } from "../findings.ts";
 import { selectAllCodes } from "../selectAll.ts";
@@ -41,6 +42,8 @@ interface Available {
 export interface FillSource {
 	readonly name: string;
 	readonly type: Type;
+	/** What to write at this fill site: a code becomes `label(name)`. */
+	readonly presentation: "value" | "label";
 }
 
 export interface InstrumentCheck {
@@ -207,11 +210,20 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					const want = q?.evaluation.draft.fills?.find(
 						(f) => f.name === fill.name,
 					)?.type;
-					fills[fill.path] = available(seen, parsed, rows).flatMap((source) =>
-						fillCompatibility(want, source.type).kind === "compatible"
-							? [source]
-							: [],
-					);
+					fills[fill.path] = available(seen, parsed, rows).flatMap((source) => {
+						const compatibility = fillCompatibility(want, source.type);
+						return compatibility.kind === "compatible"
+							? [
+									{
+										...source,
+										presentation:
+											compatibility.presentation === "label"
+												? "label"
+												: "value",
+									},
+								]
+							: [];
+					});
 				}
 				for (const fill of node.fills) read(fill.source, fill.path, seen);
 				// Unresolved, it still records its `as`: the hole already says what's wrong.
@@ -407,7 +419,12 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 		for (const fill of node.fills) {
 			const want = declared.find((f) => f.name === fill.name)?.type;
 			if (fill.source === undefined) continue;
-			const { type } = typeOf(fill.source.expr, (n) => names.get(n)?.type);
+			const value =
+				fill.presentation === "label" && fill.source.expr.kind === "call"
+					? fill.source.expr.args[0]
+					: fill.source.expr;
+			if (value === undefined) continue;
+			const { type } = typeOf(value, (n) => names.get(n)?.type);
 			const compatibility = fillCompatibility(want, type);
 			if (compatibility.kind === "incompatible")
 				say({
@@ -415,7 +432,20 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					severity: "error",
 					path: fill.path,
 					message: `\`${fill.name}\` is a number fill, so it needs a number to fill it.`,
-					range: fill.source.expr.range,
+					range: value.range,
+				});
+			if (
+				want === "text" &&
+				type.kind === "code" &&
+				fill.presentation !== "label"
+			)
+				say({
+					code: "type",
+					severity: "error",
+					path: fill.path,
+					message: `\`${fill.name}\` is text, so a coded answer needs its respondent-facing label.`,
+					hint: `Write \`label(${printCondition(value)})\`.`,
+					range: value.range,
 				});
 		}
 	};
@@ -446,11 +476,19 @@ function available(
 	rows: readonly string[],
 ): readonly FillSource[] {
 	const inputs = [...parsed.scope.values()].flatMap((n) =>
-		n.kind === "input" ? [{ name: n.input.name, type: n.type }] : [],
+		n.kind === "input"
+			? [{ name: n.input.name, type: n.type, presentation: "value" as const }]
+			: [],
 	);
 	const values = [...seen.values.values()].flatMap((v) =>
 		v.row === undefined || rows.includes(v.row)
-			? [{ name: nameOf(v.named), type: v.named.type }]
+			? [
+					{
+						name: nameOf(v.named),
+						type: v.named.type,
+						presentation: "value" as const,
+					},
+				]
 			: [],
 	);
 	const all = [...inputs, ...values];

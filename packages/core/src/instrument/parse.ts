@@ -15,7 +15,13 @@ import {
 	type YAMLMap,
 	type Node as YamlNode,
 } from "yaml";
-import { holesOf, moveRanges, namesOf, type Problem } from "../cond/ast.ts";
+import {
+	FILL_FUNCTIONS,
+	holesOf,
+	moveRanges,
+	namesOf,
+	type Problem,
+} from "../cond/ast.ts";
 import { KEYWORDS } from "../cond/lex.ts";
 import { parseCondition } from "../cond/parse.ts";
 import { type Type, typeCondition, typeOf } from "../cond/type.ts";
@@ -179,7 +185,7 @@ export const EXPRESSIONS = {
 } as const satisfies Readonly<
 	Record<string, Readonly<Record<string, "condition" | "value">>>
 >;
-export const FILL_SOURCE = "value";
+export const FILL_SOURCE = "fill";
 const ORDERS: readonly Order[] = ["random", "rotate"];
 
 /**
@@ -1473,7 +1479,7 @@ function readCond(
 	node: unknown,
 	path: string,
 	ctx: Context,
-	as: "condition" | "value",
+	as: "condition" | "value" | "fill",
 	compute?: { readonly name: string; readonly path: string },
 	/** A value that must be a number (a roster's `count`). */
 	want?: "number",
@@ -1512,7 +1518,10 @@ function readCond(
 		return undefined;
 	}
 	const text = String(node.value);
-	const parsed = parseCondition(text);
+	const parsed = parseCondition(
+		text,
+		as === "fill" ? FILL_FUNCTIONS : undefined,
+	);
 	const at = scalarMap(ctx.source, node as Scalar, text);
 	// `index` is the innermost roster's row number: read as `<roster>.index` from here on.
 	const rows = [...ctx.rows];
@@ -1764,18 +1773,32 @@ function readFills(
 				),
 			);
 		const source = readCond(pair.value, at, ctx, FILL_SOURCE);
-		// "Which answer fills it": one name. An expression would need a computed value first.
-		if (source !== undefined && source.expr.kind !== "name")
+		const labelSource =
+			source?.expr.kind === "call" && source.expr.fn === "label"
+				? source.expr.args[0]
+				: undefined;
+		const presentation = labelSource === undefined ? undefined : "label";
+		// A fill binds one value; `label(name)` is the one deliberate projection.
+		if (
+			source !== undefined &&
+			source.expr.kind !== "name" &&
+			!(presentation === "label" && labelSource?.kind === "name")
+		)
 			ctx.say(
 				problem(
 					"not-yet",
 					"error",
 					at,
-					"A fill is filled by one answer or input, named.",
-					"Compute the value first (`compute:`), then fill with its name.",
+					"A fill is filled by one answer or input, named; a coded answer may use `label(name)`.",
+					"Compute another value first (`compute:`), then fill with its name.",
 				),
 			);
-		bindings.push({ name, path: at, ...(source !== undefined && { source }) });
+		bindings.push({
+			name,
+			path: at,
+			...(source !== undefined && { source }),
+			...(presentation !== undefined && { presentation }),
+		});
 	}
 	for (const f of declared)
 		if (!bindings.some((b) => b.name === f.name))
