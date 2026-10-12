@@ -109,6 +109,43 @@ describe("the token getter, through the effects", () => {
 	});
 });
 
+describe("recovery persistence", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+	});
+
+	it("reports browser storage refusing unsaved work", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("sessionStorage", {
+			setItem: () => {
+				throw new DOMException("quota", "QuotaExceededError");
+			},
+		});
+		const effects = createEffects({
+			makeStore: () => ({}) as Store,
+			credentialStore: { load: () => null, save: () => {}, clear: () => {} },
+		});
+		const got: Msg[] = [];
+		effects.exec(
+			{
+				kind: "persist",
+				work: {
+					version: 7,
+					repo: "o/r",
+					nextId: 1,
+					questions: [],
+					schemes: [],
+					workspace: [],
+				},
+			},
+			(m) => got.push(m),
+		);
+		await vi.advanceTimersByTimeAsync(300);
+		expect(got).toEqual([{ kind: "persistenceFailed" }]);
+	});
+});
+
 describe("reading the banks in other repositories that instruments use", () => {
 	beforeEach(() => vi.useFakeTimers());
 	afterEach(() => vi.useRealTimers());

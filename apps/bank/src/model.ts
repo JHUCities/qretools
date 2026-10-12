@@ -313,6 +313,10 @@ export interface Model {
 	/** Per file; content never carries it, so marking a scale "saving" leaves the environment alone. */
 	readonly activity: Readonly<Record<Id, Activity>>;
 	readonly nextId: Id;
+	/** The next identity for a request that may answer after the author's intent moved on. */
+	readonly nextRequest: number;
+	/** The request currently entitled to answer each asynchronous operation. */
+	readonly requests: Readonly<Record<string, number>>;
 	readonly screen: Screen;
 	readonly browser: Browser;
 	readonly session: Session;
@@ -478,7 +482,11 @@ export type Msg =
 	| {
 			readonly kind: "connected";
 			readonly result: Result<Who, Failure>;
+			/** The connect command this answers; absent only in direct reducer tests. */
+			readonly request?: number;
 	  }
+	/** Browser storage refused the recovery snapshot (for example, quota was reached). */
+	| { readonly kind: "persistenceFailed" }
 	/** The tab is shown again, or its window has focus again: the author is back. */
 	| { readonly kind: "tabShown" }
 	/** "Try again" where a permission blocks writing: ask GitHub what the app may do now. */
@@ -494,6 +502,8 @@ export type Msg =
 	| {
 			readonly kind: "workspaceLoaded";
 			readonly result: Result<LoadedWorkspace, Failure>;
+			/** The load command this answers; absent only in direct reducer tests. */
+			readonly request?: number;
 	  }
 	/** Read the bank again, as the same session: a retry after a failed load. */
 	| { readonly kind: "bankReloadRequested" }
@@ -551,7 +561,12 @@ export type Cmd =
 	| { readonly kind: "applyTheme"; readonly theme: ThemeChoice }
 	/** Work leaving this tab (someone else's, or another bank's): kept in the browser, never dropped. */
 	| { readonly kind: "setAside"; readonly work: Work }
-	| { readonly kind: "connect"; readonly repo: BankRef }
+	| {
+			readonly kind: "connect";
+			readonly repo: BankRef;
+			/** Echoed by its reply, so an earlier chosen repository cannot win. */
+			readonly request?: number;
+	  }
 	/**
 	 * Ask GitHub what the app may do in the bank now, for the session of `login`, changing
 	 * nothing else: the answer comes back as `accessChecked`.
@@ -562,7 +577,12 @@ export type Cmd =
 			readonly login: string;
 	  }
 	/** Read every file of the workspace, from the author's branch or, before it exists, the bank's. */
-	| { readonly kind: "loadWorkspace"; readonly target: BranchTarget }
+	| {
+			readonly kind: "loadWorkspace";
+			readonly target: BranchTarget;
+			/** Echoed by its reply, so an older load cannot replace a newer one. */
+			readonly request?: number;
+	  }
 	| { readonly kind: "updateFromDefault"; readonly target: BranchTarget }
 	/** Take the link out of the address, adding no history entry and loading nothing. */
 	| { readonly kind: "clearLink" }
@@ -701,6 +721,8 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		remote: remoteOfBases(local),
 		activity: {},
 		nextId: stored?.nextId ?? 1,
+		nextRequest: flags.hasToken ? 2 : 1,
+		requests: flags.hasToken ? { connect: 1 } : {},
 		screen: { kind: "blank" },
 		browser: { filter: "", expanded: [] },
 		session: flags.hasToken ? { kind: "connecting" } : { kind: "anonymous" },
@@ -721,8 +743,8 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		[
 			{ kind: "loadDdiSchema" },
 			...(flags.hasToken
-				? [{ kind: "connect", repo } as const]
-				: model.local !== opened.local
+				? [{ kind: "connect", repo, request: 1 } as const]
+				: model.local !== opened.local || stored !== undefined
 					? [{ kind: "persist", work: toWork(model) } as const]
 					: []),
 		],
@@ -775,6 +797,7 @@ export function signedOut(model: Model): Model {
 		banks: banksOfLocal(local),
 		remoteBanks: {},
 		remote: remoteOfBases(local),
+		requests: {},
 		activity: {},
 		loading: { kind: "bundled" } as const,
 		screen: { kind: "blank" } as const,
@@ -910,9 +933,11 @@ export const toWork = (model: Model): Work => ({
 	repo: bankText(model.settings),
 	...(model.author !== undefined && { login: model.author }),
 	nextId: model.nextId,
-	questions: Object.values(model.local.questions),
-	schemes: Object.values(model.local.schemes),
-	workspace: Object.values(model.local.workspace),
+	// GitHub reloads clean files. Recovery storage needs only work that exists nowhere
+	// else: drafts and edits, with their bases retained for conflict detection.
+	questions: Object.values(model.local.questions).filter(ownWork),
+	schemes: Object.values(model.local.schemes).filter(ownWork),
+	workspace: Object.values(model.local.workspace).filter(ownWork),
 });
 
 /** Whether a login is someone other than the author of the work in hand. GitHub's names ignore case. */
