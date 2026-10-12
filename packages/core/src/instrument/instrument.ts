@@ -10,7 +10,7 @@ import { type Finding, inDocumentOrder, type Range } from "../findings.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
 import type { Livelit } from "../surface/livelits.ts";
-import { checkInstrument } from "./check.ts";
+import { inspectInstrument } from "./check.ts";
 import type { InstrumentDraft, Use } from "./draft.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
 import { instrumentLivelits } from "./livelits.ts";
@@ -56,6 +56,7 @@ export function instrumentOf(
 	context: InstrumentContext,
 ): Instrument {
 	const parsed = parseInstrument(source, context.banks, context.unresolved);
+	const checked = inspectInstrument(parsed);
 	const { document, collisions } = instrumentDocument(
 		elaborateInstrument(parsed, {
 			agency: context.agency ?? UNDECLARED_AGENCY,
@@ -111,7 +112,7 @@ export function instrumentOf(
 		findings: inDocumentOrder(
 			[
 				...parsed.findings,
-				...checkInstrument(parsed),
+				...checked.findings,
 				...clashes,
 				...agency,
 				...banksWithout,
@@ -122,7 +123,7 @@ export function instrumentOf(
 		ddi: document,
 		collisions,
 		refs: instrumentRefs(parsed, source),
-		livelits: instrumentLivelits(source, parsed),
+		livelits: instrumentLivelits(source, parsed, checked.fills),
 	};
 }
 
