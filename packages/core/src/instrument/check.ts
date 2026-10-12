@@ -21,6 +21,7 @@ import type {
 	QuestionRef,
 	UniverseRef,
 } from "./draft.ts";
+import { fillCompatibility } from "./fills.ts";
 import type { ParsedInstrument } from "./parse.ts";
 
 /** What has been asked or computed on the way to a step: for certain, or on some path. */
@@ -321,14 +322,15 @@ export function checkInstrument(parsed: ParsedInstrument): readonly Finding[] {
 			});
 	};
 
-	/** A number fill needs a number; a text fill takes anything, a code shown as its label. */
+	/** A fill's declared parameter type governs what may be bound at this ask. */
 	const fillTypes = (node: Extract<Node, { kind: "ask" }>) => {
 		const declared = node.question?.evaluation.draft.fills ?? [];
 		for (const fill of node.fills) {
 			const want = declared.find((f) => f.name === fill.name)?.type;
-			if (want !== "number" || fill.source === undefined) continue;
+			if (fill.source === undefined) continue;
 			const { type } = typeOf(fill.source.expr, (n) => names.get(n)?.type);
-			if (type.kind !== "number" && type.kind !== "unknown")
+			const compatibility = fillCompatibility(want, type);
+			if (compatibility.kind === "incompatible")
 				say({
 					code: "type",
 					severity: "error",
