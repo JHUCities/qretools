@@ -175,6 +175,13 @@ export type Fix =
 			readonly label: string;
 			readonly path: string;
 			readonly code: string;
+	  }
+	| {
+			/** Add one declared question fill to this `ask` map. */
+			readonly kind: "fill";
+			readonly label: string;
+			readonly path: string;
+			readonly name: string;
 	  };
 
 export const holes = (findings: readonly Finding[]): readonly Finding[] =>
