@@ -28,6 +28,7 @@ import {
 import { remoteBlob, syncOf } from "./sync.js";
 import {
 	bankLoading,
+	blockage,
 	branchOwner,
 	movedPath,
 	moveProblem,
@@ -1948,9 +1949,118 @@ describe("the app not installed on the repository", () => {
 			},
 		);
 		expect(after.session).toMatchObject({ access: { kind: "notInstalled" } });
-		expect(writeBlocked(after)).toMatch(/can't save to this workspace/);
-		expect(sessionStatus(after)).toMatch(/can't save to this workspace/);
+		// The cause first, then what follows from it, for every write.
+		const said =
+			"The QREtools app isn't installed on this repository, so this workspace can't be changed";
+		expect(writeBlocked(after)).toBe(said);
+		expect(sessionStatus(after)).toBe(said);
 		expect(update(after, { kind: "saveRequested", id: 1 })[1]).toEqual([]);
+	});
+});
+
+describe("why writing is blocked, and what to do", () => {
+	const base = () => connected(fresh());
+	const session = (m: Model) =>
+		m.session as Extract<Model["session"], { kind: "connected" }>;
+	const notInstalled = (m: Model): Model => ({
+		...m,
+		session: { ...session(m), access: { kind: "notInstalled" } },
+	});
+	const failed = (m: Model): Model => ({
+		...m,
+		loading: { kind: "failed", failure: { kind: "network", message: "x" } },
+	});
+	const tried = (m: Model) => update(m, { kind: "blockedActionTried" })[0];
+
+	it("tells a reason that stands, with its fix, from one that passes", () => {
+		expect(blockage(base())).toBeUndefined();
+		expect(blockage(notInstalled(base()))).toMatchObject({
+			kind: "standing",
+			hint: "Install it there, then try again.",
+			fix: "install",
+		});
+		expect(blockage(connected(fresh(), false))).toEqual({
+			kind: "standing",
+			reason:
+				"You have read access only to this repository, so this workspace can't be changed",
+			hint: "Ask its owner for write access.",
+		});
+		expect(blockage(failed(base()))).toMatchObject({
+			kind: "standing",
+			fix: "retryLoad",
+		});
+		for (const m of [
+			{ ...base(), loading: { kind: "loading" } as const },
+			{ ...base(), activity: { 1: { kind: "saving" } as const } },
+		])
+			expect(blockage(m)?.kind).toBe("brief");
+	});
+
+	it("opens its notice when a blocked write is tried, only for a reason that stands", () => {
+		expect(tried(notInstalled(base())).browser.blockedNotice).toBe(true);
+		const saving: Model = { ...base(), activity: { 1: { kind: "saving" } } };
+		expect(tried(saving)).toBe(saving);
+		expect(tried(base()).browser.blockedNotice).toBeUndefined();
+		const open = tried(notInstalled(base()));
+		expect(
+			update(open, { kind: "blockedNoticeClosed" })[0].browser.blockedNotice,
+		).toBeUndefined();
+	});
+
+	it("closes on Try again whether or not it works: a reason still standing is said in the top bar", () => {
+		const open = tried(notInstalled(base()));
+		const [asking] = update(open, {
+			kind: "connectRequested",
+			settings: open.settings,
+		});
+		// Asking is brief, so the notice goes; the app still isn't installed.
+		expect(asking.browser.blockedNotice).toBeUndefined();
+		const [still] = update(asking, {
+			kind: "connected",
+			result: {
+				ok: true,
+				value: {
+					login: session(open).login,
+					avatarUrl: "https://a/x",
+					access: { kind: "notInstalled" },
+					defaultBranch: "main",
+				},
+			},
+		});
+		expect(blockage(still)).toMatchObject({ kind: "standing", fix: "install" });
+		expect(still.browser.blockedNotice).toBeUndefined();
+		// The next press explains it again.
+		expect(tried(still).browser.blockedNotice).toBe(true);
+	});
+
+	it("closes the notice once the reason lifts, so a later one opens nothing unasked", () => {
+		const open = tried(notInstalled(base()));
+		// The app was installed: "Try again" asks GitHub again, and finds write access.
+		const [asking] = update(open, {
+			kind: "connectRequested",
+			settings: open.settings,
+		});
+		const [again] = update(asking, {
+			kind: "connected",
+			result: {
+				ok: true,
+				value: {
+					login: session(open).login,
+					avatarUrl: "https://a/x",
+					access: { kind: "write" },
+					defaultBranch: "main",
+				},
+			},
+		});
+		expect(again.session).toMatchObject({ access: { kind: "write" } });
+		expect(again.browser.blockedNotice).toBeUndefined();
+		// A load that fails later is said in the top bar, with no dialog until a click.
+		const [later] = update(failed(again), {
+			kind: "edited",
+			text: "name: q\n",
+		});
+		expect(blockage(later)?.kind).toBe("standing");
+		expect(later.browser.blockedNotice).toBeUndefined();
 	});
 });
 

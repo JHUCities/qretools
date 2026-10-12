@@ -18,6 +18,7 @@ import {
 	LinkButton,
 	Spinner,
 	Stack,
+	Tooltip,
 	Truncate,
 	VisuallyHidden,
 } from "@primer/react";
@@ -69,6 +70,7 @@ import {
 import {
 	bankAddProblem,
 	bankLoading,
+	blockage,
 	compareUrl,
 	folderOfPath,
 	instrumentNameProblem,
@@ -88,6 +90,7 @@ import {
 	useInstrumentUses,
 	useModel,
 } from "./AppContext.js";
+import { BlockedDialog } from "./BlockedDialog.js";
 import { BankFilter, type BankTree, Browser, bankLabel } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { type FileKind, FileSkeleton } from "./FileSkeleton.js";
@@ -345,6 +348,7 @@ export function App() {
 	const naming = model.browser.naming;
 	const namingInstrument = model.browser.namingInstrument;
 	const addingBank = model.browser.addingBank;
+	const blocking = blockage(model);
 	const moving = model.browser.moving;
 	const movingQuestion =
 		moving === undefined ? undefined : model.local.questions[moving.id];
@@ -675,6 +679,19 @@ export function App() {
 					dispatch={dispatch}
 				/>
 			)}
+			{model.browser.blockedNotice === true &&
+				blocking?.kind === "standing" && (
+					<BlockedDialog
+						blockage={blocking}
+						installHref={
+							signInConfig?.appSlug === undefined
+								? undefined
+								: installUrl(signInConfig.appSlug)
+						}
+						settings={model.settings}
+						dispatch={dispatch}
+					/>
+				)}
 			{addingBank && (
 				<AddBankDialog
 					adding={addingBank}
@@ -847,6 +864,52 @@ function Account({ model }: { model: Model }) {
 }
 
 /**
+ * "Update", which brings the default branch into the author's: a write, so while writing
+ * is blocked it is inactive and says why as a file's write buttons do (a standing reason
+ * as its tooltip and, pressed, its notice; a brief one by the top bar's line).
+ */
+function UpdateButton({
+	blocked,
+	standing,
+	from,
+	dispatch,
+}: {
+	blocked: string | undefined;
+	standing: boolean;
+	from: string;
+	dispatch: Dispatch;
+}) {
+	const button = (
+		<Button
+			size="small"
+			inactive={blocked !== undefined}
+			aria-disabled={blocked !== undefined || undefined}
+			aria-describedby={
+				blocked === undefined || standing ? undefined : SESSION_STATUS
+			}
+			onClick={() =>
+				dispatch({
+					kind:
+						blocked === undefined
+							? "updateFromDefaultRequested"
+							: "blockedActionTried",
+				})
+			}
+		>
+			Update
+			<VisuallyHidden> from {from}</VisuallyHidden>
+		</Button>
+	);
+	return blocked !== undefined && standing ? (
+		<Tooltip text={blocked} type="description">
+			{button}
+		</Tooltip>
+	) : (
+		button
+	);
+}
+
+/**
  * The author's branch above the tree, then how it stands against the default branch:
  * behind it, with "Update" to bring its changes in (a merge on GitHub; a conflict is
  * left to a pull request), and anything to propose, as a link to the pull request
@@ -928,20 +991,12 @@ function BranchLine({ model }: { model: Model }) {
 					</ExternalLink>
 					{/* Only once the branch exists: the first save makes it up to date. */}
 					{exists && (
-						<Button
-							size="small"
-							inactive={blocked !== undefined}
-							aria-describedby={
-								blocked === undefined ? undefined : SESSION_STATUS
-							}
-							onClick={() =>
-								blocked === undefined &&
-								dispatch({ kind: "updateFromDefaultRequested" })
-							}
-						>
-							Update
-							<VisuallyHidden> from {session.defaultBranch}</VisuallyHidden>
-						</Button>
+						<UpdateButton
+							blocked={blocked}
+							standing={blockage(model)?.kind === "standing"}
+							from={session.defaultBranch}
+							dispatch={dispatch}
+						/>
 					)}
 				</div>
 			)}

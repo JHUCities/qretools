@@ -34,14 +34,14 @@ const FILES = [
 	),
 ];
 
-function renderWorkspace(files = FILES) {
+function renderWorkspace(files = FILES, access = { kind: "write" }) {
 	const store = {
 		whoAmI: () =>
 			Promise.resolve(
 				ok({
 					login: "me",
 					avatarUrl: "https://a/me",
-					access: { kind: "write" },
+					access,
 					defaultBranch: "main",
 				}),
 			),
@@ -491,5 +491,72 @@ describe("a fix in the Findings list", () => {
 			q.source.startsWith("name: alpha"),
 		);
 		expect(alpha?.source).toMatch(/\nvariant_of:\n {2}beta:\n$/);
+	});
+});
+
+describe("a write the session can't make", () => {
+	const REASON =
+		"The QREtools app isn't installed on this repository, so this workspace can't be changed";
+	const openAlpha = async () => {
+		const app = renderWorkspace(FILES, { kind: "notInstalled" });
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^t\b/ }));
+		fireEvent.click(screen.getByRole("treeitem", { name: /^alpha/ }));
+		await act(async () => {});
+		return app;
+	};
+	const describedBy = (el: HTMLElement) =>
+		(el.getAttribute("aria-describedby") ?? "")
+			.split(" ")
+			.map((id) => document.getElementById(id)?.textContent ?? "")
+			.join(" ")
+			.trim();
+
+	it("is said in full in the top bar, and at the button as its description", async () => {
+		await openAlpha();
+		expect(document.getElementById("session-status")?.textContent).toBe(REASON);
+		const remove = screen.getByRole("button", { name: "Delete…" });
+		expect(remove.getAttribute("aria-disabled")).toBe("true");
+		expect(describedBy(remove)).toBe(REASON);
+	});
+
+	it("opens a notice with the reason and what to do when the button is pressed", async () => {
+		const app = await openAlpha();
+		fireEvent.click(screen.getByRole("button", { name: "Delete…" }));
+		const dialog = await screen.findByRole("dialog", {
+			name: "This workspace can't be changed",
+		});
+		expect(dialog.textContent).toContain(
+			`${REASON}. Install it there, then try again.`,
+		);
+		expect(
+			within(dialog).getByRole("button", { name: "Try again" }),
+		).toBeTruthy();
+		// Nothing was asked of GitHub, and nothing confirmed: the file is still there.
+		expect(app.store.getState().model.browser.confirmDelete).toBeUndefined();
+		fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+		await act(async () => {});
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
+	it("says nothing at a Save with nothing to save, and the reason once there is", async () => {
+		const app = await openAlpha();
+		const save = screen.getByRole("button", { name: "Save" });
+		fireEvent.click(save);
+		await act(async () => {});
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(describedBy(save)).toBe("");
+		act(() =>
+			app.dispatch({ kind: "edited", text: `${QUESTION("alpha")}note: n\n` }),
+		);
+		await act(async () => {});
+		const unsaved = screen.getByRole("button", { name: "Save" });
+		expect(describedBy(unsaved)).toBe(REASON);
+		fireEvent.click(unsaved);
+		expect(
+			await screen.findByRole("dialog", {
+				name: "This workspace can't be changed",
+			}),
+		).toBeTruthy();
 	});
 });

@@ -7,14 +7,15 @@ import {
 	Label,
 	PageHeader,
 	Stack,
+	Tooltip,
 	Truncate,
 	VisuallyHidden,
 } from "@primer/react";
 import { plainText, UNNAMED } from "@qretools/core";
 import { failureDescription } from "@qretools/shell/ui";
-import { useId } from "react";
+import { type ReactElement, useId } from "react";
 import type { Activity, Entry } from "../model.js";
-import { SESSION_STATUS } from "./AppContext.js";
+import { SESSION_STATUS, useBlocked } from "./AppContext.js";
 
 export interface HeaderActions {
 	readonly save: () => void;
@@ -67,16 +68,33 @@ export function FileHeader({
 	const saving = activity?.kind === "saving";
 	const nothing = !unsaved && also.length === 0;
 	const alsoText = `Also saves ${also.join(", ")}.`;
-	// Why a write cannot happen now is the session's (the top bar says it); the
-	// header says only what is this file's own: which unsaved shared files a save
-	// takes along. Nothing to save needs no explanation.
-	const why = canWrite ? undefined : SESSION_STATUS;
-	// An inactive button stays focusable and announced; its click does nothing.
+	// Why a write cannot happen now is the session's, and the top bar says it in full.
+	// At the button it is said on demand: a reason that stands is the button's tooltip,
+	// and a press opens its notice (why, and what to do); a brief one (loading, saving)
+	// passes by itself, so the button only names the top bar's line as its description.
+	// The header says of its own only which unsaved shared files a save takes along.
+	// Nothing to save needs no explanation.
+	const { standing, tried } = useBlocked();
+	const why = canWrite || standing ? undefined : SESSION_STATUS;
+	/** An inactive button, with its standing reason as a tooltip (Primer's, a description). */
+	const explained = (inactive: boolean, button: ReactElement): ReactElement =>
+		inactive && standing && blocked !== undefined ? (
+			<Tooltip text={blocked} type="description">
+				{button}
+			</Tooltip>
+		) : (
+			button
+		);
+	// An inactive button stays focusable and announced. Pressed, a blocked one asks for
+	// its reason; one with nothing to do does nothing.
 	const when =
-		(ok: boolean, f: () => void): (() => void) =>
+		(ok: boolean, f: () => void, blockedNow = !canWrite): (() => void) =>
 		() => {
 			if (ok) f();
+			else if (blockedNow) tried();
 		};
+	const cantRemove = q.base !== undefined && !canWrite;
+	const cantSave = !canWrite && !nothing;
 	return (
 		<div className="qhead">
 			<PageHeader>
@@ -137,42 +155,50 @@ export function FileHeader({
 							Rename…
 						</Button>
 					)}
-					{on.move !== undefined && (
+					{on.move !== undefined &&
+						explained(
+							!canWrite,
+							<Button
+								size="small"
+								inactive={!canWrite}
+								aria-disabled={!canWrite || undefined}
+								aria-describedby={why}
+								onClick={when(canWrite, on.move)}
+							>
+								Move…
+							</Button>,
+						)}
+					{explained(
+						cantRemove,
 						<Button
 							size="small"
-							inactive={!canWrite}
-							aria-disabled={!canWrite || undefined}
-							aria-describedby={why}
-							onClick={when(canWrite, on.move)}
+							variant="danger"
+							leadingVisual={TrashIcon}
+							inactive={cantRemove}
+							aria-disabled={cantRemove || undefined}
+							aria-describedby={cantRemove ? why : undefined}
+							loading={activity?.kind === "deleting"}
+							loadingAnnouncement="Deleting"
+							onClick={when(!cantRemove, on.remove, cantRemove)}
 						>
-							Move…
-						</Button>
+							Delete…
+						</Button>,
 					)}
-					<Button
-						size="small"
-						variant="danger"
-						leadingVisual={TrashIcon}
-						inactive={q.base !== undefined && !canWrite}
-						aria-disabled={(q.base !== undefined && !canWrite) || undefined}
-						aria-describedby={why}
-						loading={activity?.kind === "deleting"}
-						loadingAnnouncement="Deleting"
-						onClick={when(q.base === undefined || canWrite, on.remove)}
-					>
-						Delete…
-					</Button>
-					<Button
-						size="small"
-						variant="primary"
-						inactive={!canWrite || nothing}
-						aria-disabled={!canWrite || nothing || undefined}
-						aria-describedby={why ?? (also.length > 0 ? statusId : undefined)}
-						loading={saving}
-						loadingAnnouncement="Saving"
-						onClick={when(canWrite && !nothing && !saving, on.save)}
-					>
-						Save
-					</Button>
+					{explained(
+						cantSave,
+						<Button
+							size="small"
+							variant="primary"
+							inactive={!canWrite || nothing}
+							aria-disabled={!canWrite || nothing || undefined}
+							aria-describedby={why ?? (also.length > 0 ? statusId : undefined)}
+							loading={saving}
+							loadingAnnouncement="Saving"
+							onClick={when(canWrite && !nothing && !saving, on.save, cantSave)}
+						>
+							Save
+						</Button>,
+					)}
 				</PageHeader.Actions>
 			</PageHeader>
 			{activity?.kind === "failed" && (
