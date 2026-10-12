@@ -447,6 +447,33 @@ describe("a quick fix", () => {
 		).toBe(inline);
 	});
 
+	it("reads how a bank stores select-all answers from its details, as they are typed", () => {
+		const m = update(fresh(), {
+			kind: "schemeCreateOpened",
+			scheme: "bank",
+			bank: "",
+		})[0];
+		expect(envIn(m, "").selectAll.chosen).toEqual({ code: "1", label: "Yes" });
+		const typed = update(m, {
+			kind: "edited",
+			text: 'agency: org.example\nselect_all:\n  chosen: { "1": Selected }\n  not_chosen: { "2": Not selected }\n',
+		})[0];
+		expect(envIn(typed, "").selectAll).toEqual({
+			chosen: { code: "1", label: "Selected" },
+			notChosen: { code: "2", label: "Not selected" },
+			first: "chosen",
+		});
+		// Half-written, the usual coding stays in effect.
+		const half = update(typed, {
+			kind: "edited",
+			text: 'agency: org.example\nselect_all:\n  chosen: { "1": Selected }\n',
+		})[0];
+		expect(envIn(half, "").selectAll.notChosen).toEqual({
+			code: "0",
+			label: "No",
+		});
+	});
+
 	it("writes a bank's required fields chosen in its details' checklist", () => {
 		const m = update(fresh(), {
 			kind: "schemeCreateOpened",

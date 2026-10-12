@@ -32,7 +32,13 @@ const SELECT_ALL =
 	'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n  "b": B\n';
 
 const ddi = (source: string, versioning?: Versioning) =>
-	elaborate(parseSurface(source, ENV).draft, AGENCY, ENV.missing, versioning);
+	elaborate(
+		parseSurface(source, ENV).draft,
+		AGENCY,
+		ENV.missing,
+		ENV.selectAll,
+		versioning,
+	);
 const only = (doc: DdiDocument, type: ItemType): JsonObject[] =>
 	Object.values(doc[type] ?? {});
 const refVersion = (r: unknown): unknown =>
@@ -51,7 +57,7 @@ const VERSIONS: Versioning = {
 		"universes/adults.yaml": { number: "5" },
 		"instructions/select_one.yaml": { number: "6" },
 		"missing.yaml": { number: "7" },
-		"scales/yesno01.yaml": { number: "8" },
+		"bank.yaml": { number: "8" },
 	},
 };
 
@@ -132,11 +138,11 @@ describe("DDI versions", () => {
 		expect(validate(doc)).toEqual([]);
 	});
 
-	it("the binary scale of a select-all question takes the bank's file's version", () => {
+	it("the list a select-all option is coded on takes the version of the bank's own file, where it's written", () => {
 		const doc = ddi(SELECT_ALL, VERSIONS);
 		expect(validate(doc)).toEqual([]);
 		const binary = only(doc, "CodeList").find(
-			(l) => l.ID === "scale-yesno01.codes",
+			(l) => l.ID === "select-all.codes",
 		);
 		expect(binary?.Version).toBe("8");
 		for (const v of only(doc, "Variable"))

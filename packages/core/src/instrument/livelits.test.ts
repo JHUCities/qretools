@@ -232,4 +232,33 @@ describe("a checklist at each set of codes in a condition", () => {
 			reason: "Nothing is named `nope` here.",
 		});
 	});
+
+	it("offers a select-all option's variable the bank's own two values, with the missing codes", () => {
+		const recoded = bankOf({
+			"bank.yaml":
+				'agency: org.example\nselect_all:\n  chosen: { "Y": Selected }\n  not_chosen: { "N": Not selected }\n',
+			"missing.yaml": 'labels:\n  "-8": Refused\n',
+			"questions/m/modes.yaml":
+				'name: modes\ntext: How do you travel?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
+		});
+		const text = `${HEADER}  - stop: bas.modes_b in {"Y"}\n`;
+		expect(codeChoices(text, { bas: recoded }, "bas.modes_b")).toEqual([
+			{ name: "Y", detail: "Selected" },
+			{ name: "N", detail: "Not selected" },
+			{ name: "-8", detail: "Refused" },
+		]);
+		// A condition written for the usual coding is told once the bank says another.
+		const old = `${HEADER}  - ask: bas.modes\n  - stop: bas.modes_b = "1"\n`;
+		const findings = (bank: typeof recoded) =>
+			instrumentOf(old, { banks: { bas: bank } })
+				.findings.filter((f) => f.path === "flow.2.stop")
+				.map((f) => f.code);
+		expect(findings(recoded)).toEqual(["type"]);
+		const usual = bankOf({
+			"bank.yaml": "agency: org.example\n",
+			"questions/m/modes.yaml":
+				'name: modes\ntext: How do you travel?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
+		});
+		expect(findings(usual)).toEqual([]);
+	});
 });

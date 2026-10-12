@@ -67,7 +67,7 @@ function view(m: Model) {
 		})),
 		shared: schemeSections(
 			m,
-			(e) => evaluateScheme(e.kind, e.source, envFor(e.bank), e.name),
+			(e) => evaluateScheme(e.kind, e.source, envFor(e.bank)),
 			indexFor(""),
 			"",
 		).map((s) => ({

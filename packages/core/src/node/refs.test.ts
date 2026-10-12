@@ -116,9 +116,9 @@ describe("the codes a condition compares a bank answer with", () => {
 			'name: news\ntext: Which?\nintent: Which.\nselect: many\nresponses:\n  "1": Paper\n  "2": Radio\n',
 	});
 	/** The code refs (and an input's own code) in `cond`, as written, in document order. */
-	const codes = (cond: string) => {
+	const codes = (cond: string, bank = b) => {
 		const source = `name: x\nuses:\n  b: ./b\ninputs:\n  form:\n    responses:\n      "1": Form 1\nflow:\n  - stop: '${cond}'\n`;
-		return instrumentOf(source, { banks: { b } })
+		return instrumentOf(source, { banks: { b: bank } })
 			.refs.filter((r) => r.kind === "code" || r.range[0] !== r.range[1])
 			.filter(
 				(r) =>
@@ -176,13 +176,27 @@ describe("the codes a condition compares a bank answer with", () => {
 		]);
 	});
 
-	it("follows a select-all option's code to the binary scale", () => {
-		expect(codes('b.news_1 = "1"')).toEqual([
+	it("follows a select-all option's code to where the bank's own file says it, when it does", () => {
+		// The usual coding is written nowhere: there is nowhere to follow it to.
+		expect(codes('b.news_1 = "1"')).toEqual([]);
+		const recoded = bankOf({
+			"bank.yaml":
+				'agency: org.example\nselect_all:\n  chosen: { "1": Selected }\n  not_chosen: { "2": Not selected }\n',
+			"questions/t/news.yaml":
+				'name: news\ntext: Which?\nintent: Which.\nselect: many\nresponses:\n  "1": Paper\n  "2": Radio\n',
+		});
+		expect(codes('b.news_1 = "1" or b.news_1 = "2"', recoded)).toEqual([
 			{
 				written: '"1"',
-				path: "scales/yesno01.yaml",
-				at: "labels.1",
-				about: "`Yes`, on the shared scale `yesno01`.",
+				path: "bank.yaml",
+				at: "select_all.chosen.1",
+				about: "`Selected`, as this bank stores a select-all option.",
+			},
+			{
+				written: '"2"',
+				path: "bank.yaml",
+				at: "select_all.not_chosen.2",
+				about: "`Not selected`, as this bank stores a select-all option.",
 			},
 		]);
 	});

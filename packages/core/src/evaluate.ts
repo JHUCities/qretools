@@ -74,6 +74,7 @@ export function evaluate(
 		parsed.draft,
 		env.agency ?? UNDECLARED_AGENCY,
 		env.missing,
+		env.selectAll,
 		versioning,
 	);
 	const { draft, findings, ranges } = parsed;
@@ -193,7 +194,7 @@ function evaluateFiles(
 			);
 		else
 			schemes[path] = {
-				...evaluateScheme(at.kind, text, env, at.name),
+				...evaluateScheme(at.kind, text, env),
 				kind: at.kind,
 				name: at.name,
 			};

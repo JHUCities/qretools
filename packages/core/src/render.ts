@@ -9,6 +9,7 @@
 
 import { compact } from "./compact.ts";
 import { UNNAMED } from "./copy.ts";
+import { selectAllText } from "./selectAll.ts";
 import {
 	type Code,
 	type Domain,
@@ -172,7 +173,7 @@ export function codebookView(draft: Draft, env: Env): CodebookView {
 		concept: resolved(draft.concept, labelOf),
 		universe: resolved(draft.universe, textOf),
 		source: draft.source,
-		notes: notes(draft),
+		notes: notes(draft, env),
 	});
 }
 
@@ -236,14 +237,14 @@ function numberLine(
 	return unit === undefined ? range : `${range} ${unit}`;
 }
 
-function notes(draft: Draft): readonly string[] {
+function notes(draft: Draft, env: Env): readonly string[] {
 	const out: string[] = [];
 	const d = draft.domain;
 	if (d?.kind === "responses" && d.scale !== undefined)
 		out.push(`Uses the shared scale ${d.scale}.`);
 	if (d?.kind === "responses" && d.select === "many") {
 		out.push(
-			"Select all that apply: each option is its own variable, coded 0 = No, 1 = Yes.",
+			`Select all that apply: each option is its own variable, coded ${selectAllText(env.selectAll)}.`,
 		);
 	}
 	// An option's note is documentation whatever the select mode; it must never vanish.

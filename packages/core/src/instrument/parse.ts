@@ -15,13 +15,13 @@ import {
 	type YAMLMap,
 	type Node as YamlNode,
 } from "yaml";
-import { BINARY } from "../binary.ts";
 import { holesOf, moveRanges, namesOf, type Problem } from "../cond/ast.ts";
 import { KEYWORDS } from "../cond/lex.ts";
 import { parseCondition } from "../cond/parse.ts";
 import { type Type, typeCondition, typeOf } from "../cond/type.ts";
 import type { BankScope } from "../evaluate.ts";
 import type { Finding, Range } from "../findings.ts";
+import { selectAllCodes } from "../selectAll.ts";
 import { readCodeMap } from "../surface/codes.ts";
 import { type Code, definedVariables } from "../surface/draft.ts";
 import { EMPTY_ENV } from "../surface/env.ts";
@@ -1456,7 +1456,10 @@ function resolve(name: string, ctx: Context): Named | undefined {
 	};
 	const type: Type =
 		defined?.option !== undefined
-			? { kind: "code", codes: [...BINARY, ...bank.env.missing] }
+			? {
+					kind: "code",
+					codes: [...selectAllCodes(bank.env.selectAll), ...bank.env.missing],
+				}
 			: questionType(question, ctx);
 	return { kind: "bank", alias, variable, question, type };
 }

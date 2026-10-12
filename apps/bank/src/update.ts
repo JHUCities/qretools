@@ -1623,8 +1623,8 @@ const nameOf = (model: Model, f: BankEntry): string =>
  * unsaved shared files. The second step goes beyond a question's save because the
  * instrument's DDI elaborates its questions through their banks' shared files: an
  * unsaved scale changes what the instrument means. Only what is named is taken, never
- * every unsaved file of a bank, and never the missing values or the binary scale
- * implicitly, as for a question. Not yet followed: a bank name in a condition, or an
+ * every unsaved file of a bank, and never the missing values or the bank's details
+ * (its select-all coding) implicitly, as for a question. Not yet followed: a bank name in a condition, or an
  * input's shared scale (`refs` doesn't hold them).
  */
 export function instrumentDependencies(
@@ -2647,7 +2647,7 @@ function livelitsIn(model: Model, f: Entry): readonly Livelit[] {
 	const env = envIn(model, f.bank);
 	return f.kind === "question"
 		? livelitsOf(f.source, parseSurface(f.source, env), env)
-		: evaluateScheme(f.kind, f.source, env, f.name).livelits;
+		: evaluateScheme(f.kind, f.source, env).livelits;
 }
 
 /**

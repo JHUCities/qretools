@@ -185,3 +185,30 @@ describe("the codebook title from a concept", () => {
 		});
 	});
 });
+
+describe("the codebook's note on a select-all question", () => {
+	const MANY =
+		'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n  "b": B\n';
+	const note = (env: typeof EMPTY_ENV) =>
+		codebookView(parseSurface(MANY, env).draft, env).notes.find((n) =>
+			n.startsWith("Select all that apply"),
+		);
+
+	it("says how the bank stores each option, the usual way or its own", () => {
+		expect(note(EMPTY_ENV)).toBe(
+			"Select all that apply: each option is its own variable, coded 0 = No, 1 = Yes.",
+		);
+		expect(
+			note({
+				...EMPTY_ENV,
+				selectAll: {
+					chosen: { code: "1", label: "Selected" },
+					notChosen: { code: "2", label: "Not selected" },
+					first: "chosen",
+				},
+			}),
+		).toBe(
+			"Select all that apply: each option is its own variable, coded 1 = Selected, 2 = Not selected.",
+		);
+	});
+});
