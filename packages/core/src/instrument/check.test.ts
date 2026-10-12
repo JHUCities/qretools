@@ -171,6 +171,29 @@ flow:
 		expect(choices.map((c) => c.name)).toEqual(["rent_input"]);
 	});
 
+	it("offers an earlier alias and computed value by their instrument names", () => {
+		const parsed = parseInstrument(
+			`name: x
+uses:
+  bas: here
+flow:
+  - ask: bas.rent
+    as: prior_rent
+  - compute: doubled
+    value: prior_rent * 2
+  - ask: bas.util
+    fill:
+      rent:
+`,
+			{ bas: BAS },
+		);
+		expect(
+			(inspectInstrument(parsed).fills["flow.2.fill.rent"] ?? []).map(
+				(c) => c.name,
+			),
+		).toEqual(["doubled", "prior_rent"]);
+	});
+
 	it("gives every recorded variable one name across banks", () => {
 		expect(checked("  - ask: bas.why\n  - ask: oth.why\n")).toEqual([
 			"error name-clash flow.1.ask",

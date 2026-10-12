@@ -101,7 +101,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 	const rows: string[] = [];
 	const rowOf = new Map<string, string>();
 	/** What every row of each roster answers for certain. */
-	const perRow = new Map<string, ReadonlySet<string>>();
+	const perRow = new Map<string, readonly Available[]>();
 	const inRows = <T>(roster: string | undefined, go: () => T): T => {
 		if (roster !== undefined) rows.push(roster);
 		try {
@@ -294,9 +294,12 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 							"This condition is always true, so nothing after it is ever asked.",
 					});
 				return seen;
-			case "compute":
+			case "compute": {
 				read(node.value, `${node.path}.value`, seen);
-				return node.name === undefined ? seen : add(seen, [node.name]);
+				if (node.name === undefined) return seen;
+				const named = parsed.scope.get(node.name);
+				return add(seen, [node.name], named === undefined ? [] : [{ named }]);
+			}
 			case "roster": {
 				// `count` is read before the rows; `more` at the end of each.
 				if (node.end?.kind === "count")
@@ -307,7 +310,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 						read(node.end.cond, `${node.path}.more`, body);
 					return body;
 				});
-				if (node.name !== undefined) perRow.set(node.name, end.definite);
+				if (node.name !== undefined)
+					perRow.set(
+						node.name,
+						[...end.values.values()].filter((v) => v.row === node.name),
+					);
 				// There may be no rows at all. (A `more` roster always has one, since it asks
 				// after each; kept cautious on purpose: a row's own answers are read only
 				// within it anyway.)
@@ -317,7 +324,14 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				// Within a row, what every row answers is answered.
 				const answered =
 					node.roster === undefined ? undefined : perRow.get(node.roster);
-				const start = answered === undefined ? seen : add(seen, [...answered]);
+				const start =
+					answered === undefined
+						? seen
+						: add(
+								seen,
+								answered.map((v) => nameOf(v.named)),
+								answered,
+							);
 				const end = inRows(node.roster, () => flow(node.flow, start, true));
 				return merge([seen, end]);
 			}
@@ -457,7 +471,13 @@ function outputs(
 		},
 		...(row !== undefined && { row }),
 	});
-	if (as !== undefined) return [named(as, type)];
+	if (as !== undefined)
+		return [
+			{
+				named: { kind: "as", name: as, path: q.path, question: q, type },
+				...(row !== undefined && { row }),
+			},
+		];
 	return definedVariables(q.evaluation.draft).map((d) =>
 		named(
 			d.name,
