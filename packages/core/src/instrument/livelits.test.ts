@@ -149,6 +149,14 @@ flow:
 		).toBeUndefined();
 		expect(
 			addInstrumentFill(
+				text.replace("bas.echo", '"bas.echo"'),
+				"flow.1",
+				"neighborhood",
+				"bas.echo",
+			)?.text,
+		).toContain("fill:");
+		expect(
+			addInstrumentFill(
 				text.replace("bas.echo", "bas.echo_more"),
 				"flow.1",
 				"neighborhood",

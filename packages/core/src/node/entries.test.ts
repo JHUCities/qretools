@@ -107,6 +107,7 @@ describe("the entry points", () => {
 			  "editor": [
 			    "LIST_FIELDS",
 			    "LIVELIT_KINDS",
+			    "addInstrumentFill",
 			    "addSpace",
 			    "addVariant",
 			    "applyEdits",
