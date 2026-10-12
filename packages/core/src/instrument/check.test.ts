@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { bankOf } from "../evaluate.ts";
 import type { Finding } from "../findings.ts";
 import { checkInstrument } from "./check.ts";
+import { fillCompatibility } from "./fills.ts";
 import { parseInstrument } from "./parse.ts";
 
 const q = (name: string, rest: string) =>
@@ -124,6 +125,27 @@ describe("checking an instrument's flow", () => {
       rent: bas.why
 `),
 		).toEqual(["error type flow.1.fill.rent"]);
+	});
+
+	it("allows respondent-facing values in text fills, while keeping number fills exact", () => {
+		expect(fillCompatibility("text", { kind: "string" })).toMatchObject({
+			kind: "compatible",
+			presentation: "text",
+		});
+		expect(fillCompatibility("text", { kind: "number" })).toMatchObject({
+			kind: "compatible",
+			presentation: "number",
+		});
+		expect(
+			fillCompatibility("text", {
+				kind: "code",
+				codes: [{ code: "1", label: "Baltimore" }],
+			}),
+		).toMatchObject({ kind: "compatible", presentation: "label" });
+		expect(fillCompatibility("number", { kind: "string" })).toEqual({
+			kind: "incompatible",
+			expected: "number",
+		});
 	});
 
 	it("gives every recorded variable one name across banks", () => {
