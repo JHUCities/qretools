@@ -14,6 +14,7 @@
  */
 import { namesOf } from "../cond/ast.ts";
 import { printCondition } from "../cond/print.ts";
+import type { Type } from "../cond/type.ts";
 import {
 	type Collision,
 	codeValue,
@@ -273,6 +274,51 @@ export function elaborateInstrument(
 	};
 
 	const recordedAnswers = new Set<string>();
+	let labelValues = 0;
+	/**
+	 * A coded answer's words, as an instrument-owned text value. DDI's parameter
+	 * binding only carries a value; it does not mean "look up this code's label".
+	 * The generated ComputationItem makes that lookup explicit before the question
+	 * which displays it, while the Variable documents that its result is text.
+	 */
+	const labelledValue = (
+		source: string,
+		codes: Extract<Type, { kind: "code" }>["codes"],
+		at: string,
+	): { variable: string; construct: Item } => {
+		const variable = `display_label_${++labelValues}`;
+		const output = outOf(variable);
+		emit(
+			item("Variable", id(`var-${variable}`), {
+				VariableName: [intl(variable)],
+				Label: [structured(`Display label for ${source}`)],
+				Description: structured(
+					"An internal text value used to show a coded answer's respondent-facing label.",
+				),
+				VariableRepresentation: {
+					ValueRepresentation: { $type: "TextDomain" },
+				},
+				OutParameter: obj({ ...output, ParameterName: [intl(variable)] }),
+			}),
+		);
+		const mapping = `{${codes
+			.map((c) => `${JSON.stringify(c.code)}: ${JSON.stringify(c.label)}`)
+			.join(", ")}}.get(${source})`;
+		const construct = emit(
+			item("ComputationItem", id(at), {
+				CommandCode: vtl(
+					mapping,
+					[{ alias: source, source: outOf(source) }],
+					at,
+				),
+				AssignedVariableReference: {
+					...output,
+					ParameterName: [intl(variable)],
+				},
+			}),
+		);
+		return { variable, construct };
+	};
 	const record = (
 		q: QuestionRef,
 		as: string | undefined,
@@ -577,6 +623,53 @@ export function elaborateInstrument(
 		record(q, node.as, universe);
 		const parameters = (question.body.InParameter ??
 			[]) as readonly JsonObject[];
+		const adapters: Item[] = [];
+		const bindings = node.fills.flatMap((f) => {
+			const target = parameters.find((p) => p.Alias === f.name);
+			if (target === undefined || f.source === undefined) return [];
+			const expr = f.source.expr;
+			const labelArg =
+				f.presentation === "label" &&
+				expr.kind === "call" &&
+				expr.args[0]?.kind === "name"
+					? expr.args[0]
+					: undefined;
+			const source = labelArg ?? (expr.kind === "name" ? expr : undefined);
+			if (source === undefined) return [];
+			const variable = exported(source.name);
+			const type = (names.get(source.name) ?? parsed.scope.get(source.name))
+				?.type;
+			const declaration = q.evaluation.draft.fills?.find(
+				(fill) => fill.name === f.name,
+			);
+			// A raw code is never safe to display in a text parameter. The checker
+			// explains the error; export keeps the unsafe binding out as well.
+			if (
+				variable === undefined ||
+				type === undefined ||
+				(declaration?.type === "text" &&
+					type.kind === "code" &&
+					f.presentation !== "label")
+			)
+				return [];
+			const adapter =
+				labelArg !== undefined && type.kind === "code"
+					? labelledValue(variable, type.codes, local("label", source.name))
+					: undefined;
+			if (adapter !== undefined) adapters.push(adapter.construct);
+			const sourceParameter = outOf(adapter?.variable ?? variable);
+			return [
+				{
+					SourceParameterReference: { ...sourceParameter },
+					TargetParameterReference: {
+						URN: target.URN as string,
+						Agency: target.Agency as string,
+						ID: target.ID as string,
+						Version: target.Version as string,
+					},
+				},
+			];
+		});
 		const asked = emit(
 			item(
 				"QuestionConstruct",
@@ -593,30 +686,11 @@ export function elaborateInstrument(
 										node.options === "random" ? "Random" : "Rotate",
 								},
 					EstimatedSecondsResponseTime: node.seconds,
-					// Each fill: the question's parameter, bound to what fills it here.
-					Binding: node.fills.flatMap((f) => {
-						const source = f.source?.expr;
-						const v =
-							source?.kind === "name" ? exported(source.name) : undefined;
-						const target = parameters.find((p) => p.Alias === f.name);
-						return v === undefined || target === undefined
-							? []
-							: [
-									{
-										SourceParameterReference: { ...outOf(v) },
-										TargetParameterReference: {
-											URN: target.URN as string,
-											Agency: target.Agency as string,
-											ID: target.ID as string,
-											Version: target.Version as string,
-										},
-									},
-								];
-					}),
+					Binding: bindings,
 				}),
 			),
 		);
-		if (node.checks.length === 0) return [asked];
+		if (node.checks.length === 0) return [...adapters, asked];
 		// Each check: say its message when what it ensures isn't true. A blocking one asks
 		// again until it is (an unanswered question doesn't block: `nvl(..., true)`).
 		const shown = node.checks.flatMap((check, i) => {
@@ -651,11 +725,13 @@ export function elaborateInstrument(
 		const blocking = node.checks.filter(
 			(c) => c.severity === "blocking" && c.ensure !== undefined,
 		);
-		if (blocking.length === 0) return [asked, ...shown];
+		if (blocking.length === 0) return [...adapters, asked, ...shown];
 		const until = `${at}-until`;
 		const body = emit(
 			item("Sequence", id(`${until}-body`), {
-				ControlConstructReference: [asked, ...shown].map((c) => ref(c)),
+				ControlConstructReference: [...adapters, asked, ...shown].map((c) =>
+					ref(c),
+				),
 			}),
 		);
 		const conditions = blocking.map((c) => c.ensure as Cond);
