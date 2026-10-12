@@ -220,6 +220,13 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 			}
 			case "call": {
 				const args = x.args.map(go);
+				if (x.fn === "label") {
+					const [value] = args;
+					const [valueExpr] = x.args;
+					if (value !== undefined && valueExpr !== undefined)
+						expect(value, "code", valueExpr, "`label`");
+					return STRING;
+				}
 				if (x.fn === "between") {
 					const [v, lo, hi] = args;
 					const [vx, lox, hix] = x.args;

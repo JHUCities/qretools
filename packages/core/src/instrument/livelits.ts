@@ -113,26 +113,23 @@ export function instrumentLivelits(
 								`Choose a value for ${fill.name}`,
 								{
 									kind: "enum",
-									// A code's label needs an adapter in exported DDI; a direct
-									// parameter binding could display its storage code instead.
-									values: (fills[fill.path] ?? [])
-										.filter(
-											(value) =>
-												n.question?.evaluation.draft.fills?.find(
-													(f) => f.name === fill.name,
-												)?.type !== "text" || value.type.kind !== "code",
-										)
-										.map((value) => ({
-											name: value.name,
-											detail:
-												value.type.kind === "code"
-													? "coded response"
-													: value.type.kind === "string"
-														? "text"
-														: value.type.kind,
-										})),
+									values: (fills[fill.path] ?? []).map((value) => ({
+										name:
+											value.presentation === "label"
+												? `label(${value.name})`
+												: value.name,
+										detail:
+											value.presentation === "label"
+												? "coded response label"
+												: value.type.kind === "string"
+													? "text"
+													: value.type.kind,
+									})),
 								},
-								(w) => /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)?$/.test(w),
+								(w) =>
+									/^(?:[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)?|label\([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)?\))$/.test(
+										w,
+									),
 							),
 						),
 					];

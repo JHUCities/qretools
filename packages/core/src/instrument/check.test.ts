@@ -22,6 +22,8 @@ const BAS = bankOf({
 	"questions/a/why.yaml": q("why", "open: {}\n"),
 	"questions/a/util.yaml":
 		'name: util\ntext: "You pay {{rent}}. Utilities included?"\nintent: i\nopen: {}\nfills:\n  rent: number\n',
+	"questions/a/echo.yaml":
+		'name: echo\ntext: "You selected {{neighborhood}}."\nintent: i\nopen: {}\nfills:\n  neighborhood: text\n',
 });
 const OTHER = bankOf({
 	"bank.yaml": "agency: org.other\n",
@@ -148,6 +150,22 @@ describe("checking an instrument's flow", () => {
 		});
 	});
 
+	it("requires an explicit label projection for a coded text fill", () => {
+		const raw = checked(`  - ask: bas.tenure
+  - ask: bas.echo
+    fill:
+      neighborhood: bas.tenure
+`);
+		expect(raw).toEqual(["error type flow.1.fill.neighborhood"]);
+		expect(
+			checked(`  - ask: bas.tenure
+  - ask: bas.echo
+    fill:
+      neighborhood: label(bas.tenure)
+`),
+		).toEqual([]);
+	});
+
 	it("offers a fill only inputs and answers guaranteed at that point", () => {
 		const parsed = parseInstrument(
 			`name: x
@@ -169,6 +187,24 @@ flow:
 		);
 		const choices = inspectInstrument(parsed).fills["flow.1.fill.rent"] ?? [];
 		expect(choices.map((c) => c.name)).toEqual(["rent_input"]);
+	});
+
+	it("offers a coded source as its respondent-facing label", () => {
+		const parsed = parseInstrument(
+			`name: x
+uses:
+  bas: here
+flow:
+  - ask: bas.tenure
+  - ask: bas.echo
+    fill:
+      neighborhood:
+`,
+			{ bas: BAS },
+		);
+		expect(
+			inspectInstrument(parsed).fills["flow.1.fill.neighborhood"],
+		).toMatchObject([{ name: "bas.tenure", presentation: "label" }]);
 	});
 
 	it("offers an earlier alias and computed value by their instrument names", () => {

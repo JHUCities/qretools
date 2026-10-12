@@ -12,6 +12,8 @@ const BAS = bankOf({
 		'name: tenure\ntext: Do you own or rent?\nintent: i\nresponses:\n  "1": Own\n  "2": Rent\n',
 	"questions/h/rent.yaml":
 		"name: rent\ntext: How much is your rent?\nintent: i\nnumber: { min: 0 }\n",
+	"questions/h/echo.yaml":
+		'name: echo\ntext: "You selected {{neighborhood}}."\nintent: i\nopen: {}\nfills:\n  neighborhood: text\n',
 	"questions/m/modes.yaml":
 		'name: modes\ntitle: Travel modes\ntext: How do you travel?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
 	"questions/n/why.yaml": "name: why\ntext: Why?\nintent: i\nopen: {}\n",
@@ -68,6 +70,31 @@ flow:
 		expect(fill && applyLivelit(text, fill, "rent_input")?.text).toContain(
 			"rent: rent_input",
 		);
+	});
+
+	it("offers a coded source as label(name) for a text fill", () => {
+		const text = `name: demo
+uses:
+  bas: here
+flow:
+  - ask: bas.tenure
+  - ask: bas.echo
+    fill:
+      neighborhood:
+`;
+		const fill = instrumentOf(text, { banks: { bas: BAS } }).livelits.find(
+			(l) => l.id === "flow.1.fill.neighborhood",
+		);
+		expect(fill?.picker).toMatchObject({
+			kind: "one",
+			source: {
+				kind: "enum",
+				values: [{ name: "label(bas.tenure)", detail: "coded response label" }],
+			},
+		});
+		expect(
+			fill && applyLivelit(text, fill, "label(bas.tenure)")?.text,
+		).toContain("neighborhood: label(bas.tenure)");
 	});
 
 	it("sit at each use, each ask naming a question or empty, and each order, at any depth", () => {

@@ -63,6 +63,8 @@ export interface FillBinding {
 	readonly name: string;
 	readonly path: string;
 	readonly source?: Cond;
+	/** A coded answer is projected to its respondent-facing label before binding. */
+	readonly presentation?: "label";
 }
 
 export type Severity = "info" | "warning" | "blocking";

@@ -22,8 +22,10 @@ export type BinaryOp =
 export type UnaryOp = "not" | "-" | "+";
 
 /** VTL's scalar functions in the subset. */
-export type Fn = "isnull" | "between";
+export type Fn = "isnull" | "between" | "label";
 export const FUNCTIONS: readonly Fn[] = ["isnull", "between"];
+/** `label(x)` is a projection used only while binding a question fill. */
+export const FILL_FUNCTIONS: readonly Fn[] = [...FUNCTIONS, "label"];
 
 export type Expr =
 	| { readonly kind: "hole"; readonly range: Range }
