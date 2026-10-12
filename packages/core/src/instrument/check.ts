@@ -78,12 +78,18 @@ const merge = (branches: readonly Seen[]): Seen => {
 		),
 		possible: new Set(branches.flatMap((b) => [...b.possible])),
 		values: new Map(
-			[...first.values].filter(([name]) =>
-				rest.every((b) => b.values.has(name)),
+			[...first.values].filter(([name, value]) =>
+				rest.every((b) => sameAvailable(value, b.values.get(name))),
 			),
 		),
 	};
 };
+
+/** A branch may reuse an alias only when it remains the same usable value after joining. */
+const sameAvailable = (a: Available, b: Available | undefined): boolean =>
+	b !== undefined &&
+	a.row === b.row &&
+	JSON.stringify(a.named.type) === JSON.stringify(b.named.type);
 
 /** A question asked, as a key: asking it again on one path needs `as:`. */
 const askedKey = (q: QuestionRef): string => `ask:${q.alias}.${q.name}`;
