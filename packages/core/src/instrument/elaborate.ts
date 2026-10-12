@@ -278,7 +278,7 @@ export function elaborateInstrument(
 	/**
 	 * A coded answer's words, as an instrument-owned text value. DDI's parameter
 	 * binding only carries a value; it does not mean "look up this code's label".
-	 * The generated ComputationItem makes that lookup explicit before the question
+	 * The generated decision tree makes that lookup explicit before the question
 	 * which displays it, while the Variable documents that its result is text.
 	 */
 	const labelledValue = (
@@ -301,20 +301,31 @@ export function elaborateInstrument(
 				OutParameter: obj({ ...output, ParameterName: [intl(variable)] }),
 			}),
 		);
-		const mapping = `{${codes
-			.map((c) => `${JSON.stringify(c.code)}: ${JSON.stringify(c.label)}`)
-			.join(", ")}}.get(${source})`;
+		const choices = codes.map((code, i) => {
+			const choice = `${at}-code-${i + 1}`;
+			const assignment = emit(
+				item("ComputationItem", id(`${choice}-value`), {
+					CommandCode: vtl(JSON.stringify(code.label), [], `${choice}-value`),
+					AssignedVariableReference: {
+						...output,
+						ParameterName: [intl(variable)],
+					},
+				}),
+			);
+			return emit(
+				item("IfThenElse", id(choice), {
+					IfCondition: vtl(
+						`${source} = ${JSON.stringify(code.code)}`,
+						[{ alias: source, source: outOf(source) }],
+						choice,
+					),
+					ThenConstructReference: ref(assignment),
+				}),
+			);
+		});
 		const construct = emit(
-			item("ComputationItem", id(at), {
-				CommandCode: vtl(
-					mapping,
-					[{ alias: source, source: outOf(source) }],
-					at,
-				),
-				AssignedVariableReference: {
-					...output,
-					ParameterName: [intl(variable)],
-				},
+			item("Sequence", id(at), {
+				ControlConstructReference: choices.map((choice) => ref(choice)),
 			}),
 		);
 		return { variable, construct };
@@ -654,7 +665,11 @@ export function elaborateInstrument(
 				return [];
 			const adapter =
 				labelArg !== undefined && type.kind === "code"
-					? labelledValue(variable, type.codes, local("label", source.name))
+					? labelledValue(
+							variable,
+							type.codes,
+							local("label", source.name.replaceAll(".", "_")),
+						)
 					: undefined;
 			if (adapter !== undefined) adapters.push(adapter.construct);
 			const sourceParameter = outOf(adapter?.variable ?? variable);
