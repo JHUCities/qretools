@@ -209,8 +209,15 @@ export function addInstrumentFill(
 	if (range === undefined || ask === undefined) return undefined;
 	const written = source.slice(ask[0], ask[1]);
 	const current =
-		/^(?<indent>[ \t]*)(?<inline>-\s*)?ask:\s*(?<name>\S+)\s*$/m.exec(written);
-	if (current?.groups?.name !== question) return undefined;
+		/^(?<indent>[ \t]*)(?<inline>-\s*)?ask:\s*(?<name>.+?)\s*$/m.exec(written);
+	const rawName = current?.groups?.name;
+	const currentName =
+		rawName?.startsWith('"') && rawName.endsWith('"')
+			? rawName.slice(1, -1)
+			: rawName?.startsWith("'") && rawName.endsWith("'")
+				? rawName.slice(1, -1)
+				: rawName;
+	if (currentName !== question) return undefined;
 	const currentLine = source.lastIndexOf("\n", ask[0] + current.index) + 1;
 	const base = /^([ \t]*)/.exec(source.slice(currentLine))?.[1];
 	if (base === undefined) return undefined;
