@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bankOf } from "../evaluate.ts";
 import type { Finding } from "../findings.ts";
-import { checkInstrument } from "./check.ts";
+import { checkInstrument, inspectInstrument } from "./check.ts";
 import { fillCompatibility } from "./fills.ts";
 import { parseInstrument } from "./parse.ts";
 
@@ -146,6 +146,29 @@ describe("checking an instrument's flow", () => {
 			kind: "incompatible",
 			expected: "number",
 		});
+	});
+
+	it("offers a fill only inputs and answers guaranteed at that point", () => {
+		const parsed = parseInstrument(
+			`name: x
+uses:
+  bas: here
+inputs:
+  rent_input:
+    number: {}
+flow:
+  - if: true
+    then:
+      - ask: bas.why
+        as: branch_only
+  - ask: bas.util
+    fill:
+      rent:
+`,
+			{ bas: BAS },
+		);
+		const choices = inspectInstrument(parsed).fills["flow.1.fill.rent"] ?? [];
+		expect(choices.map((c) => c.name)).toEqual(["rent_input"]);
 	});
 
 	it("gives every recorded variable one name across banks", () => {
