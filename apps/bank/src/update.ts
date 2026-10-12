@@ -52,6 +52,7 @@ import {
 	withFields,
 } from "@qretools/core/editor";
 import {
+	type BankRef,
 	type BankSettings,
 	type BranchTarget,
 	bankText,
@@ -134,7 +135,7 @@ export function update(model: Model, msg: Msg): Step {
 	const lapsed = authFailure(msg);
 	const [stepped, cmds] =
 		lapsed === undefined ? step(model, msg) : sessionLapsed(model, lapsed);
-	const next = withoutStaleNotice(revealOpen(model, stepped));
+	const next = settled(revealOpen(model, stepped));
 	const before = linkOf(model);
 	const after = linkOf(next);
 	const linked: Step =
@@ -766,6 +767,51 @@ function step(model: Model, msg: Msg): Step {
 					: { ...added, screen: { kind: "editing", id } },
 				[],
 			]);
+		}
+
+		case "tabShown":
+			// The author is back, perhaps from installing the app in another tab.
+			return checkingAccess(model, "quiet");
+
+		case "accessCheckRequested":
+			return checkingAccess(model, "asked");
+
+		case "accessChecked": {
+			// An answer for a session or bank that has changed since is nobody's.
+			if (
+				model.checking === undefined ||
+				model.session.kind !== "connected" ||
+				!sameName(model.session.login, msg.login) ||
+				!sameBank(bankRefOf(model.settings), msg.repo)
+			)
+				return [model, []];
+			const asked = model.checking === "asked";
+			const done: Model = compact({ ...model, checking: undefined });
+			// A check nobody asked for fails silently; one asked for says so.
+			if (!msg.result.ok)
+				return [
+					asked
+						? { ...done, failures: [...done.failures, msg.result.error] }
+						: done,
+					[],
+				];
+			const { login, access } = msg.result.value;
+			if (!sameName(login, model.session.login)) return [done, []];
+			const session = { ...model.session, access };
+			const next: Model = { ...done, session };
+			// Only the permission changed: a workspace already loaded stays as it is. One
+			// that didn't load (it couldn't be read before) is read now that it can be.
+			return access.kind === "write" && model.loading.kind === "failed"
+				? [
+						{ ...next, loading: { kind: "loading" } },
+						[
+							{
+								kind: "loadWorkspace",
+								target: targetOf(model.settings, session),
+							},
+						],
+					]
+				: [next, []];
 		}
 
 		case "blockedActionTried":
@@ -1882,6 +1928,7 @@ function messageOf(model: Model, q: Entry): string {
 function authFailure(msg: Msg): Failure | undefined {
 	const failure =
 		msg.kind === "connected" ||
+		msg.kind === "accessChecked" ||
 		msg.kind === "workspaceLoaded" ||
 		msg.kind === "fileReloaded" ||
 		msg.kind === "foreignLoaded" ||
@@ -1925,6 +1972,8 @@ function stale(model: Model, msg: Msg): boolean {
 		case "foreignLoaded":
 		case "remoteBankStarted":
 		case "remoteBankLoaded":
+			return out;
+		case "accessChecked":
 			return out;
 		case "connected":
 			return model.session.kind !== "connecting";
@@ -2263,6 +2312,46 @@ const withoutStaleNotice = (model: Model): Model =>
 			}
 		: model;
 
+/** No check of what the app may do outlives the session it was asked for. */
+const withoutStaleCheck = (model: Model): Model =>
+	model.checking !== undefined && model.session.kind !== "connected"
+		? compact({ ...model, checking: undefined })
+		: model;
+
+/** What holds of every Model, whatever the step: nothing left over from a state that ended. */
+const settled = (model: Model): Model =>
+	withoutStaleNotice(withoutStaleCheck(model));
+
+const bankRefOf = (settings: Model["settings"]): BankRef => ({
+	owner: settings.owner,
+	repo: settings.repo,
+	path: settings.path,
+});
+
+/**
+ * Ask GitHub what the app may do now, while a permission blocks writing (the app isn't
+ * installed, or read access only: GitHub may say otherwise since), unless it is being
+ * asked already: one check at a time, and a press while a quiet one is in flight only
+ * makes it said.
+ */
+function checkingAccess(model: Model, how: "quiet" | "asked"): Step {
+	const { session } = model;
+	if (session.kind !== "connected" || session.access.kind === "write")
+		return [model, []];
+	if (model.checking !== undefined)
+		return [how === "asked" ? { ...model, checking: "asked" } : model, []];
+	return [
+		{ ...model, checking: how },
+		[
+			{
+				kind: "checkAccess",
+				repo: bankRefOf(model.settings),
+				login: session.login,
+			},
+		],
+	];
+}
+
 const withoutAdding = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, addingBank: undefined });
 
@@ -2370,8 +2459,11 @@ export type Blockage =
 			readonly reason: string;
 			/** What the author can do, in a sentence; absent when the fix says it all. */
 			readonly hint?: string;
-			/** What the app can offer: installing the GitHub App, or loading again. */
-			readonly fix?: "install" | "retryLoad";
+			/**
+			 * What the app can offer: installing the GitHub App (then asking GitHub again),
+			 * asking GitHub again (someone may have granted access), or loading again.
+			 */
+			readonly fix: "install" | "recheck" | "retryLoad";
 	  };
 
 /**
@@ -2388,7 +2480,8 @@ export function blockage(model: Model): Blockage | undefined {
 			kind: "standing",
 			reason:
 				"You have read access only to this repository, so this workspace can't be changed",
-			hint: "Ask its owner for write access.",
+			hint: "Ask its owner for write access, then try again.",
+			fix: "recheck",
 		};
 	if (model.session.access.kind === "notInstalled")
 		return {
@@ -2452,7 +2545,10 @@ export function sessionStatus(model: Model): string | undefined {
 				: // What is happening now comes before a standing reason (read only).
 					model.screen.kind === "foreign" && model.screen.file === undefined
 					? `Loading ${model.screen.path} from ${model.screen.branch}…`
-					: writeBlocked(model);
+					: // Asked for by the author ("Try again"): said while GitHub answers.
+						model.checking === "asked"
+						? "Checking with GitHub…"
+						: writeBlocked(model);
 	}
 }
 

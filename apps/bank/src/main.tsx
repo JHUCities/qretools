@@ -14,6 +14,7 @@ import { createRoot } from "react-dom/client";
 import { defaultBank, template as templateOf } from "./config.js";
 import { warnOnLeave } from "./model.js";
 import { readStartup } from "./persist.js";
+import { whenShown } from "./returning.js";
 import { createApp } from "./store.js";
 import { App } from "./ui/App.js";
 import { AppContext, useModel } from "./ui/AppContext.js";
@@ -80,6 +81,10 @@ if (root) {
 		app.dispatch({ kind: "hashChanged", hash: location.hash });
 	window.addEventListener("hashchange", followLink);
 	followLink();
+	// The author is back in this tab or window: `update` decides whether that is worth
+	// asking GitHub anything (it is while a permission blocks writing, as they may have
+	// installed the app in another tab).
+	whenShown(() => app.dispatch({ kind: "tabShown" }));
 	// Unsaved work lives only in this tab: closing it, or going elsewhere, asks first.
 	// The Model is read when the event fires; the rule is `warnOnLeave`'s.
 	window.addEventListener("beforeunload", (event) => {

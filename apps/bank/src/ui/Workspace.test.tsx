@@ -8,7 +8,14 @@
 import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
 import type { Store } from "@qretools/shell";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
@@ -41,7 +48,8 @@ function renderWorkspace(files = FILES, access = { kind: "write" }) {
 				ok({
 					login: "me",
 					avatarUrl: "https://a/me",
-					access,
+					// A copy, as each reply from GitHub is: a test may change what it says next.
+					access: { ...access },
 					defaultBranch: "main",
 				}),
 			),
@@ -558,5 +566,36 @@ describe("a write the session can't make", () => {
 				name: "This workspace can't be changed",
 			}),
 		).toBeTruthy();
+	});
+
+	it("becomes possible when the author comes back from installing the app, with nothing reloaded", async () => {
+		const access = { kind: "notInstalled" };
+		const app = renderWorkspace(FILES, access);
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^t\b/ }));
+		fireEvent.click(screen.getByRole("treeitem", { name: /^alpha/ }));
+		await act(async () => {});
+		const before = app.store.getState().model;
+		expect(
+			screen
+				.getByRole("button", { name: "Delete…" })
+				.getAttribute("aria-disabled"),
+		).toBe("true");
+		// Installed in another tab; then back to this one.
+		access.kind = "write";
+		act(() => app.dispatch({ kind: "tabShown" }));
+		await act(async () => {});
+		const after = app.store.getState().model;
+		expect(after.session).toMatchObject({ access: { kind: "write" } });
+		expect(after.loading).toBe(before.loading);
+		expect(after.local).toBe(before.local);
+		expect(
+			screen
+				.getByRole("button", { name: "Delete…" })
+				.getAttribute("aria-disabled"),
+		).toBeNull();
+		await waitFor(() =>
+			expect(document.getElementById("session-status")?.textContent).toBe(""),
+		);
 	});
 });
