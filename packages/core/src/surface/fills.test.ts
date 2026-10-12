@@ -142,6 +142,7 @@ describe("fills", () => {
 			parseSurface(RENT, EMPTY_ENV).draft,
 			"org.example",
 			[],
+			EMPTY_ENV.selectAll,
 		);
 		expect(validator.ok && validator.value(ddi)).toEqual([]);
 		const q = ddi.QuestionItem?.["org.example:q:1"] ?? {};
@@ -184,6 +185,7 @@ describe("fills", () => {
 			parseSurface(question("Hi {{x}}?", ""), EMPTY_ENV).draft,
 			"org.example",
 			[],
+			EMPTY_ENV.selectAll,
 		);
 		const q = ddi.QuestionItem?.["org.example:q:1"] ?? {};
 		expect(q).not.toHaveProperty("InParameter");

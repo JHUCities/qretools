@@ -7,11 +7,11 @@
  * editor marks. Pure.
  */
 
-import { BINARY_SCALE } from "../binary.ts";
 import { type Expr, namesOf } from "../cond/ast.ts";
 import { NAME_KIND } from "../copy.ts";
 import type { Range } from "../findings.ts";
-import { schemePath } from "../kinds.ts";
+import { ROOT, schemePath } from "../kinds.ts";
+import { DEFAULT_SELECT_ALL } from "../selectAll.ts";
 import type { Cond, Named, Node, Placeholder } from "./draft.ts";
 import type { ParsedInstrument } from "./parse.ts";
 
@@ -291,14 +291,24 @@ export function instrumentRefs(
 			refs.push({ kind: "code", range: written.range, alias, path, at, about });
 		if (missing.some((c) => c.code === value))
 			on("missing.yaml", `labels.${value}`, `${label}, a missing value.`);
-		// A select-all option's variable is coded on the binary scale, not its list.
-		else if (domain?.kind === "responses" && domain.select === "many")
-			on(
-				schemePath("scale", BINARY_SCALE),
-				`labels.${value}`,
-				`${label}, on the shared scale \`${BINARY_SCALE}\`.`,
-			);
-		else if (domain?.kind === "responses" && domain.scale !== undefined)
+		// A select-all option's variable holds one of the bank's two select-all values,
+		// not a code of the question's list: followed to where the bank's own file says
+		// them. The usual coding is written nowhere, so there is nowhere to follow it to.
+		else if (domain?.kind === "responses" && domain.select === "many") {
+			const coding = parsed.banks[alias]?.env.selectAll ?? DEFAULT_SELECT_ALL;
+			const part =
+				value === coding.chosen.code
+					? "chosen"
+					: value === coding.notChosen.code
+						? "not_chosen"
+						: undefined;
+			if (coding !== DEFAULT_SELECT_ALL && part !== undefined)
+				on(
+					ROOT.bank,
+					`select_all.${part}.${value}`,
+					`${label}, as this bank stores a select-all option.`,
+				);
+		} else if (domain?.kind === "responses" && domain.scale !== undefined)
 			on(
 				schemePath("scale", domain.scale),
 				`labels.${value}`,

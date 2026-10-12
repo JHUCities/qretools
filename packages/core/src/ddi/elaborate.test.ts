@@ -5,12 +5,22 @@ import nhdCohes1 from "../../examples/nhd_cohes1.yaml?raw";
 import nhdNyrs from "../../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../../examples/nhd_sat.yaml?raw";
 import agree4Text from "../../starter/scales/agree4.yaml?raw";
+import { DEFAULT_SELECT_ALL } from "../selectAll.ts";
+import type { Code } from "../surface/draft.ts";
 import { EMPTY_ENV } from "../surface/env.ts";
 import { parseSurface } from "../surface/parse.ts";
 import { parseScale } from "../surface/scales.ts";
 import type { DdiDocument, ItemType, JsonObject } from "./document.ts";
-import { elaborate } from "./elaborate.ts";
+import { elaborate as elaborateWith, type Versioning } from "./elaborate.ts";
 import { makeValidator } from "./validate.ts";
+
+/** With the usual select-all coding, which most of these tests have nothing to say about. */
+const elaborate = (
+	draft: Parameters<typeof elaborateWith>[0],
+	agency: string,
+	missing: readonly Code[],
+	versioning?: Versioning,
+) => elaborateWith(draft, agency, missing, DEFAULT_SELECT_ALL, versioning);
 
 const AGENCY = "org.example";
 // The examples name a shared unit, `years`.
@@ -202,6 +212,33 @@ describe("shared scales and select-many", () => {
 		]);
 	});
 
+	it("codes a select-all option's variable on the bank's own two values, in its order", () => {
+		const draft = parseSurface(
+			'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n  "b": B\n',
+			EMPTY_ENV,
+		).draft;
+		const doc = elaborateWith(draft, AGENCY, [], {
+			chosen: { code: "1", label: "Selected" },
+			notChosen: { code: "2", label: "Not selected" },
+			first: "chosen",
+		});
+		expect(validate(doc)).toEqual([]);
+		const labels = Object.values(doc.Category ?? {})
+			.filter((c) => String(c.ID).startsWith("select-all."))
+			.map((c) => JSON.stringify(c.Label));
+		expect(labels).toHaveLength(2);
+		expect(labels[0]).toContain("Selected");
+		expect(labels[1]).toContain("Not selected");
+		expect(
+			JSON.stringify(itemOf(doc, "CodeList", "select-all.codes").Code),
+		).toMatch(/"1".*"2"/s);
+		// No scale's identity is borrowed: a scale named yesno01 is only a scale.
+		expect(Object.keys(doc.CodeList ?? {})).toEqual([
+			`${AGENCY}:m.codes:1`,
+			`${AGENCY}:select-all.codes:1`,
+		]);
+	});
+
 	it("select-many yields one yes/no Variable per option, referencing the question", () => {
 		const { draft, findings } = parseSurface(demRace, EMPTY_ENV);
 		expect(findings).toEqual([]);
@@ -233,11 +270,11 @@ describe("shared scales and select-many", () => {
 				$type: "CodeDomain",
 				CodeListReference: {
 					$type: "CodeList",
-					value: [AGENCY, "scale-yesno01.codes", "1"],
+					value: [AGENCY, "select-all.codes", "1"],
 				},
 			},
 		});
-		expect(itemOf(doc, "CodeList", "scale-yesno01.codes").Code).toHaveLength(2);
+		expect(itemOf(doc, "CodeList", "select-all.codes").Code).toHaveLength(2);
 		expect(question(doc, "dem_race").Description).toBeDefined();
 	});
 

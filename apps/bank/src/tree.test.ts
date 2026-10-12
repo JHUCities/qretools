@@ -182,7 +182,7 @@ describe("schemeSections", () => {
 	const sections = (mm: Model) =>
 		schemeSections(
 			mm,
-			(e) => evaluateScheme(e.kind, e.source, envIn(mm, ""), e.name),
+			(e) => evaluateScheme(e.kind, e.source, envIn(mm, "")),
 			index(mm),
 			"",
 		);

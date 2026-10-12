@@ -62,9 +62,7 @@ export type LintCode =
 	| "similar-text"
 	| "unknown-variant"
 	/** Bank-level: another question has the same name, so the same DDI identity. */
-	| "duplicate-name"
-	/** The bank's `yesno01` scale doesn't say what select-all items are coded on. */
-	| "binary-scale";
+	| "duplicate-name";
 
 /** Reported by an instrument's parse and checks. */
 export type InstrumentCode =

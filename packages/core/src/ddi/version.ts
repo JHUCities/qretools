@@ -5,9 +5,9 @@
  *
  * For whoever computes them (later, in CI): a version must change whenever an item's
  * content does, so a question file's version counts the merged changes to it and to
- * every shared file it names (and `missing.yaml` for a question with a variable, the
- * binary scale for a select-all question), since a reference carries the referenced
- * item's version.
+ * every shared file it names (and `missing.yaml` for a question with a variable,
+ * `bank.yaml` for a select-all question, whose options are coded as it says), since a
+ * reference carries the referenced item's version.
  */
 import { type JsonObject, obj } from "./document.ts";
 

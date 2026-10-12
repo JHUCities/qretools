@@ -18,7 +18,12 @@ const itemsOf = (bank: Bank) =>
 		([path, ev]) =>
 			[
 				path,
-				elaborateItems(ev.draft, bank.agency ?? "invalid", bank.env.missing),
+				elaborateItems(
+					ev.draft,
+					bank.agency ?? "invalid",
+					bank.env.missing,
+					bank.env.selectAll,
+				),
 			] as const,
 	);
 const codes = (bank: Bank, path: string) =>
@@ -50,10 +55,16 @@ describe("one identity, one item", () => {
 			([path, ev]) =>
 				[
 					path,
-					elaborateItems(ev.draft, "org.example", bank.env.missing, {
-						own: { number: "1" },
-						shared: versions,
-					}),
+					elaborateItems(
+						ev.draft,
+						"org.example",
+						bank.env.missing,
+						bank.env.selectAll,
+						{
+							own: { number: "1" },
+							shared: versions,
+						},
+					),
 				] as const,
 		);
 		expect(collisions(items)).toEqual([]);
@@ -84,14 +95,42 @@ describe("one identity, one item", () => {
 		]);
 	});
 
-	it("a yesno01 scale that differs from the one select-all items use is told so", () => {
+	it("a scale named yesno01 is only a scale: select-all options are coded as the bank's own file says", () => {
 		const bank = bankOf({
 			...BANK,
-			"scales/yesno01.yaml": 'labels:\n  "0": no\n  "1": yes\n',
+			"scales/yesno01.yaml": 'labels:\n  "0": no\n  "1": yes\n  "2": maybe\n',
 			"questions/a/many.yaml": q("many", ALL),
 		});
-		expect(codes(bank, "scales/yesno01.yaml")).toEqual(["binary-scale"]);
-		expect(codes(bankOf(BANK), "scales/yesno01.yaml")).toEqual([]);
+		expect(codes(bank, "scales/yesno01.yaml")).toEqual([]);
+		expect(collisions(itemsOf(bank))).toEqual([]);
+	});
+
+	it("a select-all value that is also a missing-value code is said on the bank's file, at that value", () => {
+		const bank = bankOf({
+			...BANK,
+			"bank.yaml":
+				'agency: org.example\nselect_all:\n  chosen: { "1": Yes }\n  not_chosen: { "-8": No }\n',
+		});
+		expect(
+			(bank.findings["bank.yaml"] ?? []).map((f) => [f.code, f.path]),
+		).toEqual([["missing-code", "select_all.not_chosen.-8"]]);
+		expect(codes(bankOf(BANK), "bank.yaml")).toEqual([]);
+	});
+
+	it("the usual coding collides too, and the finding says how to end it", () => {
+		const bank = bankOf({
+			...BANK,
+			"missing.yaml": 'labels:\n  "1": Refused\n',
+		});
+		expect(
+			(bank.findings["bank.yaml"] ?? []).map((f) => [f.code, f.path, f.hint]),
+		).toEqual([
+			[
+				"missing-code",
+				"select_all.chosen.1",
+				"A select-all option is stored as 0 = No, 1 = Yes unless `select_all:` here says otherwise: write it with other codes, or change the missing-value code.",
+			],
+		]);
 	});
 
 	it("an ID the tool chooses has a hyphen, so it can't be a question's name", () => {

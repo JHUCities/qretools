@@ -4,11 +4,15 @@
  * Pure; the shell decides which text of a file counts (the saved bank version).
  */
 import { parseDocument, stringify } from "yaml";
-import { BINARY, BINARY_SCALE } from "./binary.ts";
 import { SCHEME_SINGULAR } from "./copy.ts";
 import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
 import { FOLDERS, isRoot, ROOT, type RootKind, schemePath } from "./kinds.ts";
 import { missingCollisions } from "./lint.ts";
+import {
+	DEFAULT_SELECT_ALL,
+	type SelectAll,
+	selectAllText,
+} from "./selectAll.ts";
 import { parseBankFile } from "./surface/bankfile.ts";
 import type { Code } from "./surface/draft.ts";
 import {
@@ -111,10 +115,8 @@ export function evaluateScheme(
 	kind: SchemeKind,
 	source: string,
 	env: Env,
-	/** The file's name: one means something to the tool (`yesno01`). */
-	name: string,
 ): SchemeEvaluation {
-	const read = readScheme(kind, source, env, name);
+	const read = readScheme(kind, source, env);
 	const livelits =
 		SHAPE[kind] === "bank"
 			? settingsLivelits(
@@ -129,41 +131,43 @@ export function evaluateScheme(
 	return { ...read, symbols: schemeSymbols(kind, read.value), livelits };
 }
 
-/**
- * The bank's `yesno01` scale and the one select-all items are coded on are published
- * under one identity, so they must say the same; a difference would make two items
- * with one ID. Said on the scale's file.
- */
-function binaryFindings(codes: readonly Code[]): readonly Finding[] {
-	const same =
-		codes.length === BINARY.length &&
-		codes.every(
-			(c, i) => c.code === BINARY[i]?.code && c.label === BINARY[i]?.label,
-		);
-	return same
-		? []
-		: [
-				{
-					code: "binary-scale",
-					severity: "warning",
-					path: "labels",
-					message: `\`${BINARY_SCALE}\` is the scale select-all items are coded on, so it must be exactly ${BINARY.map((c) => `\`"${c.code}": ${c.label}\``).join(", ")}.`,
-					hint: "Make it say exactly that, or give this scale another name.",
-				},
-			];
-}
-
 function readScheme(
 	kind: SchemeKind,
 	source: string,
 	env: Env,
-	name: string,
 ): Omit<SchemeEvaluation, "symbols" | "livelits"> {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
 	if (SHAPE[kind] === "bank") {
-		const { agency, findings: read } = parseBankFile(source);
-		const findings = withSpacing(doc, source, read.map(pointAt(empties)));
+		const { agency, selectAll, findings: read } = parseBankFile(source);
+		// A value a select-all option is stored as can't also be one of the bank's
+		// missing-value codes, as no code of any list can: the data couldn't tell them
+		// apart. With no coding written there is no place to point at, so the finding is
+		// the file's, and says what would end it.
+		const collisions = [
+			...missingCollisions(
+				[selectAll.chosen],
+				env.missing,
+				"select_all.chosen",
+			),
+			...missingCollisions(
+				[selectAll.notChosen],
+				env.missing,
+				"select_all.not_chosen",
+			),
+		].map((f) =>
+			selectAll === DEFAULT_SELECT_ALL
+				? {
+						...f,
+						hint: `A select-all option is stored as ${selectAllText(selectAll)} unless \`select_all:\` here says otherwise: write it with other codes, or change the missing-value code.`,
+					}
+				: f,
+		);
+		const findings = withSpacing(
+			doc,
+			source,
+			inDocumentOrder([...read, ...collisions], ranges).map(pointAt(empties)),
+		);
 		const marks: readonly Mark[] = [];
 		return agency === undefined
 			? { findings, ranges, marks }
@@ -200,13 +204,6 @@ function readScheme(
 						[
 							...findings,
 							...missingCollisions(scale.codes, env.missing, "labels"),
-							// Only once the scale reads cleanly: a hole is said by itself.
-							...(name === BINARY_SCALE &&
-							!findings.some(
-								(f) => f.severity === "hole" || f.severity === "error",
-							)
-								? binaryFindings(scale.codes)
-								: []),
 						],
 						ranges,
 					)
@@ -237,9 +234,10 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	let missing: readonly Code[] = EMPTY_ENV.missing;
 	let agency: string | undefined;
 	let required: readonly RequirableKey[] = EMPTY_ENV.required;
+	let selectAll: SelectAll = EMPTY_ENV.selectAll;
 	for (const f of files) {
 		if (f.kind === "bank") {
-			({ agency, required } = parseBankFile(f.text));
+			({ agency, required, selectAll } = parseBankFile(f.text));
 			continue;
 		}
 		if (f.kind === "concept" || f.kind === "unit") {
@@ -268,6 +266,7 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		instructions,
 		missing,
 		required,
+		selectAll,
 		...(agency !== undefined && { agency }),
 	};
 }

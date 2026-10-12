@@ -174,7 +174,7 @@ export function createEvaluations(): Evaluations {
 				hit.env === env
 			)
 				return hit.ev;
-			const ev = evaluateScheme(e.kind, e.source, env, e.name);
+			const ev = evaluateScheme(e.kind, e.source, env);
 			schemes.set(e.id, { source: e.source, name: e.name, env, ev });
 			return ev;
 		},

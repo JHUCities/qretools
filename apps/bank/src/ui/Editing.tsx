@@ -1100,7 +1100,7 @@ export function ForeignView({
 		() =>
 			file === undefined || at === undefined || at.kind === "question"
 				? undefined
-				: evaluateScheme(at.kind, file.text, env, at.name),
+				: evaluateScheme(at.kind, file.text, env),
 		[file, at, env],
 	);
 	const findings = ev?.findings ?? scheme?.findings ?? [];

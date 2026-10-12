@@ -3,8 +3,10 @@
  * question mentions is a binding in one of these; an unbound name is a hole.
  * Filenames are names. `missing` is one bank-level list, not a namespace.
  */
+
 import { isMap, parseDocument } from "yaml";
 import type { Finding } from "../findings.ts";
+import { DEFAULT_SELECT_ALL, type SelectAll } from "../selectAll.ts";
 import type { Code } from "./draft.ts";
 import {
 	EMPTY_HINT,
@@ -48,6 +50,8 @@ export interface Env {
 	readonly agency?: string;
 	/** The fields the bank also requires of its questions (`bank.yaml`'s `required`). */
 	readonly required: readonly RequirableKey[];
+	/** How the bank stores a select-all option's answer (`bank.yaml`'s `select_all`). */
+	readonly selectAll: SelectAll;
 }
 
 /** A scheme a question can name. `missing` is not one: it is a list, never named. */
@@ -113,6 +117,7 @@ export const EMPTY_ENV: Env = {
 	instructions: {},
 	missing: [],
 	required: [],
+	selectAll: DEFAULT_SELECT_ALL,
 };
 
 export interface ParsedTextEntry {

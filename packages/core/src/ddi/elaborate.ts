@@ -14,10 +14,14 @@
  * they cannot collide with a question); the one allowed dot hangs parts off a base.
  */
 
-import { BINARY, BINARY_SCALE } from "../binary.ts";
 import { compact } from "../compact.ts";
 import { schemePath } from "../kinds.ts";
 import type { SchemeKind } from "../schemes.ts";
+import {
+	DEFAULT_SELECT_ALL,
+	type SelectAll,
+	selectAllCodes,
+} from "../selectAll.ts";
 import {
 	type Code,
 	type DefinedVariable,
@@ -58,6 +62,8 @@ const UNTITLED = "untitled-question";
 
 /** The bank's missing-value list: one managed representation, referenced by every Variable. */
 const MISSING_ID = "missing-values";
+/** The code list every select-all option's variable is coded on: the bank's two values. */
+const SELECT_ALL_ID = "select-all";
 
 /**
  * What is known of the versions a question's items take: its own file's, and each
@@ -73,15 +79,17 @@ export const elaborate = (
 	draft: Draft,
 	agency: string,
 	missing: readonly Code[],
+	selectAll: SelectAll,
 	versioning: Versioning = {},
 ): DdiDocument =>
-	documentOf(elaborateItems(draft, agency, missing, versioning));
+	documentOf(elaborateItems(draft, agency, missing, selectAll, versioning));
 
 /** Who publishes the items, and at which version each file's items are. */
 interface Ctx {
 	readonly agency: string;
 	readonly own: Version;
 	readonly shared: (kind: SchemeKind, name: string) => Version;
+	readonly selectAll: SelectAll;
 }
 
 /** An item at a version; the file's principal item also carries the version's UserID. */
@@ -106,10 +114,12 @@ export function elaborateItems(
 	draft: Draft,
 	agency: string,
 	missing: readonly Code[],
+	selectAll: SelectAll,
 	versioning: Versioning = {},
 ): readonly Item[] {
 	const ctx: Ctx = {
 		agency,
+		selectAll,
 		own: versioning.own ?? UNVERSIONED,
 		shared: (kind, name) =>
 			versioning.shared?.[schemePath(kind, name)] ?? UNVERSIONED,
@@ -458,11 +468,11 @@ interface VariableSpec {
 
 /**
  * One variable named like the question; or, for select-many, one per option, each
- * a yes/no on the shared binary scale (how the Baltimore Area Survey publishes
- * such items), whose list comes with them as `items`. The two labels differ on
+ * coded on the bank's two select-all values (`SelectAll`: chosen or not), whose list
+ * comes with them as `items`. The two labels differ on
  * purpose: a question's variable is labelled by the author's title or nothing (the
  * previews fall back to other text, DDI does not invent one); an option's falls back
- * to the option's label, which is exactly what 1 means for that variable.
+ * to the option's label, which is exactly what "chosen" means for that variable.
  */
 function variableSpecs(
 	defined: readonly DefinedVariable[],
@@ -478,12 +488,15 @@ function variableSpecs(
 			variables: [compact({ name: first.name, label: title, value })],
 			items: [],
 		};
-	// The bank's own file for the binary scale gives its version (see BINARY_SCALE).
+	// The bank's coding of a select-all option (its `bank.yaml`), under an identity of
+	// the tool's own, as the missing list's is: no question or scale can have this name.
+	// Its version is the bank file's, where it is written: a change anywhere in that file
+	// is a new version of the list, as file versions are all this knows.
 	const binary = codeListItems(
 		ctx,
-		ctx.shared("scale", BINARY_SCALE),
-		`scale-${BINARY_SCALE}`,
-		BINARY,
+		ctx.shared("bank", "bank"),
+		SELECT_ALL_ID,
+		selectAllCodes(ctx.selectAll),
 		{ principal: true },
 	);
 	const yesNo = {
@@ -559,7 +572,13 @@ export function sharedUniverseItem(
 ): Item {
 	return universeItem(
 		{ kind: "ref", name, value: entry },
-		{ agency, own: UNVERSIONED, shared: () => version },
+		{
+			agency,
+			own: UNVERSIONED,
+			shared: () => version,
+			// A universe has no select-all coding in it.
+			selectAll: DEFAULT_SELECT_ALL,
+		},
 		"",
 	);
 }
