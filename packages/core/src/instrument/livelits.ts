@@ -207,13 +207,14 @@ export function addInstrumentFill(
 	const range = parsed.ranges[path];
 	const ask = parsed.ranges[`${path}.ask`];
 	if (range === undefined || ask === undefined) return undefined;
-	if (!source.slice(ask[0], ask[1]).includes(question)) return undefined;
-	const marker = source.lastIndexOf(`ask: ${question}`, range[1]);
-	const line = source.lastIndexOf("\n", marker) + 1;
-	const base =
-		marker < 0 ? undefined : /^([ \t]*)/.exec(source.slice(line))?.[1];
+	const written = source.slice(ask[0], ask[1]);
+	const current =
+		/^(?<indent>[ \t]*)(?<inline>-\s*)?ask:\s*(?<name>\S+)\s*$/m.exec(written);
+	if (current?.groups?.name !== question) return undefined;
+	const currentLine = source.lastIndexOf("\n", ask[0] + current.index) + 1;
+	const base = /^([ \t]*)/.exec(source.slice(currentLine))?.[1];
 	if (base === undefined) return undefined;
-	const fillIndent = /^\s*-\s+ask:/.test(source.slice(line))
+	const fillIndent = /-\s*ask:/.test(source.slice(currentLine, ask[1]))
 		? `${base}  `
 		: base;
 	const lead = source[range[1] - 1] === "\n" ? "" : "\n";
