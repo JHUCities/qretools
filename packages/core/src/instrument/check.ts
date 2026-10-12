@@ -298,7 +298,15 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				read(node.value, `${node.path}.value`, seen);
 				if (node.name === undefined) return seen;
 				const named = parsed.scope.get(node.name);
-				return add(seen, [node.name], named === undefined ? [] : [{ named }]);
+				const row = rows.at(-1);
+				if (row !== undefined) rowOf.set(node.name, row);
+				return add(
+					seen,
+					[node.name],
+					named === undefined
+						? []
+						: [{ named, ...(row !== undefined && { row }) }],
+				);
 			}
 			case "roster": {
 				// `count` is read before the rows; `more` at the end of each.
