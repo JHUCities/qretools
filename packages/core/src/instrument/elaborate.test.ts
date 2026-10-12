@@ -272,17 +272,22 @@ flow:
 			elaborateInstrument(parsed, { agency: "org.example" }),
 		);
 		expect(validator.ok && validator.value(document)).toEqual([]);
-		const computation = Object.values(document.ComputationItem ?? {}).find(
-			(item) => String(item.ID).includes("label-selected_neighborhood"),
+		const conditions = Object.values(document.IfThenElse ?? {}).flatMap(
+			(item) => (item.IfCondition as JsonObject | undefined)?.Command ?? [],
 		);
-		expect(computation?.CommandCode).toMatchObject({
-			Command: [
-				{
-					CommandContent:
-						'{"1": "Own", "2": "Rent", "-8": "Refused"}.get(selected_neighborhood)',
-				},
-			],
-		});
+		expect(conditions).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					CommandContent: 'selected_neighborhood = "1"',
+				}),
+				expect.objectContaining({
+					CommandContent: 'selected_neighborhood = "2"',
+				}),
+			]),
+		);
+		expect(
+			[...objects(document)].some((item) => item.CommandContent === '"Own"'),
+		).toBe(true);
 		const displayVariable = Object.values(document.Variable ?? {}).find(
 			(item) => String(item.ID).endsWith("var-display_label_1"),
 		);
@@ -299,6 +304,26 @@ flow:
 				},
 			},
 		]);
+
+		const qualified = parseInstrument(
+			`name: qualified
+uses:
+  bas: here
+flow:
+  - ask: bas.tenure
+  - ask: bas.echo
+    fill:
+      neighborhood: label(bas.tenure)
+`,
+			{ bas: BAS },
+		);
+		const qualifiedDocument = instrumentDocument(
+			elaborateInstrument(qualified, { agency: "org.example" }),
+		).document;
+		expect(validator.ok && validator.value(qualifiedDocument)).toEqual([]);
+		for (const item of objects(qualifiedDocument))
+			if (typeof item.ID === "string")
+				expect(item.ID.split(".").length).toBeLessThanOrEqual(2);
 	});
 
 	it("says nothing it doesn't know: no severity guessed, no binding to what isn't recorded", () => {
