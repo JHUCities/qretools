@@ -1983,7 +1983,8 @@ describe("why writing is blocked, and what to do", () => {
 			kind: "standing",
 			reason:
 				"You have read access only to this repository, so this workspace can't be changed",
-			hint: "Ask its owner for write access.",
+			hint: "Ask its owner for write access, then try again.",
+			fix: "recheck",
 		});
 		expect(blockage(failed(base()))).toMatchObject({
 			kind: "standing",
@@ -2007,30 +2008,142 @@ describe("why writing is blocked, and what to do", () => {
 		).toBeUndefined();
 	});
 
-	it("closes on Try again whether or not it works: a reason still standing is said in the top bar", () => {
-		const open = tried(notInstalled(base()));
-		const [asking] = update(open, {
-			kind: "connectRequested",
-			settings: open.settings,
-		});
-		// Asking is brief, so the notice goes; the app still isn't installed.
-		expect(asking.browser.blockedNotice).toBeUndefined();
-		const [still] = update(asking, {
-			kind: "connected",
+	const answered = (
+		m: Model,
+		access: "write" | "notInstalled" | "readOnly",
+		who: { login?: string; repo?: string } = {},
+	) =>
+		update(m, {
+			kind: "accessChecked",
+			login: who.login ?? session(m).login,
+			repo: {
+				owner: m.settings.owner,
+				repo: who.repo ?? m.settings.repo,
+				path: m.settings.path,
+			},
 			result: {
 				ok: true,
 				value: {
-					login: session(open).login,
+					login: who.login ?? session(m).login,
 					avatarUrl: "https://a/x",
-					access: { kind: "notInstalled" },
+					access: { kind: access },
 					defaultBranch: "main",
 				},
 			},
 		});
-		expect(blockage(still)).toMatchObject({ kind: "standing", fix: "install" });
-		expect(still.browser.blockedNotice).toBeUndefined();
-		// The next press explains it again.
-		expect(tried(still).browser.blockedNotice).toBe(true);
+
+	it("asks GitHub again when the author comes back, only while a permission blocks, one at a time", () => {
+		const blocked = notInstalled(base());
+		const [asking, cmds] = update(blocked, { kind: "tabShown" });
+		expect(asking.checking).toBe("quiet");
+		expect(cmds).toEqual([
+			{
+				kind: "checkAccess",
+				login: session(blocked).login,
+				repo: {
+					owner: blocked.settings.owner,
+					repo: blocked.settings.repo,
+					path: blocked.settings.path,
+				},
+			},
+		]);
+		// Said nowhere: nobody asked.
+		expect(sessionStatus(asking)).toBe(writeBlocked(asking));
+		// A second return while it's in flight asks nothing more.
+		expect(update(asking, { kind: "tabShown" })).toEqual([asking, []]);
+		// Read access too: someone may have granted write.
+		expect(
+			update(connected(fresh(), false), { kind: "tabShown" })[1][0]?.kind,
+		).toBe("checkAccess");
+		// Nothing to ask where nothing is blocked, or the block is not a permission.
+		for (const m of [base(), failed(base())])
+			expect(update(m, { kind: "tabShown" })).toEqual([m, []]);
+	});
+
+	it("lifts the block when the app has been installed, leaving the loaded workspace as it is", () => {
+		const blocked = update(notInstalled(base()), { kind: "tabShown" })[0];
+		const [lifted, cmds] = answered(blocked, "write");
+		expect(blockage(lifted)).toBeUndefined();
+		expect(lifted.checking).toBeUndefined();
+		expect(cmds).toEqual([]);
+		// Only the permission changed: nothing is read again.
+		expect(lifted.loading).toBe(blocked.loading);
+		expect(lifted.local).toBe(blocked.local);
+		expect(lifted.remote).toBe(blocked.remote);
+		// GitHub's answer is taken as it is: installed, but with read access only.
+		expect(blockage(answered(blocked, "readOnly")[0])).toMatchObject({
+			fix: "recheck",
+		});
+	});
+
+	it("reads a workspace that hadn't loaded, once it can be", () => {
+		const blocked = update(failed(notInstalled(base())), {
+			kind: "tabShown",
+		})[0];
+		const [next, cmds] = answered(blocked, "write");
+		expect(next.loading).toEqual({ kind: "loading" });
+		expect(cmds.map((c) => c.kind)).toEqual(["loadWorkspace"]);
+	});
+
+	it("says a check that was asked for, keeps the notice until GitHub answers, and closes it on success", () => {
+		const open = tried(notInstalled(base()));
+		const [asking, cmds] = update(open, { kind: "accessCheckRequested" });
+		expect(cmds.map((c) => c.kind)).toEqual(["checkAccess"]);
+		expect(sessionStatus(asking)).toBe("Checking with GitHub…");
+		// The reason still stands while GitHub answers, so the notice stays.
+		expect(asking.browser.blockedNotice).toBe(true);
+		// Still not installed: it stays, with its explanation.
+		const [still] = answered(asking, "notInstalled");
+		expect(still.browser.blockedNotice).toBe(true);
+		expect(still.checking).toBeUndefined();
+		// Installed: it goes, with the block.
+		const [lifted] = answered(asking, "write");
+		expect(lifted.browser.blockedNotice).toBeUndefined();
+		// A press while a quiet check is in flight makes it said, and asks nothing more.
+		const quiet = update(notInstalled(base()), { kind: "tabShown" })[0];
+		const [said, none] = update(quiet, { kind: "accessCheckRequested" });
+		expect(said.checking).toBe("asked");
+		expect(none).toEqual([]);
+	});
+
+	it("shows a failure only of a check that was asked for", () => {
+		const failure = {
+			kind: "network" as const,
+			message: "GitHub couldn't be reached.",
+		};
+		const fail = (m: Model) =>
+			update(m, {
+				kind: "accessChecked",
+				login: session(m).login,
+				repo: {
+					owner: m.settings.owner,
+					repo: m.settings.repo,
+					path: m.settings.path,
+				},
+				result: { ok: false, error: failure },
+			})[0];
+		const quiet = fail(update(notInstalled(base()), { kind: "tabShown" })[0]);
+		expect(quiet.failures).toEqual([]);
+		expect(quiet.checking).toBeUndefined();
+		expect(quiet.session.kind).toBe("connected");
+		const asked = fail(
+			update(notInstalled(base()), { kind: "accessCheckRequested" })[0],
+		);
+		expect(asked.failures).toEqual([failure]);
+		expect(blockage(asked)?.kind).toBe("standing");
+	});
+
+	it("ignores an answer for another session or bank, or one nobody is waiting for", () => {
+		const asking = update(notInstalled(base()), { kind: "tabShown" })[0];
+		expect(answered(asking, "write", { login: "someone-else" })[0]).toBe(
+			asking,
+		);
+		expect(answered(asking, "write", { repo: "other" })[0]).toBe(asking);
+		const idle = notInstalled(base());
+		expect(answered(idle, "write")[0]).toBe(idle);
+		// Signed out meanwhile: the check went with the session.
+		const out = update(asking, { kind: "signOutRequested" })[0];
+		expect(out.checking).toBeUndefined();
 	});
 
 	it("closes the notice once the reason lifts, so a later one opens nothing unasked", () => {

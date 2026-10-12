@@ -24,6 +24,7 @@ import {
 	formatLink,
 	NO_TOKEN,
 	parseLink,
+	type Who,
 } from "@qretools/shell";
 import type { Cmd, Dispatch, Id, RemoteAddress } from "./model.js";
 import {
@@ -184,6 +185,16 @@ export function createEffects(deps: Deps): Effects {
 					const s = storeFor(cmd.repo);
 					if (!s) return dispatch({ kind: "connected", result: err(NO_TOKEN) });
 					s.whoAmI().then((result) => dispatch({ kind: "connected", result }));
+					return;
+				}
+				case "checkAccess": {
+					// The same question as connecting asks, with nothing else done about it.
+					const { repo, login } = cmd;
+					const answer = (result: Result<Who, Failure>) =>
+						dispatch({ kind: "accessChecked", login, repo, result });
+					const s = storeFor(repo);
+					if (!s) return answer(err(NO_TOKEN));
+					s.whoAmI().then(answer);
 					return;
 				}
 				case "openExternal":

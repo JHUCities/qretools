@@ -470,17 +470,16 @@ export function App() {
 									<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
 								</LinkButton>
 							)}
-						{/* After installing in the other tab: ask GitHub again, no sign-in round trip. */}
+						{/*
+						 * Where a permission blocks writing (the app not installed, read access
+						 * only): ask GitHub what the app may do now, with nothing reloaded. The
+						 * app asks by itself when the author comes back to the tab, too.
+						 */}
 						{model.session.kind === "connected" &&
-							model.session.access.kind === "notInstalled" && (
+							model.session.access.kind !== "write" && (
 								<Button
 									size="small"
-									onClick={() =>
-										dispatch({
-											kind: "connectRequested",
-											settings: model.settings,
-										})
-									}
+									onClick={() => dispatch({ kind: "accessCheckRequested" })}
 								>
 									Try again
 								</Button>
@@ -688,7 +687,7 @@ export function App() {
 								? undefined
 								: installUrl(signInConfig.appSlug)
 						}
-						settings={model.settings}
+						checking={model.checking === "asked"}
 						dispatch={dispatch}
 					/>
 				)}
@@ -1013,6 +1012,7 @@ const busy = (model: Model): boolean =>
 	model.session.kind === "connecting" ||
 	(model.session.kind === "connected" &&
 		(model.loading.kind === "loading" ||
+			model.checking === "asked" ||
 			saving(model) ||
 			(model.screen.kind === "foreign" && model.screen.file === undefined)));
 

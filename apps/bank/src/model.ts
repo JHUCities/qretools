@@ -324,6 +324,13 @@ export interface Model {
 	 * reload after it lands, so no save is checked against the branch as it was before.
 	 */
 	readonly updating?: true;
+	/**
+	 * GitHub is being asked again what the app may do here (`checkAccess`), while a
+	 * permission blocks writing: quietly, when the author comes back to the tab (they may
+	 * have installed the app in another), or because they asked ("Try again"), which the
+	 * status then says. One check at a time. Never set while not connected.
+	 */
+	readonly checking?: "quiet" | "asked";
 	readonly ddiSchema: DdiSchema;
 	/** Light or dark as chosen on this device, or the system's (until the toggle is used). */
 	readonly theme: ThemeChoice;
@@ -472,6 +479,17 @@ export type Msg =
 			readonly kind: "connected";
 			readonly result: Result<Who, Failure>;
 	  }
+	/** The tab is shown again, or its window has focus again: the author is back. */
+	| { readonly kind: "tabShown" }
+	/** "Try again" where a permission blocks writing: ask GitHub what the app may do now. */
+	| { readonly kind: "accessCheckRequested" }
+	/** GitHub's answer to `checkAccess`, with whose session and which bank it was asked for. */
+	| {
+			readonly kind: "accessChecked";
+			readonly login: string;
+			readonly repo: BankRef;
+			readonly result: Result<Who, Failure>;
+	  }
 	/** The whole workspace as GitHub has it: its banks, and (later) its instruments. */
 	| {
 			readonly kind: "workspaceLoaded";
@@ -534,6 +552,15 @@ export type Cmd =
 	/** Work leaving this tab (someone else's, or another bank's): kept in the browser, never dropped. */
 	| { readonly kind: "setAside"; readonly work: Work }
 	| { readonly kind: "connect"; readonly repo: BankRef }
+	/**
+	 * Ask GitHub what the app may do in the bank now, for the session of `login`, changing
+	 * nothing else: the answer comes back as `accessChecked`.
+	 */
+	| {
+			readonly kind: "checkAccess";
+			readonly repo: BankRef;
+			readonly login: string;
+	  }
 	/** Read every file of the workspace, from the author's branch or, before it exists, the bank's. */
 	| { readonly kind: "loadWorkspace"; readonly target: BranchTarget }
 	| { readonly kind: "updateFromDefault"; readonly target: BranchTarget }
