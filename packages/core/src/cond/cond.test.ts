@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Expr, holesOf, namesOf } from "./ast.ts";
+import { type Expr, FILL_FUNCTIONS, holesOf, namesOf } from "./ast.ts";
 import { evaluateCondition, UNKNOWN, type Value } from "./eval.ts";
 import { parseCondition } from "./parse.ts";
 import { printCondition } from "./print.ts";
@@ -214,6 +214,13 @@ describe("evaluating conditions", () => {
 		const hole: Expr = { kind: "hole", range: [0, 0] };
 		expect(evaluateCondition(hole, () => 1)).toBe(UNKNOWN);
 		expect(value("isnull()", {})).toBe(UNKNOWN);
+		// A fill's `label(x)` is words the bank holds, never a `between`.
+		expect(
+			evaluateCondition(
+				parseCondition("label(x)", FILL_FUNCTIONS).expr,
+				() => "1",
+			),
+		).toBe(UNKNOWN);
 		expect(value('x = "1" and', { x: "1" })).toBe(UNKNOWN);
 		expect(value('x = "1" and', { x: "2" })).toBe(false);
 		expect(value('x = "1" or', { x: "1" })).toBe(true);

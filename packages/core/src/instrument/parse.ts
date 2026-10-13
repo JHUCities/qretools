@@ -734,7 +734,41 @@ function typeOfDomain(
 	if (domain === undefined) return { kind: "unknown" };
 	if (domain.kind === "number") return { kind: "number" };
 	if (domain.kind === "open") return { kind: "string" };
-	return { kind: "code", codes: [...domain.codes, ...missing] };
+	return { kind: "code", codes: [...domain.codes, ...asMissing(missing)] };
+}
+
+/** A bank's missing-value codes among an answer's: marked, as they aren't words for a respondent. */
+const asMissing = (missing: readonly Code[]) =>
+	missing.map((c) => ({ ...c, missing: true as const }));
+
+/**
+ * What an answer is to a condition or a fill: a question's own value or, for one option
+ * of a select-all-that-apply question, the bank's two stored values; either way with the
+ * bank's missing-value codes. The one place this is decided.
+ */
+export function answerType(
+	q: QuestionRef,
+	bank: BankScope | undefined,
+	option = false,
+): Type {
+	const missing = bank?.env.missing ?? [];
+	if (option)
+		return {
+			kind: "code",
+			codes: [
+				...(bank === undefined ? [] : selectAllCodes(bank.env.selectAll)),
+				...asMissing(missing),
+			],
+		};
+	const domain = q.evaluation.draft.domain;
+	return typeOfDomain(
+		domain === undefined
+			? undefined
+			: domain.kind === "responses"
+				? { kind: "responses", codes: domain.codes }
+				: domain,
+		missing,
+	);
 }
 
 function readUniverse(
@@ -1297,7 +1331,7 @@ function readAsk(
 						name: asName,
 						path,
 						question,
-						type: questionType(question, ctx),
+						type: answerType(question, ctx.banks[question.alias]),
 					},
 					`${path}.as`,
 				);
@@ -1411,19 +1445,6 @@ function resolveQuestion(
 }
 
 /** What a question's own answer is to a condition (its variable named like it). */
-function questionType(q: QuestionRef, ctx: Context): Type {
-	const missing = ctx.banks[q.alias]?.env.missing ?? [];
-	const domain = q.evaluation.draft.domain;
-	return typeOfDomain(
-		domain === undefined
-			? undefined
-			: domain.kind === "responses"
-				? { kind: "responses", codes: domain.codes }
-				: domain,
-		missing,
-	);
-}
-
 /**
  * What a name in a condition means: `alias.variable` a bank variable (a question's own,
  * or a select-all option's), a bare name an input, compute or `as`.
@@ -1460,13 +1481,7 @@ function resolve(name: string, ctx: Context): Named | undefined {
 		path,
 		evaluation,
 	};
-	const type: Type =
-		defined?.option !== undefined
-			? {
-					kind: "code",
-					codes: [...selectAllCodes(bank.env.selectAll), ...bank.env.missing],
-				}
-			: questionType(question, ctx);
+	const type = answerType(question, bank, defined?.option !== undefined);
 	return { kind: "bank", alias, variable, question, type };
 }
 

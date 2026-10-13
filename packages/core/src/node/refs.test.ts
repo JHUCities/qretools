@@ -190,13 +190,15 @@ describe("the codes a condition compares a bank answer with", () => {
 				written: '"1"',
 				path: "bank.yaml",
 				at: "select_all.chosen.1",
-				about: "`Selected`, as this bank stores a select-all option.",
+				about:
+					"`Selected`, as this bank stores a select-all-that-apply option.",
 			},
 			{
 				written: '"2"',
 				path: "bank.yaml",
 				at: "select_all.not_chosen.2",
-				about: "`Not selected`, as this bank stores a select-all option.",
+				about:
+					"`Not selected`, as this bank stores a select-all-that-apply option.",
 			},
 		]);
 	});

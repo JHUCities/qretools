@@ -102,16 +102,25 @@ export function evaluateCondition(
 				return x.negated;
 			}
 			case "call": {
+				// A code's words are its bank's, which a condition's evaluation isn't given.
+				if (x.fn === "label") return UNKNOWN;
 				const args = x.args.map(go);
 				if (args.includes(UNKNOWN)) return UNKNOWN;
-				if (x.fn === "isnull") return args[0] === null;
-				const [v, lo, hi] = args;
-				if (v == null || lo == null || hi == null) return null;
-				if (!same(v, lo) || !same(v, hi)) return null;
-				return (
-					(v as number | string) >= (lo as number | string) &&
-					(v as number | string) <= (hi as number | string)
-				);
+				switch (x.fn) {
+					case "isnull":
+						return args[0] === null;
+					case "between": {
+						const [v, lo, hi] = args;
+						if (v == null || lo == null || hi == null) return null;
+						if (!same(v, lo) || !same(v, hi)) return null;
+						return (
+							(v as number | string) >= (lo as number | string) &&
+							(v as number | string) <= (hi as number | string)
+						);
+					}
+					default:
+						return x.fn satisfies never;
+				}
 			}
 			default:
 				return x satisfies never;

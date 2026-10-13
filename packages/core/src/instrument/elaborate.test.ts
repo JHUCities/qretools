@@ -326,6 +326,74 @@ flow:
 				expect(item.ID.split(".").length).toBeLessThanOrEqual(2);
 	});
 
+	it("shows a label only for an answer that has one: reset first, no missing-value words, no borrowed name", () => {
+		const bank = bankOf({
+			"bank.yaml": "agency: org.example\n",
+			"missing.yaml": 'labels:\n  "-8": Refused\n',
+			"questions/h/tenure.yaml":
+				'name: tenure\ntext: Do you own or rent?\nintent: i\nresponses:\n  "1": Own\n  "2": Rent\n',
+			"questions/h/echo.yaml":
+				'name: echo\ntext: "You selected {{neighborhood}}."\nintent: i\nopen: {}\nfills:\n  neighborhood: text\n',
+		});
+		const parsed = parseInstrument(
+			`name: rows
+uses:
+  bas: here
+flow:
+  - compute: display_label_1
+    value: 1
+  - ask: bas.tenure
+  - if: bas.tenure = "-8"
+    then:
+      - say: A missing-value code is still an answer a condition may test.
+  - ask: bas.echo
+    fill:
+      neighborhood: label(bas.tenure)
+`,
+			{ bas: bank },
+		);
+		expect([...parsed.findings, ...checkInstrument(parsed)]).toEqual([]);
+		const { document } = instrumentDocument(
+			elaborateInstrument(parsed, { agency: "org.example" }),
+		);
+		expect(validator.ok && validator.value(document)).toEqual([]);
+		const commands = [...objects(document)].flatMap((o) =>
+			typeof o.CommandContent === "string" ? [o.CommandContent] : [],
+		);
+		// "Refused" is the bank's word for the data, never the respondent's.
+		expect(commands).not.toContain('"Refused"');
+		expect(commands).toContain('"Own"');
+		// The author's `display_label_1` keeps its name; the generated value takes the next.
+		const echo = Object.values(document.QuestionConstruct ?? {}).find((item) =>
+			String(item.ID).endsWith("ask-echo"),
+		);
+		expect(echo?.Binding).toMatchObject([
+			{
+				SourceParameterReference: {
+					ID: "instrument-rows.out-display_label_2",
+				},
+			},
+		]);
+		// The lookup starts by forgetting the last answer's label (a roster's next row).
+		const lookup = Object.values(document.Sequence ?? {}).find((item) =>
+			String(item.ID).endsWith("label-bas_tenure"),
+		);
+		const steps = (
+			(lookup?.ControlConstructReference ?? []) as { value: string[] }[]
+		).map((r) => r.value[1]);
+		expect(steps).toEqual(
+			["reset", "code-1", "code-2"].map(
+				(n) => `instrument-rows.label-bas_tenure-${n}`,
+			),
+		);
+		const reset = Object.values(document.ComputationItem ?? {}).find(
+			(item) => item.ID === steps[0],
+		);
+		expect(JSON.stringify(reset?.CommandCode)).toContain(
+			'"CommandContent":"null"',
+		);
+	});
+
 	it("says nothing it doesn't know: no severity guessed, no binding to what isn't recorded", () => {
 		const parsed = parseInstrument(
 			`name: x

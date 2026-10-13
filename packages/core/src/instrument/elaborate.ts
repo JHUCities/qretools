@@ -286,8 +286,19 @@ export function elaborateInstrument(
 		codes: Extract<Type, { kind: "code" }>["codes"],
 		at: string,
 	): { variable: string; construct: Item } => {
-		const variable = `display_label_${++labelValues}`;
+		// Never a name the instrument records itself: the two would be one variable.
+		let variable = `display_label_${++labelValues}`;
+		while (defined.has(variable)) variable = `display_label_${++labelValues}`;
 		const output = outOf(variable);
+		const assigned = { ...output, ParameterName: [intl(variable)] };
+		// Asked again (a roster's next row, a loop), an answer with no label to show
+		// (unanswered, or a missing-value code) must not keep the last one's words.
+		const reset = emit(
+			item("ComputationItem", id(`${at}-reset`), {
+				CommandCode: vtl("null", [], `${at}-reset`),
+				AssignedVariableReference: assigned,
+			}),
+		);
 		emit(
 			item("Variable", id(`var-${variable}`), {
 				VariableName: [intl(variable)],
@@ -301,31 +312,30 @@ export function elaborateInstrument(
 				OutParameter: obj({ ...output, ParameterName: [intl(variable)] }),
 			}),
 		);
-		const choices = codes.map((code, i) => {
-			const choice = `${at}-code-${i + 1}`;
-			const assignment = emit(
-				item("ComputationItem", id(`${choice}-value`), {
-					CommandCode: vtl(JSON.stringify(code.label), [], `${choice}-value`),
-					AssignedVariableReference: {
-						...output,
-						ParameterName: [intl(variable)],
-					},
-				}),
-			);
-			return emit(
-				item("IfThenElse", id(choice), {
-					IfCondition: vtl(
-						`${source} = ${JSON.stringify(code.code)}`,
-						[{ alias: source, source: outOf(source) }],
-						choice,
-					),
-					ThenConstructReference: ref(assignment),
-				}),
-			);
-		});
+		const choices = codes
+			.filter((code) => code.missing !== true)
+			.map((code, i) => {
+				const choice = `${at}-code-${i + 1}`;
+				const assignment = emit(
+					item("ComputationItem", id(`${choice}-value`), {
+						CommandCode: vtl(JSON.stringify(code.label), [], `${choice}-value`),
+						AssignedVariableReference: assigned,
+					}),
+				);
+				return emit(
+					item("IfThenElse", id(choice), {
+						IfCondition: vtl(
+							`${source} = ${JSON.stringify(code.code)}`,
+							[{ alias: source, source: outOf(source) }],
+							choice,
+						),
+						ThenConstructReference: ref(assignment),
+					}),
+				);
+			});
 		const construct = emit(
 			item("Sequence", id(at), {
-				ControlConstructReference: choices.map((choice) => ref(choice)),
+				ControlConstructReference: [reset, ...choices].map((c) => ref(c)),
 			}),
 		);
 		return { variable, construct };
