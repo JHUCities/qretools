@@ -13,7 +13,7 @@ import {
 } from "@primer/react";
 import { plainText, UNNAMED } from "@qretools/core";
 import { failureDescription } from "@qretools/shell/ui";
-import { type ReactElement, useId } from "react";
+import { type ReactElement, type ReactNode, useId } from "react";
 import type { Activity, Entry } from "../model.js";
 import { SESSION_STATUS, useBlocked } from "./AppContext.js";
 
@@ -38,6 +38,7 @@ export function FileHeader({
 	blocked,
 	also = [],
 	stale = false,
+	hint,
 	on,
 }: {
 	q: Entry;
@@ -56,6 +57,8 @@ export function FileHeader({
 	 * file a refused save happened to report on.
 	 */
 	stale?: boolean;
+	/** Something offered about this file, after its own banners: in the header's row. */
+	hint?: ReactNode;
 	on: HeaderActions;
 }) {
 	const canWrite = blocked === undefined;
@@ -217,6 +220,7 @@ export function FileHeader({
 					primaryAction={reload}
 				/>
 			)}
+			{hint}
 		</div>
 	);
 }

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { resolve } from "node:path";
 /**
  * A workspace of several banks, drawn: each bank under its own heading with its own
  * questions and shared files, and New asking which bank first. A workspace of one bank
@@ -7,6 +8,7 @@
  */
 import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
+import { readBank } from "@qretools/core/node";
 import type { Store } from "@qretools/shell";
 import {
 	act,
@@ -26,6 +28,12 @@ const file = (path: string, text: string) => ({
 	sha: `sha-${path}`,
 	text,
 });
+/** The example bank as the template ships it (the library's fixture), at `banks/example`. */
+const EXAMPLE_BANK = Object.entries(
+	// From the package's folder, where Vitest runs: jsdom gives this module no file URL.
+	await readBank(resolve("../../packages/core/fixtures/bank")),
+).map(([path, text]) => file(`banks/example/${path}`, text));
+
 const QUESTION = (name: string) =>
 	`name: ${name}\ntext: Is it so?\nintent: To see.\nresponses: yn\n`;
 const FILES = [
@@ -136,9 +144,7 @@ describe("a workspace of several banks", () => {
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
 			"Instrument…",
-			"Example instrument…",
 			"Bank…",
-			"Workspace details",
 			"banks/a",
 			"banks/b",
 		]);
@@ -295,6 +301,8 @@ describe("a workspace's instruments", () => {
 		await act(async () => {});
 		const tree = screen.getByRole("tree", { name: "Instruments" });
 		expect(within(tree).getByRole("treeitem", { name: /^wave2/ })).toBeTruthy();
+		// Not the workspace's first instrument: no offer of the example.
+		expect(screen.queryByText("New here?")).toBeNull();
 		const { model } = app.store.getState();
 		expect(
 			Object.values(model.local.workspace).map((e) =>
@@ -321,9 +329,7 @@ describe("a workspace's instruments", () => {
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
 			"Instrument…",
-			"Example instrument…",
 			"Bank…",
-			"Workspace details",
 		]);
 	});
 
@@ -443,16 +449,29 @@ describe("a workspace's instruments", () => {
 
 	// The owner's reversal (2026-10-09): the section stays with none yet, a bank at the
 	// root included, so instruments are found where a team starts.
-	it("say there are none yet in a workspace that is one bank alone, and offer both ways to start one", async () => {
+	it("say there are none yet, and the first offers the example where a bank is called example", async () => {
 		const app = renderWorkspace([
-			file("bank.yaml", "agency: org.example\n"),
-			file("questions/t/alpha.yaml", QUESTION("alpha")),
+			file("workspace.yaml", "agency: org.example\n"),
+			...EXAMPLE_BANK,
 		]);
 		await act(async () => {});
 		expect(screen.getByRole("heading", { name: "Instruments" })).toBeTruthy();
 		expect(screen.queryByRole("tree", { name: "Instruments" })).toBeNull();
 		expect(screen.getByText("No instruments yet.")).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "Example instrument" }));
+		// The section offers nothing itself (owner, 2026-10-13): New, in the header, starts
+		// one, and the first one offers the example beside it.
+		expect(screen.queryByRole("button", { name: "New instrument" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Instrument…" }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+			target: { value: "mine" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Create" }));
+		await act(async () => {});
+		expect(screen.queryByText("No instruments yet.")).toBeNull();
+		// Primer's Banner draws its action twice, for its wide and narrow layouts.
+		const [open] = screen.getAllByRole("button", { name: "Open the example" });
+		fireEvent.click(open as HTMLElement);
 		expect(app.store.getState().model.browser.namingInstrument).toEqual({
 			name: "example",
 			example: true,
@@ -460,12 +479,52 @@ describe("a workspace's instruments", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Create" }));
 		await act(async () => {});
 		const made = Object.values(app.store.getState().model.local.workspace).find(
-			(e) => e.kind === "instrument",
+			(e) => e.kind === "instrument" && e.name === "example",
 		);
-		// The bank is at the root: the example reads it as `../`, built from its question.
-		expect(made?.source).toContain("uses:\n  bank: ../\n");
-		expect(made?.source).toMatch(/^name: example$/m);
-		expect(screen.queryByText("No instruments yet.")).toBeNull();
+		// It reads the bank called `example`.
+		expect(made?.source).toContain("uses:\n  bank: ../banks/example\n");
+		expect(made?.source).toContain("rating: label(bank.service_satisfaction)");
+		// Two instruments now: neither offers it again.
+		expect(screen.queryByText("New here?")).toBeNull();
+	});
+
+	it("say there are none yet in a workspace that is one bank alone, where the first offers no example", async () => {
+		renderWorkspace([
+			file("bank.yaml", "agency: org.example\n"),
+			file("questions/t/alpha.yaml", QUESTION("alpha")),
+		]);
+		await act(async () => {});
+		expect(screen.getByRole("heading", { name: "Instruments" })).toBeTruthy();
+		expect(screen.getByText("No instruments yet.")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Instrument…" }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+			target: { value: "mine" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Create" }));
+		await act(async () => {});
+		expect(screen.getByRole("tree", { name: "Instruments" })).toBeTruthy();
+		// No bank called `example`: nothing to offer.
+		expect(screen.queryByText("New here?")).toBeNull();
+	});
+
+	it("stop offering the example once the offer is dismissed", async () => {
+		const app = renderWorkspace([
+			file("workspace.yaml", "agency: org.example\n"),
+			...EXAMPLE_BANK,
+		]);
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Instrument…" }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+			target: { value: "mine" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Create" }));
+		await act(async () => {});
+		expect(screen.getByText("New here?")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+		expect(screen.queryByText("New here?")).toBeNull();
+		expect(app.store.getState().model.browser.exampleHintDismissed).toBe(true);
 	});
 });
 

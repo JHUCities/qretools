@@ -1,8 +1,10 @@
 name: service_comments
 title: Comments on the service
-text: Is there anything else you would like to tell us about the service you received?
-intent: Collects comments in the respondent's own words; an example of an open question with a length limit.
+text: 'You answered "{{rating}}". What would have made the service better?'
+intent: Collects what would improve the service, in the respondent's own words; an example of an open question with a length limit, whose text is filled from an earlier answer.
 concept: service_satisfaction
 universe: all_respondents
 open:
   max_length: 500
+fills:
+  rating: text

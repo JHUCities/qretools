@@ -13,7 +13,8 @@ export const SOURCE_URL = "https://github.com/JHUCities/qretools";
 
 /**
  * The template a new workspace starts from (`VITE_TEMPLATE`, as owner/name): one bank
- * of examples and no instrument, since the app makes one (New, Example instrument).
+ * of examples and no instrument, since the app makes one (New, Instrument; the first offers an example where the
+ * workspace has a bank called `example`).
  * The sign-in page links GitHub's "Use this template" for it. Configuration, not a
  * constant: another team points it at its own. Absent or malformed means no link.
  */

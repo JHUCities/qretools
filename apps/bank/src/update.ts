@@ -74,7 +74,7 @@ import {
 	describeSchemeChange,
 	describeWorkspaceChange,
 } from "./commits.js";
-import { createEvaluations } from "./evaluations.js";
+import { createEvaluations, type Evaluations } from "./evaluations.js";
 import {
 	type Activity,
 	type AddingBank,
@@ -682,6 +682,9 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "instrumentCreateOpened":
+			// No example to make (`exampleSource`): nothing opens.
+			if (msg.example && exampleSource(model, "example") === undefined)
+				return [model, []];
 			return [
 				{
 					...model,
@@ -730,6 +733,10 @@ function step(model: Model, msg: Msg): Step {
 				instrumentNameProblem(model, naming.name) !== undefined
 			)
 				return [model, []];
+			const source = naming.example
+				? exampleSource(model, naming.name)
+				: instrumentSource(naming.name);
+			if (source === undefined) return [model, []];
 			const [added, id] = add(
 				{
 					...model,
@@ -738,9 +745,7 @@ function step(model: Model, msg: Msg): Step {
 				{
 					kind: "instrument",
 					name: naming.name,
-					source: naming.example
-						? exampleSource(model, naming.name)
-						: instrumentSource(naming.name),
+					source,
 				},
 			);
 			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
@@ -1561,6 +1566,18 @@ function step(model: Model, msg: Msg): Step {
 			);
 		}
 
+		case "exampleHintDismissed": {
+			// The banner goes from under its own button: focus returns to the source.
+			const at =
+				model.screen.kind === "editing" && model.cursor?.id === model.screen.id
+					? model.cursor.offset
+					: 0;
+			return [
+				{ ...model, browser: { ...model.browser, exampleHintDismissed: true } },
+				[{ kind: "revealRange", range: [at, at] }],
+			];
+		}
+
 		case "failureDismissed":
 			return [
 				{
@@ -2328,16 +2345,30 @@ function freeExampleName(model: Model): string {
 }
 
 /**
- * The example instrument named `name`, reading the bank New makes questions in: its
- * folder beside the instrument's (`../banks/x`, or `../` for a bank at the root).
+ * The bank the example instrument asks: the workspace's own bank called `example`
+ * (`banks/example`, where New makes a bank; any case, as GitHub may hold it), or
+ * undefined. Without it there is no example to make (owner, 2026-10-13).
  */
-function exampleSource(model: Model, name: string): string {
-	const bank = newBank(model);
-	return exampleInstrument(
-		name,
-		bank === "" ? "../" : `../${bank}`,
-		createEvaluations().scope(model, bank),
+export const exampleBank = (model: Pick<Model, "banks">): string | undefined =>
+	model.banks.find(
+		(b) => b.toLowerCase() === newBankFolder("example").toLowerCase(),
 	);
+
+/**
+ * The example instrument named `name`, reading the example bank beside it
+ * (`../banks/example`); undefined where there is none to make: no bank called `example`,
+ * or one the example doesn't read in (its questions changed, or aren't saved yet).
+ * `update` evaluates the bank afresh; the view passes the app's kept evaluations.
+ */
+export function exampleSource(
+	model: Pick<Model, "local" | "remote" | "banks">,
+	name: string,
+	evaluations: Evaluations = createEvaluations(),
+): string | undefined {
+	const bank = exampleBank(model);
+	return bank === undefined
+		? undefined
+		: exampleInstrument(name, `../${bank}`, evaluations.scope(model, bank));
 }
 
 export function instrumentNameProblem(
@@ -2593,6 +2624,31 @@ export function blockage(model: Model): Blockage | undefined {
 		return brief("Saving…");
 	return undefined;
 }
+
+/**
+ * Whether the open instrument offers the example beside it: the author's first
+ * instrument, never saved, the workspace holding no other here or on GitHub, and a bank
+ * called `example` to ask (`exampleBank`), until they dismiss the offer. The cheap half
+ * of the rule: the view also asks that the example reads there (`exampleSource`). Not tied to its text, so typing never takes the offer away.
+ */
+export const offersExample = (
+	model: Pick<Model, "local" | "remote" | "browser" | "banks">,
+	id: Id,
+): boolean => {
+	const e = model.local.workspace[id];
+	return (
+		e?.kind === "instrument" &&
+		e.base === undefined &&
+		model.browser.exampleHintDismissed !== true &&
+		exampleBank(model) !== undefined &&
+		Object.values(model.local.workspace).every(
+			(o) => o.kind !== "instrument" || o.id === id,
+		) &&
+		!Object.keys(model.remote.workspace).some((p) =>
+			p.startsWith(`${WORKSPACE.instruments}/`),
+		)
+	);
+};
 
 /** Why nothing can be written to GitHub right now (`blockage`'s reason), or undefined. */
 export const writeBlocked = (model: Model): string | undefined =>

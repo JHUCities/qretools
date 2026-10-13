@@ -65,7 +65,7 @@ describe("qretools check", () => {
 	it("passes a clean bank, saying how many files it read", async () => {
 		const r = await run("check", SAMPLE);
 		expect(r).toMatchObject({ code: 0, out: "" });
-		expect(r.err).toMatch(/^22 files, 0 findings/);
+		expect(r.err).toMatch(/^26 files, 0 findings/);
 	});
 
 	it("reports findings as compilers do, and fails on anything to fill in", async () => {
@@ -161,7 +161,7 @@ describe("qretools export", () => {
 		const r = await run("export", SAMPLE, "-o", "out.json");
 		expect(r.code).toBe(0);
 		const doc = JSON.parse(r.written["out.json"] ?? "{}");
-		expect(Object.keys(doc.QuestionItem ?? {})).toHaveLength(6);
+		expect(Object.keys(doc.QuestionItem ?? {})).toHaveLength(9);
 		expect(Object.keys(doc.QuestionItem ?? {})[0]).toMatch(/^org\.example:/);
 	});
 
@@ -188,7 +188,7 @@ describe("the command under real Node", () => {
 			SAMPLE,
 		]);
 		expect(stdout).toBe("");
-		expect(stderr).toMatch(/^22 files/);
+		expect(stderr).toMatch(/^26 files/);
 		const exported = await exec(process.execPath, [bin, "export", SAMPLE]);
 		expect(JSON.parse(exported.stdout).QuestionItem).toBeDefined();
 	});

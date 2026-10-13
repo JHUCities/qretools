@@ -1,0 +1,9 @@
+name: member_age
+title: Age of a household member
+text: How old is this person?
+intent: Records each household member's age; an example of a question asked once per person.
+universe: household_members
+number:
+  min: 0
+  max: 120
+  unit: years

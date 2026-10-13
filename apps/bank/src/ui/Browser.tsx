@@ -7,7 +7,6 @@
 
 import { SearchIcon } from "@primer/octicons-react";
 import {
-	Button,
 	CounterLabel,
 	FormControl,
 	Label,
@@ -62,7 +61,7 @@ export function Browser({
 	workspace?: readonly SchemeLeaf[];
 	/** The workspace has no bank of its own: only its instruments and details are shown. */
 	workspaceOnly?: boolean;
-	/** The workspace has no instrument at all: its section offers to start one. */
+	/** The workspace has no instrument at all: its section says so. */
 	noInstruments?: boolean;
 	filter: string;
 	open: Id | undefined;
@@ -83,8 +82,8 @@ export function Browser({
 		);
 	const [only] = banks;
 	// What is asked comes first, then what it is asked from.
-	// Shown in every workspace, a bank at the root included: with none yet, it says so and
-	// offers to start one, so instruments are found where a team starts.
+	// Shown in every workspace, a bank at the root included: with none yet, it says so,
+	// so instruments are found where a team starts (New, in the header, starts one).
 	const none = noInstruments && filter === "";
 	const instruments = (workspace.length > 0 || none) && (
 		<Instruments
@@ -140,7 +139,7 @@ function Instruments({
 	dispatch,
 }: {
 	leaves: readonly SchemeLeaf[];
-	/** No instrument yet: a line saying so, and the two ways to start one. */
+	/** No instrument yet: a line saying so. */
 	none: boolean;
 	open: Id | undefined;
 	dispatch: Dispatch;
@@ -151,27 +150,7 @@ function Instruments({
 			<h3 id={id} className="browser-heading">
 				Instruments
 			</h3>
-			{none && (
-				<>
-					<p className="quiet browser-empty">No instruments yet.</p>
-					<Stack direction="horizontal" gap="condensed" wrap="wrap">
-						<Button
-							size="small"
-							onClick={() => dispatch({ kind: "instrumentCreateOpened" })}
-						>
-							New instrument
-						</Button>
-						<Button
-							size="small"
-							onClick={() =>
-								dispatch({ kind: "instrumentCreateOpened", example: true })
-							}
-						>
-							Example instrument
-						</Button>
-					</Stack>
-				</>
-			)}
+			{none && <p className="quiet browser-empty">No instruments yet.</p>}
 			{leaves.length > 0 && (
 				<TreeView aria-labelledby={id}>
 					{leaves.map((leaf) => (

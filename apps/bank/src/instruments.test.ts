@@ -22,9 +22,11 @@ import {
 import { claimOf } from "./sync.js";
 import {
 	bankAddProblem,
+	exampleSource,
 	instrumentAlsoSaves,
 	instrumentDependencies,
 	instrumentNameProblem,
+	offersExample,
 	signOutPlan,
 	update,
 } from "./update.js";
@@ -47,8 +49,20 @@ function loaded(): Model {
 	return loading()[0];
 }
 
-/** The same, with what the load asked for. */
-function loading(): ReturnType<typeof update> {
+/** The fixture workspace with its sample bank also at `banks/example`, saved, as the template has it. */
+const withExampleBank = (): Model =>
+	loading(
+		Object.fromEntries(
+			Object.entries(files).flatMap(([path, text]) =>
+				path.startsWith("bank/")
+					? [[`banks/example/${path.slice("bank/".length)}`, text]]
+					: [],
+			),
+		),
+	)[0];
+
+/** The same, with what the load asked for; `more` files are on the branch too. */
+function loading(more: Record<string, string> = {}): ReturnType<typeof update> {
 	const [start] = init({
 		work: ok(undefined),
 		hasToken: true,
@@ -66,7 +80,7 @@ function loading(): ReturnType<typeof update> {
 	return update(connected, {
 		kind: "workspaceLoaded",
 		result: ok({
-			files: Object.entries(files).map(([path, text]) => ({
+			files: Object.entries({ ...files, ...more }).map(([path, text]) => ({
 				path,
 				sha: `sha-${path}`,
 				text,
@@ -303,12 +317,95 @@ describe("an open instrument", () => {
 	});
 });
 
+/** The workspace with an empty bank called `example` added in this tab, as New, Bank… makes one. */
+const withEmptyExampleBank = (m: Model): Model =>
+	[
+		{ kind: "bankAddOpened", how: "new" },
+		{ kind: "bankAddChanged", text: "example" },
+		{ kind: "bankAddConfirmed" },
+	].reduce<Model>((at, msg) => update(at, msg as Msg)[0], m);
+
+/** The workspace with no instrument here or on GitHub. */
+const withoutInstruments = (m: Model): Model => ({
+	...m,
+	local: {
+		...m.local,
+		workspace: Object.fromEntries(
+			Object.entries(m.local.workspace).filter(
+				([, e]) => e.kind !== "instrument",
+			),
+		),
+	},
+	remote: { ...m.remote, workspace: {} },
+});
+
 describe("a new instrument", () => {
 	const named = (m: Model, name: string): Model =>
 		update(update(m, { kind: "instrumentCreateOpened" })[0], {
 			kind: "instrumentNameChanged",
 			name,
 		})[0];
+
+	it("offers the example only while it is the first, never saved, and not dismissed", () => {
+		const first = (m: Model): [Model, InstrumentEntry] => {
+			const [made] = update(named(m, "mine"), {
+				kind: "instrumentNamingConfirmed",
+			});
+			const mine = Object.values(made.local.workspace).find(
+				(e) => e.kind === "instrument",
+			) as InstrumentEntry;
+			return [made, mine];
+		};
+		// No bank called `example` to ask: nothing to offer, and nothing to make.
+		const bare = withoutInstruments(loaded());
+		const [without, lone] = first(bare);
+		expect(offersExample(without, lone.id)).toBe(false);
+		expect(
+			update(without, { kind: "instrumentCreateOpened", example: true })[0],
+		).toBe(without);
+		// One the example doesn't read in (empty, made in this tab): the cheap rule still
+		// offers, and the example itself says there is none to make.
+		const [hollow, sole] = first(withEmptyExampleBank(bare));
+		expect(offersExample(hollow, sole.id)).toBe(true);
+		expect(exampleSource(hollow, "example")).toBeUndefined();
+		expect(
+			update(hollow, { kind: "instrumentCreateOpened", example: true })[0],
+		).toBe(hollow);
+		const [made, mine] = first(withoutInstruments(withExampleBank()));
+		expect(offersExample(made, mine.id)).toBe(true);
+		expect(exampleSource(made, "example")).toContain("roster: members");
+		// Saved: it has a base.
+		const saved = { ...mine, base: { path: "p", sha: "s", text: mine.source } };
+		expect(
+			offersExample(
+				{
+					...made,
+					local: {
+						...made.local,
+						workspace: { ...made.local.workspace, [mine.id]: saved },
+					},
+				},
+				mine.id,
+			),
+		).toBe(false);
+		// Another on GitHub that this tab doesn't hold yet.
+		expect(
+			offersExample(
+				{
+					...made,
+					remote: {
+						...made.remote,
+						workspace: { "instruments/other.yaml": { sha: "s", text: "" } },
+					},
+				},
+				mine.id,
+			),
+		).toBe(false);
+		// Dismissed: focus goes back to the source, where the banner was.
+		const [dismissed, cmds] = update(made, { kind: "exampleHintDismissed" });
+		expect(offersExample(dismissed, mine.id)).toBe(false);
+		expect(cmds).toEqual([{ kind: "revealRange", range: [0, 0] }]);
+	});
 
 	it("is named by the rule its file's path needs, never as another's", () => {
 		const m = loaded();
@@ -392,8 +489,8 @@ describe("the workspace details", () => {
 });
 
 describe("the example instrument", () => {
-	it("is named already, never over one taken, and reads the bank New makes questions in", () => {
-		const m = loaded();
+	it("is named already, never over one taken, and reads the bank called example", () => {
+		const m = withExampleBank();
 		const [asked] = update(m, {
 			kind: "instrumentCreateOpened",
 			example: true,
@@ -406,7 +503,7 @@ describe("the example instrument", () => {
 		const e = Object.values(made.local.workspace).find(
 			(f) => f.kind === "instrument" && f.name === "example",
 		);
-		expect(e?.source).toContain("uses:\n  bank: ../bank\n");
+		expect(e?.source).toContain("uses:\n  bank: ../banks/example\n");
 		expect(made.screen).toEqual({ kind: "editing", id: e?.id });
 		const [again] = update(made, {
 			kind: "instrumentCreateOpened",

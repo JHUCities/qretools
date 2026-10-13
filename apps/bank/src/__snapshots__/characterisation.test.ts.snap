@@ -6,7 +6,7 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
     {
       "effects": [
         {
-          "link": "#repo=octo-org%2Fsurvey&branch=qretools-iain&file=questions%2Fexamples%2Flibrary_visits.yaml",
+          "link": "#repo=octo-org%2Fsurvey&branch=qretools-iain&file=questions%2Fexamples%2Fhousehold_size.yaml",
           "push": true,
         },
       ],
@@ -24,11 +24,11 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
           "changes": [
             {
               "deletes": false,
-              "expected": "sha-questions/examples/library_visits.yaml",
-              "path": "questions/examples/library_visits.yaml",
+              "expected": "sha-questions/examples/household_size.yaml",
+              "path": "questions/examples/household_size.yaml",
             },
           ],
-          "commit": "Update library_visits",
+          "commit": "Update household_size",
         },
       ],
       "msg": "saveRequested",
@@ -46,15 +46,15 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
             {
               "deletes": false,
               "expected": null,
-              "path": "questions/moved/library_visits.yaml",
+              "path": "questions/moved/household_size.yaml",
             },
             {
               "deletes": true,
-              "expected": "new-questions/examples/library_visits.yaml",
-              "path": "questions/examples/library_visits.yaml",
+              "expected": "new-questions/examples/household_size.yaml",
+              "path": "questions/examples/household_size.yaml",
             },
           ],
-          "commit": "Move library_visits to moved",
+          "commit": "Move household_size to moved",
         },
       ],
       "msg": "moveConfirmed",
@@ -143,11 +143,11 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
           "changes": [
             {
               "deletes": true,
-              "expected": "sha-questions/examples/news_sources.yaml",
-              "path": "questions/examples/news_sources.yaml",
+              "expected": "sha-questions/examples/library_visits.yaml",
+              "path": "questions/examples/library_visits.yaml",
             },
           ],
-          "commit": "Delete news_sources",
+          "commit": "Delete library_visits",
         },
       ],
       "msg": "deleteRequested",
@@ -156,12 +156,15 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
   "shown": {
     "remote": {
       "questions": [
+        "questions/examples/household_size.yaml",
         "questions/examples/library_visits.yaml",
+        "questions/examples/member_age.yaml",
         "questions/examples/news_sources.yaml",
         "questions/examples/parks_spending.yaml",
         "questions/examples/parks_spending_reversed.yaml",
         "questions/examples/service_comments.yaml",
         "questions/examples/service_satisfaction.yaml",
+        "questions/interview/consent.yaml",
       ],
       "schemes": [
         "bank.yaml",
@@ -180,6 +183,7 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
         "units/dollars.yaml",
         "units/years.yaml",
         "universes/all_respondents.yaml",
+        "universes/household_members.yaml",
       ],
     },
     "shared": [
@@ -206,20 +210,21 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
         "leaves": [
           "days complete used by 1",
           "dollars complete used by 0",
-          "years complete used by 0",
+          "years complete used by 1",
         ],
       },
       {
         "kind": "universe",
         "leaves": [
-          "all_respondents complete used by 6",
+          "all_respondents complete used by 7",
+          "household_members complete used by 1",
         ],
       },
       {
         "kind": "instruction",
         "leaves": [
           "select_all complete used by 1",
-          "select_one complete used by 3",
+          "select_one complete used by 4",
         ],
       },
       {
@@ -239,12 +244,20 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
       {
         "folder": "examples",
         "leaves": [
+          "household_size complete",
           "library_visits complete",
+          "member_age complete",
           "news_sources complete",
           "parks_spending complete",
           "parks_spending_reversed complete",
           "service_comments complete",
           "service_satisfaction complete",
+        ],
+      },
+      {
+        "folder": "interview",
+        "leaves": [
+          "consent complete",
         ],
       },
     ],

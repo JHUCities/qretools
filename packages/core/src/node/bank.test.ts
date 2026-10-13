@@ -56,7 +56,7 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 	});
 
 	it("reads every bank file and nothing else", () => {
-		expect(Object.keys(files).length).toBe(22);
+		expect(Object.keys(files).length).toBe(26);
 		expect(bank.ignored).toEqual([]);
 		for (const path of Object.values(ROOT))
 			expect(Object.keys(bank.schemes)).toContain(path);
