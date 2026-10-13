@@ -128,7 +128,7 @@ describe("one identity, one item", () => {
 			[
 				"missing-code",
 				"select_all.chosen.1",
-				"A select-all option is stored as 0 = No, 1 = Yes unless `select_all:` here says otherwise: write it with other codes, or change the missing-value code.",
+				"A select-all-that-apply option is stored as 0 = No, 1 = Yes unless `select_all:` here says otherwise: write it with other codes, or change the missing-value code.",
 			],
 		]);
 	});

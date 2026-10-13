@@ -159,7 +159,7 @@ function readScheme(
 			selectAll === DEFAULT_SELECT_ALL
 				? {
 						...f,
-						hint: `A select-all option is stored as ${selectAllText(selectAll)} unless \`select_all:\` here says otherwise: write it with other codes, or change the missing-value code.`,
+						hint: `A select-all-that-apply option is stored as ${selectAllText(selectAll)} unless \`select_all:\` here says otherwise: write it with other codes, or change the missing-value code.`,
 					}
 				: f,
 		);

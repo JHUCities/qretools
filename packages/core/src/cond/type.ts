@@ -18,6 +18,8 @@ export type Type =
 			readonly codes: readonly {
 				readonly code: string;
 				readonly label: string;
+				/** One of the bank's missing-value codes: an answer may hold it, a respondent never reads it. */
+				readonly missing?: true;
 			}[];
 	  }
 	| { readonly kind: "unknown" };

@@ -11,7 +11,6 @@ import { evaluateCondition, UNKNOWN } from "../cond/eval.ts";
 import { printCondition } from "../cond/print.ts";
 import { type Type, typeOf } from "../cond/type.ts";
 import type { Finding, Range } from "../findings.ts";
-import { selectAllCodes } from "../selectAll.ts";
 import { type Named as BankNamed, definedVariables } from "../surface/draft.ts";
 import type { TextEntry } from "../surface/env.ts";
 import type {
@@ -24,7 +23,7 @@ import type {
 	UniverseRef,
 } from "./draft.ts";
 import { fillCompatibility } from "./fills.ts";
-import type { ParsedInstrument } from "./parse.ts";
+import { answerType, type ParsedInstrument } from "./parse.ts";
 
 /** What has been asked or computed on the way to a step: for certain, or on some path. */
 interface Seen {
@@ -206,11 +205,13 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 		switch (node.kind) {
 			case "ask": {
 				const q = node.question;
+				const sources =
+					node.fills.length === 0 ? [] : available(seen, parsed, rows);
 				for (const fill of node.fills) {
 					const want = q?.evaluation.draft.fills?.find(
 						(f) => f.name === fill.name,
 					)?.type;
-					fills[fill.path] = available(seen, parsed, rows).flatMap((source) => {
+					fills[fill.path] = sources.flatMap((source) => {
 						const compatibility = fillCompatibility(want, source.type);
 						return compatibility.kind === "compatible"
 							? [
@@ -492,10 +493,10 @@ function available(
 			: [],
 	);
 	const all = [...inputs, ...values];
+	const count = new Map<string, number>();
+	for (const { name } of all) count.set(name, (count.get(name) ?? 0) + 1);
 	return all
-		.filter(
-			(value) => all.filter((other) => other.name === value.name).length === 1,
-		)
+		.filter((value) => count.get(value.name) === 1)
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -506,18 +507,7 @@ function outputs(
 	row: string | undefined,
 ): readonly Available[] {
 	const bank = parsed.banks[q.alias];
-	const domain = q.evaluation.draft.domain;
-	const type: Type =
-		domain === undefined
-			? { kind: "unknown" }
-			: domain.kind === "number"
-				? { kind: "number" }
-				: domain.kind === "open"
-					? { kind: "string" }
-					: {
-							kind: "code",
-							codes: [...domain.codes, ...(bank?.env.missing ?? [])],
-						};
+	const type = answerType(q, bank);
 	const named = (name: string, valueType: Type): Available => ({
 		named: {
 			kind: "bank",
@@ -536,18 +526,7 @@ function outputs(
 			},
 		];
 	return definedVariables(q.evaluation.draft).map((d) =>
-		named(
-			d.name,
-			d.option === undefined
-				? type
-				: {
-						kind: "code",
-						codes: [
-							...(bank === undefined ? [] : selectAllCodes(bank.env.selectAll)),
-							...(bank?.env.missing ?? []),
-						],
-					},
-		),
+		named(d.name, d.option === undefined ? type : answerType(q, bank, true)),
 	);
 }
 

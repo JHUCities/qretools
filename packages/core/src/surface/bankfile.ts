@@ -126,7 +126,7 @@ export function parseSettingsFile(
 }
 
 const SELECT_ALL_EXAMPLE =
-	'Write the two values a select-all option is stored as, each with its label: `chosen: { "1": Yes }` and `not_chosen: { "0": No }`.';
+	'Write the two values a select-all-that-apply option is stored as, each with its label: `chosen: { "1": Yes }` and `not_chosen: { "0": No }`.';
 /** Said with every problem: the bank is never left with half a coding. */
 const UNTIL_IT_READS = `Until it reads, the usual coding is used: ${selectAllText(DEFAULT_SELECT_ALL)}.`;
 

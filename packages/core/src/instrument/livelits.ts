@@ -5,10 +5,19 @@
  * they don't depend on the banks; what an `ask` or `uses` picker offers is the app's to
  * give, from these functions, as the banks it has are the app's.
  */
+
+import {
+	type Document,
+	isMap,
+	isScalar,
+	parseDocument,
+	type Scalar,
+} from "yaml";
 import { type Address, relativeFolder } from "../address.ts";
 import type { Expr } from "../cond/ast.ts";
 import type { BankScope, Evaluation } from "../evaluate.ts";
 import type { Fix, Range } from "../findings.ts";
+import { scalar } from "../surface/edit.ts";
 import {
 	type Choice,
 	enumAt,
@@ -85,16 +94,50 @@ export function instrumentLivelits(
 	},
 	fills: Readonly<Record<string, readonly FillSource[]>> = {},
 ): readonly Livelit[] {
+	// Parsed when a step first needs it, once.
+	let parsedDoc: Document | undefined;
+	const doc = () => {
+		parsedDoc ??= parseDocument(source, { prettyErrors: false });
+		return parsedDoc;
+	};
 	const steps = (flow: readonly Node[]): Livelit[] =>
 		flow.flatMap((n): Livelit[] => {
 			switch (n.kind) {
-				case "ask":
-					const missing = (n.question?.evaluation.draft.fills ?? []).filter(
-						(declared) => !n.fills.some((fill) => fill.name === declared.name),
+				case "ask": {
+					const asked = `${n.question?.alias}.${n.question?.name}`;
+					// A declared fill the ask doesn't have yet is an action of its question's
+					// picker, offered only where it can be written (a flow map is the author's).
+					const fillActions = (
+						n.question?.evaluation.draft.fills ?? []
+					).flatMap((declared): Fix[] =>
+						n.fills.some((fill) => fill.name === declared.name) ||
+						fillAdded(doc(), source, n.path, declared.name, asked) === undefined
+							? []
+							: [
+									{
+										kind: "fill",
+										label: `Fill \`${declared.name}\`…`,
+										path: n.path,
+										name: declared.name,
+										question: asked,
+									},
+								],
 					);
 					const askField = parsed.ranges[`${n.path}.ask`];
+					const questions = pickerAt(
+						source,
+						parsed,
+						`${n.path}.ask`,
+						"Choose a question",
+						{ kind: "questions" },
+						(w) => QUALIFIED.test(w),
+					).map((l) => ({ ...l, actions: fillActions }));
 					return [
-						...(askField === undefined || missing.length === 0
+						...questions,
+						// No question picker (the name is in quotes): the actions alone.
+						...(questions.length > 0 ||
+						fillActions.length === 0 ||
+						askField === undefined
 							? []
 							: [
 									{
@@ -104,23 +147,9 @@ export function instrumentLivelits(
 										field: askField,
 										span: [askField[1], askField[1]] as Range,
 										picker: { kind: "actions" as const },
-										actions: missing.map((fill) => ({
-											kind: "fill" as const,
-											label: `Fill \`${fill.name}\`…`,
-											path: n.path,
-											name: fill.name,
-											question: `${n.question?.alias}.${n.question?.name}`,
-										})),
+										actions: fillActions,
 									},
 								]),
-						...pickerAt(
-							source,
-							parsed,
-							`${n.path}.ask`,
-							"Choose a question",
-							{ kind: "questions" },
-							(w) => QUALIFIED.test(w),
-						),
 						...enumAt(
 							source,
 							parsed,
@@ -156,6 +185,7 @@ export function instrumentLivelits(
 							),
 						),
 					];
+				}
 				case "section":
 					return [
 						...enumAt(
@@ -196,40 +226,91 @@ export function instrumentLivelits(
 	].sort((a, b) => a.field[0] - b.field[0]);
 }
 
-/** Add an empty fill below one `ask`, preserving the author's surrounding indentation. */
+/**
+ * The text with one declared fill added, empty, to the `ask` at `path`, the caret after
+ * it; undefined when the step isn't that question's any more (a stale action), already
+ * names the fill, or isn't written as lines a line can be added to (a flow map, a `fill`
+ * holding a word), which the author edits by hand. Under the step's `fill:` at its
+ * entries' indent, or as a new `fill:` after the `ask`'s own lines, at its key's column.
+ */
 export function addInstrumentFill(
 	source: string,
 	path: string,
 	name: string,
 	question: string,
 ): { readonly text: string; readonly caret: number } | undefined {
-	const parsed = parseInstrument(source, {});
-	const range = parsed.ranges[path];
-	const ask = parsed.ranges[`${path}.ask`];
-	if (range === undefined || ask === undefined) return undefined;
-	const written = source.slice(ask[0], ask[1]);
-	const current =
-		/^(?<indent>[ \t]*)(?<inline>-\s*)?ask:\s*(?<name>.+?)\s*$/m.exec(written);
-	const rawName = current?.groups?.name;
-	const currentName =
-		rawName?.startsWith('"') && rawName.endsWith('"')
-			? rawName.slice(1, -1)
-			: rawName?.startsWith("'") && rawName.endsWith("'")
-				? rawName.slice(1, -1)
-				: rawName;
-	if (currentName !== question) return undefined;
-	const currentLine = source.lastIndexOf("\n", ask[0] + current.index) + 1;
-	const base = /^([ \t]*)/.exec(source.slice(currentLine))?.[1];
-	if (base === undefined) return undefined;
-	const fillIndent = /-\s*ask:/.test(source.slice(currentLine, ask[1]))
-		? `${base}  `
-		: base;
-	const lead = source[range[1] - 1] === "\n" ? "" : "\n";
-	const inserted = `${lead}${fillIndent}fill:\n${fillIndent}  ${name}:`;
-	return {
-		text: source.slice(0, range[1]) + inserted + source.slice(range[1]),
-		caret: range[1] + inserted.length,
+	return fillAdded(
+		parseDocument(source, { prettyErrors: false }),
+		source,
+		path,
+		name,
+		question,
+	);
+}
+
+/** `addInstrumentFill` on a document already parsed: the pickers ask for every missing fill. */
+function fillAdded(
+	doc: Document,
+	source: string,
+	path: string,
+	name: string,
+	question: string,
+): { readonly text: string; readonly caret: number } | undefined {
+	const step = doc.getIn(
+		path.split(".").map((p) => (/^\d+$/.test(p) ? Number(p) : p)),
+		true,
+	);
+	if (!isMap(step) || step.flow) return undefined;
+	const pairOf = (key: string) =>
+		step.items.find((p) => isScalar(p.key) && p.key.value === key);
+	const ask = pairOf("ask");
+	const askStart = isScalar(ask?.key) ? ask.key.range?.[0] : undefined;
+	if (askStart === undefined) return undefined;
+	if (!isScalar(ask?.value) || ask.value.value !== question) return undefined;
+	const columnOf = (at: number) => at - (source.lastIndexOf("\n", at - 1) + 1);
+	const indent = " ".repeat(columnOf(askStart));
+	// New lines after the line holding `end`'s last written character.
+	const after = (end: number, lines: string) => {
+		let last = end;
+		while (last > 0 && /\s/.test(source[last - 1] ?? "")) last--;
+		const lineEnd = source.indexOf("\n", last);
+		const at = lineEnd === -1 ? source.length : lineEnd;
+		return {
+			text: source.slice(0, at) + lines + source.slice(at),
+			caret: at + lines.length,
+		};
 	};
+	const entry = `${scalar(name)}:`;
+	const fill = pairOf("fill");
+	if (fill === undefined) {
+		const end = ask.value.range?.[1];
+		return end === undefined
+			? undefined
+			: after(end, `\n${indent}fill:\n${indent}  ${entry}`);
+	}
+	const key = fill.key as Scalar;
+	const v = fill.value;
+	if (v === null || (isScalar(v) && v.value === null && v.source === ""))
+		return key.range == null
+			? undefined
+			: after(key.range[1], `\n${indent}  ${entry}`);
+	if (!isMap(v) || v.flow || v.range == null) return undefined;
+	if (v.items.some((p) => isScalar(p.key) && String(p.key.value) === name))
+		return undefined;
+	const first = v.items[0]?.key;
+	const firstStart = isScalar(first) ? first.range?.[0] : undefined;
+	// An explicit key (`? a`) starts after its mark: not a column to write a plain key at.
+	if (
+		firstStart !== undefined &&
+		source
+			.slice(source.lastIndexOf("\n", firstStart - 1) + 1, firstStart)
+			.trim() !== ""
+	)
+		return undefined;
+	return after(
+		v.range[1],
+		`\n${firstStart === undefined ? `${indent}  ` : " ".repeat(columnOf(firstStart))}${entry}`,
+	);
 }
 
 /**

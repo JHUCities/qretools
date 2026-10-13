@@ -111,7 +111,7 @@ flow:
   - ask: bas.echo
 `;
 		const action = instrumentOf(text, { banks: { bas: BAS } }).livelits.find(
-			(l) => l.id === "flow.1.fill",
+			(l) => l.id === "flow.1.ask",
 		);
 		expect(action?.actions).toMatchObject([
 			{
@@ -163,6 +163,79 @@ flow:
 				"bas.echo",
 			),
 		).toBeUndefined();
+	});
+
+	it("adds a fill where the step's own lines put it, whatever follows or is there already", () => {
+		const head = "name: demo\nuses:\n  bas: here\nflow:\n";
+		const add = (body: string, path: string, name = "neighborhood") =>
+			addInstrumentFill(head + body, path, name, "bas.echo")?.text.slice(
+				head.length,
+			);
+		// The next step stays a step.
+		expect(
+			add("  - ask: bas.echo\n    as: e\n  - ask: bas.why\n", "flow.0"),
+		).toBe(
+			"  - ask: bas.echo\n    fill:\n      neighborhood:\n    as: e\n  - ask: bas.why\n",
+		);
+		// A `fill:` already there gains an entry, at its entries' indent; never a second key.
+		expect(
+			add(
+				"  - ask: bas.echo\n    fill:\n        neighborhood: x\n  - ask: bas.why\n",
+				"flow.0",
+				"other",
+			),
+		).toBe(
+			"  - ask: bas.echo\n    fill:\n        neighborhood: x\n        other:\n  - ask: bas.why\n",
+		);
+		expect(
+			add("  - ask: bas.echo\n    fill:\n  - ask: bas.why\n", "flow.0"),
+		).toBe(
+			"  - ask: bas.echo\n    fill:\n      neighborhood:\n  - ask: bas.why\n",
+		);
+		expect(
+			add("  - ask: bas.echo\n    fill:\n      neighborhood: x\n", "flow.0"),
+		).toBeUndefined();
+		// At the `ask` key's column, wherever the dash left it, and at any depth.
+		expect(add("  -   ask: bas.echo\n", "flow.0")).toBe(
+			"  -   ask: bas.echo\n      fill:\n        neighborhood:\n",
+		);
+		expect(
+			add(
+				'  - if: bas.tenure = "1"\n    then:\n      - ask: bas.echo # here\n',
+				"flow.0.then.0",
+			),
+		).toBe(
+			'  - if: bas.tenure = "1"\n    then:\n      - ask: bas.echo # here\n        fill:\n          neighborhood:\n',
+		);
+		// Not lines to add a line to: the author's to edit, so nothing is offered either.
+		expect(add("  - { ask: bas.echo }\n", "flow.0")).toBeUndefined();
+		expect(
+			add(
+				"  - ask: bas.echo\n    fill: { neighborhood: x }\n",
+				"flow.0",
+				"other",
+			),
+		).toBeUndefined();
+		expect(
+			add("  - ask: bas.echo\n    fill:\n      ? a\n      : x\n", "flow.0"),
+		).toBeUndefined();
+		// Offered wherever it can be written: beside a comment, and at a name in quotes
+		// (which has no question picker to carry it).
+		const offered = (body: string) =>
+			instrumentOf(head + body, { banks: { bas: BAS } }).livelits.flatMap((l) =>
+				l.actions.flatMap((a) => (a.kind === "fill" ? [[l.id, a.name]] : [])),
+			);
+		expect(offered("  - ask: bas.echo # note\n")).toEqual([
+			["flow.0.ask", "neighborhood"],
+		]);
+		expect(offered('  - ask: "bas.echo"\n')).toEqual([
+			["flow.0.fill", "neighborhood"],
+		]);
+		expect(
+			instrumentOf(`${head}  - { ask: bas.echo }\n`, {
+				banks: { bas: BAS },
+			}).livelits.flatMap((l) => l.actions.filter((a) => a.kind === "fill")),
+		).toEqual([]);
 	});
 
 	it("sit at each use, each ask naming a question or empty, and each order, at any depth", () => {
