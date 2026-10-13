@@ -29,7 +29,7 @@ import {
 	ownChoices,
 	type Source,
 } from "@qretools/core/editor";
-import { codeLine } from "./diagnostics.ts";
+import { codeLine, withCode } from "./diagnostics.ts";
 
 /** What the app gives the editor so it can offer livelits: read when a picker opens. */
 export interface LivelitHost {
@@ -178,7 +178,10 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 	dom.setAttribute("role", "dialog");
 	dom.setAttribute("aria-label", open.label);
 	const close = (refocus: boolean) => {
-		view.dispatch({ effects: openPicker.of(null) });
+		// Taken down by an update (an edit, another picker opened), its focus leaves and
+		// asks to close it: it is closed already, and an update can't dispatch another.
+		if (view.state.field(pickerField) === open)
+			view.dispatch({ effects: openPicker.of(null) });
 		if (refocus) view.focus();
 	};
 	const choose = (value: string | readonly string[]) => {
@@ -260,7 +263,7 @@ function pickerDOM(view: EditorView, host: LivelitHost, open: Livelit) {
 		const button = document.createElement("button");
 		button.type = "button";
 		button.className = "cm-action cm-livelit-create";
-		button.textContent = fix.label;
+		withCode(button, fix.label);
 		button.addEventListener("click", () => act(fix));
 		dom.append(button);
 		return button;

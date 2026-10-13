@@ -56,15 +56,20 @@ export const toDiagnostics = (
 export function codeLine(text: string, className: string): HTMLElement {
 	const div = document.createElement("div");
 	div.className = className;
+	return withCode(div, text);
+}
+
+/** `text` inside `el`, its backticked names as code: for an element that isn't a line (a button). */
+export function withCode<E extends HTMLElement>(el: E, text: string): E {
 	for (const s of codeSpans(text)) {
 		if (s.code) {
 			const code = document.createElement("code");
 			code.className = "code";
 			code.textContent = s.text;
-			div.append(code);
-		} else div.append(s.text);
+			el.append(code);
+		} else el.append(s.text);
 	}
-	return div;
+	return el;
 }
 
 /** The tooltip's content: message and hint, as in the Findings list. */

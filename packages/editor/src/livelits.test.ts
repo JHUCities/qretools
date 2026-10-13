@@ -2,7 +2,7 @@
 import { EditorView } from "@codemirror/view";
 import { EMPTY_ENV, type Env, parseSurface } from "@qretools/core";
 import { choicesOf, livelitsOf, type Offered } from "@qretools/core/editor";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEditor } from "./editor.ts";
 
 const env: Env = {
@@ -90,6 +90,34 @@ describe("a scale picker in the editor", () => {
 		(choices[1] as HTMLButtonElement).click();
 		expect(chosen).toEqual([{ id: "responses", value: "yes_no" }]);
 		expect(parent.querySelector('[role="dialog"]')).toBeNull();
+	});
+
+	it("shows an action's backticked name as code, never the backticks", () => {
+		const { parent, editor } = open();
+		const livelits = livelitsOf(TEXT, parseSurface(TEXT, env), env).map(
+			(l) => ({
+				...l,
+				actions: l.actions.map((a) => ({ ...a, label: "Fill `place`…" })),
+			}),
+		);
+		editor.sync({ id: 1, text: TEXT, diagnostics: [], marks: [], livelits });
+		(parent.querySelector("button.cm-livelit") as HTMLButtonElement).click();
+		const create = parent.querySelector(".cm-livelit-create") as HTMLElement;
+		expect(create.textContent).toBe("Fill place…");
+		expect(create.querySelector("code")?.textContent).toBe("place");
+	});
+
+	it("a picker an edit took down doesn't close itself again when its focus leaves", () => {
+		const { parent, view } = open();
+		(parent.querySelector("button.cm-livelit") as HTMLButtonElement).click();
+		const dialog = parent.querySelector('[role="dialog"]') as HTMLElement;
+		view.dispatch({ changes: { from: 0, insert: "# \n" } });
+		expect(parent.querySelector('[role="dialog"]')).toBeNull();
+		// The browser sends this as the picker is removed, inside the update that removes
+		// it, where a dispatch throws.
+		const dispatch = vi.spyOn(view, "dispatch");
+		dialog.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+		expect(dispatch).not.toHaveBeenCalled();
 	});
 
 	it("opens from the keyboard on the field, offers a new one, and Escape gives the caret back", () => {
