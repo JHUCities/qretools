@@ -565,7 +565,7 @@ export type Cmd =
 			readonly kind: "connect";
 			readonly repo: BankRef;
 			/** Echoed by its reply, so an earlier chosen repository cannot win. */
-			readonly request?: number;
+			readonly request: number;
 	  }
 	/**
 	 * Ask GitHub what the app may do in the bank now, for the session of `login`, changing
@@ -581,7 +581,7 @@ export type Cmd =
 			readonly kind: "loadWorkspace";
 			readonly target: BranchTarget;
 			/** Echoed by its reply, so an older load cannot replace a newer one. */
-			readonly request?: number;
+			readonly request: number;
 	  }
 	| { readonly kind: "updateFromDefault"; readonly target: BranchTarget }
 	/** Take the link out of the address, adding no history entry and loading nothing. */

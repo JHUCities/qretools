@@ -35,8 +35,8 @@ import {
 	workspaceFileOf,
 } from "@qretools/core";
 import {
-	addSpace,
 	addInstrumentFill,
+	addSpace,
 	addVariant,
 	applyEdits,
 	applyLivelit,
@@ -841,17 +841,19 @@ function step(model: Model, msg: Msg): Step {
 			const next: Model = { ...done, session };
 			// Only the permission changed: a workspace already loaded stays as it is. One
 			// that didn't load (it couldn't be read before) is read now that it can be.
-			return access.kind === "write" && model.loading.kind === "failed"
-				? [
-						{ ...next, loading: { kind: "loading" } },
-						[
-							{
-								kind: "loadWorkspace",
-								target: targetOf(model.settings, session),
-							},
-						],
-					]
-				: [next, []];
+			if (access.kind !== "write" || model.loading.kind !== "failed")
+				return [next, []];
+			const [loading, request] = requested(next, "workspace");
+			return [
+				{ ...loading, loading: { kind: "loading" } },
+				[
+					{
+						kind: "loadWorkspace",
+						target: targetOf(model.settings, session),
+						request,
+					},
+				],
+			];
 		}
 
 		case "blockedActionTried":
