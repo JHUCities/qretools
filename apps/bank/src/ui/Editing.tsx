@@ -5,7 +5,14 @@
  */
 
 import { ArrowLeftIcon } from "@primer/octicons-react";
-import { Button, CounterLabel, Label, Link, PageHeader } from "@primer/react";
+import {
+	Banner,
+	Button,
+	CounterLabel,
+	Label,
+	Link,
+	PageHeader,
+} from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
 import {
 	type Evaluation,
@@ -84,12 +91,14 @@ import {
 import {
 	bankLoading,
 	branchOwner,
+	exampleSource,
 	externalUrl,
 	followOf,
 	hrefOf,
 	instrumentAlsoSaves,
 	instrumentDependencies,
 	linkBranch,
+	offersExample,
 	writeBlocked,
 } from "../update.js";
 import { type InstrumentUse, instrumentsUsing } from "../usedBy.js";
@@ -321,6 +330,13 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const slices = useSlices();
 	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const stale = useStale(e);
+	const offered = useModel((m) => offersExample(m, e.id));
+	// Evaluated only while the offer could show, from the evaluations kept for the tree.
+	const example = useMemo(
+		() =>
+			offered && exampleSource(slices, "example", evaluations) !== undefined,
+		[offered, slices, evaluations],
+	);
 	const read = evaluations.instrument(slices, e);
 	const { instrument } = read;
 	// A name is marked exactly where it can be followed: green where its bank is this
@@ -419,6 +435,28 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 				blocked={blocked}
 				also={also}
 				stale={stale}
+				hint={
+					example && (
+						<Banner
+							variant="info"
+							// One line beside its action: the band beside it grows with this header.
+							layout="compact"
+							actionsLayout="inline"
+							title="New here?"
+							description="Explore an example instrument, which asks questions from the example bank."
+							primaryAction={
+								<Banner.PrimaryAction
+									onClick={() =>
+										dispatch({ kind: "instrumentCreateOpened", example: true })
+									}
+								>
+									Open the example
+								</Banner.PrimaryAction>
+							}
+							onDismiss={() => dispatch({ kind: "exampleHintDismissed" })}
+						/>
+					)
+				}
 				on={{
 					...on,
 					save: () => {

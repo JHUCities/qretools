@@ -49,10 +49,10 @@ responses:
 		]);
 
 		const bank = bankOf(await readBank("fixtures/bank"));
-		Object.keys(bank.questions).length; // → 6
+		Object.keys(bank.questions).length; // → 9
 		bank.ignored; // → []
 		bank.agency; // → "org.example"
-		expect(Object.keys(bank.questions).length).toBe(6);
+		expect(Object.keys(bank.questions).length).toBe(9);
 		expect(bank.ignored).toEqual([]);
 		expect(bank.agency).toBe("org.example");
 

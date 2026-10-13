@@ -133,7 +133,7 @@ bank declares in its own file, `bank.yaml`. A bank without one is reported once,
 
 ```ts
 const bank = bankOf(await readBank("fixtures/bank"));
-Object.keys(bank.questions).length; // → 6
+Object.keys(bank.questions).length; // → 9
 bank.ignored; // → []
 bank.agency; // → "org.example"
 ```

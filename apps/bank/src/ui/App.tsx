@@ -133,21 +133,9 @@ function NewMenu({
 						Instrument…
 					</ActionList.Item>
 					<ActionList.Item
-						onSelect={() =>
-							dispatch({ kind: "instrumentCreateOpened", example: true })
-						}
-					>
-						Example instrument…
-					</ActionList.Item>
-					<ActionList.Item
 						onSelect={() => dispatch({ kind: "bankAddOpened", how: "new" })}
 					>
 						Bank…
-					</ActionList.Item>
-					<ActionList.Item
-						onSelect={() => dispatch({ kind: "workspaceDetailsOpened" })}
-					>
-						Workspace details
 					</ActionList.Item>
 					{workspaceOnly ? null : banks.length <= 1 ? (
 						<>

@@ -232,9 +232,11 @@ export interface Browser {
 	/** A new instrument is named before it exists, as a shared file is: its name is its file's. */
 	readonly namingInstrument?: {
 		readonly name: string;
-		/** The example instrument, built for the bank it reads, rather than a blank one. */
+		/** The example instrument, written for the example bank, rather than a blank one. */
 		readonly example?: true;
 	};
+	/** The author dismissed the offer of the example instrument (`offersExample`). Never persisted. */
+	readonly exampleHintDismissed?: true;
 	/**
 	 * Signing out with unsaved work: asking what to do with it, or saving it first. A
 	 * failed save comes back here, never on a file.
@@ -520,7 +522,8 @@ export type Msg =
 	| { readonly kind: "signOutSaveConfirmed" }
 	| { readonly kind: "signOutDiscardConfirmed" }
 	| { readonly kind: "signOutCancelled" }
-	| { readonly kind: "failureDismissed"; readonly index: number };
+	| { readonly kind: "failureDismissed"; readonly index: number }
+	| { readonly kind: "exampleHintDismissed" };
 
 /** A bank in another repository, as an instrument's `uses` gives it. */
 export type RemoteAddress = Extract<Address, { readonly kind: "remote" }>;
