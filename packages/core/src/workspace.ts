@@ -1,7 +1,7 @@
 /**
- * A workspace: a repository, or a folder in one, holding instruments (`instruments/`),
- * its own file (`workspace.yaml`) and, at its root, a bank: its questions and shared
- * files. Pure: files by path in, values out.
+ * A workspace: a repository, or a folder in one, holding instruments (`instruments/`)
+ * and, at its root, a bank: its questions, its shared files and its settings
+ * (`workspace.yaml`). Pure: files by path in, values out.
  */
 import {
 	type Address,
@@ -19,12 +19,11 @@ import {
 	instrumentOf,
 } from "./instrument/instrument.ts";
 import type { Unread } from "./instrument/parse.ts";
-import { type BankFile, kindAt } from "./schemes.ts";
-import {
-	WORKSPACE,
-	type WorkspaceFile,
-	workspaceFileOf,
-} from "./workspacefile.ts";
+import { type BankFile, kindAt, ROOT } from "./schemes.ts";
+import { agencyWritten } from "./surface/bankfile.ts";
+
+/** Where a workspace keeps what no bank reads: its instruments' folder (one file each). */
+export const WORKSPACE = { instruments: "instruments" } as const;
 
 /**
  * Whether a folder is never walked for a workspace's files, by its name: hidden ones
@@ -43,7 +42,7 @@ export const readsInWorkspace = (path: string): boolean =>
 
 /** The workspace's own files, never a bank's, even when its root is one. */
 const own = (path: string): boolean =>
-	path === WORKSPACE.file || path.startsWith(`${WORKSPACE.instruments}/`);
+	path.startsWith(`${WORKSPACE.instruments}/`);
 
 /** A path in a bank's folder ("" for the workspace's root), as a path in the workspace. */
 export const inBank = (bank: string, path: string): string =>
@@ -96,26 +95,23 @@ export function placeOf(
 	return at === undefined ? undefined : { bank, rel, at };
 }
 
-/** What a workspace reads a file as: a bank's, an instrument, or the workspace's own file. */
+/** What a workspace reads a file as: a bank's, or an instrument. */
 export type WorkspacePlace =
 	| ({ readonly kind: "bank" } & NonNullable<ReturnType<typeof placeOf>>)
-	| { readonly kind: "instrument"; readonly name: string }
-	| { readonly kind: "workspaceFile" };
+	| { readonly kind: "instrument"; readonly name: string };
 
 /** The path an instrument of this name is saved at. */
 export const instrumentPath = (name: string): string =>
 	`${WORKSPACE.instruments}/${name}.yaml`;
 
 /**
- * Where a workspace path is, among the workspace's `banks`: in a bank (`placeOf`), an
- * instrument (`instruments/<name>.yaml`), or the workspace's own file. None for a path
- * the workspace doesn't read.
+ * Where a workspace path is, among the workspace's `banks`: in a bank (`placeOf`) or an
+ * instrument (`instruments/<name>.yaml`). None for a path the workspace doesn't read.
  */
 export function fileAt(
 	path: string,
 	banks: Iterable<string>,
 ): WorkspacePlace | undefined {
-	if (path === WORKSPACE.file) return { kind: "workspaceFile" };
 	if (isInstrument(path))
 		return {
 			kind: "instrument",
@@ -128,9 +124,10 @@ export function fileAt(
 /**
  * The workspace's files, by bank: the root ("") with its files by path, when it is a
  * bank, and the files no bank holds. The root is the only bank there can be, and is one
- * when it holds a file a bank reads there (`bank.yaml`, a shared file, a question) or a
- * `questions/` folder; a `bank.yaml` in any other folder makes no bank of it. The
- * workspace's own (`workspace.yaml`, `instruments/`) no bank holds. Total, and
+ * when it holds a file a bank reads there (`workspace.yaml`, a shared file, a question)
+ * or a `questions/` folder, so a workspace of settings alone is a bank with no questions
+ * yet; a `workspace.yaml` in any other folder makes no bank of it. The workspace's
+ * instruments (`instruments/`) no bank holds. Total, and
  * independent of the order the files are given in.
  */
 export function banksIn(files: Readonly<Record<string, string>>): {
@@ -262,8 +259,8 @@ export interface InstrumentIn {
 
 /**
  * The instrument at `path` in a workspace, read against the workspace's banks (by
- * folder) and the remote banks given (by key), under the agency its workspace file
- * writes. However the banks were put together (`bankOf` whole, or `bankFrom` from
+ * folder) and the remote banks given (by key), under the agency its workspace writes
+ * (`agencyWritten`). However the banks were put together (`bankOf` whole, or `bankFrom` from
  * evaluations kept), this is the one place a use's resolution becomes a bank or a reason.
  */
 export function instrumentIn(
@@ -273,12 +270,13 @@ export function instrumentIn(
 		banks,
 		remote,
 		remoteBanks,
-		file,
+		agency,
 	}: {
 		readonly banks: Readonly<Record<string, BankScope>>;
 		readonly remote: Readonly<Record<AddressKey, RemoteBank>>;
 		readonly remoteBanks: Readonly<Record<AddressKey, BankScope>>;
-		readonly file?: WorkspaceFile;
+		/** As `workspace.yaml` writes it, valid or not: the instrument says when it isn't one. */
+		readonly agency?: string | undefined;
 	},
 ): InstrumentIn {
 	const uses = resolveUses(
@@ -304,14 +302,13 @@ export function instrumentIn(
 		instrument: instrumentOf(source, {
 			banks: given,
 			unresolved,
-			// As written, valid or not: the instrument says when it isn't one.
-			...(file?.given !== undefined && { agency: file.given }),
+			...(agency !== undefined && { agency }),
 		}),
 		uses,
 	};
 }
 
-/** A workspace, evaluated: its banks, its instruments read against them, and its own file. */
+/** A workspace, evaluated: its banks, and its instruments read against them. */
 export interface Workspace {
 	/** Its banks by folder ("" for the root), each whole (`bankOf`). */
 	readonly banks: Readonly<Record<string, Bank>>;
@@ -319,17 +316,15 @@ export interface Workspace {
 	readonly remote: Readonly<Record<AddressKey, BankScope>>;
 	/** Its instruments by path, each with where its banks were found. */
 	readonly instruments: Readonly<Record<string, InstrumentIn>>;
-	/** `workspace.yaml`, read; absent when there's none. */
-	readonly file?: WorkspaceFile;
 	/** YAML files read as nothing, by the bank or the workspace: a wrong folder shows here. */
 	readonly ignored: readonly string[];
 }
 
 /**
  * A workspace from its files, by path in it: its bank found (`banksIn`) and evaluated,
- * and each instrument read against the banks it uses, published under the agency its
- * `workspace.yaml` gives. `remote` holds the banks in other repositories as read (see
- * `remotesOf`); one not there yet is pending. `versions` gives each local bank's files'
+ * and each instrument read against the banks it uses, published under the agency
+ * `workspace.yaml` gives its questions too. `remote` holds the banks in other
+ * repositories as read (see `remotesOf`); one not there yet is pending. `versions` gives each local bank's files'
  * DDI versions, by bank folder. Total, and independent of the order of the files.
  */
 export function workspaceOf(
@@ -350,16 +345,15 @@ export function workspaceOf(
 	const remoteBanks: Record<AddressKey, BankScope> = {};
 	for (const [key, read] of Object.entries(remote))
 		if (read.kind === "files") remoteBanks[key] = scopeOf(read.files);
-	const text = outside[WORKSPACE.file];
-	const file = text === undefined ? undefined : workspaceFileOf(text);
+	const settings = files[ROOT.workspace];
+	const agency = settings === undefined ? undefined : agencyWritten(settings);
 	const instruments: Record<string, InstrumentIn> = {};
 	// The root's bank holds every file but the workspace's own, so what it reads as
-	// nothing (a `bank.yaml` in a folder, say) is the workspace's to report too.
+	// nothing (a `workspace.yaml` in a folder, say) is the workspace's to report too.
 	const ignored: string[] = Object.values(banks).flatMap((b) =>
 		b.ignored.filter(readsInWorkspace),
 	);
 	for (const [path, source] of Object.entries(outside)) {
-		if (path === WORKSPACE.file) continue;
 		if (!isInstrument(path)) {
 			// Only the workspace's own kind of file is worth saying it's read nowhere.
 			if (readsInWorkspace(path)) ignored.push(path);
@@ -369,14 +363,13 @@ export function workspaceOf(
 			banks,
 			remote,
 			remoteBanks,
-			...(file !== undefined && { file }),
+			agency,
 		});
 	}
 	return {
 		banks,
 		remote: remoteBanks,
 		instruments,
-		...(file !== undefined && { file }),
 		ignored: ignored.sort(),
 	};
 }

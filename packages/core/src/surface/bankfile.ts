@@ -1,7 +1,9 @@
 /**
- * The bank's own file, `bank.yaml`: what the bank says about itself, so that whoever
- * reads or imports it reads the same. Today one field, the DDI agency every item it
- * defines is published under. A workspace's `workspace.yaml` is read by the same rule.
+ * The workspace's settings file, `workspace.yaml`: what the workspace says about itself,
+ * so that whoever reads or imports it reads the same. The DDI agency everything in it
+ * is published under (questions, shared files and instruments alike), and the fields it
+ * requires of every question. `select_all.yaml` is read here too: moving its reader
+ * beside `SelectAll` would close an import cycle (env.ts reads the usual coding).
  */
 import { isMap, isScalar, parseDocument } from "yaml";
 import type { Finding } from "../findings.ts";
@@ -29,37 +31,18 @@ export const AGENCY_PATTERN = /^[a-zA-Z0-9-]{1,63}(\.[a-zA-Z0-9-]{1,63})*$/;
 export const AGENCY_RULE_TEXT =
 	"Letters, digits and hyphens, up to 63 at a time, in parts joined by dots, such as `org.example`.";
 
-export interface ParsedBankFile {
+export interface ParsedSettingsFile {
+	/** Absent until the file gives a valid one. */
 	readonly agency?: string;
-	/** The fields the bank also requires of its questions; empty for a workspace. */
+	/** The fields the workspace also requires of its questions. */
 	readonly required: readonly RequirableKey[];
 	readonly findings: readonly Finding[];
 }
 
-/** What each kind of file publishes under its agency, as the hole for a missing one says it. */
-const PUBLISHES: Readonly<Record<"bank" | "workspace", string>> = {
-	bank: "this bank's items are",
-	workspace: "this workspace's instruments are",
-};
+const FIELDS: readonly string[] = ["agency", "required"];
 
-/** The bank file, read. Total: an empty or broken file is findings, never a throw. */
-export const parseBankFile = (source: string): ParsedBankFile =>
-	parseSettingsFile(source, "bank");
-
-/** The fields each kind of settings file has. */
-const FIELDS: Readonly<Record<"bank" | "workspace", readonly string[]>> = {
-	bank: ["agency", "required"],
-	workspace: ["agency"],
-};
-
-/**
- * A settings file: a bank's `bank.yaml` (its agency, and the fields it requires of its
- * questions) or a workspace's `workspace.yaml` (its agency).
- */
-export function parseSettingsFile(
-	source: string,
-	owner: "bank" | "workspace",
-): ParsedBankFile {
+/** `workspace.yaml`, read. Total: an empty or broken file is findings, never a throw. */
+export function parseSettingsFile(source: string): ParsedSettingsFile {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const syntax: Finding[] = yamlErrors(doc.errors, source.length);
 	let js: unknown;
@@ -82,24 +65,19 @@ export function parseSettingsFile(
 				error("not-a-map", "", "This file is fields, such as `agency:`."),
 			],
 		};
-	const fields = FIELDS[owner];
 	const unknown = Object.keys(js)
-		.filter((k) => !fields.includes(k))
+		.filter((k) => !FIELDS.includes(k))
 		.map((k) =>
 			error(
 				"unknown-key",
 				k,
 				`\`${k}\` isn't a field here.`,
-				fields.length === 1
-					? `The only field is \`${fields[0]}\`.`
-					: `The fields are ${fields.map((f) => `\`${f}\``).join(", ")}.`,
+				`The fields are ${FIELDS.map((f) => `\`${f}\``).join(", ")}.`,
 			),
 		);
 	const required =
-		owner === "bank" && "required" in js
-			? readRequired(js.required)
-			: { value: [], findings: [] };
-	const agency = readAgency(doc, js, owner);
+		"required" in js ? readRequired(js.required) : { value: [], findings: [] };
+	const agency = readAgency(doc);
 	return {
 		...(agency.value !== undefined && { agency: agency.value }),
 		required: required.value,
@@ -236,23 +214,39 @@ export function parseSelectAllFile(source: string): {
 	};
 }
 
-function readAgency(
-	doc: ReturnType<typeof parseDocument>,
-	js: Record<string, unknown>,
-	owner: "bank" | "workspace",
-): { value?: string; findings: readonly Finding[] } {
-	// As written: a number-like agency (`2024`) keeps its spelling, as codes do.
+/**
+ * The agency `workspace.yaml` writes, valid or not; absent when it writes none. What an
+ * instrument is given, so its own findings say `invalid-agency` where the file's is
+ * wrong (as the CLI's `--agency`), rather than that none was given.
+ */
+export function agencyWritten(source: string): string | undefined {
+	const written = agencyAsWritten(
+		parseDocument(source, { prettyErrors: false }),
+	);
+	return typeof written === "string" && written.trim() !== ""
+		? written
+		: undefined;
+}
+
+/** As written: a number-like agency (`2024`) keeps its spelling, as codes do. */
+function agencyAsWritten(doc: ReturnType<typeof parseDocument>): unknown {
 	const node = doc.get("agency", true);
-	const agency =
-		isScalar(node) && typeof node.value === "number"
-			? (node.source ?? String(node.value))
-			: js.agency;
+	return isScalar(node) && typeof node.value === "number"
+		? (node.source ?? String(node.value))
+		: doc.get("agency");
+}
+
+function readAgency(doc: ReturnType<typeof parseDocument>): {
+	value?: string;
+	findings: readonly Finding[];
+} {
+	const agency = agencyAsWritten(doc);
 	if (agency === undefined)
 		return {
 			findings: [
 				hole(
 					"agency",
-					`Add an \`agency:\` line: the DDI agency ${PUBLISHES[owner]} published under.`,
+					"Add an `agency:` line: the DDI agency this workspace's questions, shared files and instruments are published under.",
 				),
 			],
 		};
@@ -275,7 +269,7 @@ function readAgency(
 const REQUIRABLE_TEXT = REQUIRABLE_KEYS.map((k) => `\`${k}\``).join(", ");
 
 /**
- * `required:`, a list of question fields. Each a field a bank may require; one already
+ * `required:`, a list of question fields. Each a field a workspace may require; one already
  * required, or listed twice, is advice; anything else is an error at its place.
  */
 function readRequired(value: unknown): {
@@ -323,9 +317,9 @@ function readRequired(value: unknown): {
 					"wrong-type",
 					at,
 					typeof item === "string"
-						? `\`${item}\` isn't a field a bank can require.`
+						? `\`${item}\` isn't a field a workspace can require.`
 						: "Each entry is a field's name.",
-					`A bank can require ${REQUIRABLE_TEXT}.`,
+					`A workspace can require ${REQUIRABLE_TEXT}.`,
 				),
 			);
 		else if (keys.includes(item as RequirableKey))

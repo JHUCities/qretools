@@ -167,7 +167,6 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
         "questions/example/service_satisfaction.yaml",
       ],
       "schemes": [
-        "bank.yaml",
         "concepts/library_use.yaml",
         "concepts/news_consumption.yaml",
         "concepts/parks_spending_support.yaml",
@@ -184,6 +183,7 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
         "units/years.yaml",
         "universes/all_respondents.yaml",
         "universes/household_members.yaml",
+        "workspace.yaml",
       ],
     },
     "shared": [
@@ -236,12 +236,6 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
       {
         "kind": "select_all",
         "leaves": [],
-      },
-      {
-        "kind": "bank",
-        "leaves": [
-          "bank complete used by -",
-        ],
       },
     ],
     "tree": [

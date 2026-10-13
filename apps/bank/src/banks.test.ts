@@ -7,6 +7,7 @@ import { formatLink } from "@qretools/shell";
 import { describe, expect, it } from "vitest";
 import {
 	type Cmd,
+	detailsOf,
 	envIn,
 	init,
 	type Model,
@@ -55,26 +56,29 @@ describe("loading a workspace", () => {
 	const WORKSPACE = [
 		file("workspace.yaml", "agency: org.example\n"),
 		file("instruments/x.yaml", "name: x\n"),
-		file("bank.yaml", "agency: org.example\n"),
 		file("questions/t/q.yaml", "name: q\n"),
 		file("scales/yn.yaml", 'labels:\n  "1": Yes\n'),
-		// A bank file in a folder makes no bank of it: read as nothing.
-		file("banks/a/bank.yaml", "agency: org.example\n"),
+		// Settings in a folder make no bank of it: read as nothing. Nor is `bank.yaml` read.
+		file("banks/a/workspace.yaml", "agency: org.example\n"),
+		file("bank.yaml", "agency: org.old\n"),
 		file("banks/a/questions/t/q.yaml", "name: q\n"),
 	];
 
-	it("holds the workspace's own files apart from the bank's", () => {
+	it("holds the workspace's instruments apart from the bank's files, its details among them", () => {
 		const m = loaded(WORKSPACE);
 		expect(
 			Object.values(m.local.workspace)
 				.map((f) => `${f.kind} ${f.base?.path}`)
 				.sort(),
-		).toEqual([
-			"instrument instruments/x.yaml",
-			"workspaceFile workspace.yaml",
-		]);
-		expect(Object.keys(m.remote.workspace).sort()).toEqual([
-			"instruments/x.yaml",
+		).toEqual(["instrument instruments/x.yaml"]);
+		expect(Object.keys(m.remote.workspace)).toEqual(["instruments/x.yaml"]);
+		// `workspace.yaml` is read once, as the root's settings, never as a file apart.
+		expect(detailsOf(m.local.schemes)).toMatchObject({
+			kind: "workspace",
+			base: { path: "workspace.yaml" },
+		});
+		expect(Object.keys(m.remote.schemes).sort()).toEqual([
+			"scales/yn.yaml",
 			"workspace.yaml",
 		]);
 		// GitHub changing an instrument the author hasn't touched brings it forward.
@@ -105,14 +109,14 @@ describe("loading a workspace", () => {
 		expect(again.local.questions).toBe(m.local.questions);
 	});
 
-	it("holds the root's bank, and no other folder's, whatever bank file it has", () => {
+	it("holds the root's bank, and no other folder's, whatever settings it has", () => {
 		const m = loaded(WORKSPACE);
 		expect(m.banks).toEqual([""]);
 		expect(
 			[...Object.values(m.local.questions), ...Object.values(m.local.schemes)]
 				.map((f) => `${f.bank} ${f.base?.path}`)
 				.sort(),
-		).toEqual([" bank.yaml", " questions/t/q.yaml", " scales/yn.yaml"]);
+		).toEqual([" questions/t/q.yaml", " scales/yn.yaml", " workspace.yaml"]);
 	});
 
 	it("names the files GitHub wouldn't give as text, once however often it loads", () => {
@@ -141,7 +145,7 @@ describe("loading a workspace", () => {
 
 	it("starts a template question with its bank's required fields in their places; a blank one blank", () => {
 		const requiring = WORKSPACE.map((f) =>
-			f.path === "bank.yaml"
+			f.path === "workspace.yaml"
 				? file(f.path, "agency: org.example\nrequired: [concept]\n")
 				: f,
 		);

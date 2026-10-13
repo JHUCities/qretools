@@ -253,34 +253,24 @@ const V6Schema = z.strictObject({
 	schemes: z.array(SchemeSchema.extend(inBankSchema)),
 });
 
-/** The workspace's own files: its instruments, and `workspace.yaml`, in no bank. */
-const WorkspaceEntrySchema = z.discriminatedUnion("kind", [
-	z.strictObject({
-		kind: z.literal("instrument"),
-		name: z.string(),
-		id: z.int().positive(),
-		source: z.string(),
-		base: BaseSchema.optional(),
-	}),
-	z.strictObject({
-		kind: z.literal("workspaceFile"),
-		id: z.int().positive(),
-		source: z.string(),
-		base: BaseSchema.optional(),
-	}),
-]);
-
-/** Version 7: version 6 with the workspace's own files beside its banks'. */
-export const WorkSchema = V6Schema.extend({
-	version: z.literal(7),
-	workspace: z.array(WorkspaceEntrySchema),
+/** The workspace's own files, in no bank: its instruments. */
+const WorkspaceEntrySchema = z.strictObject({
+	kind: z.literal("instrument"),
+	name: z.string(),
+	id: z.int().positive(),
+	source: z.string(),
+	base: BaseSchema.optional(),
 });
 
-/** Version 6 had no workspace files of its own. */
-const v6ToV7 = (v6: z.infer<typeof V6Schema>): Work => ({
-	...v6,
-	version: 7,
-	workspace: [],
+/**
+ * Version 8: version 6 with the workspace's instruments beside its bank's files, and
+ * `workspace.yaml` among the shared files (kind `workspace`). Version 7 kept that file
+ * apart and had a `bank.yaml`; its work isn't upgraded (nobody had any to keep), and
+ * the number stays 8 for whatever else changes before a release.
+ */
+export const WorkSchema = V6Schema.extend({
+	version: z.literal(8),
+	workspace: z.array(WorkspaceEntrySchema),
 });
 
 /**
@@ -305,18 +295,11 @@ export const WORK_ASIDE_KEY = "qretools.work.aside";
 export function readWork(
 	raw: string | null,
 ): Result<Work | undefined, Failure> {
-	return parseStored(
-		raw,
-		z.union([
-			WorkSchema,
-			V6Schema.transform(v6ToV7),
-			V5Schema.transform((v5) => v6ToV7(v5ToV6(v5))),
-		]),
-		{
-			what: "The work kept in this tab",
-			key: WORK_UNREADABLE_KEY,
-		},
-	);
+	// Only this version: older work is set aside as unreadable, never upgraded.
+	return parseStored(raw, WorkSchema, {
+		what: "The work kept in this tab",
+		key: WORK_UNREADABLE_KEY,
+	});
 }
 
 /** Version 1 of the stored settings: the default bank and "remember" for a new tab. */
@@ -423,8 +406,8 @@ export function fromLegacy(p: Persisted): {
 	readonly setAside: boolean;
 } {
 	return {
-		work: v6ToV7(
-			v5ToV6({
+		work: {
+			...v5ToV6({
 				version: 5,
 				repo: p.workOf?.repo ?? `${p.settings.owner}/${p.settings.repo}`,
 				...(p.workOf?.login !== undefined && { login: p.workOf.login }),
@@ -432,7 +415,9 @@ export function fromLegacy(p: Persisted): {
 				questions: p.questions,
 				schemes: p.schemes,
 			}),
-		),
+			version: 8,
+			workspace: [],
+		},
 		settings: { ...p.settings, path: "" },
 		setAside: Object.values(p.kept).some(
 			(k) => k.questions.length + k.schemes.length > 0,

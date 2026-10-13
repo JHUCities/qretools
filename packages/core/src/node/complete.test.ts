@@ -169,7 +169,7 @@ describe("completion in an instrument", async () => {
 
 	it("offers a select-all option's codes: chosen or not, and the bank's missing ones", () => {
 		const b = bankOf({
-			"bank.yaml": "agency: org.example\n",
+			"workspace.yaml": "agency: org.example\n",
 			"missing.yaml": 'labels:\n  "-9": Don\'t know\n',
 			"questions/t/q.yaml":
 				'name: q\ntext: Which?\nintent: Which.\nselect: many\nresponses:\n  "1": A\n  "2": B\n',

@@ -103,15 +103,17 @@ describe("qretools check", () => {
 		expect((await run("--help")).code).toBe(0);
 	});
 
-	it("checks a workspace: its bank, its instruments and its own file", async () => {
+	it("checks a workspace: its bank and its instruments", async () => {
 		const ws = await mkdtemp(join(tmpdir(), "qretools-ws-"));
 		await cp(here("../../fixtures/households"), ws, { recursive: true });
-		await writeFile(join(ws, "workspace.yaml"), "agency: org.example\n");
 		await writeFile(join(ws, "stray.yaml"), "x: 1\n");
 		await writeFile(join(ws, "a-stray.yaml"), "x: 1\n");
-		// A bank file anywhere but the root makes no bank: it's read as nothing.
+		// Settings anywhere but the root make no bank: they're read as nothing.
 		await mkdir(join(ws, "banks/x"), { recursive: true });
-		await writeFile(join(ws, "banks/x/bank.yaml"), "agency: org.example\n");
+		await writeFile(
+			join(ws, "banks/x/workspace.yaml"),
+			"agency: org.example\n",
+		);
 		const r = await run("check", ws);
 		const lines = r.out.trimEnd().split("\n");
 		// The households instrument reads its own workspace's bank; remote's can't be read here.
@@ -129,10 +131,10 @@ describe("qretools check", () => {
 		);
 		expect(lines.at(-1)).toMatch(/stray\.yaml:1:1: note: .* \[ignored\]$/);
 		expect(
-			lines.filter((l) => l.includes("banks/x/bank.yaml:1:1: note:")),
+			lines.filter((l) => l.includes("banks/x/workspace.yaml:1:1: note:")),
 		).toHaveLength(1);
-		// 16 bank files, 2 instruments, the workspace file.
-		expect(r.err).toMatch(/^19 files, /);
+		// 16 bank files (`workspace.yaml` among them), 2 instruments.
+		expect(r.err).toMatch(/^18 files, /);
 		expect(r.code).toBe(1);
 	});
 

@@ -30,7 +30,7 @@ function loaded(from: "branch" | "default" = "branch"): Model {
 		kind: "workspaceLoaded",
 		result: ok({
 			files: [
-				{ path: "bank.yaml", sha: "s0", text: "agency: org.example\n" },
+				{ path: "workspace.yaml", sha: "s0", text: "agency: org.example\n" },
 				{ path: "questions/t/alpha.yaml", sha: "s1", text: QUESTION },
 			],
 			found: true,

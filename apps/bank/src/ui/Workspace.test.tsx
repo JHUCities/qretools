@@ -18,6 +18,7 @@ import {
 	within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { detailsOf } from "../model.js";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
 import { AppContext } from "./AppContext.js";
@@ -37,7 +38,6 @@ const QUESTION = (name: string) =>
 	`name: ${name}\ntext: Is it so?\nintent: To see.\nresponses: yn\n`;
 const FILES = [
 	file("workspace.yaml", "agency: org.example\n"),
-	file("bank.yaml", "agency: org.example\n"),
 	file("scales/yn.yaml", 'labels:\n  "1": Yes\n  "2": No\n'),
 	file("questions/t/alpha.yaml", QUESTION("alpha")),
 	file("questions/u/beta.yaml", QUESTION("beta")),
@@ -65,7 +65,11 @@ function renderWorkspace(files = FILES, access = { kind: "write" }) {
 				ok({
 					found: true,
 					files: [
-						{ path: "bank.yaml", sha: "r1", text: "agency: org.example\n" },
+						{
+							path: "workspace.yaml",
+							sha: "r1",
+							text: "agency: org.example\n",
+						},
 						{ path: "questions/t/far.yaml", sha: "r2", text: QUESTION("far") },
 					],
 					unread: [],
@@ -112,8 +116,8 @@ describe("a workspace's bank", () => {
 	it("is its root alone: one set of questions and shared files, and New asks no bank", async () => {
 		renderWorkspace([
 			...FILES,
-			// A bank file in a folder makes no bank of it.
-			file("banks/b/bank.yaml", "agency: org.example\n"),
+			// Settings in a folder make no bank of it.
+			file("banks/b/workspace.yaml", "agency: org.example\n"),
 		]);
 		await act(async () => {});
 		const nav = screen.getByRole("navigation", { name: "Question bank" });
@@ -172,11 +176,40 @@ describe("a workspace's instruments", () => {
 		fireEvent.click(gear);
 		await act(async () => {});
 		const { model } = app.store.getState();
-		const details = Object.values(model.local.workspace).find(
-			(e) => e.kind === "workspaceFile",
-		);
+		const details = detailsOf(model.local.schemes);
+		expect(details?.base?.path).toBe("workspace.yaml");
 		expect(model.screen).toEqual({ kind: "editing", id: details?.id });
 		expect(gear.getAttribute("aria-current")).toBe("page");
+		// Its one way in: neither the tree's Shared sections nor New list it.
+		expect(
+			within(nav).queryByRole("treeitem", { name: /details/i }),
+		).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "New" }));
+		expect(
+			screen
+				.getAllByRole("menuitem")
+				.map((i) => i.textContent)
+				.filter((t) => /details/i.test(t ?? "")),
+		).toEqual([]);
+	});
+
+	it("say on that button that a workspace with no details has its agency to fill in, and start them there", async () => {
+		const app = renderWorkspace(
+			FILES.filter((f) => f.path !== "workspace.yaml"),
+		);
+		await act(async () => {});
+		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		fireEvent.click(
+			within(nav).getByRole("button", {
+				name: "Workspace details (to fill in or fix)",
+			}),
+		);
+		await act(async () => {});
+		const { model } = app.store.getState();
+		const details = detailsOf(model.local.schemes);
+		expect(details).toMatchObject({ kind: "workspace", bank: "" });
+		expect(details?.base).toBeUndefined();
+		expect(model.screen).toEqual({ kind: "editing", id: details?.id });
 	});
 
 	it("say on that button what the tree's marks said: unsaved, and something to fill in", async () => {
@@ -287,8 +320,8 @@ describe("a workspace's instruments", () => {
 	});
 
 	it("are all a workspace with no bank of its own shows, and all New makes there", async () => {
+		// Not even its details: `workspace.yaml` alone is a bank with no questions yet.
 		renderWorkspace([
-			file("workspace.yaml", "agency: org.example\n"),
 			file(
 				"instruments/w.yaml",
 				"name: w\nuses:\n  tpl: JHUCities/qretools-bank-template@v1\nflow:\n  - ask: tpl.q\n",
@@ -400,10 +433,7 @@ describe("a workspace's instruments", () => {
 	// The owner's reversal (2026-10-09): the section stays with none yet, a bank at the
 	// root included, so instruments are found where a team starts.
 	it("say there are none yet, and the first offers the example where the example questions are", async () => {
-		const app = renderWorkspace([
-			file("workspace.yaml", "agency: org.example\n"),
-			...EXAMPLE_QUESTIONS,
-		]);
+		const app = renderWorkspace([...EXAMPLE_QUESTIONS]);
 		await act(async () => {});
 		expect(screen.getByRole("heading", { name: "Instruments" })).toBeTruthy();
 		expect(screen.queryByRole("tree", { name: "Instruments" })).toBeNull();
@@ -440,7 +470,7 @@ describe("a workspace's instruments", () => {
 
 	it("say there are none yet in a workspace without the example questions, where the first offers no example", async () => {
 		renderWorkspace([
-			file("bank.yaml", "agency: org.example\n"),
+			file("workspace.yaml", "agency: org.example\n"),
 			file("questions/t/alpha.yaml", QUESTION("alpha")),
 		]);
 		await act(async () => {});
@@ -459,10 +489,7 @@ describe("a workspace's instruments", () => {
 	});
 
 	it("stop offering the example once the offer is dismissed", async () => {
-		const app = renderWorkspace([
-			file("workspace.yaml", "agency: org.example\n"),
-			...EXAMPLE_QUESTIONS,
-		]);
+		const app = renderWorkspace([...EXAMPLE_QUESTIONS]);
 		await act(async () => {});
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		fireEvent.click(screen.getByRole("menuitem", { name: "Instrument…" }));
@@ -484,7 +511,6 @@ describe("a fix in the Findings list", () => {
 			"How strongly do you agree that residents are treated fairly by police officers in your own neighborhood these days";
 		const app = renderWorkspace([
 			file("workspace.yaml", "agency: org.example\n"),
-			file("bank.yaml", "agency: org.example\n"),
 			file(
 				"questions/t/alpha.yaml",
 				`name: alpha\ntext: ${LONG} here?\nintent: To see.\nopen: {}\n`,

@@ -17,6 +17,9 @@ export const NAME_RULE_TEXT =
 export const FOLDER_RULE_TEXT =
 	"Lowercase letters, digits, hyphens and underscores, starting with a letter.";
 
+/** The workspace's settings file, `workspace.yaml`, in running text. */
+export const WORKSPACE_DETAILS = "workspace details";
+
 /** Each kind of shared element, singular, as a heading or a "New …" item says it. */
 export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 	concept: "concept",
@@ -26,7 +29,7 @@ export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 	instruction: "instruction",
 	missing: "missing values",
 	select_all: "select-all-that-apply values",
-	bank: "bank details",
+	workspace: WORKSPACE_DETAILS,
 };
 
 /** Each kind, plural, as a section of the tree names it. */
@@ -38,7 +41,7 @@ export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 	instruction: "Instructions",
 	missing: "Missing values",
 	select_all: "Select-all-that-apply values",
-	bank: "Bank",
+	workspace: "Workspace details",
 };
 
 /** Each kind in running text: "shared scale", "missing values". */
@@ -50,11 +53,8 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 	instruction: "shared instruction",
 	missing: "missing values",
 	select_all: "select-all-that-apply values",
-	bank: "bank details",
+	workspace: WORKSPACE_DETAILS,
 };
-
-/** The workspace's own file, `workspace.yaml`, in running text: as "bank details" is a bank's. */
-export const WORKSPACE_DETAILS = "workspace details";
 
 /**
  * A finding's severity as the author reads it ("hole" is the tool's word, not theirs):

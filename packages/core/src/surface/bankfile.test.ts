@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import bankTemplate from "../../templates/settings/bank.yaml?raw";
 import selectAllTemplate from "../../templates/settings/select_all.yaml?raw";
 import workspaceTemplate from "../../templates/settings/workspace.yaml?raw";
 import { schemeEnv } from "../schemes.ts";
@@ -10,7 +9,7 @@ import {
 } from "../selectAll.ts";
 import {
 	AGENCY_RULE_TEXT,
-	parseBankFile,
+	agencyWritten,
 	parseSelectAllFile,
 	parseSettingsFile,
 } from "./bankfile.ts";
@@ -18,11 +17,11 @@ import { EMPTY_ENV } from "./env.ts";
 import { parseSurface } from "./parse.ts";
 
 const found = (source: string) =>
-	parseBankFile(source).findings.map((f) => [f.severity, f.code, f.path]);
+	parseSettingsFile(source).findings.map((f) => [f.severity, f.code, f.path]);
 
-describe("the bank file", () => {
+describe("the workspace's settings file", () => {
 	it("reads the agency", () => {
-		expect(parseBankFile("agency: edu.example.dept-1\n")).toEqual({
+		expect(parseSettingsFile("agency: edu.example.dept-1\n")).toEqual({
 			agency: "edu.example.dept-1",
 			required: [],
 			findings: [],
@@ -44,17 +43,17 @@ describe("the bank file", () => {
 		])
 			expect([
 				bad,
-				parseBankFile(`agency: "${bad}"\n`).agency,
+				parseSettingsFile(`agency: "${bad}"\n`).agency,
 				found(`agency: "${bad}"\n`),
 			]).toEqual([bad, undefined, [["error", "invalid-agency", "agency"]]]);
 		expect(
-			parseBankFile(`agency: ${"a".repeat(63)}.org\n`).agency,
+			parseSettingsFile(`agency: ${"a".repeat(63)}.org\n`).agency,
 		).toBeDefined();
 	});
 
 	it("reads an agency as written, even one YAML reads as a number", () => {
-		expect(parseBankFile("agency: 2024\n").agency).toBe("2024");
-		expect(parseBankFile("agency: 1.10\n").agency).toBe("1.10");
+		expect(parseSettingsFile("agency: 2024\n").agency).toBe("2024");
+		expect(parseSettingsFile("agency: 1.10\n").agency).toBe("1.10");
 		expect(found("agency: true\n")).toEqual([
 			["error", "invalid-agency", "agency"],
 		]);
@@ -68,21 +67,22 @@ describe("the bank file", () => {
 
 	it("puts the agency in the environment, absent when there is none", () => {
 		expect(
-			schemeEnv([{ kind: "bank", name: "bank", text: "agency: org.example\n" }])
-				.agency,
+			schemeEnv([
+				{ kind: "workspace", name: "workspace", text: "agency: org.example\n" },
+			]).agency,
 		).toBe("org.example");
 		expect(
-			schemeEnv([{ kind: "bank", name: "bank", text: "agency:\n" }]),
+			schemeEnv([{ kind: "workspace", name: "workspace", text: "agency:\n" }]),
 		).not.toHaveProperty("agency");
 	});
 
 	it("reads the fields it requires of its questions, and says what's wrong with the list", () => {
 		const head = "agency: org.example\nrequired:\n";
-		expect(parseBankFile(`${head}  - title\n  - concept\n`)).toMatchObject({
+		expect(parseSettingsFile(`${head}  - title\n  - concept\n`)).toMatchObject({
 			required: ["title", "concept"],
 			findings: [],
 		});
-		const read = parseBankFile(
+		const read = parseSettingsFile(
 			`${head}  - title\n  - responses\n  - intent\n  - title\n  - colour\n`,
 		);
 		expect(read.required).toEqual(["title"]);
@@ -104,20 +104,21 @@ describe("the bank file", () => {
 		]);
 	});
 
-	it("is a bank's alone: a workspace's file has no `required`", () => {
-		expect(
-			parseSettingsFile(
-				"agency: org.example\nrequired: [title]\n",
-				"workspace",
-			).findings.map((f) => [f.code, f.path]),
-		).toEqual([["unknown-key", "required"]]);
+	it("gives the agency as written, valid or not, for an instrument to say what's wrong with it", () => {
+		expect(agencyWritten("agency: my org\n")).toBe("my org");
+		expect(parseSettingsFile("agency: my org\n").agency).toBeUndefined();
+		expect(agencyWritten("agency: org.example\n")).toBe("org.example");
+		expect(agencyWritten("agency: 1.10\n")).toBe("1.10");
+		expect(agencyWritten("agency:\n")).toBeUndefined();
+		expect(agencyWritten("")).toBeUndefined();
+		expect(agencyWritten("- not\n- a map\n")).toBeUndefined();
 	});
 
 	it("makes a required field to fill in, missing or empty, with what it's for", () => {
 		const env = schemeEnv([
 			{
-				kind: "bank",
-				name: "bank",
+				kind: "workspace",
+				name: "workspace",
 				text: "agency: org.example\nrequired: [title, concept]\n",
 			},
 		]);
@@ -145,31 +146,26 @@ describe("the bank file", () => {
 
 /*
  * The template repository (JHUCities/qretools-template) carries these comments too, in
- * its workspace.yaml and bank.yaml, filled in with org.example: change both.
+ * its workspace.yaml, filled in with org.example: change both.
  */
-describe("the settings templates a new bank or workspace starts from", () => {
-	it("leave only the agency to fill in, and a bank's required list ready to uncomment", () => {
-		const holes = (source: string, owner: "bank" | "workspace") =>
-			parseSettingsFile(source, owner).findings.map((f) => [
-				f.severity,
-				f.path,
-			]);
+describe("the settings template a new workspace starts from", () => {
+	it("leaves only the agency to fill in, and the required list ready to uncomment", () => {
+		const holes = (source: string) =>
+			parseSettingsFile(source).findings.map((f) => [f.severity, f.path]);
 		// The comment says the rule the parser enforces.
-		for (const t of [bankTemplate, workspaceTemplate])
-			expect(t.replace(/\n# /g, " ")).toContain(
-				"letters, digits and hyphens, in parts joined by dots",
-			);
+		expect(workspaceTemplate.replace(/\n# /g, " ")).toContain(
+			"letters, digits and hyphens, in parts joined by dots",
+		);
 		expect(AGENCY_RULE_TEXT).toContain(
 			"Letters, digits and hyphens, up to 63 at a time, in parts joined by dots",
 		);
-		expect(holes(bankTemplate, "bank")).toEqual([["hole", "agency"]]);
-		expect(holes(workspaceTemplate, "workspace")).toEqual([["hole", "agency"]]);
-		const on = bankTemplate.replace(
+		expect(holes(workspaceTemplate)).toEqual([["hole", "agency"]]);
+		const on = workspaceTemplate.replace(
 			"#required:\n#  - title",
 			"required:\n  - title",
 		);
-		expect(on).not.toBe(bankTemplate);
-		expect(parseBankFile(on).required).toEqual(["title"]);
+		expect(on).not.toBe(workspaceTemplate);
+		expect(parseSettingsFile(on).required).toEqual(["title"]);
 	});
 });
 
@@ -262,12 +258,10 @@ describe("how a bank stores a select-all option's answer", () => {
 	});
 
 	it("isn't a settings file's to say", () => {
-		for (const owner of ["bank", "workspace"] as const)
-			expect(
-				parseSettingsFile(
-					"agency: org.example\nselect_all:\n",
-					owner,
-				).findings.map((f) => f.code),
-			).toEqual(["unknown-key"]);
+		expect(
+			parseSettingsFile("agency: org.example\nselect_all:\n").findings.map(
+				(f) => f.code,
+			),
+		).toEqual(["unknown-key"]);
 	});
 });

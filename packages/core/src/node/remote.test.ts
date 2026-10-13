@@ -43,7 +43,7 @@ beforeAll(async () => {
 	await git("config", "commit.gpgsign", "false");
 	await git("config", "tag.gpgsign", "false");
 	await writeFile(
-		join(origin, "banks", "hh", "bank.yaml"),
+		join(origin, "banks", "hh", "workspace.yaml"),
 		"agency: org.example\n",
 	);
 	await writeFile(
@@ -51,7 +51,10 @@ beforeAll(async () => {
 		"name: q\n",
 	);
 	await mkdir(join(origin, "banks", "b"), { recursive: true });
-	await writeFile(join(origin, "banks", "b", "bank.yaml"), "agency: org.b\n");
+	await writeFile(
+		join(origin, "banks", "b", "workspace.yaml"),
+		"agency: org.b\n",
+	);
 	await writeFile(join(origin, "README.md"), "# A bank\n");
 	await git("add", ".");
 	await git("commit", "--quiet", "-m", "v1");
@@ -72,7 +75,7 @@ describe("a bank in another repository, read at its tag with git", () => {
 		expect(read).toEqual({
 			kind: "files",
 			files: {
-				"bank.yaml": "agency: org.example\n",
+				"workspace.yaml": "agency: org.example\n",
 				"questions/t/q.yaml": "name: q\n",
 			},
 		});
@@ -89,7 +92,7 @@ describe("a bank in another repository, read at its tag with git", () => {
 		// Another folder at the same tag, after the first: its own entry, not the first's checkout.
 		expect(await readTagged(remote("o/bank/banks/b@v1"), options())).toEqual({
 			kind: "files",
-			files: { "bank.yaml": "agency: org.b\n" },
+			files: { "workspace.yaml": "agency: org.b\n" },
 		});
 		expect(await readTagged(remote("o/bank/banks/hh@v1"), options())).toEqual(
 			hh,

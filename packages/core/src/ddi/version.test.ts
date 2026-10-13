@@ -58,7 +58,7 @@ const VERSIONS: Versioning = {
 		"instructions/select_one.yaml": { number: "6" },
 		"missing.yaml": { number: "7" },
 		// The settings file's version is no item's: nothing published is written there.
-		"bank.yaml": { number: "9" },
+		"workspace.yaml": { number: "9" },
 		"select_all.yaml": { number: "8" },
 	},
 };

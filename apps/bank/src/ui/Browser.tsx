@@ -20,15 +20,7 @@ import {
 	SkeletonBox,
 	SkeletonText,
 } from "@primer/react/experimental";
-import {
-	absentRoot,
-	type Finding,
-	isRoot,
-	SCHEME_SINGULAR,
-	type Status,
-	status,
-	UNNAMED,
-} from "@qretools/core";
+import { isRoot, SCHEME_SINGULAR, type Status, UNNAMED } from "@qretools/core";
 import { StatusIcon } from "@qretools/shell/ui";
 import { useId } from "react";
 import type { Dispatch, Id } from "../model.js";
@@ -57,9 +49,9 @@ export function Browser({
 	loading = false,
 }: {
 	banks: readonly BankTree[];
-	/** The workspace's own files (`workspaceLeaves`): its instruments and its details. */
+	/** The workspace's own files (`workspaceLeaves`): its instruments. */
 	workspace?: readonly SchemeLeaf[];
-	/** The workspace has no bank of its own: only its instruments and details are shown. */
+	/** The workspace has no bank of its own: only its instruments are shown. */
 	workspaceOnly?: boolean;
 	/** The workspace has no instrument at all: its section says so. */
 	noInstruments?: boolean;
@@ -131,7 +123,7 @@ export function Browser({
 	);
 }
 
-/** The workspace's instruments and its details: one flat tree, named by its heading. */
+/** The workspace's instruments: one flat tree, named by its heading. */
 function Instruments({
 	leaves,
 	none,
@@ -320,21 +312,12 @@ function FolderItem({
 	);
 }
 
-/**
- * What an absent root file means for the bank, by the core's rule (`absentRoot`):
- * findings for a required one, none for an optional one.
- */
-const absent = (s: SchemeSection): readonly Finding[] =>
-	isRoot(s.kind) && s.leaves.length === 0 ? absentRoot(s.kind) : [];
-
 /** A section's count, heard: "3 scales"; a bank's one root file is there or not. */
 const sectionCount = (s: SchemeSection): string =>
 	isRoot(s.kind)
 		? s.leaves.length > 0
 			? "defined"
-			: absent(s).length > 0
-				? `none yet, ${STATUS_TEXT(status(absent(s)))}`
-				: "none yet"
+			: "none yet"
 		: countLabel(s.leaves.length, SCHEME_SINGULAR[s.kind]);
 
 function SectionItem({
@@ -360,11 +343,7 @@ function SectionItem({
 			</TreeView.LeadingVisual>
 			{section.label}
 			<TreeView.TrailingVisual label={sectionCount(section)}>
-				{absent(section).length > 0 ? (
-					<StatusIcon status={status(absent(section))} />
-				) : (
-					<CounterLabel>{section.leaves.length}</CounterLabel>
-				)}
+				<CounterLabel>{section.leaves.length}</CounterLabel>
 			</TreeView.TrailingVisual>
 			<TreeView.SubTree>
 				{/* A tree node navigates; creating is the New menu's, never a node's. */}

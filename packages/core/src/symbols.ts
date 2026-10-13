@@ -115,7 +115,7 @@ export function schemeSymbols(
 	if (
 		value === undefined ||
 		isRoot(kind) ||
-		value.kind === "bank" ||
+		value.kind === "settings" ||
 		value.kind === "coding"
 	)
 		return { ...none, fingerprints: [] };

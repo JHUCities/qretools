@@ -101,7 +101,7 @@ export function instrumentOf(
 						severity: "error",
 						path: `uses.${u.alias}`,
 						message: `\`${u.alias}\` declares no DDI agency, so its questions would be published under \`${UNDECLARED_AGENCY}\`.`,
-						hint: "The bank gives its agency in its `bank.yaml`.",
+						hint: "A workspace gives its agency in its `workspace.yaml`.",
 					},
 				]
 			: [],

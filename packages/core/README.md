@@ -53,9 +53,10 @@ qretools export path/to/bank -o bank.json   # the bank's DDI, validated
 ```
 
 `check` also reads a workspace: a folder holding a bank at its root (`questions/`,
-the shared folders, `bank.yaml`), `instruments/` and `workspace.yaml`. It reports the
-bank's findings, every instrument's (read against its own workspace's bank, written
-`../`, under the agency `workspace.yaml` gives), and notes YAML files it reads as nothing.
+the shared folders, `workspace.yaml`) and `instruments/`. It reports the bank's
+findings, every instrument's (read against its own workspace's bank, written `../`,
+under the agency `workspace.yaml` gives its questions too), and notes YAML files it
+reads as nothing.
 
 A bank in another repository (`owner/repo@v1`, or `owner/repo/folder@v1`) is read at
 that tag with your own `git`, so whatever credentials git has reach a private
@@ -128,8 +129,8 @@ draft.findings.map((f) => [f.severity, f.path]);
 
 A whole bank from a directory: each file's evaluation and findings by path, the
 shared files' environment, the paths that aren't bank files, and the DDI agency the
-bank declares in its own file, `bank.yaml`. A bank without one is reported once, under
-`bank.yaml`, and its items are published under `invalid` until it has one.
+workspace declares in `workspace.yaml`. A bank without one is reported once, under
+`workspace.yaml`, and its items are published under `invalid` until it has one.
 
 ```ts
 const bank = bankOf(await readBank("fixtures/bank"));

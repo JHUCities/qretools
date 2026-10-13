@@ -33,9 +33,7 @@ let files: Record<string, string>;
 /** The households bank, as another repository would hold it: no instruments. */
 const hhFiles = () =>
 	Object.fromEntries(
-		Object.entries(files).filter(
-			([path]) => !path.startsWith("instruments/") && path !== "workspace.yaml",
-		),
+		Object.entries(files).filter(([path]) => !path.startsWith("instruments/")),
 	);
 beforeAll(async () => {
 	files = {

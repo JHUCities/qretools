@@ -395,7 +395,7 @@ function setText(
 }
 
 /**
- * The picker of a bank's details (`bank.yaml`): which fields every question must also
+ * The picker of the workspace's details (`workspace.yaml`): which fields every question must also
  * have, chosen together as a checklist, where `required` is written (empty or a list).
  */
 export function settingsLivelits(

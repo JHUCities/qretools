@@ -216,7 +216,7 @@ function toJs(doc: Document): Read<unknown> {
 
 /**
  * A one-line field. Required by the language (`name`, `text`, `intent`) or by the bank
- * (`bank.yaml`'s `required`), missing or empty it's a hole whose hint says what the field
+ * (`workspace.yaml`'s `required`), missing or empty it's a hole whose hint says what the field
  * is for; optional and empty, the hint also offers removing the line.
  */
 function readText(

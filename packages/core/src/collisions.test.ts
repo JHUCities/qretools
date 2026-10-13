@@ -4,7 +4,7 @@ import { elaborateItems } from "./ddi/elaborate.ts";
 import { type Bank, bankOf } from "./evaluate.ts";
 
 const BANK = {
-	"bank.yaml": "agency: org.example\n",
+	"workspace.yaml": "agency: org.example\n",
 	"missing.yaml": 'labels:\n  "-8": Refused\n',
 	"scales/yesno01.yaml": 'labels:\n  "0": No\n  "1": Yes\n',
 };
@@ -115,7 +115,7 @@ describe("one identity, one item", () => {
 		).toEqual([["missing-code", "not_chosen.-8"]]);
 		// Said once, in the file that writes the coding.
 		expect(codes(bank, "missing.yaml")).toEqual([]);
-		expect(codes(bankOf(BANK), "bank.yaml")).toEqual([]);
+		expect(codes(bankOf(BANK), "workspace.yaml")).toEqual([]);
 	});
 
 	it("the usual coding collides too, and the finding says how to end it", () => {

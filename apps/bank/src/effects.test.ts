@@ -131,7 +131,7 @@ describe("recovery persistence", () => {
 			{
 				kind: "persist",
 				work: {
-					version: 7,
+					version: 8,
 					repo: "o/r",
 					nextId: 1,
 					questions: [],

@@ -12,7 +12,7 @@ import { createEditor } from "./editor.ts";
 import { instrumentSource } from "./instrument.ts";
 
 const hh = bankOf({
-	"bank.yaml": "agency: org.example\n",
+	"workspace.yaml": "agency: org.example\n",
 	"questions/hh/own.yaml":
 		'name: own\ntext: Do you own your home?\nintent: Tenure.\nresponses:\n  "1": Yes\n  "2": No\n',
 	"questions/hh/size.yaml":

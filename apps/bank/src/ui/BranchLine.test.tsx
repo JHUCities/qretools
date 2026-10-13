@@ -15,7 +15,7 @@ import { App } from "./App.js";
 import { AppContext, SESSION_STATUS } from "./AppContext.js";
 
 const FILES = [
-	{ path: "bank.yaml", sha: "s0", text: "agency: org.example\n" },
+	{ path: "workspace.yaml", sha: "s0", text: "agency: org.example\n" },
 	{
 		path: "questions/t/alpha.yaml",
 		sha: "s1",

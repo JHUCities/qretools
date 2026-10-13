@@ -8,7 +8,7 @@ import { parseInstrument } from "./parse.ts";
 const q = (name: string, rest: string) =>
 	`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
 const BAS = bankOf({
-	"bank.yaml": "agency: org.example\n",
+	"workspace.yaml": "agency: org.example\n",
 	"universes/renters.yaml": "text: Renters\n",
 	"questions/a/consent.yaml": q(
 		"consent",
@@ -26,7 +26,7 @@ const BAS = bankOf({
 		'name: echo\ntext: "You selected {{neighborhood}}."\nintent: i\nopen: {}\nfills:\n  neighborhood: text\n',
 });
 const OTHER = bankOf({
-	"bank.yaml": "agency: org.other\n",
+	"workspace.yaml": "agency: org.other\n",
 	"questions/a/why.yaml": q("why", "open: {}\n"),
 });
 

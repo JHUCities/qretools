@@ -41,10 +41,8 @@ import {
 	type Target,
 	UNNAMED,
 	usedBy,
-	WORKSPACE_DETAILS,
 } from "@qretools/core";
 import {
-	bankFileJsonSchema,
 	inspect,
 	LIVELIT_KINDS,
 	labelledJsonSchema,
@@ -72,6 +70,7 @@ import {
 import { memo, type ReactNode, useCallback, useId, useMemo } from "react";
 import {
 	bankFileOf,
+	detailsOf,
 	type Entry,
 	envOfRemote,
 	fileOf,
@@ -81,7 +80,6 @@ import {
 	type Question,
 	type SchemeEntry,
 	schemeFileNamed,
-	type WorkspaceFileEntry,
 } from "../model.js";
 import {
 	alsoSaves,
@@ -125,7 +123,7 @@ const SCHEME_SCHEMAS: Readonly<Record<Shape, Record<string, unknown>>> = {
 	text: textEntryJsonSchema(),
 	labelled: labelledJsonSchema(),
 	coding: selectAllFileJsonSchema(),
-	bank: bankFileJsonSchema(),
+	settings: workspaceFileJsonSchema(),
 };
 
 /**
@@ -146,8 +144,6 @@ export const Editing = memo(function Editing({
 			return <QuestionEditing q={entry} index={index} />;
 		case "instrument":
 			return <InstrumentEditing e={entry} />;
-		case "workspaceFile":
-			return <WorkspaceDetailsEditing e={entry} />;
 		default:
 			return <SchemeEditing e={entry} index={index} />;
 	}
@@ -197,7 +193,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	// Until the bank declares its agency, say so beside its DDI (not while it loads).
 	const loading = useModel(bankLoading);
 	const declare = useCallback(
-		() => dispatch({ kind: "schemeCreateOpened", scheme: "bank" }),
+		() =>
+			dispatch({ kind: "schemeCreateOpened", scheme: "workspace", bank: "" }),
 		[dispatch],
 	);
 	// One element while nothing changes: the DDI pane is memoised, and a new notice per
@@ -370,7 +367,12 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 			}),
 		[instrument.refs, read],
 	);
-	const own = evaluations.workspaceFile(slices);
+	// What the workspace's details say, beside the DDI they publish it under.
+	const details = detailsOf(slices.local.schemes);
+	const own =
+		details === undefined
+			? undefined
+			: evaluations.scheme(details, evaluations.env(slices, "")).findings;
 	const { findings, ranges, draft, ddi } = instrument;
 	const [listed, flushFindings] = useSettled(findings, SETTLE_MS, e.id);
 	const outline = useMemo(() => outlineOf(draft), [draft]);
@@ -417,7 +419,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 		() => (
 			<>
 				<DownloadReason id={reasonId} refusal={refusal} />
-				<WorkspaceNotice own={own} />
+				<WorkspaceNotice findings={own} />
 			</>
 		),
 		[reasonId, refusal, own],
@@ -546,81 +548,6 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	);
 }
 
-const WORKSPACE_SCHEMA = workspaceFileJsonSchema();
-
-/** The workspace details: the agency its instruments are published under. */
-function WorkspaceDetailsEditing({ e }: { e: WorkspaceFileEntry }) {
-	const { evaluations } = useApp();
-	const blocked = useModel(writeBlocked);
-	const activity = useModel((m) => m.activity);
-	const slices = useSlices();
-	const { onTarget, onFix, on } = useActions(e.id);
-	const stale = useStale(e);
-	const own = evaluations.workspaceFile(slices);
-	const findings = own?.findings ?? NO_FINDINGS;
-	const ranges = own?.ranges ?? NO_RANGES;
-	const [listed, flush] = useSettled(findings, SETTLE_MS, e.id);
-	const diagnostics = useMemo(
-		() => toDiagnostics(findings, ranges, onFix),
-		[findings, ranges, onFix],
-	);
-	return (
-		<>
-			<FileHeader
-				q={e}
-				name={WORKSPACE_DETAILS}
-				unsaved={isUnsaved(e)}
-				activity={activity[e.id]}
-				blocked={blocked}
-				stale={stale}
-				on={{
-					...on,
-					save: () => {
-						flush();
-						on.save();
-					},
-				}}
-			/>
-			<div className="split">
-				<section
-					className="left"
-					aria-label="Workspace details source"
-					onBlur={flush}
-				>
-					<EditorPane
-						id={e.id}
-						text={e.source}
-						diagnostics={diagnostics}
-						marks={NO_MARKS}
-						schema={WORKSPACE_SCHEMA}
-						label="Workspace details: source (YAML)"
-					/>
-				</section>
-				<ScrollableRegion key={e.id} className="right" aria-label="Previews">
-					<Panes
-						kind="workspaceFile"
-						readOnly={false}
-						badge={{ findings: <StatusBadge status={status(findings)} /> }}
-						body={(pane) =>
-							pane === "findings" ? (
-								<SettledFindings
-									findings={listed}
-									flush={flush}
-									onTarget={onTarget}
-									onFix={onFix}
-								/>
-							) : null
-						}
-					/>
-				</ScrollableRegion>
-			</div>
-		</>
-	);
-}
-
-const NO_FINDINGS: readonly Finding[] = [];
-const NO_RANGES: Readonly<Record<string, Range>> = {};
-
 const SINGULAR = SCHEME_SINGULAR;
 
 function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
@@ -654,7 +581,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const inEffect =
 		e.kind === "missing"
 			? env.missing.length > 0
-			: e.kind === "bank"
+			: e.kind === "workspace"
 				? env.agency !== undefined
 				: e.kind === "select_all"
 					? env.selectAll !== DEFAULT_SELECT_ALL
@@ -802,10 +729,10 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 				{selectAllText(value.selectAll)}.
 			</p>
 		);
-	if (value.kind === "bank")
+	if (value.kind === "settings")
 		return (
 			<p>
-				Items are published under the DDI agency{" "}
+				Everything in this workspace is published under the DDI agency{" "}
 				<code className="code">{value.agency}</code>.
 			</p>
 		);

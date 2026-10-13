@@ -73,7 +73,7 @@ describe("a bank as written", () => {
 			"octo/surveys/./x",
 			"octo/surveys//x",
 			"octo/surveys/a b",
-			"https://github.com/octo/surveys/blob/main/bank.yaml",
+			"https://github.com/octo/surveys/blob/main/workspace.yaml",
 		])
 			expect([text, parseBank(text).ok]).toEqual([text, false]);
 	});

@@ -42,23 +42,59 @@ describe("a workspace", () => {
 		expect(ws.ignored).toEqual([]);
 	});
 
-	it("reads each instrument against its own bank, under its own agency, as instrumentOf does", () => {
+	it("reads each instrument against its own bank, as instrumentOf does, under the one agency `workspace.yaml` gives questions and instruments alike", () => {
 		const ws = workspaceOf({
 			...hh,
 			"instruments/households.yaml": households,
-			"workspace.yaml": "agency: org.example\n",
+			"workspace.yaml": "agency: org.one\n",
 			"README.md": "# A workspace\n",
 		});
 		const read = ws.instruments["instruments/households.yaml"];
 		expect(read?.uses).toEqual({ hh: { kind: "local", folder: "" } });
+		const bank = bankOf({ ...hh, "workspace.yaml": "agency: org.one\n" });
 		const direct = instrumentOf(households, {
-			banks: { hh: bankOf(hh) },
-			agency: "org.example",
+			banks: { hh: bank },
+			agency: "org.one",
 		});
 		expect(read?.instrument.findings).toEqual(direct.findings);
 		expect(read?.instrument.ddi).toEqual(direct.ddi);
-		expect(ws.file?.agency).toBe("org.example");
+		// One agency: the bank's, its questions' and the instrument's.
+		expect(ws.banks[""]?.agency).toBe("org.one");
+		expect(read?.instrument.agency).toBe("org.one");
+		const agencies = new Set(
+			[
+				...JSON.stringify(read?.instrument.ddi).matchAll(/"Agency":"([^"]+)"/g),
+			].map((m) => m[1]),
+		);
+		expect([...agencies]).toEqual(["org.one"]);
 		expect(ws.ignored).toEqual([]);
+	});
+
+	it("says once that a workspace with no `workspace.yaml` declares no agency, not once per file", () => {
+		const { "workspace.yaml": _, ...rest } = hh;
+		const bank = workspaceOf(rest).banks[""];
+		expect(
+			Object.entries(bank?.findings ?? {})
+				.filter(([, fs]) => fs.some((f) => f.path === "agency"))
+				.map(([path]) => path),
+		).toEqual(["workspace.yaml"]);
+	});
+
+	it("reads `bank.yaml` at the root as nothing, and says so", () => {
+		const ws = workspaceOf({ ...hh, "bank.yaml": "agency: org.old\n" });
+		expect(ws.ignored).toEqual(["bank.yaml"]);
+		expect(ws.banks[""]?.agency).toBe("org.example.households");
+	});
+
+	it("takes a workspace of settings alone for a bank with no questions yet", () => {
+		const ws = workspaceOf({
+			"workspace.yaml": "agency: org.example\n",
+			"instruments/households.yaml": households,
+		});
+		expect(ws.instruments["instruments/households.yaml"]?.uses).toEqual({
+			hh: { kind: "local", folder: "" },
+		});
+		expect(ws.banks[""]?.questions).toEqual({});
 	});
 
 	it("publishes under the agency as written, so a wrong one is said on the instrument", () => {
@@ -202,13 +238,13 @@ flow:
 		expect(codes(read?.instrument.findings ?? [], "uses.hh")).toHaveLength(1);
 	});
 
-	it("takes a bank file in a folder for no bank, and says the folder's files are ignored", () => {
+	it("takes settings in a folder for no bank, and says the folder's files are ignored", () => {
 		const nested = {
-			"banks/x/bank.yaml": "agency: org.example\n",
 			"banks/x/questions/t/q.yaml": "name: q\n",
+			"banks/x/workspace.yaml": "agency: org.example\n",
 		};
 		// With no bank at the root, the workspace says so.
-		const none = workspaceOf({ ...nested, "workspace.yaml": "" });
+		const none = workspaceOf({ ...nested, "instruments/x.yaml": "name: x\n" });
 		expect(none.banks).toEqual({});
 		expect(none.ignored).toEqual(Object.keys(nested));
 		// With one, they're its files, read as nothing, and said the same way.

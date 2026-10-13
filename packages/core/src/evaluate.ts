@@ -217,7 +217,7 @@ export function scopeOf(
 
 /**
  * A bank from its files: path (relative to the bank's root, `/`-separated) to text.
- * The agency comes from the bank's own file. Total, and independent of the order the
+ * The agency comes from `workspace.yaml`. Total, and independent of the order the
  * files are given in. It compares every question's wording with every other's, so
  * it's for checking a bank whole, not for every keystroke.
  */
@@ -234,7 +234,7 @@ export function bankOf(
 	const findings: Record<string, readonly Finding[]> = {};
 	for (const [path, ev] of byPath(questions, schemes))
 		findings[path] = fileFindings(path, ev, scope.index, label);
-	// A required root file that's absent is said once, about the bank (`absentRoot`).
+	// A required root file that's absent is said once, about the workspace (`absentRoot`).
 	for (const kind of REQUIRED_ROOTS)
 		if (findings[ROOT[kind]] === undefined)
 			findings[ROOT[kind]] = absentRoot(kind);

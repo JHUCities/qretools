@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
-import { parseBankFile } from "./bankfile.ts";
+import { parseSettingsFile } from "./bankfile.ts";
 import { EMPTY_ENV, type Env } from "./env.ts";
 import {
 	applyLivelit,
@@ -226,7 +226,7 @@ describe("the checklist of a bank's required fields", () => {
 		return settingsLivelits(
 			text,
 			indexDocument(doc, text.length),
-			parseBankFile(text).required,
+			parseSettingsFile(text).required,
 		);
 	};
 	const write = (text: string, value: readonly string[]) => {

@@ -60,7 +60,7 @@ describe("the DDI pane, as drawn", () => {
 		);
 		expect(html(container)).toMatchSnapshot();
 		fireEvent.click(
-			screen.getByRole("button", { name: "Add the bank's agency" }),
+			screen.getByRole("button", { name: "Add the workspace's agency" }),
 		);
 		expect(declare).toHaveBeenCalledOnce();
 	});

@@ -13,9 +13,9 @@ const of = (...paths: string[]) =>
 	Object.fromEntries(paths.map((p) => [p, `# ${p}\n`]));
 
 describe("the bank in a workspace", () => {
-	it("is the root, holding everything but the workspace's own files", () => {
+	it("is the root, holding everything but the workspace's instruments", () => {
 		const files = of(
-			"bank.yaml",
+			"workspace.yaml",
 			"missing.yaml",
 			"questions/t/q.yaml",
 			"scales/agree.yaml",
@@ -24,7 +24,7 @@ describe("the bank in a workspace", () => {
 		expect(banksIn(files)).toEqual({ banks: { "": files }, outside: {} });
 	});
 
-	it("knows a bank by its questions when it has no bank file yet", () => {
+	it("knows a bank by its questions when it has no settings yet", () => {
 		expect(Object.keys(banksIn(of("questions/t/q.yaml")).banks)).toEqual([""]);
 	});
 
@@ -36,55 +36,65 @@ describe("the bank in a workspace", () => {
 		expect(Object.keys(banksIn(of("banks/a/scales/yn.yaml")).banks)).toEqual(
 			[],
 		);
-		// What a bank doesn't read at its root makes no bank of it.
+		// What a bank doesn't read at its root makes no bank of it: `bank.yaml` is such a file.
 		expect(
-			Object.keys(banksIn(of("docs/notes.yaml", "workspace.yaml")).banks),
+			Object.keys(banksIn(of("docs/notes.yaml", "bank.yaml")).banks),
 		).toEqual([]);
 	});
 
-	it("takes no other folder for a bank, whatever bank file it holds", () => {
+	it("is a bank with no questions yet when the workspace has only its settings", () => {
+		const files = of("workspace.yaml", "instruments/x.yaml");
+		expect(banksIn(files)).toEqual({
+			banks: { "": of("workspace.yaml") },
+			outside: of("instruments/x.yaml"),
+		});
+	});
+
+	it("takes no other folder for a bank, whatever settings it holds", () => {
 		const nested = of(
-			"banks/x/bank.yaml",
+			"banks/x/workspace.yaml",
 			"banks/x/questions/t/q.yaml",
-			"workspace.yaml",
+			"instruments/x.yaml",
 		);
 		// With no bank at the root, they're outside any: the workspace says they're ignored.
 		expect(banksIn(nested)).toEqual({ banks: {}, outside: nested });
 		// With one, they're the root's files, which it reads as nothing (its own `ignored`).
-		const { banks } = banksIn({ ...nested, ...of("bank.yaml") });
+		const { banks } = banksIn({ ...nested, ...of("workspace.yaml") });
 		expect(Object.keys(banks)).toEqual([""]);
 		expect(Object.keys(banks[""] ?? {})).toEqual([
-			"bank.yaml",
-			"banks/x/bank.yaml",
 			"banks/x/questions/t/q.yaml",
+			"banks/x/workspace.yaml",
+			"workspace.yaml",
 		]);
 	});
 
-	it("leaves the workspace's own files outside the bank at its root", () => {
+	it("leaves the workspace's instruments outside the bank at its root", () => {
 		const { banks, outside } = banksIn(
 			of(
-				"bank.yaml",
 				"workspace.yaml",
 				"instruments/x.yaml",
-				"instruments/bank.yaml",
+				"instruments/workspace.yaml",
 				"README.md",
 			),
 		);
-		expect(Object.keys(banks[""] ?? {})).toEqual(["README.md", "bank.yaml"]);
-		expect(Object.keys(outside)).toEqual([
-			"instruments/bank.yaml",
-			"instruments/x.yaml",
+		expect(Object.keys(banks[""] ?? {})).toEqual([
+			"README.md",
 			"workspace.yaml",
 		]);
-		expect(Object.keys(banksIn(of("instruments/bank.yaml")).banks)).toEqual([]);
+		expect(Object.keys(outside)).toEqual([
+			"instruments/workspace.yaml",
+			"instruments/x.yaml",
+		]);
+		expect(
+			Object.keys(banksIn(of("instruments/workspace.yaml")).banks),
+		).toEqual([]);
 	});
 
 	it("doesn't depend on the order the files are given in", () => {
 		const paths = [
 			"questions/t/q.yaml",
-			"bank.yaml",
 			"workspace.yaml",
-			"banks/bas/bank.yaml",
+			"banks/bas/workspace.yaml",
 		];
 		expect(banksIn(of(...[...paths].reverse()))).toEqual(banksIn(of(...paths)));
 	});
@@ -127,11 +137,11 @@ describe("where a workspace path is", () => {
 		});
 	});
 
-	it("is nowhere when the bank doesn't read it, there is none, or it's the workspace's own", () => {
+	it("is nowhere when the bank doesn't read it, there is none, or it's an instrument", () => {
 		expect(placeOf("banks/hh/questions/t/q.yaml", banks)).toBeUndefined();
 		expect(placeOf("notes/x.yaml", banks)).toBeUndefined();
 		expect(placeOf("instruments/x.yaml", banks)).toBeUndefined();
-		expect(placeOf("workspace.yaml", banks)).toBeUndefined();
+		expect(placeOf("bank.yaml", banks)).toBeUndefined();
 		expect(placeOf("questions/t/q.yaml", [])).toBeUndefined();
 		expect(bankAt("questions/t/q.yaml", [])).toBeUndefined();
 	});
@@ -140,13 +150,13 @@ describe("where a workspace path is", () => {
 		expect(relIn("", inBank("", "questions/t/q.yaml"))).toBe(
 			"questions/t/q.yaml",
 		);
-		expect(inBank("", "bank.yaml")).toBe("bank.yaml");
+		expect(inBank("", "workspace.yaml")).toBe("workspace.yaml");
 	});
 
 	it("agrees with how banksIn partitions the same files", () => {
 		const files = Object.fromEntries(
 			[
-				"bank.yaml",
+				"workspace.yaml",
 				"questions/t/q.yaml",
 				"scales/a.yaml",
 				"instruments/x.yaml",
@@ -163,7 +173,7 @@ describe("where a workspace path is", () => {
 
 describe("what a workspace reads a file as", () => {
 	const banks = [""];
-	it("is the bank's file, an instrument, or the workspace's own file", () => {
+	it("is the bank's file or an instrument", () => {
 		expect(fileAt("questions/t/q.yaml", banks)).toMatchObject({
 			kind: "bank",
 			bank: "",
@@ -173,7 +183,10 @@ describe("what a workspace reads a file as", () => {
 			kind: "instrument",
 			name: "households",
 		});
-		expect(fileAt("workspace.yaml", banks)).toEqual({ kind: "workspaceFile" });
+		expect(fileAt("workspace.yaml", banks)).toMatchObject({
+			kind: "bank",
+			at: { kind: "workspace" },
+		});
 	});
 
 	it("is nothing for what the workspace doesn't read", () => {
@@ -181,7 +194,8 @@ describe("what a workspace reads a file as", () => {
 			"instruments/deeper/x.yaml",
 			"instruments/x.yml",
 			"notes/x.yaml",
-			"banks/hh/bank.yaml",
+			"banks/hh/workspace.yaml",
+			"bank.yaml",
 		])
 			expect(fileAt(path, banks), path).toBeUndefined();
 	});
