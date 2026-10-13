@@ -132,6 +132,13 @@ shared files' environment, the paths that aren't bank files, and the DDI agency 
 workspace declares in `workspace.yaml`. A bank without one is reported once, under
 `workspace.yaml`, and its items are published under `invalid` until it has one.
 
+`workspace.yaml` has three fields: `agency`; `required`, the fields every question must
+have beyond `name`, `text` and `intent` (such as `title`); and `required_in`, the fields
+the questions in one folder must also have, by the folder's path (`questions/health:`
+with a list under it). A folder only adds to `required`, and a folder named there that
+holds no question is a warning on `workspace.yaml`. `envAt(env, path)` is the
+environment the question at a path is read against; `bankOf` applies it to each.
+
 ```ts
 const bank = bankOf(await readBank("fixtures/bank"));
 Object.keys(bank.questions).length; // → 9

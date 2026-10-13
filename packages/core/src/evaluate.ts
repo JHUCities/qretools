@@ -26,9 +26,10 @@ import {
 	type SchemeEvaluation,
 	type SchemeKind,
 	UNDECLARED_AGENCY,
+	unknownFolders,
 } from "./schemes.ts";
 import type { Draft } from "./surface/draft.ts";
-import type { Env } from "./surface/env.ts";
+import { type Env, envAt } from "./surface/env.ts";
 import { type Livelit, livelitsOf } from "./surface/livelits.ts";
 import type { Mark } from "./surface/marks.ts";
 import { parseSurface } from "./surface/parse.ts";
@@ -141,7 +142,8 @@ function byPath(
 /**
  * A bank from its files' evaluations, by path: the index built from their symbols and
  * the agency from the environment. A new object every call: memoise on the inputs.
- * Every evaluation given must have been made against `env` (and `versions`): a cache of
+ * Every evaluation given must have been made against `env`, a question's against `env`
+ * as its folder has it (`envAt`), and `versions`: a cache of
  * evaluations is keyed on the environment, or names resolve against one and codes read
  * from another, with no finding anywhere.
  */
@@ -171,7 +173,11 @@ export function bankFrom({
 	};
 }
 
-/** Each file of a bank evaluated against the bank's environment, and those no kind reads. */
+/**
+ * Each file of a bank evaluated against the bank's environment, a question against it as
+ * its folder has it (`envAt`): the one place, so a bank checked whole, one only read and
+ * the command line agree. And the files no kind reads.
+ */
 function evaluateFiles(
 	files: Readonly<Record<string, string>>,
 	versions: Versions | undefined,
@@ -187,7 +193,7 @@ function evaluateFiles(
 		else if (at.kind === "question")
 			questions[path] = evaluate(
 				text,
-				env,
+				envAt(env, path),
 				versions === undefined
 					? {}
 					: compact({ own: versions[path], shared: versions }),
@@ -232,8 +238,17 @@ export function bankOf(
 	const label = (path: string): string =>
 		questions[path]?.draft.name ?? schemes[path]?.name ?? path;
 	const findings: Record<string, readonly Finding[]> = {};
+	// The settings file is also told of the folders it names that aren't there.
+	const folders = unknownFolders(env.requiredIn, Object.keys(questions));
 	for (const [path, ev] of byPath(questions, schemes))
-		findings[path] = fileFindings(path, ev, scope.index, label);
+		findings[path] = fileFindings(
+			path,
+			path === ROOT.workspace
+				? { ...ev, findings: [...ev.findings, ...folders] }
+				: ev,
+			scope.index,
+			label,
+		);
 	// A required root file that's absent is said once, about the workspace (`absentRoot`).
 	for (const kind of REQUIRED_ROOTS)
 		if (findings[ROOT[kind]] === undefined)

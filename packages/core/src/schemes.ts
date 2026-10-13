@@ -234,10 +234,11 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	let missing: readonly Code[] = EMPTY_ENV.missing;
 	let agency: string | undefined;
 	let required: readonly RequirableKey[] = EMPTY_ENV.required;
+	let requiredIn: Env["requiredIn"] = EMPTY_ENV.requiredIn;
 	let selectAll: SelectAll = EMPTY_ENV.selectAll;
 	for (const f of files) {
 		if (f.kind === "workspace") {
-			({ agency, required } = parseSettingsFile(f.text));
+			({ agency, required, requiredIn } = parseSettingsFile(f.text));
 			continue;
 		}
 		if (f.kind === "select_all") {
@@ -270,6 +271,7 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		instructions,
 		missing,
 		required,
+		requiredIn,
 		selectAll,
 		...(agency !== undefined && { agency }),
 	};
@@ -316,6 +318,37 @@ export const absentRoot = (kind: RootKind): readonly Finding[] =>
 				),
 			]
 		: [];
+
+/**
+ * What `workspace.yaml` is told of the folders its `required_in` names that hold no
+ * question, among the workspace's question `paths`: a warning at each key, since a typo
+ * there would otherwise require nothing, silently. The workspace's to say, never the
+ * file's own parse, which can't know what folders there are.
+ */
+export function unknownFolders(
+	requiredIn: Env["requiredIn"],
+	paths: Iterable<string>,
+): readonly Finding[] {
+	const folders = new Set<string>();
+	for (const path of paths) {
+		const parts = path.split("/");
+		if (parts[0] === "questions" && parts.length > 2)
+			folders.add(parts.slice(0, -1).join("/"));
+	}
+	const there = [...folders].sort();
+	return Object.keys(requiredIn)
+		.filter((folder) => !folders.has(folder))
+		.map((folder) => ({
+			code: "unknown-folder" as const,
+			severity: "warning" as const,
+			path: `required_in.${folder}`,
+			message: `No questions are saved in \`${folder}\`.`,
+			hint:
+				there.length === 0
+					? "No folder holds a saved question yet. Until one does, this requires nothing."
+					: `The folders with saved questions are ${there.map((f) => `\`${f}\``).join(", ")}. Until this is one of them, it requires nothing.`,
+		}));
+}
 
 /** A concept or unit file with its label; the definition is written in the file afterwards. */
 export const labelledSource = (label: string): string =>

@@ -359,6 +359,12 @@ export const WorkspaceFileSchema = z.strictObject({
 		.describe(
 			"Fields every question in this workspace must have, beyond `name`, `text` and `intent`, such as `title`. A question without one has it to fill in.",
 		),
+	required_in: z
+		.record(z.string(), z.array(z.enum(REQUIRABLE_KEYS)))
+		.optional()
+		.describe(
+			"Fields the questions in one folder must also have, by the folder's path, such as `questions/health`. It adds to `required`, never removes.",
+		),
 });
 export const workspaceFileJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(WorkspaceFileSchema) as Record<string, unknown>;
