@@ -63,7 +63,7 @@ function harness(opts: {
 	});
 	// A connect builds the store, which hands us the getter.
 	effects.exec(
-		{ kind: "connect", repo: { owner: "o", repo: "r", path: "" } },
+		{ kind: "connect", repo: { owner: "o", repo: "r", path: "" }, request: 1 },
 		() => {},
 	);
 	return {

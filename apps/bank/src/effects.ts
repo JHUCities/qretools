@@ -188,7 +188,7 @@ export function createEffects(deps: Deps): Effects {
 						dispatch({
 							kind: "connected",
 							result,
-							...(cmd.request !== undefined && { request: cmd.request }),
+							request: cmd.request,
 						});
 					if (!s) return reply(err(NO_TOKEN));
 					s.whoAmI().then(reply);
@@ -227,7 +227,7 @@ export function createEffects(deps: Deps): Effects {
 						dispatch({
 							kind: "workspaceLoaded",
 							result,
-							...(cmd.request !== undefined && { request: cmd.request }),
+							request: cmd.request,
 						});
 					if (!s) return reply(err(NO_TOKEN));
 					s.loadWorkspace(cmd.target).then(reply);

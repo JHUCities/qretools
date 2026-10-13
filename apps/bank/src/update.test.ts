@@ -2241,6 +2241,24 @@ describe("why writing is blocked, and what to do", () => {
 		expect(out.checking).toBeUndefined();
 	});
 
+	it("reads a workspace that couldn't be read under a request of its own, which a later retry supersedes", () => {
+		const asking = update(failed(notInstalled(base())), {
+			kind: "accessCheckRequested",
+		})[0];
+		const [reading, cmds] = answered(asking, "write");
+		const first = cmds.find((c) => c.kind === "loadWorkspace")?.request;
+		expect(first).toBeTypeOf("number");
+		expect(reading.requests.workspace).toBe(first);
+		const [retried] = update(reading, { kind: "bankReloadRequested" });
+		expect(
+			update(retried, {
+				kind: "workspaceLoaded",
+				request: first as number,
+				result: loadOf([]),
+			}),
+		).toEqual([retried, []]);
+	});
+
 	it("closes the notice once the reason lifts, so a later one opens nothing unasked", () => {
 		const open = tried(notInstalled(base()));
 		// The app was installed: "Try again" asks GitHub again, and finds write access.
