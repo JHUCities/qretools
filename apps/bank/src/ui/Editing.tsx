@@ -15,6 +15,7 @@ import {
 } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
 import {
+	DEFAULT_SELECT_ALL,
 	type Evaluation,
 	evaluate,
 	evaluateScheme,
@@ -35,6 +36,7 @@ import {
 	SHAPE,
 	type Shape,
 	type Symbols,
+	selectAllText,
 	status,
 	type Target,
 	UNNAMED,
@@ -48,6 +50,7 @@ import {
 	labelledJsonSchema,
 	labelsJsonSchema,
 	outlineOf,
+	selectAllFileJsonSchema,
 	textEntryJsonSchema,
 	workspaceFileJsonSchema,
 } from "@qretools/core/editor";
@@ -121,6 +124,7 @@ const SCHEME_SCHEMAS: Readonly<Record<Shape, Record<string, unknown>>> = {
 	labels: labelsJsonSchema(),
 	text: textEntryJsonSchema(),
 	labelled: labelledJsonSchema(),
+	coding: selectAllFileJsonSchema(),
 	bank: bankFileJsonSchema(),
 };
 
@@ -652,7 +656,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 			? env.missing.length > 0
 			: e.kind === "bank"
 				? env.agency !== undefined
-				: inScope(env, e.kind)[e.name] !== undefined;
+				: e.kind === "select_all"
+					? env.selectAll !== DEFAULT_SELECT_ALL
+					: inScope(env, e.kind)[e.name] !== undefined;
 	return (
 		<>
 			<FileHeader
@@ -789,6 +795,13 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 	if (value === undefined)
 		return <p className="quiet">Nothing readable yet.</p>;
 	if (value.kind === "text") return <p>{value.text}</p>;
+	if (value.kind === "coding")
+		return (
+			<p>
+				A select-all-that-apply option is stored as{" "}
+				{selectAllText(value.selectAll)}.
+			</p>
+		);
 	if (value.kind === "bank")
 		return (
 			<p>

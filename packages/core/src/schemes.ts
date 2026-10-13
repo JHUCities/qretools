@@ -7,13 +7,9 @@ import { parseDocument, stringify } from "yaml";
 import { SCHEME_SINGULAR } from "./copy.ts";
 import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
 import { FOLDERS, isRoot, ROOT, type RootKind, schemePath } from "./kinds.ts";
-import { missingCollisions } from "./lint.ts";
-import {
-	DEFAULT_SELECT_ALL,
-	type SelectAll,
-	selectAllText,
-} from "./selectAll.ts";
-import { parseBankFile } from "./surface/bankfile.ts";
+import { missingCollisions, usualCodingCollisions } from "./lint.ts";
+import { DEFAULT_SELECT_ALL, type SelectAll } from "./selectAll.ts";
+import { parseBankFile, parseSelectAllFile } from "./surface/bankfile.ts";
 import type { Code } from "./surface/draft.ts";
 import {
 	EMPTY_ENV,
@@ -50,14 +46,16 @@ export const SCHEME_KINDS: readonly SchemeKind[] = [
 	"universe",
 	"instruction",
 	"missing",
+	"select_all",
 	"bank",
 ];
 
 /**
  * What a kind's file holds, which decides how it is read, previewed and started: a
- * `labels:` map, one `text:` line, or a concept's `label:` and `definition:`.
+ * `labels:` map, one `text:` line, a concept's `label:` and `definition:`, or the two
+ * values a select-all option is stored as.
  */
-export type Shape = "labels" | "text" | "labelled" | "bank";
+export type Shape = "labels" | "text" | "labelled" | "coding" | "bank";
 
 export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	concept: "labelled",
@@ -66,6 +64,7 @@ export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	universe: "text",
 	instruction: "text",
 	missing: "labels",
+	select_all: "coding",
 	bank: "bank",
 };
 
@@ -95,6 +94,7 @@ export type SchemeValue =
 	| { readonly kind: "labels"; readonly codes: readonly Code[] }
 	| { readonly kind: "text"; readonly text: string }
 	| { readonly kind: "labelled"; readonly entry: LabelledEntry }
+	| { readonly kind: "coding"; readonly selectAll: SelectAll }
 	| { readonly kind: "bank"; readonly agency: string };
 
 export interface SchemeEvaluation {
@@ -139,39 +139,39 @@ function readScheme(
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
 	if (SHAPE[kind] === "bank") {
-		const { agency, selectAll, findings: read } = parseBankFile(source);
+		const { agency, findings: read } = parseBankFile(source);
+		const findings = withSpacing(doc, source, read.map(pointAt(empties)));
+		const marks: readonly Mark[] = [];
+		return agency === undefined
+			? { findings, ranges, marks }
+			: { findings, ranges, marks, value: { kind: "bank", agency } };
+	}
+	if (SHAPE[kind] === "coding") {
+		const { value, findings: read } = parseSelectAllFile(source);
 		// A value a select-all option is stored as can't also be one of the bank's
 		// missing-value codes, as no code of any list can: the data couldn't tell them
-		// apart. With no coding written there is no place to point at, so the finding is
-		// the file's, and says what would end it.
-		const collisions = [
-			...missingCollisions(
-				[selectAll.chosen],
-				env.missing,
-				"select_all.chosen",
-			),
-			...missingCollisions(
-				[selectAll.notChosen],
-				env.missing,
-				"select_all.not_chosen",
-			),
-		].map((f) =>
-			selectAll === DEFAULT_SELECT_ALL
-				? {
-						...f,
-						hint: `A select-all-that-apply option is stored as ${selectAllText(selectAll)} unless \`select_all:\` here says otherwise: write it with other codes, or change the missing-value code.`,
-					}
-				: f,
-		);
+		// apart. Said here for a coding written here; for the usual one, on the missing list.
+		const collisions =
+			value === DEFAULT_SELECT_ALL
+				? []
+				: [
+						...missingCollisions([value.chosen], env.missing, "chosen"),
+						...missingCollisions([value.notChosen], env.missing, "not_chosen"),
+					];
 		const findings = withSpacing(
 			doc,
 			source,
 			inDocumentOrder([...read, ...collisions], ranges).map(pointAt(empties)),
 		);
 		const marks: readonly Mark[] = [];
-		return agency === undefined
+		return value === DEFAULT_SELECT_ALL
 			? { findings, ranges, marks }
-			: { findings, ranges, marks, value: { kind: "bank", agency } };
+			: {
+					findings,
+					ranges,
+					marks,
+					value: { kind: "coding", selectAll: value },
+				};
 	}
 	if (SHAPE[kind] === "text") {
 		const { entry, findings: read } = parseTextEntry(source);
@@ -197,17 +197,17 @@ function readScheme(
 	const marks = labelMarksOf(doc, source.length);
 	if (scale === undefined) return { findings, ranges, marks };
 	return {
-		// The missing list is compared with itself only if it were a scale; it is not.
-		findings:
-			kind === "scale"
-				? inDocumentOrder(
-						[
-							...findings,
-							...missingCollisions(scale.codes, env.missing, "labels"),
-						],
-						ranges,
-					)
-				: findings,
+		// A scale's codes are compared with the missing list; the missing list's with the
+		// usual select-all coding, which has no file of its own to say it in.
+		findings: inDocumentOrder(
+			[
+				...findings,
+				...(kind === "scale"
+					? missingCollisions(scale.codes, env.missing, "labels")
+					: usualCodingCollisions(scale.codes, env.selectAll)),
+			],
+			ranges,
+		),
 		ranges,
 		marks,
 		value: { kind: "labels", codes: scale.codes },
@@ -237,7 +237,11 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	let selectAll: SelectAll = EMPTY_ENV.selectAll;
 	for (const f of files) {
 		if (f.kind === "bank") {
-			({ agency, required, selectAll } = parseBankFile(f.text));
+			({ agency, required } = parseBankFile(f.text));
+			continue;
+		}
+		if (f.kind === "select_all") {
+			selectAll = parseSelectAllFile(f.text).value;
 			continue;
 		}
 		if (f.kind === "concept" || f.kind === "unit") {

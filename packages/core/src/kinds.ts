@@ -6,8 +6,11 @@
 import type { SchemeKind } from "./schemes.ts";
 import type { NamedScheme } from "./surface/env.ts";
 
-/** `missing`: the bank's one missing-value list; `bank`: what the bank says about itself. */
-export type RootKind = "missing" | "bank";
+/**
+ * `missing`: the bank's one missing-value list; `select_all`: the two values a
+ * select-all option is stored as; `bank`: what the bank says about itself.
+ */
+export type RootKind = "missing" | "select_all" | "bank";
 
 /**
  * Where each root kind's one file lives, from which paths, the loader and `readBank`
@@ -15,6 +18,7 @@ export type RootKind = "missing" | "bank";
  */
 export const ROOT: Readonly<Record<RootKind, string>> = {
 	missing: "missing.yaml",
+	select_all: "select_all.yaml",
 	bank: "bank.yaml",
 };
 

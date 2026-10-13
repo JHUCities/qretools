@@ -10,6 +10,7 @@ import {
 import {
 	AGENCY_RULE_TEXT,
 	parseBankFile,
+	parseSelectAllFile,
 	parseSettingsFile,
 } from "./bankfile.ts";
 import { EMPTY_ENV } from "./env.ts";
@@ -23,7 +24,6 @@ describe("the bank file", () => {
 		expect(parseBankFile("agency: edu.example.dept-1\n")).toEqual({
 			agency: "edu.example.dept-1",
 			required: [],
-			selectAll: DEFAULT_SELECT_ALL,
 			findings: [],
 		});
 	});
@@ -173,11 +173,10 @@ describe("the settings templates a new bank or workspace starts from", () => {
 });
 
 describe("how a bank stores a select-all option's answer", () => {
-	const A = "agency: org.example\n";
-	const read = (text: string) => parseBankFile(A + text);
+	const read = parseSelectAllFile;
 
 	it("is 0 No, 1 Yes when the bank says nothing", () => {
-		expect(read("").selectAll).toBe(DEFAULT_SELECT_ALL);
+		expect(schemeEnv([]).selectAll).toBe(DEFAULT_SELECT_ALL);
 		expect(selectAllCodes(DEFAULT_SELECT_ALL)).toEqual([
 			{ code: "0", label: "No" },
 			{ code: "1", label: "Yes" },
@@ -185,65 +184,67 @@ describe("how a bank stores a select-all option's answer", () => {
 	});
 
 	it("is what the bank writes: each value as spelled, in the order written", () => {
-		const { selectAll, findings } = read(
-			'select_all:\n  chosen: { "01": Selected }\n  not_chosen: { "02": Not selected }\n',
+		const { value, findings } = read(
+			'chosen: { "01": Selected }\nnot_chosen: { "02": Not selected }\n',
 		);
 		expect(findings).toEqual([]);
-		expect(selectAll).toEqual({
+		expect(value).toEqual({
 			chosen: { code: "01", label: "Selected" },
 			notChosen: { code: "02", label: "Not selected" },
 			first: "chosen",
 		});
-		expect(selectAllCodes(selectAll).map((c) => c.code)).toEqual(["01", "02"]);
-		expect(selectAllText(selectAll)).toBe("01 = Selected, 02 = Not selected");
+		expect(selectAllCodes(value).map((c) => c.code)).toEqual(["01", "02"]);
+		expect(selectAllText(value)).toBe("01 = Selected, 02 = Not selected");
 		// Unquoted and in the other order: still the bank's spelling and order.
-		const other = read(
-			"select_all:\n  not_chosen:\n    2: No\n  chosen:\n    1: Yes\n",
-		);
+		const other = read("not_chosen:\n  2: No\nchosen:\n  1: Yes\n");
 		expect(other.findings).toEqual([]);
-		expect(selectAllCodes(other.selectAll)).toEqual([
+		expect(selectAllCodes(other.value)).toEqual([
 			{ code: "2", label: "No" },
 			{ code: "1", label: "Yes" },
 		]);
+		// The environment takes it from the bank's `select_all.yaml`, nowhere else.
+		expect(
+			schemeEnv([
+				{
+					kind: "select_all",
+					name: "select_all",
+					text: "chosen:\n  1: Yes\nnot_chosen:\n  2: No\n",
+				},
+			]).selectAll.notChosen.code,
+		).toBe("2");
 	});
 
 	it("is the usual coding, said so, until both parts read whole and differ", () => {
 		const cases: [string, [string, string, string][]][] = [
-			["select_all:\n", [["hole", "hole", "select_all"]]],
-			["select_all: yes_no\n", [["error", "wrong-type", "select_all"]]],
+			["", [["hole", "hole", ""]]],
+			["yes_no\n", [["error", "not-a-map", ""]]],
+			['chosen: { "1": Yes }\n', [["hole", "hole", "not_chosen"]]],
+			['chosen:\nnot_chosen: { "0": No }\n', [["hole", "hole", "chosen"]]],
 			[
-				'select_all:\n  chosen: { "1": Yes }\n',
-				[["hole", "hole", "select_all"]],
+				'chosen: { "1": Yes, "2": Maybe }\nnot_chosen: { "0": No }\n',
+				[["error", "wrong-type", "chosen"]],
 			],
 			[
-				'select_all:\n  chosen:\n  not_chosen: { "0": No }\n',
-				[["hole", "hole", "select_all.chosen"]],
+				'chosen: { "1": }\nnot_chosen: { "0": No }\n',
+				[["error", "wrong-type", "chosen"]],
 			],
 			[
-				'select_all:\n  chosen: { "1": Yes, "2": Maybe }\n  not_chosen: { "0": No }\n',
-				[["error", "wrong-type", "select_all.chosen"]],
+				'chosen: { "1": Yes }\nnot_chosen: { "1": No }\n',
+				[["error", "duplicate-code", "not_chosen"]],
 			],
 			[
-				'select_all:\n  chosen: { "1": }\n  not_chosen: { "0": No }\n',
-				[["error", "wrong-type", "select_all.chosen"]],
-			],
-			[
-				'select_all:\n  chosen: { "1": Yes }\n  not_chosen: { "1": No }\n',
-				[["error", "duplicate-code", "select_all.not_chosen"]],
-			],
-			[
-				'select_all:\n  chosen: { "1": Yes }\n  not_chosen: { "0": No }\n  scale: yn\n',
-				[["error", "unknown-key", "select_all.scale"]],
+				'chosen: { "1": Yes }\nnot_chosen: { "0": No }\nscale: yn\n',
+				[["error", "unknown-key", "scale"]],
 			],
 		];
 		for (const [text, expected] of cases) {
-			const { selectAll, findings } = read(text);
+			const { value, findings } = read(text);
 			expect(
 				findings.map((f) => [f.severity, f.code, f.path]),
 				text,
 			).toEqual(expected);
 			// Never half of it.
-			expect(selectAll, text).toBe(DEFAULT_SELECT_ALL);
+			expect(value, text).toBe(DEFAULT_SELECT_ALL);
 			for (const f of findings)
 				expect(f.hint).toContain(
 					"Until it reads, the usual coding is used: 0 = No, 1 = Yes.",
@@ -251,11 +252,13 @@ describe("how a bank stores a select-all option's answer", () => {
 		}
 	});
 
-	it("isn't a workspace's to say", () => {
-		expect(
-			parseSettingsFile(`${A}select_all:\n`, "workspace").findings.map(
-				(f) => f.code,
-			),
-		).toEqual(["unknown-key"]);
+	it("isn't a settings file's to say", () => {
+		for (const owner of ["bank", "workspace"] as const)
+			expect(
+				parseSettingsFile(
+					"agency: org.example\nselect_all:\n",
+					owner,
+				).findings.map((f) => f.code),
+			).toEqual(["unknown-key"]);
 	});
 });

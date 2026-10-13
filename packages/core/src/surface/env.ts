@@ -50,7 +50,7 @@ export interface Env {
 	readonly agency?: string;
 	/** The fields the bank also requires of its questions (`bank.yaml`'s `required`). */
 	readonly required: readonly RequirableKey[];
-	/** How the bank stores a select-all option's answer (`bank.yaml`'s `select_all`). */
+	/** How the bank stores a select-all option's answer (its `select_all.yaml`). */
 	readonly selectAll: SelectAll;
 }
 

@@ -234,6 +234,10 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
         ],
       },
       {
+        "kind": "select_all",
+        "leaves": [],
+      },
+      {
         "kind": "bank",
         "leaves": [
           "bank complete used by -",

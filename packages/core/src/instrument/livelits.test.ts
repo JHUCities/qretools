@@ -430,8 +430,9 @@ describe("a checklist at each set of codes in a condition", () => {
 
 	it("offers a select-all option's variable the bank's own two values, with the missing codes", () => {
 		const recoded = bankOf({
-			"bank.yaml":
-				'agency: org.example\nselect_all:\n  chosen: { "Y": Selected }\n  not_chosen: { "N": Not selected }\n',
+			"bank.yaml": "agency: org.example\n",
+			"select_all.yaml":
+				'chosen: { "Y": Selected }\nnot_chosen: { "N": Not selected }\n',
 			"missing.yaml": 'labels:\n  "-8": Refused\n',
 			"questions/m/modes.yaml":
 				'name: modes\ntext: How do you travel?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": Walk\n',

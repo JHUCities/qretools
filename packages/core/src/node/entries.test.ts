@@ -14,6 +14,7 @@ describe("the entry points", () => {
 			{
 			  "core": [
 			    "AGENCY_PATTERN",
+			    "DEFAULT_SELECT_ALL",
 			    "EMPTY_ENV",
 			    "FIELD_OF",
 			    "FILL_TYPES",
@@ -80,6 +81,7 @@ describe("the entry points", () => {
 			    "othersOf",
 			    "parseBankFile",
 			    "parseScale",
+			    "parseSelectAllFile",
 			    "parseSurface",
 			    "piecesOf",
 			    "placeOf",
@@ -96,6 +98,7 @@ describe("the entry points", () => {
 			    "schemeEnv",
 			    "schemePath",
 			    "scopeOf",
+			    "selectAllText",
 			    "skippedFolder",
 			    "status",
 			    "textOf",
@@ -138,6 +141,7 @@ describe("the entry points", () => {
 			    "quoteCode",
 			    "rangesOf",
 			    "renameEdits",
+			    "selectAllFileJsonSchema",
 			    "sharedScaleSource",
 			    "spaceBefore",
 			    "textEntryJsonSchema",

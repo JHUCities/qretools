@@ -25,6 +25,7 @@ export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 	universe: "universe",
 	instruction: "instruction",
 	missing: "missing values",
+	select_all: "select-all-that-apply values",
 	bank: "bank details",
 };
 
@@ -36,6 +37,7 @@ export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 	universe: "Universes",
 	instruction: "Instructions",
 	missing: "Missing values",
+	select_all: "Select-all-that-apply values",
 	bank: "Bank",
 };
 
@@ -47,6 +49,7 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 	universe: "shared universe",
 	instruction: "shared instruction",
 	missing: "missing values",
+	select_all: "select-all-that-apply values",
 	bank: "bank details",
 };
 

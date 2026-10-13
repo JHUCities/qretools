@@ -57,7 +57,9 @@ const VERSIONS: Versioning = {
 		"universes/adults.yaml": { number: "5" },
 		"instructions/select_one.yaml": { number: "6" },
 		"missing.yaml": { number: "7" },
-		"bank.yaml": { number: "8" },
+		// The settings file's version is no item's: nothing published is written there.
+		"bank.yaml": { number: "9" },
+		"select_all.yaml": { number: "8" },
 	},
 };
 
@@ -138,7 +140,7 @@ describe("DDI versions", () => {
 		expect(validate(doc)).toEqual([]);
 	});
 
-	it("the list a select-all option is coded on takes the version of the bank's own file, where it's written", () => {
+	it("the list a select-all option is coded on takes the version of `select_all.yaml`, where it's written", () => {
 		const doc = ddi(SELECT_ALL, VERSIONS);
 		expect(validate(doc)).toEqual([]);
 		const binary = only(doc, "CodeList").find(

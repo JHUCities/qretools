@@ -488,13 +488,12 @@ function variableSpecs(
 			variables: [compact({ name: first.name, label: title, value })],
 			items: [],
 		};
-	// The bank's coding of a select-all option (its `bank.yaml`), under an identity of
-	// the tool's own, as the missing list's is: no question or scale can have this name.
-	// Its version is the bank file's, where it is written: a change anywhere in that file
-	// is a new version of the list, as file versions are all this knows.
+	// The bank's coding of a select-all option (its `select_all.yaml`), under an identity
+	// of the tool's own, as the missing list's is: no question or scale can have this
+	// name. Its version is that file's, which holds nothing else.
 	const binary = codeListItems(
 		ctx,
-		ctx.shared("bank", "bank"),
+		ctx.shared("select_all", "select_all"),
 		SELECT_ALL_ID,
 		selectAllCodes(ctx.selectAll),
 		{ principal: true },

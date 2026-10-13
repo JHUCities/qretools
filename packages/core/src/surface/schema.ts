@@ -359,26 +359,25 @@ export const BankFileSchema = z.strictObject({
 		.describe(
 			"Fields every question in this bank must have, beyond `name`, `text` and `intent`, such as `title`. A question without one has it to fill in.",
 		),
-	select_all: z
-		.strictObject({
-			chosen: z
-				.record(z.string(), z.string())
-				.describe(
-					'The value stored when the respondent chose the option, with its label: one line, such as `"1": Yes`.',
-				),
-			not_chosen: z
-				.record(z.string(), z.string())
-				.describe(
-					'The value stored when the respondent didn\'t choose the option, with its label: one line, such as `"0": No`.',
-				),
-		})
-		.optional()
-		.describe(
-			"How this bank stores a select-all-that-apply answer. Each option is its own variable holding one of two values: `chosen` or `not_chosen`. Left out, they are 1 Yes and 0 No.",
-		),
 });
 export const bankFileJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(BankFileSchema) as Record<string, unknown>;
+
+/** The schema of `select_all.yaml`: the two values a select-all option is stored as. */
+export const SelectAllFileSchema = z.strictObject({
+	chosen: z
+		.record(z.string(), z.string())
+		.describe(
+			'The value stored when the respondent chose the option, with its label: one line, such as `"1": Yes`.',
+		),
+	not_chosen: z
+		.record(z.string(), z.string())
+		.describe(
+			'The value stored when the respondent didn\'t choose the option, with its label: one line, such as `"0": No`.',
+		),
+});
+export const selectAllFileJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(SelectAllFileSchema) as Record<string, unknown>;
 
 /** The schema of a workspace's own file, `workspace.yaml`: as a bank's, for its instruments. */
 export const WorkspaceFileSchema = z.strictObject({

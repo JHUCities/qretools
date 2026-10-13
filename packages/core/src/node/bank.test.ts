@@ -58,7 +58,8 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 	it("reads every bank file and nothing else", () => {
 		expect(Object.keys(files).length).toBe(26);
 		expect(bank.ignored).toEqual([]);
-		for (const path of Object.values(ROOT))
+		// `select_all.yaml` is optional, and this bank stores select-all answers the usual way.
+		for (const path of [ROOT.bank, ROOT.missing])
 			expect(Object.keys(bank.schemes)).toContain(path);
 	});
 

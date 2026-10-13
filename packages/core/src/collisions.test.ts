@@ -105,15 +105,16 @@ describe("one identity, one item", () => {
 		expect(collisions(itemsOf(bank))).toEqual([]);
 	});
 
-	it("a select-all value that is also a missing-value code is said on the bank's file, at that value", () => {
+	it("a select-all value that is also a missing-value code is said in `select_all.yaml`, at that value", () => {
 		const bank = bankOf({
 			...BANK,
-			"bank.yaml":
-				'agency: org.example\nselect_all:\n  chosen: { "1": Yes }\n  not_chosen: { "-8": No }\n',
+			"select_all.yaml": 'chosen: { "1": Yes }\nnot_chosen: { "-8": No }\n',
 		});
 		expect(
-			(bank.findings["bank.yaml"] ?? []).map((f) => [f.code, f.path]),
-		).toEqual([["missing-code", "select_all.not_chosen.-8"]]);
+			(bank.findings["select_all.yaml"] ?? []).map((f) => [f.code, f.path]),
+		).toEqual([["missing-code", "not_chosen.-8"]]);
+		// Said once, in the file that writes the coding.
+		expect(codes(bank, "missing.yaml")).toEqual([]);
 		expect(codes(bankOf(BANK), "bank.yaml")).toEqual([]);
 	});
 
@@ -123,12 +124,16 @@ describe("one identity, one item", () => {
 			"missing.yaml": 'labels:\n  "1": Refused\n',
 		});
 		expect(
-			(bank.findings["bank.yaml"] ?? []).map((f) => [f.code, f.path, f.hint]),
+			(bank.findings["missing.yaml"] ?? []).map((f) => [
+				f.code,
+				f.path,
+				f.hint,
+			]),
 		).toEqual([
 			[
 				"missing-code",
-				"select_all.chosen.1",
-				"A select-all-that-apply option is stored as 0 = No, 1 = Yes unless `select_all:` here says otherwise: write it with other codes, or change the missing-value code.",
+				"labels.1",
+				"Pick another missing-value code, or write the two values in `select_all.yaml`.",
 			],
 		]);
 	});

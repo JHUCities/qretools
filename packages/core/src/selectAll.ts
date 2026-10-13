@@ -1,7 +1,7 @@
 /**
  * How a bank stores a select-all option's answer: every option is its own variable,
  * holding one of two values, one meaning the respondent chose the option and one that
- * they didn't. The bank says which in its `bank.yaml` (`select_all`), and everything that
+ * they didn't. The bank says which in its `select_all.yaml`, and everything that
  * needs the coding reads it from the bank's environment: the DDI code list its option
  * variables are published on, what an instrument's conditions may compare them with, and
  * the codebook's note. A bank that says nothing uses 0 No, 1 Yes.
