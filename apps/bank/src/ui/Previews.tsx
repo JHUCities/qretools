@@ -192,17 +192,17 @@ export function Codebook({
 }
 
 /**
- * Said beside the DDI while the bank declares no valid agency: its items are published
+ * Said beside the DDI while the workspace declares no valid agency: its items are published
  * under the placeholder, and this is where to add one.
  */
 export function AgencyNotice({ declare }: { declare: () => void }) {
 	return (
 		<InlineMessage variant="warning">
 			<span>
-				This bank declares no valid DDI agency yet, so its items are published
-				under <code className="code">{UNDECLARED_AGENCY}</code>.{" "}
+				This workspace declares no valid DDI agency yet, so its items are
+				published under <code className="code">{UNDECLARED_AGENCY}</code>.{" "}
 				<Link as="button" type="button" onClick={declare}>
-					Add the bank's agency
+					Add the workspace's agency
 				</Link>
 			</span>
 		</InlineMessage>

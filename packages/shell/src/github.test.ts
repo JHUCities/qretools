@@ -716,7 +716,10 @@ describe("loading a workspace", () => {
 	it("reads a bank at a tag, pinned to it, and says why when it isn't there", async () => {
 		const { s, seen } = store(
 			workspaceRepo({
-				branches: { v1: { "bank.yaml": "agency: org.example\n" }, v2: null },
+				branches: {
+					v1: { "workspace.yaml": "agency: org.example\n" },
+					v2: null,
+				},
 			}),
 		);
 		expect(await s.loadBankAt("v1")).toEqual({
@@ -725,7 +728,7 @@ describe("loading a workspace", () => {
 				found: true,
 				files: [
 					{
-						path: "bank.yaml",
+						path: "workspace.yaml",
 						sha: "t:agency: org.example\n",
 						text: "agency: org.example\n",
 					},

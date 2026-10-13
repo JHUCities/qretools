@@ -14,7 +14,7 @@ import { SkeletonText } from "@primer/react/experimental";
 import { SCHEME_SINGULAR, type SchemeKind } from "@qretools/core";
 import type { ReactNode } from "react";
 
-export type FileKind = "question" | SchemeKind | "instrument" | "workspaceFile";
+export type FileKind = "question" | SchemeKind | "instrument";
 export type PaneId =
 	| "findings"
 	| "respondent"
@@ -44,7 +44,6 @@ export function panesOf(
 			{ id: "findings", title: "Findings" },
 			{ id: "outline", title: "Outline" },
 		];
-	if (kind === "workspaceFile") return [{ id: "findings", title: "Findings" }];
 	return [
 		{ id: "findings", title: "Findings" },
 		{ id: "value", title: SCHEME_SINGULAR[kind] },

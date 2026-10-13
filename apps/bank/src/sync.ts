@@ -14,7 +14,6 @@ import {
 	placeOf,
 	schemePath,
 	usedBy,
-	WORKSPACE,
 } from "@qretools/core";
 import type { File } from "@qretools/shell";
 import type {
@@ -44,7 +43,7 @@ export type Sync =
 
 /**
  * The path a file lives at, or will: its base, or the one its kind and name give (a
- * shared file in its bank, an instrument in `instruments/`, the workspace's own file).
+ * shared file in its bank, an instrument in `instruments/`).
  * A question's is chosen when it is first saved.
  */
 export function claimOf(f: Entry): Path | undefined {
@@ -54,8 +53,6 @@ export function claimOf(f: Entry): Path | undefined {
 			return undefined;
 		case "instrument":
 			return instrumentPath(f.name);
-		case "workspaceFile":
-			return WORKSPACE.file;
 		default:
 			return inBank(f.bank, schemePath(f.kind, f.name));
 	}
@@ -65,7 +62,7 @@ export function claimOf(f: Entry): Path | undefined {
 export const sliceFor = (f: Entry): keyof Remote =>
 	f.kind === "question"
 		? "questions"
-		: f.kind === "instrument" || f.kind === "workspaceFile"
+		: f.kind === "instrument"
 			? "workspace"
 			: "schemes";
 
@@ -252,18 +249,15 @@ export function rebase(
 		workspace,
 		(path, blob, fid): WorkspaceEntry | undefined => {
 			const place = fileAt(path, banks);
-			const base = { path, ...blob };
 			return place?.kind === "instrument"
 				? {
 						kind: "instrument",
 						name: place.name,
 						id: fid,
 						source: blob.text,
-						base,
+						base: { path, ...blob },
 					}
-				: place?.kind === "workspaceFile"
-					? { kind: "workspaceFile", id: fid, source: blob.text, base }
-					: undefined;
+				: undefined;
 		},
 		remote.workspace,
 	);

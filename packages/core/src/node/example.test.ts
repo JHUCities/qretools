@@ -89,7 +89,7 @@ describe("the example instrument", async () => {
 
 	it("is not made in a bank it doesn't read in", () => {
 		expect(exampleInstrument("demo", HERE, households)).toBeUndefined();
-		const empty = bankOf({ "bank.yaml": "agency: org.example\n" });
+		const empty = bankOf({ "workspace.yaml": "agency: org.example\n" });
 		expect(exampleInstrument("demo", HERE, empty)).toBeUndefined();
 	});
 });

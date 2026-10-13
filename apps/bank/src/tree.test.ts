@@ -206,7 +206,6 @@ describe("schemeSections", () => {
 			["instruction", []],
 			["missing", [["missing", undefined]]],
 			["select_all", []],
-			["bank", []],
 		]);
 	});
 

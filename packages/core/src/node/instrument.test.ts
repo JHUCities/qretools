@@ -57,7 +57,7 @@ describe("the households instrument, whole", async () => {
 	};
 
 	it("says when a bank it uses has no agency", async () => {
-		const { "bank.yaml": _, ...files } = await readBank(
+		const { "workspace.yaml": _, ...files } = await readBank(
 			here("../../fixtures/households"),
 		);
 		const without = instrumentOf(await readFile(FILE, "utf8"), {

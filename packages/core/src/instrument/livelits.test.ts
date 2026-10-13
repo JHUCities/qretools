@@ -12,7 +12,7 @@ import {
 import { parseInstrument } from "./parse.ts";
 
 const BAS = bankOf({
-	"bank.yaml": "agency: org.example\n",
+	"workspace.yaml": "agency: org.example\n",
 	"questions/h/tenure.yaml":
 		'name: tenure\ntext: Do you own or rent?\nintent: i\nresponses:\n  "1": Own\n  "2": Rent\n',
 	"questions/h/rent.yaml":
@@ -411,7 +411,7 @@ describe("a checklist at each set of codes in a condition", () => {
 
 	it("offers a select-all option's variable the bank's own two values, with the missing codes", () => {
 		const recoded = bankOf({
-			"bank.yaml": "agency: org.example\n",
+			"workspace.yaml": "agency: org.example\n",
 			"select_all.yaml":
 				'chosen: { "Y": Selected }\nnot_chosen: { "N": Not selected }\n',
 			"missing.yaml": 'labels:\n  "-8": Refused\n',
@@ -432,7 +432,7 @@ describe("a checklist at each set of codes in a condition", () => {
 				.map((f) => f.code);
 		expect(findings(recoded)).toEqual(["type"]);
 		const usual = bankOf({
-			"bank.yaml": "agency: org.example\n",
+			"workspace.yaml": "agency: org.example\n",
 			"questions/m/modes.yaml":
 				'name: modes\ntext: How do you travel?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
 		});

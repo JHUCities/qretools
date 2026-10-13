@@ -18,7 +18,7 @@ const validator = makeValidator(schema);
 const q = (name: string, rest: string) =>
 	`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
 const BAS = bankOf({
-	"bank.yaml": "agency: org.bank\n",
+	"workspace.yaml": "agency: org.bank\n",
 	"missing.yaml": 'labels:\n  "-8": Refused\n',
 	"scales/yesno01.yaml": 'labels:\n  "0": No\n  "1": Yes\n',
 	"universes/renters.yaml": "text: Renters\n",
@@ -328,7 +328,7 @@ flow:
 
 	it("shows a label only for an answer that has one: reset first, no missing-value words, no borrowed name", () => {
 		const bank = bankOf({
-			"bank.yaml": "agency: org.example\n",
+			"workspace.yaml": "agency: org.example\n",
 			"missing.yaml": 'labels:\n  "-8": Refused\n',
 			"questions/h/tenure.yaml":
 				'name: tenure\ntext: Do you own or rent?\nintent: i\nresponses:\n  "1": Own\n  "2": Rent\n',

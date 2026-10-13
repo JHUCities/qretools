@@ -1,6 +1,7 @@
 /**
- * The `qretools` command: `check` a workspace directory's findings (its bank's, its
- * instruments' and its own file's), as compilers report them, or `export` a bank's DDI. `main` takes its output as values (`Io`), so it runs in a
+ * The `qretools` command: `check` a workspace directory's findings (its bank's and its
+ * instruments'), as compilers report them, or `export` a bank's DDI. `main` takes its
+ * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { readFile } from "node:fs/promises";
@@ -25,7 +26,6 @@ import {
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
 import { type RemoteBank, remotesOf, workspaceOf } from "../workspace.ts";
-import { WORKSPACE } from "../workspacefile.ts";
 import { readBank, readWorkspace } from "./index.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
@@ -46,7 +46,7 @@ const USAGE = `Usage:
   qretools instrument export <file> --agency <agency> [--bank alias=dir]... [-o file]
 
 dir is the bank's or workspace's folder (default: the current directory). A workspace
-holds a bank at its root (questions/, scales/ and so on), instruments/ and workspace.yaml.
+holds a bank at its root (questions/, scales/, workspace.yaml and so on) and instruments/.
 An instrument's banks are read from its own workspace (\`../\` in its \`uses\`), from
 another repository at its tag (\`owner/repo@v1\`, with git), or from --bank for an alias.
 --strict  also fail on warnings.
@@ -101,7 +101,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	}
 	if (Object.keys(files).length === 0) {
 		io.err(
-			`No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
+			`No bank files in ${dir}: a bank has questions/, scales/, workspace.yaml and so on.\n`,
 		);
 		return USAGE_ERROR;
 	}
@@ -202,16 +202,10 @@ async function checkWorkspace(
 			findings: instrument.findings,
 			ranges: instrument.ranges,
 		});
-	if (ws.file !== undefined)
-		checked.push({
-			path: WORKSPACE.file,
-			findings: ws.file.findings,
-			ranges: ws.file.ranges,
-		});
 	// Nothing the tool reads, whatever else is there: the wrong folder, most likely.
 	if (checked.length === 0) {
 		io.err(
-			`No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
+			`No bank files in ${dir}: a bank has questions/, scales/, workspace.yaml and so on.\n`,
 		);
 		return USAGE_ERROR;
 	}
@@ -242,9 +236,7 @@ async function checkWorkspace(
 			(n, b) =>
 				n + Object.keys(b.questions).length + Object.keys(b.schemes).length,
 			0,
-		) +
-		Object.keys(ws.instruments).length +
-		(ws.file === undefined ? 0 : 1);
+		) + Object.keys(ws.instruments).length;
 	io.err(
 		`${read} files, ${counts.findings} findings: ${counts.incomplete} with something to fill in or fix, ${counts.warnings} with warnings.\n`,
 	);
@@ -281,7 +273,7 @@ async function exportBank(
 	);
 	if (refusal?.kind === "noAgency") {
 		io.err(
-			"Not exported: the bank declares no DDI agency (bank.yaml, agency:).\n",
+			"Not exported: the workspace declares no DDI agency (workspace.yaml, agency:).\n",
 		);
 		return PROBLEMS;
 	}

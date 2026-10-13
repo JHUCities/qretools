@@ -14,6 +14,7 @@
  */
 import {
 	type AddressKey,
+	agencyWritten,
 	type BankScope,
 	bankFrom,
 	type Env,
@@ -30,11 +31,10 @@ import {
 	type SchemeEvaluation,
 	type SchemeFileEvaluation,
 	scopeOf,
-	type WorkspaceFile,
-	workspaceFileOf,
 } from "@qretools/core";
 import { questionJsonSchema } from "@qretools/core/editor";
 import {
+	detailsOf,
 	envOf,
 	type Id,
 	type InstrumentEntry,
@@ -59,8 +59,6 @@ export interface Evaluations {
 	 * A question never saved has no path, so no instrument can ask it until it is.
 	 */
 	scope(model: Slices, bank: string): BankScope;
-	/** `workspace.yaml` as it is being edited; absent while the workspace has none. */
-	workspaceFile(model: Slices): WorkspaceFile | undefined;
 	/**
 	 * The banks in other repositories as an instrument is given them: each read one's
 	 * files or why not (one still being read is left out, so it reads as pending), and
@@ -122,14 +120,13 @@ export function createEvaluations(): Evaluations {
 			scope: BankScope;
 		}
 	>();
-	let file: { source: string; file: WorkspaceFile } | undefined;
 	const instruments = new Map<
 		Id,
 		{
 			source: string;
 			banks: readonly string[];
 			remote: Readonly<Record<AddressKey, RemoteBank>>;
-			file: WorkspaceFile | undefined;
+			agency: string | undefined;
 			used: readonly BankScope[];
 			read: InstrumentIn;
 		}
@@ -215,15 +212,6 @@ export function createEvaluations(): Evaluations {
 			scopes.set(bank, { env, keys, scope });
 			return scope;
 		},
-		workspaceFile(model) {
-			const e = Object.values(model.local.workspace).find(
-				(f) => f.kind === "workspaceFile",
-			);
-			if (e === undefined) return undefined;
-			if (file?.source !== e.source)
-				file = { source: e.source, file: workspaceFileOf(e.source) };
-			return file.file;
-		},
 		instrument(model, e) {
 			const path = instrumentPath(e.name);
 			const hit = instruments.get(e.id);
@@ -240,11 +228,14 @@ export function createEvaluations(): Evaluations {
 				if (r.kind === "local" && !(r.folder in used))
 					used[r.folder] = self.scope(model, r.folder);
 			const scopes = Object.values(used);
-			const ws = self.workspaceFile(model);
+			// As `workspace.yaml` writes it while it is being edited, valid or not.
+			const details = detailsOf(model.local.schemes);
+			const agency =
+				details === undefined ? undefined : agencyWritten(details.source);
 			if (
 				hit &&
 				hit.source === e.source &&
-				hit.file === ws &&
+				hit.agency === agency &&
 				hit.remote === remote &&
 				sameList(hit.banks, model.banks) &&
 				sameList(hit.used, scopes)
@@ -254,13 +245,13 @@ export function createEvaluations(): Evaluations {
 				banks: used,
 				remote,
 				remoteBanks,
-				...(ws !== undefined && { file: ws }),
+				agency,
 			});
 			instruments.set(e.id, {
 				source: e.source,
 				banks: model.banks,
 				remote,
-				file: ws,
+				agency,
 				used: scopes,
 				read,
 			});

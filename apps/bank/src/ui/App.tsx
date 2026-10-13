@@ -24,12 +24,12 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import {
+	absentRoot,
 	fileAt,
 	type Index,
 	indexOf,
 	isRoot,
 	plainText,
-	SCHEME_KINDS,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 	type Symbols,
@@ -51,6 +51,7 @@ import { SOURCE_URL } from "../config.js";
 import {
 	bankFileOf,
 	type Dispatch,
+	detailsOf,
 	fileOf,
 	type Id,
 	isScheme,
@@ -63,6 +64,7 @@ import {
 	bankFolders,
 	banksShown,
 	detailsButton,
+	SHARED_KINDS,
 	schemeSections,
 	treeOf,
 	workspaceLeaves,
@@ -187,7 +189,7 @@ function NewItems({ bank, dispatch }: { bank?: string; dispatch: Dispatch }) {
 			))}
 			<ActionList.Divider />
 			<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
-			{SCHEME_KINDS.map((k) => (
+			{SHARED_KINDS.map((k) => (
 				<ActionList.Item
 					key={k}
 					onSelect={() =>
@@ -293,11 +295,7 @@ export function App() {
 			remoteBanks: model.remoteBanks,
 		};
 		return workspaceLeaves(treeInput, (e) =>
-			statusOf(
-				e.kind === "instrument"
-					? evaluations.instrument(slices, e).instrument.findings
-					: (evaluations.workspaceFile(slices)?.findings ?? []),
-			),
+			statusOf(evaluations.instrument(slices, e).instrument.findings),
 		);
 	}, [
 		treeInput,
@@ -307,25 +305,26 @@ export function App() {
 		model.banks,
 		model.remoteBanks,
 	]);
-	// A workspace whose files are all its own (instruments, details) has no bank to show
-	// or to make questions in: an empty repository still starts as one bank at its root.
-	// What the details' button says (unsaved, to fill in or fix, advice), as their tree
-	// item's marks did.
-	const details = useMemo(() => {
-		const file = evaluations.workspaceFile({
-			local,
-			remote: model.remote,
-			banks: model.banks,
-		});
-		return detailsButton(
-			treeInput,
-			file === undefined ? undefined : statusOf(file.findings),
-		);
-	}, [treeInput, evaluations, local, model.remote, model.banks]);
+	// What the details' button says (unsaved, to fill in or fix, advice), as a tree
+	// item's marks would. A workspace with no details yet has its agency to fill in.
+	const detailsEntry = detailsOf(local.schemes);
+	const details = useMemo(
+		() =>
+			detailsButton(
+				treeInput,
+				statusOf(
+					detailsEntry === undefined
+						? absentRoot("workspace")
+						: evaluations.scheme(detailsEntry, envFor("")).findings,
+				),
+			),
+		[treeInput, evaluations, detailsEntry, envFor],
+	);
 	// The workspace's details are open: said on the button beside its name.
 	const detailsOpen =
-		screen.kind === "editing" &&
-		local.workspace[screen.id]?.kind === "workspaceFile";
+		screen.kind === "editing" && screen.id === detailsEntry?.id;
+	// A workspace whose files are all instruments has no bank to show or to make
+	// questions in: an empty repository still starts as one bank at its root.
 	const workspaceOnly =
 		shownBanks.length === 0 && Object.keys(local.workspace).length > 0;
 	const naming = model.browser.naming;
@@ -356,10 +355,10 @@ export function App() {
 	const confirmName =
 		confirm === undefined
 			? undefined
-			: // The workspace's own files say what they are: nothing else is named so.
+			: // An instrument and the workspace's details say what they are.
 				confirm.kind === "instrument"
 				? `instrument ${confirm.name}`
-				: confirm.kind === "workspaceFile"
+				: confirm.kind === "workspace"
 					? WORKSPACE_DETAILS
 					: confirm.base !== undefined
 						? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
@@ -572,7 +571,14 @@ export function App() {
 										// No selected look on a button: the open file's header says it,
 										// and assistive technology hears it here.
 										aria-current={detailsOpen ? "page" : undefined}
-										onClick={() => dispatch({ kind: "workspaceDetailsOpened" })}
+										// One per workspace: opened if it exists, else started.
+										onClick={() =>
+											dispatch({
+												kind: "schemeCreateOpened",
+												scheme: "workspace",
+												bank: "",
+											})
+										}
 									/>
 								</div>
 							</div>
@@ -719,13 +725,14 @@ export function App() {
 			{signingOut && signOut && (
 				<SignOutDialog
 					questions={signOut.save.filter((f) => f.kind === "question").length}
-					shared={signOut.save.filter(isScheme).length}
+					shared={
+						signOut.save.filter((f) => isScheme(f) && f.kind !== "workspace")
+							.length
+					}
 					instruments={
 						signOut.save.filter((f) => f.kind === "instrument").length
 					}
-					workspaceDetails={signOut.save.some(
-						(f) => f.kind === "workspaceFile",
-					)}
+					workspaceDetails={signOut.save.some((f) => f.kind === "workspace")}
 					discard={signOut.discard.map(
 						(q) => evaluations.get(q, envFor(q.bank)).draft.name ?? UNNAMED,
 					)}
@@ -734,7 +741,7 @@ export function App() {
 							? (evaluations.get(f, envFor(f.bank)).draft.name ?? UNNAMED)
 							: f.kind === "instrument"
 								? `instrument ${f.name}`
-								: f.kind === "workspaceFile"
+								: f.kind === "workspace"
 									? WORKSPACE_DETAILS
 									: `${SCHEME_NAME[f.kind]} ${f.name}`,
 					)}

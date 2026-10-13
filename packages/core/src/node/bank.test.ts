@@ -59,7 +59,7 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 		expect(Object.keys(files).length).toBe(26);
 		expect(bank.ignored).toEqual([]);
 		// `select_all.yaml` is optional, and this bank stores select-all answers the usual way.
-		for (const path of [ROOT.bank, ROOT.missing])
+		for (const path of [ROOT.workspace, ROOT.missing])
 			expect(Object.keys(bank.schemes)).toContain(path);
 	});
 
@@ -80,13 +80,13 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 			expect(JSON.stringify(ev.ddi)).not.toContain(UNDECLARED_AGENCY);
 	});
 
-	it("without a bank file, says so once and publishes under `invalid`", async () => {
-		const { "bank.yaml": _, ...rest } = files;
+	it("without `workspace.yaml`, says so once and publishes under `invalid`", async () => {
+		const { "workspace.yaml": _, ...rest } = files;
 		const without = bankOf(rest);
 		const validate = await validator();
 		expect(without.agency).toBeUndefined();
 		expect(
-			without.findings["bank.yaml"]?.map((f) => [f.severity, f.path]),
+			without.findings["workspace.yaml"]?.map((f) => [f.severity, f.path]),
 		).toEqual([["hole", "agency"]]);
 		for (const [path, ev] of Object.entries(without.questions)) {
 			expect(JSON.stringify(ev.ddi)).toContain(

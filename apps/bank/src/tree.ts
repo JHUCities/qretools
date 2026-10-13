@@ -19,7 +19,6 @@ import {
 	type Status,
 	status,
 	usedBy,
-	WORKSPACE_DETAILS,
 } from "@qretools/core";
 import type {
 	Entry,
@@ -36,6 +35,7 @@ export type TreeInput = Pick<
 	"local" | "browser" | "screen" | "activity"
 >;
 
+import { detailsOf } from "./model.js";
 import { claimOf, isUnsaved } from "./sync.js";
 import { type InstrumentUses, instrumentsUsing } from "./usedBy.js";
 
@@ -202,7 +202,7 @@ export function schemeSections(
 	const entries = Object.values(model.local.schemes).filter(
 		(e) => e.bank === bank,
 	);
-	return SCHEME_KINDS.flatMap((kind) => {
+	return SHARED_KINDS.flatMap((kind) => {
 		const mine = entries.filter((e) => e.kind === kind);
 		const leaves = mine
 			.filter((e) => filter === "" || e.name.toLowerCase().includes(filter))
@@ -234,6 +234,14 @@ export function schemeSections(
 }
 
 /**
+ * The kinds the tree's Shared sections and the New menu list: every one but the
+ * workspace's details, whose one way in is the button beside the workspace's name.
+ */
+export const SHARED_KINDS: readonly SchemeKind[] = SCHEME_KINDS.filter(
+	(k) => k !== "workspace",
+);
+
+/**
  * The workspace's instruments, flat, by name. Its details (`workspace.yaml`) are about
  * the whole workspace, so they open from beside its name, never from this list.
  */
@@ -244,11 +252,10 @@ export function workspaceLeaves(
 	const filter = model.browser.filter.trim().toLowerCase();
 	const leaf = (e: WorkspaceEntry): SchemeLeaf => ({
 		...marks(model, e),
-		name: e.kind === "instrument" ? e.name : WORKSPACE_DETAILS,
+		name: e.name,
 		status: evaluate(e),
 	});
 	return Object.values(model.local.workspace)
-		.filter((e) => e.kind === "instrument")
 		.map(leaf)
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.filter((l) => filter === "" || l.name.toLowerCase().includes(filter));
@@ -257,16 +264,14 @@ export function workspaceLeaves(
 /**
  * What the button for the workspace's details says, now they're out of the tree: its
  * name, and what the tree's marks said (unsaved changes, something to fill in or fix,
- * advice), with whether that calls for its dot. `status` is the details' own, when
- * the workspace has them.
+ * advice), with whether that calls for its dot. `status` is the details' own, or,
+ * while the workspace has none, what the core says of that (`absentRoot`).
  */
 export function detailsButton(
 	model: TreeInput,
 	status: Status | undefined,
 ): { readonly label: string; readonly attention: boolean } {
-	const details = Object.values(model.local.workspace).find(
-		(e) => e.kind === "workspaceFile",
-	);
+	const details = detailsOf(model.local.schemes);
 	const said = [
 		...(details !== undefined && isUnsaved(details) ? ["unsaved changes"] : []),
 		...(status?.kind === "incomplete" ? ["to fill in or fix"] : []),

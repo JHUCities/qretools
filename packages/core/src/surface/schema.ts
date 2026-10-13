@@ -201,7 +201,7 @@ export const KNOWN_KEYS = Object.keys(
 export const REQUIRED_KEYS = ["name", "text", "intent"] as const;
 export const DOMAIN_KEYS = ["responses", "number", "open"] as const;
 /**
- * The fields a bank may also require of its questions (`required:` in `bank.yaml`), as a
+ * The fields a bank may also require of its questions (`required:` in `workspace.yaml`), as a
  * team's house rule: optional one-line fields only. A response domain is always required,
  * and `select`, `legacy` and `variant_of` are never something to demand.
  */
@@ -346,22 +346,22 @@ export const TextEntryFileSchema = z.strictObject({
 export const textEntryJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(TextEntryFileSchema) as Record<string, unknown>;
 
-/** The schema of the bank's own file, `bank.yaml`. */
-export const BankFileSchema = z.strictObject({
+/** The schema of the workspace's settings file, `workspace.yaml`. */
+export const WorkspaceFileSchema = z.strictObject({
 	agency: z
 		.string()
 		.describe(
-			"The DDI agency this bank's items are published under: the registered code of the organization that maintains it, such as `org.example`.",
+			"The DDI agency this workspace's questions, shared files and instruments are published under: the registered code of the organization that maintains it, such as `org.example`.",
 		),
 	required: z
 		.array(z.enum(REQUIRABLE_KEYS))
 		.optional()
 		.describe(
-			"Fields every question in this bank must have, beyond `name`, `text` and `intent`, such as `title`. A question without one has it to fill in.",
+			"Fields every question in this workspace must have, beyond `name`, `text` and `intent`, such as `title`. A question without one has it to fill in.",
 		),
 });
-export const bankFileJsonSchema = (): Record<string, unknown> =>
-	z.toJSONSchema(BankFileSchema) as Record<string, unknown>;
+export const workspaceFileJsonSchema = (): Record<string, unknown> =>
+	z.toJSONSchema(WorkspaceFileSchema) as Record<string, unknown>;
 
 /** The schema of `select_all.yaml`: the two values a select-all option is stored as. */
 export const SelectAllFileSchema = z.strictObject({
@@ -378,17 +378,6 @@ export const SelectAllFileSchema = z.strictObject({
 });
 export const selectAllFileJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(SelectAllFileSchema) as Record<string, unknown>;
-
-/** The schema of a workspace's own file, `workspace.yaml`: as a bank's, for its instruments. */
-export const WorkspaceFileSchema = z.strictObject({
-	agency: z
-		.string()
-		.describe(
-			"The DDI agency this workspace's instruments are published under: the registered code of the organization that maintains them, such as `org.example`.",
-		),
-});
-export const workspaceFileJsonSchema = (): Record<string, unknown> =>
-	z.toJSONSchema(WorkspaceFileSchema) as Record<string, unknown>;
 
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";

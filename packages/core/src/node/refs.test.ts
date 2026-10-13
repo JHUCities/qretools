@@ -104,7 +104,7 @@ describe("where an instrument names its banks' files", () => {
 
 describe("the codes a condition compares a bank answer with", () => {
 	const b = bankOf({
-		"bank.yaml": "agency: org.example\n",
+		"workspace.yaml": "agency: org.example\n",
 		"missing.yaml": 'labels:\n  "-9": Don\'t know\n',
 		"scales/satisfied3.yaml":
 			'labels:\n  "1": Satisfied\n  "2": Neither\n  "3": Dissatisfied\n',
@@ -180,7 +180,7 @@ describe("the codes a condition compares a bank answer with", () => {
 		// The usual coding is written nowhere: there is nowhere to follow it to.
 		expect(codes('b.news_1 = "1"')).toEqual([]);
 		const recoded = bankOf({
-			"bank.yaml": "agency: org.example\n",
+			"workspace.yaml": "agency: org.example\n",
 			"select_all.yaml":
 				'chosen: { "1": Selected }\nnot_chosen: { "2": Not selected }\n',
 			"questions/t/news.yaml":

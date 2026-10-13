@@ -9,7 +9,7 @@ import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
 import { FOLDERS, isRoot, ROOT, type RootKind, schemePath } from "./kinds.ts";
 import { missingCollisions, usualCodingCollisions } from "./lint.ts";
 import { DEFAULT_SELECT_ALL, type SelectAll } from "./selectAll.ts";
-import { parseBankFile, parseSelectAllFile } from "./surface/bankfile.ts";
+import { parseSelectAllFile, parseSettingsFile } from "./surface/bankfile.ts";
 import type { Code } from "./surface/draft.ts";
 import {
 	EMPTY_ENV,
@@ -38,7 +38,7 @@ export { FOLDERS, isRoot, ROOT, type RootKind, schemePath };
 export type SchemeKind = NamedScheme | RootKind;
 export type Kind = "question" | SchemeKind;
 
-/** In the tree's order: what is measured, then how it is asked, then missing data, then the bank itself. */
+/** In the tree's order: what is measured, then how it is asked, then missing data, then the workspace's details. */
 export const SCHEME_KINDS: readonly SchemeKind[] = [
 	"concept",
 	"scale",
@@ -47,15 +47,15 @@ export const SCHEME_KINDS: readonly SchemeKind[] = [
 	"instruction",
 	"missing",
 	"select_all",
-	"bank",
+	"workspace",
 ];
 
 /**
  * What a kind's file holds, which decides how it is read, previewed and started: a
- * `labels:` map, one `text:` line, a concept's `label:` and `definition:`, or the two
- * values a select-all option is stored as.
+ * `labels:` map, one `text:` line, a concept's `label:` and `definition:`, the two
+ * values a select-all option is stored as, or the workspace's settings.
  */
-export type Shape = "labels" | "text" | "labelled" | "coding" | "bank";
+export type Shape = "labels" | "text" | "labelled" | "coding" | "settings";
 
 export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	concept: "labelled",
@@ -65,7 +65,7 @@ export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	instruction: "text",
 	missing: "labels",
 	select_all: "coding",
-	bank: "bank",
+	workspace: "settings",
 };
 
 /** What a bank path holds, or undefined for a file the tool does not read. */
@@ -95,7 +95,7 @@ export type SchemeValue =
 	| { readonly kind: "text"; readonly text: string }
 	| { readonly kind: "labelled"; readonly entry: LabelledEntry }
 	| { readonly kind: "coding"; readonly selectAll: SelectAll }
-	| { readonly kind: "bank"; readonly agency: string };
+	| { readonly kind: "settings"; readonly agency: string };
 
 export interface SchemeEvaluation {
 	readonly findings: readonly Finding[];
@@ -106,7 +106,7 @@ export interface SchemeEvaluation {
 	readonly value?: SchemeValue;
 	/** What it writes that another shared file may repeat, for the bank index. */
 	readonly symbols: Symbols;
-	/** Its pickers: a bank's details have one, for the fields every question must have. */
+	/** Its pickers: the workspace's details have one, for the fields every question must have. */
 	readonly livelits: readonly Livelit[];
 }
 
@@ -118,14 +118,14 @@ export function evaluateScheme(
 ): SchemeEvaluation {
 	const read = readScheme(kind, source, env);
 	const livelits =
-		SHAPE[kind] === "bank"
+		SHAPE[kind] === "settings"
 			? settingsLivelits(
 					source,
 					indexDocument(
 						parseDocument(source, { prettyErrors: false }),
 						source.length,
 					),
-					parseBankFile(source).required,
+					parseSettingsFile(source).required,
 				)
 			: [];
 	return { ...read, symbols: schemeSymbols(kind, read.value), livelits };
@@ -138,13 +138,13 @@ function readScheme(
 ): Omit<SchemeEvaluation, "symbols" | "livelits"> {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const { ranges, empties } = indexDocument(doc, source.length);
-	if (SHAPE[kind] === "bank") {
-		const { agency, findings: read } = parseBankFile(source);
+	if (SHAPE[kind] === "settings") {
+		const { agency, findings: read } = parseSettingsFile(source);
 		const findings = withSpacing(doc, source, read.map(pointAt(empties)));
 		const marks: readonly Mark[] = [];
 		return agency === undefined
 			? { findings, ranges, marks }
-			: { findings, ranges, marks, value: { kind: "bank", agency } };
+			: { findings, ranges, marks, value: { kind: "settings", agency } };
 	}
 	if (SHAPE[kind] === "coding") {
 		const { value, findings: read } = parseSelectAllFile(source);
@@ -236,8 +236,8 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	let required: readonly RequirableKey[] = EMPTY_ENV.required;
 	let selectAll: SelectAll = EMPTY_ENV.selectAll;
 	for (const f of files) {
-		if (f.kind === "bank") {
-			({ agency, required } = parseBankFile(f.text));
+		if (f.kind === "workspace") {
+			({ agency, required } = parseSettingsFile(f.text));
 			continue;
 		}
 		if (f.kind === "select_all") {
@@ -299,8 +299,8 @@ export const bankEnv = (files: Readonly<Record<string, string>>): Env =>
  */
 export const UNDECLARED_AGENCY = "invalid";
 
-/** Root files a bank must have: the agency its items are published under. */
-export const REQUIRED_ROOTS: readonly RootKind[] = ["bank"];
+/** Root files a workspace must have: the agency everything in it is published under. */
+export const REQUIRED_ROOTS: readonly RootKind[] = ["workspace"];
 
 /**
  * What a bank without its `kind` root file is told, about the bank, never on each
@@ -311,7 +311,7 @@ export const absentRoot = (kind: RootKind): readonly Finding[] =>
 		? [
 				hole(
 					"agency",
-					"This bank declares no DDI agency: add `bank.yaml` with an `agency:` line.",
+					"This workspace declares no DDI agency: add `workspace.yaml` with an `agency:` line.",
 					`Until then its items are published under \`${UNDECLARED_AGENCY}\`.`,
 				),
 			]

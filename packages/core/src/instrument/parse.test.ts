@@ -6,7 +6,7 @@ import { parseInstrument } from "./parse.ts";
 import { scalarMap } from "./scalar.ts";
 
 const BAS = bankOf({
-	"bank.yaml": "agency: org.example\n",
+	"workspace.yaml": "agency: org.example\n",
 	"missing.yaml": 'labels:\n  "-8": Refused\n',
 	"scales/agree2.yaml": 'labels:\n  "1": Agree\n  "2": Disagree\n',
 	"universes/renters.yaml": "text: Respondents who rent their home\n",

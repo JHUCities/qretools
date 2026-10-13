@@ -32,7 +32,6 @@ import instrumentTemplate from "@qretools/core/templates/instrument/instrument.y
 import numberTemplate from "@qretools/core/templates/number.yaml?raw";
 import scaleTemplate from "@qretools/core/templates/scale.yaml?raw";
 import selectManyTemplate from "@qretools/core/templates/select-many.yaml?raw";
-import bankTemplate from "@qretools/core/templates/settings/bank.yaml?raw";
 import selectAllTemplate from "@qretools/core/templates/settings/select_all.yaml?raw";
 import workspaceTemplate from "@qretools/core/templates/settings/workspace.yaml?raw";
 import type {
@@ -115,16 +114,8 @@ export interface InstrumentEntry {
 	readonly base?: Base;
 }
 
-/** The workspace's own file, `workspace.yaml`: one per workspace, as `bank.yaml` is per bank. */
-export interface WorkspaceFileEntry {
-	readonly kind: "workspaceFile";
-	readonly id: Id;
-	readonly source: string;
-	readonly base?: Base;
-}
-
 /** A file of the workspace itself, in no bank. */
-export type WorkspaceEntry = InstrumentEntry | WorkspaceFileEntry;
+export type WorkspaceEntry = InstrumentEntry;
 
 /** A file of one of the workspace's banks. */
 export type BankEntry = Question | SchemeEntry;
@@ -133,7 +124,7 @@ export type BankEntry = Question | SchemeEntry;
 export type Entry = BankEntry | WorkspaceEntry;
 
 export const isBankEntry = (e: Entry): e is BankEntry =>
-	e.kind !== "instrument" && e.kind !== "workspaceFile";
+	e.kind !== "instrument";
 
 /**
  * The working copies, split by kind. The split is structural, not cosmetic: the
@@ -177,7 +168,7 @@ const localOf = (
 export interface Remote {
 	readonly questions: Readonly<Record<Path, Blob>>;
 	readonly schemes: Readonly<Record<Path, Blob>>;
-	/** The workspace's own files: its instruments and `workspace.yaml`. */
+	/** The workspace's own files: its instruments. */
 	readonly workspace: Readonly<Record<Path, Blob>>;
 }
 
@@ -443,7 +434,6 @@ export type Msg =
 	| { readonly kind: "bankAddCancelled" }
 	| { readonly kind: "bankAddConfirmed" }
 	/** The workspace details: opened if they exist, else started. One per workspace. */
-	| { readonly kind: "workspaceDetailsOpened" }
 	/** A read of a bank in another repository has started: now it is being read. */
 	| { readonly kind: "remoteBankStarted"; readonly key: AddressKey }
 	| {
@@ -650,7 +640,7 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 	// The usual coding written out, explained: a file that reads as it starts.
 	select_all: selectAllTemplate,
 	// Its settings, explained as the template repository explains them.
-	bank: bankTemplate,
+	workspace: workspaceTemplate,
 };
 
 /**
@@ -659,9 +649,6 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
  */
 export const instrumentSource = (name: string): string =>
 	instrumentTemplate.replace(/^name:[ \t]*$/m, `name: ${name}`);
-
-/** What new workspace details start as: the agency, to fill in, explained. */
-export const WORKSPACE_DETAILS_TEMPLATE = workspaceTemplate;
 
 /** The core's starter scale files, keyed by file name, as a bank names a scale. */
 const SCALE_FILES: Readonly<Record<string, string>> = { agree4, satisfied5 };
@@ -892,7 +879,11 @@ export const schemesOf = (
 ): readonly SchemeEntry[] =>
 	Object.values(schemes).filter((e) => e.bank === bank);
 
-/** Whether GitHub's copy holds any shared file of this bank yet. */
+/** The workspace's details, `workspace.yaml`, among the working copies; absent while it has none. */
+export const detailsOf = (schemes: Local["schemes"]): SchemeEntry | undefined =>
+	Object.values(schemes).find((e) => e.kind === "workspace" && e.bank === "");
+
+/** Whether GitHub's copy holds any shared file of this bank yet, the workspace's details included. */
 export const knownBank = (
 	remoteSchemes: Remote["schemes"],
 	bank: string,
@@ -933,7 +924,7 @@ export const envOfRemote = (schemes: Remote["schemes"]): Env =>
 	);
 
 export const toWork = (model: Model): Work => ({
-	version: 7,
+	version: 8,
 	repo: bankText(model.settings),
 	...(model.author !== undefined && { login: model.author }),
 	nextId: model.nextId,

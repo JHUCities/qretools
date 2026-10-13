@@ -8,9 +8,10 @@ import type { NamedScheme } from "./surface/env.ts";
 
 /**
  * `missing`: the bank's one missing-value list; `select_all`: the two values a
- * select-all option is stored as; `bank`: what the bank says about itself.
+ * select-all option is stored as; `workspace`: the workspace's details, its agency
+ * and the fields it requires of every question.
  */
-export type RootKind = "missing" | "select_all" | "bank";
+export type RootKind = "missing" | "select_all" | "workspace";
 
 /**
  * Where each root kind's one file lives, from which paths, the loader and `readBank`
@@ -19,7 +20,7 @@ export type RootKind = "missing" | "select_all" | "bank";
 export const ROOT: Readonly<Record<RootKind, string>> = {
 	missing: "missing.yaml",
 	select_all: "select_all.yaml",
-	bank: "bank.yaml",
+	workspace: "workspace.yaml",
 };
 
 /** Whether a kind is one file per bank at its root, rather than named in a folder. */

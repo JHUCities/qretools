@@ -7,11 +7,11 @@ import { Button, Link, LinkButton, VisuallyHidden } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
 import {
 	type DdiDocument,
+	type Finding,
 	type Refusal,
+	ROOT,
 	refusalReason,
 	type Target,
-	WORKSPACE,
-	type WorkspaceFile,
 } from "@qretools/core";
 import type { OutlineItem, OutlinePart } from "@qretools/core/editor";
 import { Fragment, type ReactNode, useEffect, useState } from "react";
@@ -91,28 +91,38 @@ export function DownloadReason({
 	);
 }
 
-/** What the workspace file says, or that there's none: beside the DDI, which it publishes. */
-export function WorkspaceNotice({ own }: { own: WorkspaceFile | undefined }) {
-	if (own === undefined)
+/**
+ * What `workspace.yaml` says of the agency (its `findings`), or that there's no such
+ * file (none given): beside the DDI, which is published under it.
+ */
+export function WorkspaceNotice({
+	findings,
+}: {
+	findings: readonly Finding[] | undefined;
+}) {
+	if (findings === undefined)
 		return (
 			<InlineMessage variant="warning">
 				<span>
-					This workspace has no <code className="code">{WORKSPACE.file}</code>,
+					This workspace has no <code className="code">{ROOT.workspace}</code>,
 					so there's no DDI agency to publish its instruments under.
 				</span>
 			</InlineMessage>
 		);
-	return own.findings.map((f, i) => (
-		<InlineMessage
-			// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and can repeat
-			key={i}
-			variant={f.severity === "error" ? "critical" : "warning"}
-		>
-			<span>
-				<code className="code">{WORKSPACE.file}</code>: {inlineCode(f.message)}
-			</span>
-		</InlineMessage>
-	));
+	return findings
+		.filter((f) => f.path === "agency")
+		.map((f, i) => (
+			<InlineMessage
+				// biome-ignore lint/suspicious/noArrayIndexKey: findings are positional and can repeat
+				key={i}
+				variant={f.severity === "error" ? "critical" : "warning"}
+			>
+				<span>
+					<code className="code">{ROOT.workspace}</code>:{" "}
+					{inlineCode(f.message)}
+				</span>
+			</InlineMessage>
+		));
 }
 
 /**

@@ -1,6 +1,6 @@
 /**
- * Saving and deleting a workspace's own files: an instrument takes along what it reads
- * that isn't saved yet, so it never lands on the branch reading differently from how it
+ * Saving and deleting a workspace's instruments: one takes along what it reads that
+ * isn't saved yet, so it never lands on the branch reading differently from how it
  * reads here; the workspace details save alone.
  */
 import { fileURLToPath } from "node:url";
@@ -11,13 +11,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
 	type Cmd,
+	detailsOf,
 	type Entry,
 	type InstrumentEntry,
 	init,
 	type Model,
 	type Msg,
 	type Question,
-	WORKSPACE_DETAILS_TEMPLATE,
+	SCHEME_TEMPLATES,
+	type SchemeEntry,
 } from "./model.js";
 import { claimOf } from "./sync.js";
 import {
@@ -115,7 +117,7 @@ const edit = (m: Model, path: string): Model => {
 	const slice =
 		f.kind === "question"
 			? "questions"
-			: f.kind === "instrument" || f.kind === "workspaceFile"
+			: f.kind === "instrument"
 				? "workspace"
 				: "schemes";
 	return {
@@ -471,21 +473,65 @@ describe("a new instrument", () => {
 });
 
 describe("the workspace details", () => {
-	it("are started once, then opened", () => {
+	// What the gear beside the workspace's name sends.
+	const opened = {
+		kind: "schemeCreateOpened",
+		scheme: "workspace",
+		bank: "",
+	} as const;
+
+	it("are started once, as the root's `workspace.yaml`, then opened", () => {
 		const [start] = init({ work: ok(undefined), hasToken: false });
-		const [made] = update(start, { kind: "workspaceDetailsOpened" });
-		const [e] = Object.values(made.local.workspace);
+		const [made] = update(start, opened);
+		const e = detailsOf(made.local.schemes);
 		expect(e).toMatchObject({
-			kind: "workspaceFile",
-			source: WORKSPACE_DETAILS_TEMPLATE,
+			kind: "workspace",
+			bank: "",
+			source: SCHEME_TEMPLATES.workspace,
 		});
+		expect(e === undefined ? undefined : claimOf(e)).toBe("workspace.yaml");
+		expect(made.local.workspace).toEqual({});
 		expect(made.screen).toEqual({ kind: "editing", id: e?.id });
-		const [again] = update(
-			{ ...made, screen: { kind: "blank" } },
-			{ kind: "workspaceDetailsOpened" },
-		);
-		expect(Object.values(again.local.workspace)).toHaveLength(1);
+		const [again] = update({ ...made, screen: { kind: "blank" } }, opened);
+		expect(Object.values(again.local.schemes)).toHaveLength(1);
 		expect(again.screen).toEqual({ kind: "editing", id: e?.id });
+	});
+
+	it("give one agency to the questions and the instruments, as they are typed", () => {
+		const m = loaded();
+		const details = at(m, "workspace.yaml") as SchemeEntry;
+		const typed: Model = {
+			...m,
+			local: {
+				...m.local,
+				schemes: {
+					...m.local.schemes,
+					[details.id]: { ...details, source: "agency: org.typed\n" },
+				},
+			},
+		};
+		const evaluations = createEvaluations();
+		expect(evaluations.env(typed, "").agency).toBe("org.typed");
+		const read = (mm: Model) =>
+			evaluations.instrument(mm, at(mm, HOUSEHOLDS) as InstrumentEntry)
+				.instrument;
+		expect(read(typed).agency).toBe("org.typed");
+		// Written but wrong, the instrument says so itself, rather than that none was given.
+		const wrong: Model = {
+			...typed,
+			local: {
+				...typed.local,
+				schemes: {
+					...typed.local.schemes,
+					[details.id]: { ...details, source: "agency: Not An Agency\n" },
+				},
+			},
+		};
+		expect(
+			read(wrong)
+				.findings.filter((f) => f.path === "")
+				.map((f) => f.code),
+		).toContain("invalid-agency");
 	});
 });
 
@@ -853,13 +899,13 @@ describe("a bank in another repository an instrument uses", () => {
 			key: KEY,
 			result: ok({
 				found: true,
-				files: [{ path: "bank.yaml", sha: "b", text: "agency: x\n" }],
+				files: [{ path: "workspace.yaml", sha: "b", text: "agency: x\n" }],
 				unread: [],
 			}),
 		});
 		expect(read.remoteBanks[KEY]).toEqual({
 			kind: "files",
-			files: { "bank.yaml": "agency: x\n" },
+			files: { "workspace.yaml": "agency: x\n" },
 		});
 		const [missing] = update(started, {
 			kind: "remoteBankLoaded",

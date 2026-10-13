@@ -128,7 +128,7 @@ describe("init", () => {
 
 	it("restores saved work, and starts connecting when a token is on hand", () => {
 		const stored = {
-			version: 7 as const,
+			version: 8 as const,
 			repo: "JHUCities/bas-question-bank",
 			nextId: 9,
 			questions: [
@@ -478,10 +478,10 @@ describe("a quick fix", () => {
 		});
 	});
 
-	it("writes a bank's required fields chosen in its details' checklist", () => {
+	it("writes the required fields chosen in its details' checklist", () => {
 		const m = update(fresh(), {
 			kind: "schemeCreateOpened",
-			scheme: "bank",
+			scheme: "workspace",
 			bank: "",
 		})[0];
 		const id = firstId(m);
@@ -1214,6 +1214,15 @@ describe("writing waits for this session's load", () => {
 		);
 		const env = envIn(m, "");
 		expect(Object.keys(env.scales)).toContain("agree4");
+		// A workspace whose details are on GitHub is known: nothing it lacks stands in.
+		const known = {
+			...m,
+			remote: {
+				...m.remote,
+				schemes: { "workspace.yaml": { sha: "w", text: "agency: org.x\n" } },
+			},
+		};
+		expect(Object.keys(envIn(known, "").scales)).toEqual(["mine"]);
 	});
 });
 
@@ -2385,7 +2394,7 @@ describe("work belongs to this tab", () => {
 
 	it("starts in its own work's bank, and records who signed in with it", () => {
 		const work = {
-			version: 7 as const,
+			version: 8 as const,
 			repo: "a/bank",
 			login: "iain",
 			nextId: 1,

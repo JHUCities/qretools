@@ -53,7 +53,6 @@ export { marksOf } from "./surface/marks.ts";
 export { rangesOf } from "./surface/parse.ts";
 export { type Place, placeAt } from "./surface/place.ts";
 export {
-	bankFileJsonSchema,
 	labelledJsonSchema,
 	labelsJsonSchema,
 	nameFrom,

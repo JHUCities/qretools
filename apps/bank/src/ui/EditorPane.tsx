@@ -39,7 +39,7 @@ export function EditorPane(
 					readonly instrument?: undefined;
 					/** A question: its response domains are offered written out too. */
 					readonly question?: true;
-					/** A file with pickers of its own (a bank's details); a question always has them. */
+					/** A file with pickers of its own (the workspace's details); a question always has them. */
 					readonly pickers?: true;
 			  }
 			| {

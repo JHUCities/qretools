@@ -38,7 +38,7 @@ export async function readBank(
 
 /**
  * Every file of the workspace in `dir` (`readsInWorkspace`), by its path relative to
- * `dir`, as `readBank` gives a bank's: its banks, its instruments and its own file, for
+ * `dir`, as `readBank` gives a bank's: its bank and its instruments, for
  * `workspaceOf` to sort. Rejects, as `readBank` does, if `dir` isn't a directory.
  */
 export async function readWorkspace(

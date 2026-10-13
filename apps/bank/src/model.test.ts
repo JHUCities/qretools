@@ -18,9 +18,9 @@ describe("EXAMPLE_SCALES", () => {
 	});
 });
 
-describe("the bank's agency", () => {
+describe("the workspace's agency", () => {
 	const bank = (source: string): Record<number, SchemeEntry> => ({
-		1: { id: 1, kind: "bank", name: "bank", bank: "", source },
+		1: { id: 1, kind: "workspace", name: "workspace", bank: "", source },
 	});
 	const urns = (source: string) =>
 		Object.keys(
@@ -28,14 +28,14 @@ describe("the bank's agency", () => {
 				.ddi.QuestionItem ?? {},
 		);
 
-	it("comes from the working copy of the bank's own file, as it is typed", () => {
+	it("comes from the working copy of `workspace.yaml`, as it is typed", () => {
 		expect(urns("agency: org.example\n")).toEqual(["org.example:q:1"]);
 		expect(urns("agency: org.example.dept\n")).toEqual([
 			"org.example.dept:q:1",
 		]);
 	});
 
-	it("is `invalid` while the bank declares none", () => {
+	it("is `invalid` while the workspace declares none", () => {
 		expect(urns("agency:\n")).toEqual(["invalid:q:1"]);
 	});
 });

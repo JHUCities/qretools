@@ -32,7 +32,6 @@ import {
 	saveableName,
 	UNNAMED,
 	WORKSPACE,
-	workspaceFileOf,
 } from "@qretools/core";
 import {
 	addInstrumentFill,
@@ -109,8 +108,6 @@ import {
 	schemeFileNamed,
 	signedOut,
 	toWork,
-	WORKSPACE_DETAILS_TEMPLATE,
-	type WorkspaceFileEntry,
 } from "./model.js";
 import {
 	claimOf,
@@ -849,20 +846,6 @@ function step(model: Model, msg: Msg): Step {
 				[],
 			];
 
-		case "workspaceDetailsOpened": {
-			// One per workspace: open it if it exists, else start it.
-			const existing = Object.values(model.local.workspace).find(
-				(e) => e.kind === "workspaceFile",
-			);
-			if (existing)
-				return [{ ...model, screen: { kind: "editing", id: existing.id } }, []];
-			const [added, id] = add(model, {
-				kind: "workspaceFile",
-				source: WORKSPACE_DETAILS_TEMPLATE,
-			});
-			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
-		}
-
 		case "schemeNamingCancelled":
 			return [{ ...model, browser: withoutNaming(model.browser) }, []];
 
@@ -986,7 +969,7 @@ function step(model: Model, msg: Msg): Step {
 			// unseen folder without a word. A scheme file's path follows from its kind
 			// and the name it was given at creation.
 			if (q.base !== undefined) return write(model, as, msg.id, q, q.base.path);
-			// So does an instrument's (its name) and the workspace's own file's.
+			// So does an instrument's (its name).
 			if (q.kind !== "question") {
 				const path = claimOf(q);
 				if (path === undefined) return [model, []];
@@ -1691,9 +1674,9 @@ const nameOf = (model: Model, f: BankEntry): string =>
  * unsaved shared files. The second step goes beyond a question's save because the
  * instrument's DDI elaborates its questions through their banks' shared files: an
  * unsaved scale changes what the instrument means. Only what is named is taken, never
- * every unsaved file of a bank, and never the missing values or the bank's details
- * (its select-all coding) implicitly, as for a question. Not yet followed: a bank name in a condition, or an
- * input's shared scale (`refs` doesn't hold them).
+ * every unsaved file of a bank, and never the missing values, the select-all coding
+ * or the workspace's details implicitly, as for a question. Not yet followed: a bank
+ * name in a condition, or an input's shared scale (`refs` doesn't hold them).
  */
 export function instrumentDependencies(
 	model: Pick<Model, "local" | "remote">,
@@ -2167,9 +2150,7 @@ const claimant = (model: Model, path: Path): Entry | undefined =>
 function placesOf(f: Entry): Readonly<Record<string, Range>> {
 	return f.kind === "instrument"
 		? instrumentOf(f.source, { banks: {} }).ranges
-		: f.kind === "workspaceFile"
-			? workspaceFileOf(f.source).ranges
-			: rangesOf(f.source);
+		: rangesOf(f.source);
 }
 
 /** Open your own copy `f` from a link, at the place it names, if any. */
@@ -2735,7 +2716,6 @@ function withFile(model: Model, f: Entry): Model {
 				local: { ...local, questions: { ...local.questions, [f.id]: f } },
 			};
 		case "instrument":
-		case "workspaceFile":
 			return {
 				...model,
 				local: { ...local, workspace: { ...local.workspace, [f.id]: f } },
@@ -2749,7 +2729,7 @@ function withFile(model: Model, f: Entry): Model {
 }
 
 /**
- * A file's pickers in its text as it is now: a question's fields, a bank's details. One
+ * A file's pickers in its text as it is now: a question's fields, the workspace's details. One
  * place, so a choice is always written where its picker is now.
  */
 /**
@@ -2883,8 +2863,7 @@ function withoutFile(model: Model, id: Id): Model {
 type NewFile =
 	| Pick<Question, "kind" | "bank" | "source">
 	| Pick<SchemeEntry, "kind" | "name" | "bank" | "source">
-	| Pick<InstrumentEntry, "kind" | "name" | "source">
-	| Pick<WorkspaceFileEntry, "kind" | "source">;
+	| Pick<InstrumentEntry, "kind" | "name" | "source">;
 
 function add(model: Model, file: NewFile): [Model, Id] {
 	const id = model.nextId;
