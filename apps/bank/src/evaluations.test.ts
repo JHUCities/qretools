@@ -18,24 +18,30 @@ import {
 } from "./model.js";
 import { update } from "./update.js";
 
-/** Two banks of their own, one in each folder, and an instrument on both. */
+/** An instrument on its own workspace's bank, one in another repository, and a folder that is neither. */
 const BOTH = `name: both
 uses:
-  hh: ../households
-  t: ../bank
+  hh: ../
   gone: ../nowhere
   far: owner/bank@v1
 flow:
   - ask: hh.consent
-  - ask: t.library_visits
+  - ask: far.consent
 `;
 
 let files: Record<string, string>;
+/** The households bank, as another repository would hold it: no instruments. */
+const hhFiles = () =>
+	Object.fromEntries(
+		Object.entries(files).filter(
+			([path]) => !path.startsWith("instruments/") && path !== "workspace.yaml",
+		),
+	);
 beforeAll(async () => {
 	files = {
 		...(await readWorkspace(
 			fileURLToPath(
-				new URL("../../../packages/core/fixtures", import.meta.url),
+				new URL("../../../packages/core/fixtures/households", import.meta.url),
 			),
 		)),
 		"instruments/both.yaml": BOTH,
@@ -110,13 +116,7 @@ describe("an instrument read live", () => {
 	it("reads as the core reads the same files, whatever has come of a bank in another repository", () => {
 		const m = loaded(files);
 		const key = "owner/bank@v1";
-		const hh = Object.fromEntries(
-			Object.entries(files).flatMap(([path, text]) =>
-				path.startsWith("households/")
-					? [[path.slice("households/".length), text]]
-					: [],
-			),
-		);
+		const hh = hhFiles();
 		const cases: [Model["remoteBanks"], Parameters<typeof workspaceOf>[1]][] = [
 			// Not asked for yet, and being read: both pending.
 			[{}, {}],
@@ -147,13 +147,7 @@ describe("an instrument read live", () => {
 
 	it("reads a bank in another repository once per read, and completes from it", () => {
 		const m = loaded(files);
-		const hh = Object.fromEntries(
-			Object.entries(files).flatMap(([path, text]) =>
-				path.startsWith("households/")
-					? [[path.slice("households/".length), text]]
-					: [],
-			),
-		);
+		const hh = hhFiles();
 		const read = {
 			...m,
 			remoteBanks: { "owner/bank@v1": { kind: "files" as const, files: hh } },
@@ -169,35 +163,39 @@ describe("an instrument read live", () => {
 		).toBe(scopes.bas);
 	});
 
-	it("re-reads only the instruments that use a bank being edited", () => {
-		const m = loaded(files);
+	it("re-reads only the instruments that use the bank being edited", () => {
+		const m: Model = {
+			...loaded(files),
+			remoteBanks: { "owner/bank@v1": { kind: "files", files: hhFiles() } },
+		};
 		const evaluations = createEvaluations();
 		const households = evaluations.instrument(m, instrument(m, "households"));
-		const both = evaluations.instrument(m, instrument(m, "both"));
-		const hhScope = evaluations.scope(m, "households");
-		// An edit in the second bank of `both`: it changes, `households` doesn't.
-		const q = questionAt(m, "bank/questions/examples/library_visits.yaml");
+		const remote = evaluations.instrument(m, instrument(m, "remote"));
+		// An edit in this workspace's bank: `households` changes, `remote` doesn't.
+		const q = questionAt(m, "questions/household/consent.yaml");
 		const edited = typed(m, q, `${q.source}# edited\n`);
-		expect(evaluations.scope(edited, "households")).toBe(hhScope);
-		expect(
-			evaluations.instrument(edited, instrument(edited, "households")),
-		).toBe(households);
-		expect(evaluations.instrument(edited, instrument(edited, "both"))).not.toBe(
-			both,
+		expect(evaluations.instrument(edited, instrument(edited, "remote"))).toBe(
+			remote,
 		);
+		const reread = evaluations.instrument(
+			edited,
+			instrument(edited, "households"),
+		);
+		expect(reread).not.toBe(households);
 		// Typing in one instrument changes no bank and no other instrument.
+		const scope = evaluations.scope(edited, "");
 		const e = instrument(edited, "both");
 		const typing = typed(edited, e, `${e.source}# edited\n`);
-		expect(evaluations.scope(typing, "households")).toBe(hhScope);
+		expect(evaluations.scope(typing, "")).toBe(scope);
 		expect(
 			evaluations.instrument(typing, instrument(typing, "households")),
-		).toBe(households);
+		).toBe(reread);
 	});
 
 	it("reads a question's unsaved edits", () => {
 		const m = loaded(files);
 		const evaluations = createEvaluations();
-		const q = questionAt(m, "households/questions/household/consent.yaml");
+		const q = questionAt(m, "questions/household/consent.yaml");
 		const renamed = typed(
 			m,
 			q,
@@ -212,7 +210,7 @@ describe("an instrument read live", () => {
 	});
 
 	it("completes with the questions of its banks as they are now", () => {
-		const ASKING = "uses:\n  hh: ../households\nflow:\n  - ask: hh.";
+		const ASKING = "uses:\n  hh: ../\nflow:\n  - ask: hh.";
 		const m = loaded(files);
 		const evaluations = createEvaluations();
 		const e = instrument(m, "households");
@@ -223,7 +221,7 @@ describe("an instrument read live", () => {
 				evaluations.usedScopes(model, e),
 			)?.options.map((o) => o.label) ?? [];
 		expect(offered(m)).toContain("hh.consent");
-		const q = questionAt(m, "households/questions/household/consent.yaml");
+		const q = questionAt(m, "questions/household/consent.yaml");
 		const renamed = typed(
 			m,
 			q,
@@ -237,7 +235,7 @@ describe("an instrument read live", () => {
 		const m = loaded(files);
 		const evaluations = createEvaluations();
 		evaluations.instrument(m, instrument(m, "households"));
-		const q = questionAt(m, "households/questions/household/age.yaml");
+		const q = questionAt(m, "questions/household/age.yaml");
 		const start = performance.now();
 		for (let i = 0; i < 20; i++) {
 			const edited = typed(m, q, `${q.source}# ${i}\n`);
@@ -264,7 +262,7 @@ describe.skipIf(!existsSync(REFERENCE))(
 				.filter(([path]) => path.startsWith("questions/"))
 				.flatMap(([, text]) => /^name: (\w+)$/m.exec(text)?.[1] ?? [])
 				.slice(0, 150);
-			const big = `name: big\nuses:\n  b: ..\nflow:\n${names.map((n) => `  - ask: b.${n}\n`).join("")}`;
+			const big = `name: big\nuses:\n  b: ../\nflow:\n${names.map((n) => `  - ask: b.${n}\n`).join("")}`;
 			const m = loaded({ ...bank, "instruments/big.yaml": big });
 			const evaluations = createEvaluations();
 			evaluations.instrument(m, instrument(m, "big"));

@@ -6,7 +6,7 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
     {
       "effects": [
         {
-          "link": "#repo=octo-org%2Fsurvey&branch=qretools-iain&file=questions%2Fexamples%2Fhousehold_size.yaml",
+          "link": "#repo=octo-org%2Fsurvey&branch=qretools-iain&file=questions%2Fexample%2Fconsent.yaml",
           "push": true,
         },
       ],
@@ -24,11 +24,11 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
           "changes": [
             {
               "deletes": false,
-              "expected": "sha-questions/examples/household_size.yaml",
-              "path": "questions/examples/household_size.yaml",
+              "expected": "sha-questions/example/consent.yaml",
+              "path": "questions/example/consent.yaml",
             },
           ],
-          "commit": "Update household_size",
+          "commit": "Update consent",
         },
       ],
       "msg": "saveRequested",
@@ -46,15 +46,15 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
             {
               "deletes": false,
               "expected": null,
-              "path": "questions/moved/household_size.yaml",
+              "path": "questions/moved/consent.yaml",
             },
             {
               "deletes": true,
-              "expected": "new-questions/examples/household_size.yaml",
-              "path": "questions/examples/household_size.yaml",
+              "expected": "new-questions/example/consent.yaml",
+              "path": "questions/example/consent.yaml",
             },
           ],
-          "commit": "Move household_size to moved",
+          "commit": "Move consent to moved",
         },
       ],
       "msg": "moveConfirmed",
@@ -143,11 +143,11 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
           "changes": [
             {
               "deletes": true,
-              "expected": "sha-questions/examples/library_visits.yaml",
-              "path": "questions/examples/library_visits.yaml",
+              "expected": "sha-questions/example/household_size.yaml",
+              "path": "questions/example/household_size.yaml",
             },
           ],
-          "commit": "Delete library_visits",
+          "commit": "Delete household_size",
         },
       ],
       "msg": "deleteRequested",
@@ -156,15 +156,15 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
   "shown": {
     "remote": {
       "questions": [
-        "questions/examples/household_size.yaml",
-        "questions/examples/library_visits.yaml",
-        "questions/examples/member_age.yaml",
-        "questions/examples/news_sources.yaml",
-        "questions/examples/parks_spending.yaml",
-        "questions/examples/parks_spending_reversed.yaml",
-        "questions/examples/service_comments.yaml",
-        "questions/examples/service_satisfaction.yaml",
-        "questions/interview/consent.yaml",
+        "questions/example/consent.yaml",
+        "questions/example/household_size.yaml",
+        "questions/example/library_visits.yaml",
+        "questions/example/member_age.yaml",
+        "questions/example/news_sources.yaml",
+        "questions/example/parks_spending.yaml",
+        "questions/example/parks_spending_reversed.yaml",
+        "questions/example/service_comments.yaml",
+        "questions/example/service_satisfaction.yaml",
       ],
       "schemes": [
         "bank.yaml",
@@ -246,8 +246,9 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
     ],
     "tree": [
       {
-        "folder": "examples",
+        "folder": "example",
         "leaves": [
+          "consent complete",
           "household_size complete",
           "library_visits complete",
           "member_age complete",
@@ -256,12 +257,6 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
           "parks_spending_reversed complete",
           "service_comments complete",
           "service_satisfaction complete",
-        ],
-      },
-      {
-        "folder": "interview",
-        "leaves": [
-          "consent complete",
         ],
       },
     ],

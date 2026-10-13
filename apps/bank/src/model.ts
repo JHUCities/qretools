@@ -181,10 +181,10 @@ export interface Remote {
 	readonly workspace: Readonly<Record<Path, Blob>>;
 }
 
+/** A bank on GitHub being added to the instrument `use.id`, at its `uses` entry `use.path`. */
 export interface AddingBank {
-	readonly how: "new" | "import";
 	readonly text: string;
-	readonly use?: { readonly id: Id; readonly path: string };
+	readonly use: { readonly id: Id; readonly path: string };
 }
 
 export type Screen =
@@ -220,9 +220,8 @@ export interface Browser {
 	 */
 	readonly naming?: Naming;
 	/**
-	 * A bank being added: a new one in this workspace, its folder named (`banks/<text>`),
-	 * or one on GitHub, its address given. From an instrument's `uses` entry, `use` is
-	 * where its address is written once it's added.
+	 * A bank on GitHub being added from an instrument's `uses` entry, its address given:
+	 * `use` is where the address is written once it's added.
 	 */
 	readonly addingBank?: AddingBank;
 	/**
@@ -233,7 +232,7 @@ export interface Browser {
 	/** A new instrument is named before it exists, as a shared file is: its name is its file's. */
 	readonly namingInstrument?: {
 		readonly name: string;
-		/** The example instrument, written for the example bank, rather than a blank one. */
+		/** The example instrument, written for the example questions, rather than a blank one. */
 		readonly example?: true;
 	};
 	/** The author dismissed the offer of the example instrument (`offersExample`). Never persisted. */
@@ -439,8 +438,7 @@ export type Msg =
 	/** An inactive write button was pressed: say why, when the reason is one that stands. */
 	| { readonly kind: "blockedActionTried" }
 	| { readonly kind: "blockedNoticeClosed" }
-	/** A bank to add: a new one here (from New or a `uses` entry), or one on GitHub (from one). */
-	| { readonly kind: "bankAddOpened"; readonly how: "new" }
+	/** A bank on GitHub to add, asked for from a `uses` entry (the fix opens its dialog). */
 	| { readonly kind: "bankAddChanged"; readonly text: string }
 	| { readonly kind: "bankAddCancelled" }
 	| { readonly kind: "bankAddConfirmed" }

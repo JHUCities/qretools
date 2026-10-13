@@ -6,5 +6,5 @@
 # instrument exports begins with it, as in urn:ddi:org.example:...
 # Write your organization's code here: letters, digits and hyphens, in parts
 # joined by dots, such as edu.example.dept.
-# Questions are published under their own bank's agency (banks/*/bank.yaml).
+# Questions are published under the bank's agency (bank.yaml).
 agency:

@@ -10,7 +10,7 @@ const here = (path: string): string =>
 
 const HEAD = [
 	"uses:",
-	"  hh: ../households",
+	"  hh: ../",
 	"inputs:",
 	"  county:",
 	"    responses:",

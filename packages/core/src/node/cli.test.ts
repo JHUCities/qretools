@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { cp, glob, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import {
+	cp,
+	glob,
+	mkdir,
+	mkdtemp,
+	readFile,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,7 +58,7 @@ describe("a bank in another repository", () => {
 			},
 			"instrument",
 			"check",
-			here("../../fixtures/instruments/remote.yaml"),
+			here("../../fixtures/households/instruments/remote.yaml"),
 			"--agency",
 			"org.example",
 		);
@@ -96,20 +103,18 @@ describe("qretools check", () => {
 		expect((await run("--help")).code).toBe(0);
 	});
 
-	it("checks a workspace: its banks, its instruments and its own file", async () => {
+	it("checks a workspace: its bank, its instruments and its own file", async () => {
 		const ws = await mkdtemp(join(tmpdir(), "qretools-ws-"));
-		await cp(here("../../fixtures/households"), join(ws, "households"), {
-			recursive: true,
-		});
-		await cp(here("../../fixtures/instruments"), join(ws, "instruments"), {
-			recursive: true,
-		});
+		await cp(here("../../fixtures/households"), ws, { recursive: true });
 		await writeFile(join(ws, "workspace.yaml"), "agency: org.example\n");
 		await writeFile(join(ws, "stray.yaml"), "x: 1\n");
 		await writeFile(join(ws, "a-stray.yaml"), "x: 1\n");
+		// A bank file anywhere but the root makes no bank: it's read as nothing.
+		await mkdir(join(ws, "banks/x"), { recursive: true });
+		await writeFile(join(ws, "banks/x/bank.yaml"), "agency: org.example\n");
 		const r = await run("check", ws);
 		const lines = r.out.trimEnd().split("\n");
-		// The households instrument reads its bank beside it; remote's can't be read here.
+		// The households instrument reads its own workspace's bank; remote's can't be read here.
 		expect(
 			lines.filter(
 				(l) => l.includes("households.yaml:") && !l.includes(": note: "),
@@ -123,6 +128,9 @@ describe("qretools check", () => {
 			`${join(ws, "a-stray.yaml")}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]`,
 		);
 		expect(lines.at(-1)).toMatch(/stray\.yaml:1:1: note: .* \[ignored\]$/);
+		expect(
+			lines.filter((l) => l.includes("banks/x/bank.yaml:1:1: note:")),
+		).toHaveLength(1);
 		// 16 bank files, 2 instruments, the workspace file.
 		expect(r.err).toMatch(/^19 files, /);
 		expect(r.code).toBe(1);
@@ -146,15 +154,12 @@ describe("qretools check", () => {
 });
 
 describe("qretools export", () => {
-	it("says which bank to export from a workspace whose banks are in folders", async () => {
+	it("finds no bank in a folder whose only bank files are in folders of their own", async () => {
 		const ws = await mkdtemp(join(tmpdir(), "qretools-ws-"));
-		for (const bank of ["banks/b", "banks/a"])
-			await cp(SAMPLE, join(ws, bank), { recursive: true });
+		await cp(SAMPLE, join(ws, "banks/a"), { recursive: true });
 		const r = await run("export", ws);
 		expect(r.code).toBe(2);
-		expect(r.err).toBe(
-			`${ws} is a workspace with banks at banks/a, banks/b; export one: qretools export ${join(ws, "banks/a")}\n`,
-		);
+		expect(r.err).toMatch(/^No bank files in /);
 	});
 
 	it("writes the bank's DDI, valid, with every question's items once", async () => {
@@ -167,7 +172,7 @@ describe("qretools export", () => {
 
 	it("exports each question's items as the bank evaluated them, versions and all", async () => {
 		const files = await readBank(SAMPLE);
-		const path = "questions/examples/parks_spending.yaml";
+		const path = "questions/example/parks_spending.yaml";
 		const bank = bankOf(files, { [path]: { number: "3" } });
 		expect(
 			bank.questions[path]?.items.map((i) => i.identity.Version),

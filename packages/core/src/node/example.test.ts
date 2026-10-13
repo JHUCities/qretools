@@ -1,15 +1,17 @@
 /**
- * The example instrument: the written one in the example bank, with nothing to fill in,
- * and none at all in a bank it doesn't read in.
+ * The example instrument: the written one beside the example questions, with nothing to
+ * fill in, and none at all in a bank it doesn't read in.
  */
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { HERE } from "../address.ts";
 import { makeValidator } from "../ddi/validate.ts";
 import { bankOf } from "../evaluate.ts";
 import { exampleInstrument } from "../instrument/example.ts";
 import { instrumentOf } from "../instrument/instrument.ts";
 import { parseInstrument } from "../instrument/parse.ts";
+import { workspaceOf } from "../workspace.ts";
 import { readBank } from "./index.ts";
 
 const here = (path: string): string =>
@@ -27,16 +29,42 @@ describe("the example instrument", async () => {
 
 	// This is what keeps the written text and the template's bank together: a mismatch
 	// would only show as the example no longer being offered.
-	it("reads in the example bank with nothing to fill in, named and pointed at it", () => {
-		const text = exampleInstrument("demo", "../banks/example", example) ?? "";
+	it("reads beside the example questions with nothing to fill in, named and pointed at its workspace", () => {
+		const text = exampleInstrument("demo", HERE, example) ?? "";
 		expect(text).toMatch(/^name: demo$/m);
-		expect(text).toContain("uses:\n  bank: ../banks/example\n");
+		expect(text).toContain("uses:\n  bank: ../\n");
 		expect(text).toContain("rating: label(bank.service_satisfaction)");
 		expect(text).toContain(
 			"  - roster: members\n    count: bank.household_size",
 		);
 		expect(text).toContain("      - if: dissatisfied");
 		expect(wrong(text, example)).toEqual([]);
+	});
+
+	it("reads in a workspace whose example questions are in questions/example/", async () => {
+		const files = await readBank(here("../../fixtures/bank"));
+		const asked = [
+			...(exampleInstrument("demo", HERE, example) ?? "").matchAll(
+				/\bbank\.(\w+)/g,
+			),
+		].map((m) => m[1]);
+		// Every question it names is one of that folder's, and no other folder has any.
+		const names = Object.keys(files)
+			.filter((p) => p.startsWith("questions/"))
+			.map((p) => p.match(/^questions\/example\/(\w+)\.yaml$/)?.[1]);
+		expect(names).not.toContain(undefined);
+		expect(asked).toEqual(expect.arrayContaining(names));
+		const read = workspaceOf({
+			...files,
+			"workspace.yaml": "agency: org.example\n",
+			"instruments/demo.yaml": exampleInstrument("demo", HERE, example) ?? "",
+		}).instruments["instruments/demo.yaml"];
+		expect(read?.uses).toEqual({ bank: { kind: "local", folder: "" } });
+		expect(
+			read?.instrument.findings.filter(
+				(f) => f.severity === "hole" || f.severity === "error",
+			),
+		).toEqual([]);
 	});
 
 	it("exports as DDI the official schema accepts, with nothing but advice to say", async () => {
@@ -50,7 +78,7 @@ describe("the example instrument", async () => {
 		);
 		if (!validator.ok) throw new Error(validator.error.message);
 		const instrument = instrumentOf(
-			exampleInstrument("demo", "../banks/example", example) ?? "",
+			exampleInstrument("demo", HERE, example) ?? "",
 			{ banks: { bank: example }, agency: "org.example" },
 		);
 		expect(instrument.findings.filter((f) => f.severity !== "info")).toEqual(
@@ -60,8 +88,8 @@ describe("the example instrument", async () => {
 	});
 
 	it("is not made in a bank it doesn't read in", () => {
-		expect(exampleInstrument("demo", "../", households)).toBeUndefined();
+		expect(exampleInstrument("demo", HERE, households)).toBeUndefined();
 		const empty = bankOf({ "bank.yaml": "agency: org.example\n" });
-		expect(exampleInstrument("demo", "../", empty)).toBeUndefined();
+		expect(exampleInstrument("demo", HERE, empty)).toBeUndefined();
 	});
 });

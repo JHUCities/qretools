@@ -124,7 +124,7 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 	});
 
 	it("takes each file's version when given, version 1 when not", async () => {
-		const path = "questions/examples/parks_spending.yaml";
+		const path = "questions/example/parks_spending.yaml";
 		const versioned = bankOf(files, {
 			[path]: { number: "3" },
 			"scales/support4.yaml": { number: "2" },

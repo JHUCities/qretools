@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressOf, joinFolder } from "../address.ts";
+import { addressOf } from "../address.ts";
 import { bankOf } from "../evaluate.ts";
 import { applyLivelit } from "../surface/livelits.ts";
 import { instrumentOf } from "./instrument.ts";
@@ -26,7 +26,7 @@ const BAS = bankOf({
 
 const SOURCE = `name: demo
 uses:
-  bas: ../banks/bas
+  bas: ../
   other:
 flow:
   - ask: bas.tenure
@@ -245,7 +245,7 @@ flow:
 			l.picker.kind === "actions" ? "actions" : l.picker.source.kind,
 		]);
 		expect(shown).toEqual([
-			["uses.bas", "../banks/bas", "banks"],
+			["uses.bas", "../", "banks"],
 			["uses.other", "", "banks"],
 			["flow.0.ask", "bas.tenure", "questions"],
 			["flow.0.options", "random", "enum"],
@@ -259,25 +259,18 @@ flow:
 	});
 
 	it("sit at any name the parse reads as a question's, however unusual", () => {
-		const text = "uses:\n  b9_: ./b\nflow:\n  - ask: b9_.x_1_\n";
+		const text = "uses:\n  b9_: ../\nflow:\n  - ask: b9_.x_1_\n";
 		expect(instrumentOf(text, { banks: {} }).livelits.map((l) => l.id)).toEqual(
 			["uses.b9_", "flow.0.ask"],
 		);
 	});
 
-	it("offer a new bank here, or one from GitHub, at each use", () => {
+	it("offer a bank from GitHub at each use, and never a new one here", () => {
 		const uses = ids({}).find((l) => l.id === "uses.other");
 		expect(uses?.actions).toEqual([
 			{
 				kind: "bank",
-				label: "New bank in this workspace…",
-				how: "new",
-				path: "uses.other",
-			},
-			{
-				kind: "bank",
 				label: "Use a bank from GitHub…",
-				how: "import",
 				path: "uses.other",
 			},
 		]);
@@ -313,34 +306,22 @@ describe("what the pickers offer", () => {
 		);
 	});
 
-	it("lists the workspace's banks as written from the instrument, then GitHub's", () => {
-		const remote = addressOf("JHUCities/Bank/banks/hh@v1");
-		const choices = bankChoices(
-			"instruments",
-			["", "banks/hh"],
-			remote.kind === "remote" ? [remote] : [],
-		);
-		expect(choices.map((c) => c.name)).toEqual([
-			"../",
-			"../banks/hh",
+	it("lists this workspace's bank as `../` when it has one, then GitHub's", () => {
+		const remote = addressOf("JHUCities/Bank/surveys/hh@v1");
+		const remotes = remote.kind === "remote" ? [remote] : [];
+		expect(bankChoices(true, remotes)).toEqual([
+			{ name: "../", detail: "This workspace's bank" },
 			// As written, not the lowercased key.
-			"JHUCities/Bank/banks/hh@v1",
+			{ name: "JHUCities/Bank/surveys/hh@v1", detail: "A bank on GitHub" },
 		]);
-		for (const [c, bank] of [
-			[choices[0], ""],
-			[choices[1], "banks/hh"],
-		] as const) {
-			const a = addressOf(c?.name ?? "");
-			expect(a.kind === "local" && joinFolder("instruments", a.path)).toBe(
-				bank,
-			);
-		}
+		expect(bankChoices(false, remotes).map((c) => c.name)).toEqual([
+			"JHUCities/Bank/surveys/hh@v1",
+		]);
 	});
 });
 
 describe("a checklist at each set of codes in a condition", () => {
-	const HEADER =
-		"name: demo\nuses:\n  bas: ../banks/bas\nflow:\n  - ask: bas.tenure\n";
+	const HEADER = "name: demo\nuses:\n  bas: ../\nflow:\n  - ask: bas.tenure\n";
 	const sets = (source: string) =>
 		instrumentOf(source, { banks: {} }).livelits.filter((l) => l.set);
 	const write = (source: string, id: string, codes: readonly string[]) => {

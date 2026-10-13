@@ -32,7 +32,7 @@ describe("an instrument's outline", async () => {
 	it("follows the flow, nested as it nests, each item at its path", async () => {
 		const { draft } = instrumentOf(
 			await readFile(
-				here("../../fixtures/instruments/households.yaml"),
+				here("../../fixtures/households/instruments/households.yaml"),
 				"utf8",
 			),
 			{ banks },
@@ -44,7 +44,7 @@ describe("an instrument's outline", async () => {
 		const { draft } = instrumentOf(
 			[
 				"uses:",
-				"  hh: ../households",
+				"  hh: ../",
 				"flow:",
 				"  - ask: hh.size",
 				"  - ask: hh.size",

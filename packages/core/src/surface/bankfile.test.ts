@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import bankTemplate from "../../templates/settings/bank.yaml?raw";
+import selectAllTemplate from "../../templates/settings/select_all.yaml?raw";
 import workspaceTemplate from "../../templates/settings/workspace.yaml?raw";
 import { schemeEnv } from "../schemes.ts";
 import {
@@ -144,7 +145,7 @@ describe("the bank file", () => {
 
 /*
  * The template repository (JHUCities/qretools-template) carries these comments too, in
- * its workspace.yaml and banks/local/bank.yaml, filled in with org.example: change both.
+ * its workspace.yaml and bank.yaml, filled in with org.example: change both.
  */
 describe("the settings templates a new bank or workspace starts from", () => {
 	it("leave only the agency to fill in, and a bank's required list ready to uncomment", () => {
@@ -181,6 +182,14 @@ describe("how a bank stores a select-all option's answer", () => {
 			{ code: "0", label: "No" },
 			{ code: "1", label: "Yes" },
 		]);
+	});
+
+	it("starts, from its template, as the usual coding in the usual order", () => {
+		// Written the other way round, creating the file would reorder the published list.
+		expect(read(selectAllTemplate)).toEqual({
+			value: DEFAULT_SELECT_ALL,
+			findings: [],
+		});
 	});
 
 	it("is what the bank writes: each value as spelled, in the order written", () => {

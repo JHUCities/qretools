@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	bankOf,
@@ -12,7 +14,7 @@ import { type Io, main } from "./cli.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
-const FILE = here("../../fixtures/instruments/households.yaml");
+const FILE = here("../../fixtures/households/instruments/households.yaml");
 
 type Schema = {
 	$defs: Record<
@@ -189,7 +191,7 @@ describe("qretools instrument", () => {
 		const r = await run(
 			"instrument",
 			"check",
-			here("../../fixtures/instruments/remote.yaml"),
+			here("../../fixtures/households/instruments/remote.yaml"),
 		);
 		// In another repository: read at its tag, and here it can't be.
 		expect(r.code).toBe(2);
@@ -210,5 +212,19 @@ describe("qretools instrument", () => {
 		expect(
 			(await run("instrument", "check", FILE, "--bank", "zz=x")).code,
 		).toBe(2);
+	});
+
+	it("reads its own workspace only as `../`, and no other folder beside it", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-uses-"));
+		const file = join(dir, "x.yaml");
+		await writeFile(
+			file,
+			"name: x\nuses:\n  hh: ../households\nflow:\n  - ask: hh.size\n",
+		);
+		const r = await run("instrument", "check", file);
+		expect(r.code).toBe(2);
+		expect(r.err).toBe(
+			"Can't read `hh`: `../households`: an instrument uses its own workspace as `../`, and another workspace as `owner/repo@v1`.\n",
+		);
 	});
 });

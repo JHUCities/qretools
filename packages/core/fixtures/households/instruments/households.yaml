@@ -2,7 +2,7 @@ name: households
 title: Households and housing
 description: A small instrument with every construct of the language, for the library's tests.
 uses:
-  hh: ../households
+  hh: ../
 inputs:
   county:
     responses:
