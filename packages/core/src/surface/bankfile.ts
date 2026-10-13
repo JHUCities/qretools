@@ -2,7 +2,7 @@
  * The workspace's settings file, `workspace.yaml`: what the workspace says about itself,
  * so that whoever reads or imports it reads the same. The DDI agency everything in it
  * is published under (questions, shared files and instruments alike), and the fields it
- * requires of every question. `select_all.yaml` is read here too: moving its reader
+ * requires of every question, or of those in one folder. `select_all.yaml` is read here too: moving its reader
  * beside `SelectAll` would close an import cycle (env.ts reads the usual coding).
  */
 import { isMap, isScalar, parseDocument } from "yaml";
@@ -36,10 +36,17 @@ export interface ParsedSettingsFile {
 	readonly agency?: string;
 	/** The fields the workspace also requires of its questions. */
 	readonly required: readonly RequirableKey[];
+	/**
+	 * The fields a folder of questions also requires (`required_in`), by the folder's path
+	 * in the workspace, in author order. Only ever more than `required`: see `envAt`.
+	 */
+	readonly requiredIn: RequiredIn;
 	readonly findings: readonly Finding[];
 }
 
-const FIELDS: readonly string[] = ["agency", "required"];
+export type RequiredIn = Readonly<Record<string, readonly RequirableKey[]>>;
+
+const FIELDS: readonly string[] = ["agency", "required", "required_in"];
 
 /** `workspace.yaml`, read. Total: an empty or broken file is findings, never a throw. */
 export function parseSettingsFile(source: string): ParsedSettingsFile {
@@ -51,6 +58,7 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 	} catch (e) {
 		return {
 			required: [],
+			requiredIn: {},
 			findings: [
 				...syntax,
 				yamlError(e instanceof Error ? e.message : String(e)),
@@ -60,6 +68,7 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 	if ((doc.contents !== null && !isMap(doc.contents)) || !isPlainObject(js))
 		return {
 			required: [],
+			requiredIn: {},
 			findings: [
 				...syntax,
 				error("not-a-map", "", "This file is fields, such as `agency:`."),
@@ -77,11 +86,22 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 		);
 	const required =
 		"required" in js ? readRequired(js.required) : { value: [], findings: [] };
+	const requiredIn =
+		"required_in" in js
+			? readRequiredIn(js.required_in, required.value)
+			: { value: {}, findings: [] };
 	const agency = readAgency(doc);
 	return {
 		...(agency.value !== undefined && { agency: agency.value }),
 		required: required.value,
-		findings: [...syntax, ...unknown, ...agency.findings, ...required.findings],
+		requiredIn: requiredIn.value,
+		findings: [
+			...syntax,
+			...unknown,
+			...agency.findings,
+			...required.findings,
+			...requiredIn.findings,
+		],
 	};
 }
 
@@ -269,10 +289,16 @@ function readAgency(doc: ReturnType<typeof parseDocument>): {
 const REQUIRABLE_TEXT = REQUIRABLE_KEYS.map((k) => `\`${k}\``).join(", ");
 
 /**
- * `required:`, a list of question fields. Each a field a workspace may require; one already
- * required, or listed twice, is advice; anything else is an error at its place.
+ * A list of question fields, at `at` (`required`, or a folder's under `required_in`).
+ * Each a field a workspace may require; one already required (always, or by `everywhere`,
+ * the workspace's own `required`), or listed twice, is advice; anything else is an error
+ * at its place.
  */
-function readRequired(value: unknown): {
+function readRequired(
+	value: unknown,
+	at = "required",
+	everywhere: readonly RequirableKey[] = [],
+): {
 	value: readonly RequirableKey[];
 	findings: readonly Finding[];
 } {
@@ -281,8 +307,8 @@ function readRequired(value: unknown): {
 			value: [],
 			findings: [
 				hole(
-					"required",
-					"`required` is empty.",
+					at,
+					`\`${at}\` is empty.`,
 					`List fields, one per line as \`- title\`, from ${REQUIRABLE_TEXT}; or remove the line.`,
 				),
 			],
@@ -293,29 +319,35 @@ function readRequired(value: unknown): {
 			findings: [
 				error(
 					"wrong-type",
-					"required",
-					"`required` is a list of fields.",
+					at,
+					`\`${at}\` is a list of fields.`,
 					`Write each on its own line as \`- title\`, from ${REQUIRABLE_TEXT}.`,
 				),
 			],
 		};
 	const keys: RequirableKey[] = [];
 	const findings: Finding[] = [];
+	const ignored = (path: string, message: string, hint: string) =>
+		findings.push({
+			code: "ignored-key",
+			severity: "warning",
+			path,
+			message,
+			hint,
+		});
 	value.forEach((item, i) => {
-		const at = `required.${i}`;
+		const path = `${at}.${i}`;
 		if ((REQUIRED_KEYS as readonly unknown[]).includes(item))
-			findings.push({
-				code: "ignored-key",
-				severity: "warning",
-				path: at,
-				message: `\`${String(item)}\` is always required.`,
-				hint: "Every question has `name`, `text` and `intent`; remove the line.",
-			});
+			ignored(
+				path,
+				`\`${String(item)}\` is always required.`,
+				"Every question has `name`, `text` and `intent`; remove the line.",
+			);
 		else if (!(REQUIRABLE_KEYS as readonly unknown[]).includes(item))
 			findings.push(
 				error(
 					"wrong-type",
-					at,
+					path,
 					typeof item === "string"
 						? `\`${item}\` isn't a field a workspace can require.`
 						: "Each entry is a field's name.",
@@ -323,14 +355,78 @@ function readRequired(value: unknown): {
 				),
 			);
 		else if (keys.includes(item as RequirableKey))
-			findings.push({
-				code: "ignored-key",
-				severity: "warning",
-				path: at,
-				message: `\`${item}\` is listed twice.`,
-				hint: "Remove one.",
-			});
+			ignored(path, `\`${item}\` is listed twice.`, "Remove one.");
+		else if (everywhere.includes(item as RequirableKey))
+			ignored(
+				path,
+				`\`${item}\` is already required of every question.`,
+				"`required` lists it; remove the line.",
+			);
 		else keys.push(item as RequirableKey);
 	});
 	return { value: keys, findings };
+}
+
+/**
+ * A folder of questions, as `required_in` names one: its path in the workspace. Deeper
+ * than one folder reads too (the file tree may go deeper later); whether a folder is
+ * there is the workspace's to say (`unknownFolders`), never this file's own parse.
+ */
+const QUESTION_FOLDER = /^questions(\/[^/\s]+)+$/;
+
+const REQUIRED_IN_EXAMPLE =
+	"Write a folder of questions and the fields its questions must have: `questions/health:` and, under it, `- universe`.";
+
+/**
+ * `required_in:`, a map from a folder of questions to the fields its questions must
+ * also have. A key that isn't a folder's path is an error at the key and counts for
+ * nothing; each list is read as `required` is.
+ */
+function readRequiredIn(
+	value: unknown,
+	everywhere: readonly RequirableKey[],
+): { value: RequiredIn; findings: readonly Finding[] } {
+	if (value === null)
+		return {
+			value: {},
+			findings: [
+				hole(
+					"required_in",
+					"`required_in` is empty.",
+					`${REQUIRED_IN_EXAMPLE} Or remove the line.`,
+				),
+			],
+		};
+	if (!isPlainObject(value))
+		return {
+			value: {},
+			findings: [
+				error(
+					"wrong-type",
+					"required_in",
+					"`required_in` is folders, each with a list of fields.",
+					REQUIRED_IN_EXAMPLE,
+				),
+			],
+		};
+	const folders: Record<string, readonly RequirableKey[]> = {};
+	const findings: Finding[] = [];
+	for (const [folder, fields] of Object.entries(value)) {
+		const at = `required_in.${folder}`;
+		if (!QUESTION_FOLDER.test(folder)) {
+			findings.push(
+				error(
+					"wrong-type",
+					at,
+					`\`${folder}\` isn't a folder of questions.`,
+					"Write the folder's path in the workspace, with no `/` at the end, such as `questions/health`.",
+				),
+			);
+			continue;
+		}
+		const read = readRequired(fields, at, everywhere);
+		folders[folder] = read.value;
+		findings.push(...read.findings);
+	}
+	return { value: folders, findings };
 }

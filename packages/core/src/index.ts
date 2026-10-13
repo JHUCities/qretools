@@ -137,6 +137,7 @@ export {
 	type Shape,
 	schemeEnv,
 	schemePath,
+	unknownFolders,
 } from "./schemes.ts";
 export {
 	DEFAULT_SELECT_ALL,
@@ -166,6 +167,7 @@ export {
 export {
 	EMPTY_ENV,
 	type Env,
+	envAt,
 	FIELD_OF,
 	inScope,
 	type LabelledEntry,

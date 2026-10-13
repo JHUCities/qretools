@@ -16,3 +16,11 @@ agency:
 # require a title:
 #required:
 #  - title
+
+# Fields the questions in one folder must also have, by the folder's path. It
+# adds to the fields above and never removes one, so a topic can ask for more.
+# Remove the # at the start of these three lines to require a universe of the
+# questions in questions/example:
+#required_in:
+#  questions/example:
+#    - universe

@@ -17,6 +17,7 @@ import { ScrollableRegion } from "@primer/react/experimental";
 import {
 	DEFAULT_SELECT_ALL,
 	type Evaluation,
+	envAt,
 	evaluate,
 	evaluateScheme,
 	exportRefusal,
@@ -30,6 +31,7 @@ import {
 	othersOf,
 	placeOf,
 	type Range,
+	relIn,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 	type SchemeEvaluation,
@@ -40,6 +42,7 @@ import {
 	status,
 	type Target,
 	UNNAMED,
+	unknownFolders,
 	usedBy,
 } from "@qretools/core";
 import {
@@ -260,7 +263,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						text={q.source}
 						diagnostics={diagnostics}
 						marks={ev.marks}
-						schema={evaluations.schema(env)}
+						schema={evaluations.schema(evaluations.at(q, env))}
 						question
 						livelits={ev.livelits}
 						label={`Question ${ev.draft.name ?? UNNAMED}: source (YAML)`}
@@ -559,9 +562,28 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const eStale = useStale(e);
 	const ev = evaluations.scheme(e, env);
+	// The workspace's details are also told of the folders they name that hold no saved
+	// question: only the workspace knows its folders (`unknownFolders`).
+	const own = useMemo(
+		() =>
+			e.kind === "workspace"
+				? [
+						...ev.findings,
+						...unknownFolders(
+							env.requiredIn,
+							Object.values(questions).flatMap((q) =>
+								q.base === undefined || q.bank !== e.bank
+									? []
+									: [relIn(q.bank, q.base.path)],
+							),
+						),
+					]
+				: ev.findings,
+		[e.kind, e.bank, ev.findings, env.requiredIn, questions],
+	);
 	const { findings, related } = useBankFindings(
 		e.id,
-		ev.findings,
+		own,
 		ev.symbols,
 		ev.ranges,
 		index,
@@ -1062,17 +1084,24 @@ export function ForeignView({
 	const file = screen.file;
 	// One value per path, so the evaluations below keep theirs between renders.
 	const banks = useModel((m) => m.banks);
-	const at = useMemo(
-		() => placeOf(screen.path, banks)?.at,
+	const place = useMemo(
+		() => placeOf(screen.path, banks),
 		[screen.path, banks],
 	);
+	const at = place?.at;
 	const kind = at?.kind;
+	// A question of theirs reads as its folder has it on their branch (`envAt`), as their own does.
+	const rel = place?.rel;
+	const placed = useMemo(
+		() => (kind === "question" ? envAt(env, rel) : env),
+		[kind, env, rel],
+	);
 	const ev = useMemo(
 		() =>
 			file === undefined || kind !== "question"
 				? undefined
-				: evaluate(file.text, env),
-		[file, kind, env],
+				: evaluate(file.text, placed),
+		[file, kind, placed],
 	);
 	const scheme = useMemo(
 		() =>
@@ -1137,7 +1166,7 @@ export function ForeignView({
 							marks={marks}
 							schema={
 								kind === undefined || kind === "question"
-									? evaluations.schema(env)
+									? evaluations.schema(placed)
 									: SCHEME_SCHEMAS[SHAPE[kind]]
 							}
 							readOnly

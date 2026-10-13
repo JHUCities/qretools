@@ -5,7 +5,7 @@
  */
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ok, workspaceOf } from "@qretools/core";
+import { type Evaluation, ok, workspaceOf } from "@qretools/core";
 import { instrumentCompletion } from "@qretools/core/editor";
 import { readBank, readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -109,6 +109,58 @@ const typed = (m: Model, f: Question | InstrumentEntry, text: string): Model =>
 					workspace: { ...m.local.workspace, [f.id]: { ...f, source: text } },
 				},
 			};
+
+describe("a question read as its folder has it", () => {
+	const q = (name: string) =>
+		`name: ${name}\ntext: Is it so?\nintent: To see why.\nopen: {}\n`;
+	const m = () =>
+		loaded({
+			"workspace.yaml":
+				"agency: org.example\nrequired_in:\n  questions/nhd: [universe]\n",
+			"questions/nhd/a.yaml": q("a"),
+			"questions/nhd/a2.yaml": q("a2"),
+			"questions/other/b.yaml": q("b"),
+		});
+	const holes = (ev: Evaluation) =>
+		ev.findings.filter((f) => f.severity === "hole").map((f) => f.path);
+
+	it("keeps an unchanged question's evaluation, and one environment per folder", () => {
+		const model = m();
+		const evaluations = createEvaluations();
+		const env = evaluations.env(model, "");
+		const a = questionAt(model, "questions/nhd/a.yaml");
+		const b = questionAt(model, "questions/other/b.yaml");
+		const first = evaluations.get(a, env);
+		expect(holes(first)).toEqual(["universe"]);
+		expect(holes(evaluations.get(b, env))).toEqual([]);
+		// The other folder's question between them didn't cost this one its evaluation.
+		expect(evaluations.get(a, env)).toBe(first);
+		expect(
+			evaluations.at(questionAt(model, "questions/nhd/a2.yaml"), env),
+		).toBe(evaluations.at(a, env));
+		// A folder that asks nothing more is read against the bank's own.
+		expect(evaluations.at(b, env)).toBe(env);
+	});
+
+	it("reads a question again when it is saved from a draft or moved to another folder", () => {
+		const model = m();
+		const evaluations = createEvaluations();
+		const env = evaluations.env(model, "");
+		const b = questionAt(model, "questions/other/b.yaml");
+		if (b.base === undefined) throw new Error("not saved");
+		const { base: _, ...draft } = b;
+		const asDraft = evaluations.get(draft, env);
+		expect(holes(asDraft)).toEqual([]);
+		// Saved into the folder that asks for a universe: the same text, read again.
+		const saved = {
+			...b,
+			base: { ...b.base, path: "questions/nhd/b.yaml" },
+		};
+		expect(holes(evaluations.get(saved, env))).toEqual(["universe"]);
+		// And moved back out of it.
+		expect(holes(evaluations.get(b, env))).toEqual([]);
+	});
+});
 
 describe("an instrument read live", () => {
 	it("reads as the core reads the same files, whatever has come of a bank in another repository", () => {

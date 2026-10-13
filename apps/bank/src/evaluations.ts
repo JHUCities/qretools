@@ -19,6 +19,7 @@ import {
 	bankFrom,
 	type Env,
 	type Evaluation,
+	envAt,
 	evaluate,
 	evaluateScheme,
 	type InstrumentIn,
@@ -72,6 +73,15 @@ export interface Evaluations {
 		model: WorkspaceSlices,
 		e: InstrumentEntry,
 	): Readonly<Record<string, BankScope>>;
+	/**
+	 * The environment a question is read against: its bank's `env`, with what its folder
+	 * also requires (`envAt`). One reference per environment and folder, so it keys a cache.
+	 */
+	at(q: Question, env: Env): Env;
+	/**
+	 * A question's evaluation, given its bank's environment: read against it as the
+	 * question's folder has it (`at`), here and nowhere else, so every pane agrees.
+	 */
 	get(q: Question, env: Env): Evaluation;
 	scheme(e: SchemeEntry, env: Env): SchemeEvaluation;
 	schema(env: Env): Record<string, unknown>;
@@ -110,6 +120,8 @@ export function createEvaluations(): Evaluations {
 		string,
 		{ entries: readonly SchemeEntry[]; known: boolean; env: Env }
 	>();
+	// A bank's environment as each folder has it, kept for as long as the bank's is.
+	const placed = new WeakMap<Env, Map<string, Env>>();
 	// A bank's editor schema, kept for as long as its environment is.
 	const schemas = new WeakMap<Env, Record<string, unknown>>();
 	const scopes = new Map<
@@ -155,7 +167,23 @@ export function createEvaluations(): Evaluations {
 			envs.set(bank, { entries, known, env });
 			return env;
 		},
-		get(q, env) {
+		at(q, base) {
+			// A draft has no folder yet: it is read against the bank's own.
+			if (q.base === undefined) return base;
+			const path = relIn(q.bank, q.base.path);
+			const folder = path.slice(0, path.lastIndexOf("/") + 1);
+			const kept = placed.get(base) ?? new Map<string, Env>();
+			placed.set(base, kept);
+			const hit = kept.get(folder);
+			if (hit !== undefined) return hit;
+			const env = envAt(base, path);
+			kept.set(folder, env);
+			return env;
+		},
+		get(q, base) {
+			// Keyed on the folder's environment: a question saved or moved into a folder
+			// that requires more is read again, one left where it was is not.
+			const env = self.at(q, base);
 			const hit = cache.get(q.id);
 			if (hit && hit.source === q.source && hit.env === env) return hit.ev;
 			const ev = evaluate(q.source, env);

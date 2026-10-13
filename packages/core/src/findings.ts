@@ -61,6 +61,8 @@ export type LintCode =
 	| "duplicate-unit"
 	| "similar-text"
 	| "unknown-variant"
+	/** Bank-level: `required_in` names a folder no saved question is in. */
+	| "unknown-folder"
 	/** Bank-level: another question has the same name, so the same DDI identity. */
 	| "duplicate-name";
 

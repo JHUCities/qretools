@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import selectAllTemplate from "../../templates/settings/select_all.yaml?raw";
 import workspaceTemplate from "../../templates/settings/workspace.yaml?raw";
+import { bankOf } from "../evaluate.ts";
 import { schemeEnv } from "../schemes.ts";
 import {
 	DEFAULT_SELECT_ALL,
@@ -13,7 +14,7 @@ import {
 	parseSelectAllFile,
 	parseSettingsFile,
 } from "./bankfile.ts";
-import { EMPTY_ENV } from "./env.ts";
+import { EMPTY_ENV, envAt } from "./env.ts";
 import { parseSurface } from "./parse.ts";
 
 const found = (source: string) =>
@@ -24,6 +25,7 @@ describe("the workspace's settings file", () => {
 		expect(parseSettingsFile("agency: edu.example.dept-1\n")).toEqual({
 			agency: "edu.example.dept-1",
 			required: [],
+			requiredIn: {},
 			findings: [],
 		});
 	});
@@ -144,6 +146,134 @@ describe("the workspace's settings file", () => {
 	});
 });
 
+describe("the fields a folder's questions must also have", () => {
+	const head = "agency: org.example\nrequired:\n  - title\nrequired_in:\n";
+	const settings = `${head}  questions/nhd:\n    - universe\n  questions/example: [concept]\n`;
+	const env = schemeEnv([
+		{ kind: "workspace", name: "workspace", text: settings },
+	]);
+
+	it("reads them by folder path, in the order written", () => {
+		const read = parseSettingsFile(settings);
+		expect(read.findings).toEqual([]);
+		expect(Object.entries(read.requiredIn)).toEqual([
+			["questions/nhd", ["universe"]],
+			["questions/example", ["concept"]],
+		]);
+	});
+
+	it("says what's wrong at its place: a key that's no folder of questions, a list that isn't one, a field asked twice", () => {
+		expect(found("agency: org.example\nrequired_in:\n")).toEqual([
+			["hole", "hole", "required_in"],
+		]);
+		expect(found("agency: org.example\nrequired_in: [title]\n")).toEqual([
+			["error", "wrong-type", "required_in"],
+		]);
+		const source = `${head}  nhd: [note]\n  questions/nhd/: [note]\n  scales/x: [note]\n  questions/a: universe\n  questions/b:\n  questions/c: [title, note, note, colour, name]\n`;
+		expect(found(source)).toEqual([
+			["error", "wrong-type", "required_in.nhd"],
+			["error", "wrong-type", "required_in.questions/nhd/"],
+			["error", "wrong-type", "required_in.scales/x"],
+			["error", "wrong-type", "required_in.questions/a"],
+			["hole", "hole", "required_in.questions/b"],
+			// Already required of every question: advice, as a field listed twice is.
+			["warning", "ignored-key", "required_in.questions/c.0"],
+			["warning", "ignored-key", "required_in.questions/c.2"],
+			["error", "wrong-type", "required_in.questions/c.3"],
+			["warning", "ignored-key", "required_in.questions/c.4"],
+		]);
+		// A key that's no folder counts for nothing; a folder keeps what read.
+		expect(parseSettingsFile(source).requiredIn).toEqual({
+			"questions/a": [],
+			"questions/b": [],
+			"questions/c": ["note"],
+		});
+	});
+
+	it("adds to what every question must have, by whole folder names, and never for a draft", () => {
+		expect(envAt(env, "questions/nhd/sat.yaml").required).toEqual([
+			"title",
+			"universe",
+		]);
+		expect(envAt(env, "questions/example/q.yaml").required).toEqual([
+			"title",
+			"concept",
+		]);
+		// `questions/nh` isn't above `questions/nhd`, nor `questions/nhd` above `questions/nhdx`.
+		expect(envAt(env, "questions/nhdx/q.yaml")).toBe(env);
+		expect(envAt(env, "questions/other/q.yaml")).toBe(env);
+		// Not saved yet: no folder, so only what every question must have.
+		expect(envAt(env)).toBe(env);
+		// A folder asking only for what is asked everywhere adds nothing.
+		const same = {
+			...env,
+			requiredIn: { "questions/nhd": ["title"] as const },
+		};
+		expect(envAt(same, "questions/nhd/q.yaml")).toBe(same);
+	});
+
+	it("keeps the rest of the environment as it is, the usual select-all coding by identity", () => {
+		const at = envAt(env, "questions/nhd/sat.yaml");
+		expect(at).not.toBe(env);
+		expect(at.selectAll).toBe(DEFAULT_SELECT_ALL);
+		expect({ ...at, required: env.required }).toEqual(env);
+	});
+
+	const q = (name: string) =>
+		`name: ${name}\ntitle: T\ntext: Is it so?\nintent: To see why.\nopen: {}\n`;
+
+	it("is read for each question of a workspace by where its file is", () => {
+		const bank = bankOf({
+			"workspace.yaml": settings,
+			"questions/nhd/a.yaml": q("a"),
+			"questions/example/b.yaml": q("b"),
+			"questions/other/c.yaml": q("c"),
+		});
+		const holes = (path: string) =>
+			(bank.findings[path] ?? [])
+				.filter((f) => f.severity === "hole")
+				.map((f) => f.path);
+		expect(holes("questions/nhd/a.yaml")).toEqual(["universe"]);
+		expect(holes("questions/example/b.yaml")).toEqual(["concept"]);
+		expect(holes("questions/other/c.yaml")).toEqual([]);
+		expect(bank.findings["workspace.yaml"]).toEqual([]);
+	});
+
+	it("warns, on the settings, of a folder it names that holds no question", () => {
+		const bank = bankOf({
+			"workspace.yaml": `${head}  questions/nhd: [universe]\n  questions/nh: [note]\n  questions/nhd/sub: [note]\n`,
+			"questions/nhd/a.yaml": `${q("a")}universe: Everyone asked\n`,
+			"scales/s.yaml": "labels:\n  1: Yes\n  2: No\n",
+		});
+		expect(
+			bank.findings["workspace.yaml"]?.map((f) => [
+				f.severity,
+				f.code,
+				f.path,
+				f.hint,
+			]),
+		).toEqual([
+			[
+				"warning",
+				"unknown-folder",
+				"required_in.questions/nh",
+				"The folders with saved questions are `questions/nhd`. Until this is one of them, it requires nothing.",
+			],
+			[
+				"warning",
+				"unknown-folder",
+				"required_in.questions/nhd/sub",
+				"The folders with saved questions are `questions/nhd`. Until this is one of them, it requires nothing.",
+			],
+		]);
+		expect(
+			bank.findings["questions/nhd/a.yaml"]?.filter(
+				(f) => f.severity === "hole",
+			),
+		).toEqual([]);
+	});
+});
+
 /*
  * The template repository (JHUCities/qretools-template) carries these comments too, in
  * its workspace.yaml, filled in with org.example: change both.
@@ -166,6 +296,15 @@ describe("the settings template a new workspace starts from", () => {
 		);
 		expect(on).not.toBe(workspaceTemplate);
 		expect(parseSettingsFile(on).required).toEqual(["title"]);
+		const inFolder = workspaceTemplate.replace(
+			"#required_in:\n#  questions/example:\n#    - universe",
+			"required_in:\n  questions/example:\n    - universe",
+		);
+		expect(inFolder).not.toBe(workspaceTemplate);
+		expect(parseSettingsFile(inFolder).requiredIn).toEqual({
+			"questions/example": ["universe"],
+		});
+		expect(holes(inFolder)).toEqual([["hole", "agency"]]);
 	});
 });
 

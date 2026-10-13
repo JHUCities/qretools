@@ -138,6 +138,31 @@ describe("qretools check", () => {
 		expect(r.code).toBe(1);
 	});
 
+	it("asks more of the questions in a folder `required_in` names, and of no others", async () => {
+		const ws = await mkdtemp(join(tmpdir(), "qretools-in-"));
+		const q = (name: string) =>
+			`name: ${name}\ntext: Is it so?\nintent: To see why.\nopen: {}\n`;
+		await mkdir(join(ws, "questions/nhd"), { recursive: true });
+		await mkdir(join(ws, "questions/other"), { recursive: true });
+		await writeFile(
+			join(ws, "workspace.yaml"),
+			"agency: org.example\nrequired_in:\n  questions/nhd: [universe]\n  questions/gone: [note]\n",
+		);
+		await writeFile(join(ws, "questions/nhd/a.yaml"), q("a"));
+		await writeFile(join(ws, "questions/other/b.yaml"), q("b"));
+		const r = await run("check", ws);
+		expect(
+			r.out
+				.trimEnd()
+				.split("\n")
+				.filter((l) => /\[(to fill in|unknown-folder)\]$/.test(l)),
+		).toEqual([
+			`${join(ws, "questions/nhd/a.yaml")}:5:1: error: \`universe\` is required in this bank. [to fill in]`,
+			`${join(ws, "workspace.yaml")}:4:3: warning: No questions are saved in \`questions/gone\`. [unknown-folder]`,
+		]);
+		expect(r.code).toBe(1);
+	});
+
 	it("says a folder of nothing it reads holds no bank, whatever YAML is there", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "qretools-none-"));
 		await writeFile(join(dir, "stray.yaml"), "x: 1\n");

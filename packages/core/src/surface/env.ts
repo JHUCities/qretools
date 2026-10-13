@@ -50,6 +50,11 @@ export interface Env {
 	readonly agency?: string;
 	/** The fields the bank also requires of its questions (`workspace.yaml`'s `required`). */
 	readonly required: readonly RequirableKey[];
+	/**
+	 * The fields a folder's questions must also have (`workspace.yaml`'s `required_in`), by
+	 * the folder's path. Never read for a question directly: `envAt` gives its `required`.
+	 */
+	readonly requiredIn: Readonly<Record<string, readonly RequirableKey[]>>;
 	/** How the bank stores a select-all option's answer (its `select_all.yaml`). */
 	readonly selectAll: SelectAll;
 }
@@ -117,8 +122,30 @@ export const EMPTY_ENV: Env = {
 	instructions: {},
 	missing: [],
 	required: [],
+	requiredIn: {},
 	selectAll: DEFAULT_SELECT_ALL,
 };
+
+/**
+ * The environment the question at `path` (in the workspace) is read against: `env`, with
+ * the fields its folder also requires added to `required`. A folder only adds, so a topic
+ * can be stricter, never looser. `env` itself, by reference, when there is no path (a
+ * draft not saved yet) or its folder adds nothing: callers memoise on the reference, and
+ * `selectAll` is compared by identity, so the rest is never rebuilt.
+ */
+export function envAt(env: Env, path?: string): Env {
+	if (path === undefined) return env;
+	// Whole segments: `questions/nh` isn't above `questions/nhd/x.yaml`. Questions sit one
+	// folder deep today, so at most one key matches; every folder above would, if deeper.
+	const added = Object.entries(env.requiredIn)
+		.flatMap(([folder, fields]) =>
+			path.startsWith(`${folder}/`) ? fields : [],
+		)
+		.filter((k, i, all) => !env.required.includes(k) && all.indexOf(k) === i);
+	return added.length === 0
+		? env
+		: { ...env, required: [...env.required, ...added] };
+}
 
 export interface ParsedTextEntry {
 	readonly entry?: TextEntry;
