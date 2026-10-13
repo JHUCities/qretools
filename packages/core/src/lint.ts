@@ -12,6 +12,12 @@ import { fixLabel, SCHEME_LABELS, SCHEME_NAME } from "./copy.ts";
 import type { Finding, Fix, LintCode } from "./findings.ts";
 import { fold, labelsKey, unitKey } from "./fold.ts";
 import {
+	DEFAULT_SELECT_ALL,
+	type SelectAll,
+	selectAllCodes,
+	selectAllText,
+} from "./selectAll.ts";
+import {
 	type Code,
 	type Draft,
 	type Named,
@@ -379,6 +385,29 @@ export const missingCollisions = (
 			),
 		);
 };
+
+/**
+ * The missing-value codes that are also what a select-all option is stored as, while
+ * the usual coding is in effect (no `select_all.yaml`, or one that doesn't read yet): the
+ * data couldn't tell them apart. A written coding says this in its own file.
+ */
+export const usualCodingCollisions = (
+	missing: readonly Code[],
+	selectAll: SelectAll,
+): readonly Finding[] =>
+	selectAll !== DEFAULT_SELECT_ALL
+		? []
+		: missing
+				.filter((c) => selectAllCodes(selectAll).some((s) => s.code === c.code))
+				.map((c) =>
+					advise(
+						"missing-code",
+						"warning",
+						`labels.${c.code}`,
+						`Code \`${c.code}\` is also what a select-all-that-apply option is stored as (${selectAllText(selectAll)}).`,
+						"Pick another missing-value code, or write the two values in `select_all.yaml`.",
+					),
+				);
 
 const RULES: readonly Rule[] = [
 	duplicateLabels,

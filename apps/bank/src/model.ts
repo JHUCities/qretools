@@ -33,6 +33,7 @@ import numberTemplate from "@qretools/core/templates/number.yaml?raw";
 import scaleTemplate from "@qretools/core/templates/scale.yaml?raw";
 import selectManyTemplate from "@qretools/core/templates/select-many.yaml?raw";
 import bankTemplate from "@qretools/core/templates/settings/bank.yaml?raw";
+import selectAllTemplate from "@qretools/core/templates/settings/select_all.yaml?raw";
 import workspaceTemplate from "@qretools/core/templates/settings/workspace.yaml?raw";
 import type {
 	Access,
@@ -648,6 +649,8 @@ export const SCHEME_TEMPLATES: Readonly<Record<SchemeKind, string>> = {
 	universe: "text:\n",
 	instruction: "text:\n",
 	missing: 'labels:\n  "-8":\n',
+	// The usual coding written out, explained: a file that reads as it starts.
+	select_all: selectAllTemplate,
 	// Its settings, explained as the template repository explains them.
 	bank: bankTemplate,
 };

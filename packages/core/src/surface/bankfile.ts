@@ -33,11 +33,6 @@ export interface ParsedBankFile {
 	readonly agency?: string;
 	/** The fields the bank also requires of its questions; empty for a workspace. */
 	readonly required: readonly RequirableKey[];
-	/**
-	 * How the bank stores a select-all option's answer: what `select_all` says once it
-	 * reads whole, else the usual coding (`DEFAULT_SELECT_ALL`, by reference), never half.
-	 */
-	readonly selectAll: SelectAll;
 	readonly findings: readonly Finding[];
 }
 
@@ -53,7 +48,7 @@ export const parseBankFile = (source: string): ParsedBankFile =>
 
 /** The fields each kind of settings file has. */
 const FIELDS: Readonly<Record<"bank" | "workspace", readonly string[]>> = {
-	bank: ["agency", "required", "select_all"],
+	bank: ["agency", "required"],
 	workspace: ["agency"],
 };
 
@@ -73,7 +68,6 @@ export function parseSettingsFile(
 	} catch (e) {
 		return {
 			required: [],
-			selectAll: DEFAULT_SELECT_ALL,
 			findings: [
 				...syntax,
 				yamlError(e instanceof Error ? e.message : String(e)),
@@ -83,7 +77,6 @@ export function parseSettingsFile(
 	if ((doc.contents !== null && !isMap(doc.contents)) || !isPlainObject(js))
 		return {
 			required: [],
-			selectAll: DEFAULT_SELECT_ALL,
 			findings: [
 				...syntax,
 				error("not-a-map", "", "This file is fields, such as `agency:`."),
@@ -106,22 +99,11 @@ export function parseSettingsFile(
 		owner === "bank" && "required" in js
 			? readRequired(js.required)
 			: { value: [], findings: [] };
-	const selectAll =
-		owner === "bank" && "select_all" in js
-			? readSelectAll(doc.get("select_all", true))
-			: { value: DEFAULT_SELECT_ALL, findings: [] };
 	const agency = readAgency(doc, js, owner);
 	return {
 		...(agency.value !== undefined && { agency: agency.value }),
 		required: required.value,
-		selectAll: selectAll.value,
-		findings: [
-			...syntax,
-			...unknown,
-			...agency.findings,
-			...required.findings,
-			...selectAll.findings,
-		],
+		findings: [...syntax, ...unknown, ...agency.findings, ...required.findings],
 	};
 }
 
@@ -131,33 +113,38 @@ const SELECT_ALL_EXAMPLE =
 const UNTIL_IT_READS = `Until it reads, the usual coding is used: ${selectAllText(DEFAULT_SELECT_ALL)}.`;
 
 /**
- * `select_all:`, the two values a select-all option's variable holds: `chosen` and
+ * `select_all.yaml`, the two values a select-all option's variable holds: `chosen` and
  * `not_chosen`, each one `code: label`, the code kept as the bank spelled it. Read from
  * the YAML as written. Anything short of both, whole and different, is a finding at its
- * place and the usual coding stays in effect.
+ * place and the usual coding stays in effect (`DEFAULT_SELECT_ALL`, by reference), never
+ * half. Total: an empty or broken file is findings, never a throw.
  */
-function readSelectAll(node: unknown): {
-	value: SelectAll;
-	findings: readonly Finding[];
+export function parseSelectAllFile(source: string): {
+	readonly value: SelectAll;
+	readonly findings: readonly Finding[];
 } {
+	const doc = parseDocument(source, { prettyErrors: false });
+	const syntax = yamlErrors(doc.errors, source.length);
+	const node: unknown = doc.contents;
 	const usual = (...findings: Finding[]) => ({
 		value: DEFAULT_SELECT_ALL,
-		findings: findings.map((f) => ({
+		findings: [...syntax, ...findings].map((f) => ({
 			...f,
 			hint:
 				f.hint === undefined ? UNTIL_IT_READS : `${f.hint} ${UNTIL_IT_READS}`,
 		})),
 	});
-	if (isScalar(node) && (node.value === null || node.value === ""))
-		return usual(
-			hole("select_all", "`select_all` is empty.", SELECT_ALL_EXAMPLE),
-		);
+	if (
+		node === null ||
+		(isScalar(node) && (node.value === null || node.value === ""))
+	)
+		return usual(hole("", "This file is empty.", SELECT_ALL_EXAMPLE));
 	if (!isMap(node) || node.flow)
 		return usual(
 			error(
-				"wrong-type",
-				"select_all",
-				"`select_all` has two parts, `chosen` and `not_chosen`, each on its own line.",
+				"not-a-map",
+				"",
+				"This file has two parts, `chosen` and `not_chosen`, each on its own line.",
 				SELECT_ALL_EXAMPLE,
 			),
 		);
@@ -169,26 +156,19 @@ function readSelectAll(node: unknown): {
 		.map((k) =>
 			error(
 				"unknown-key",
-				`select_all.${k}`,
-				`\`${k}\` isn't a part of \`select_all\`.`,
-				"Its parts are `chosen` and `not_chosen`.",
+				k,
+				`\`${k}\` isn't a field here.`,
+				"The fields are `chosen` and `not_chosen`.",
 			),
 		);
 	const part = (key: "chosen" | "not_chosen"): Code | undefined => {
-		const at = `select_all.${key}`;
 		const value = node.get(key, true);
 		if (value === undefined) {
-			findings.push(
-				hole(
-					"select_all",
-					`\`select_all\` has no \`${key}\`.`,
-					SELECT_ALL_EXAMPLE,
-				),
-			);
+			findings.push(hole(key, `\`${key}\` is missing.`, SELECT_ALL_EXAMPLE));
 			return undefined;
 		}
 		if (isScalar(value) && (value.value === null || value.value === "")) {
-			findings.push(hole(at, `\`${key}\` is empty.`, SELECT_ALL_EXAMPLE));
+			findings.push(hole(key, `\`${key}\` is empty.`, SELECT_ALL_EXAMPLE));
 			return undefined;
 		}
 		const [pair] = isMap(value) ? value.items : [];
@@ -206,7 +186,7 @@ function readSelectAll(node: unknown): {
 			findings.push(
 				error(
 					"wrong-type",
-					at,
+					key,
 					`\`${key}\` is one value and its label.`,
 					SELECT_ALL_EXAMPLE,
 				),
@@ -231,12 +211,17 @@ function readSelectAll(node: unknown): {
 		findings.push(
 			error(
 				"duplicate-code",
-				"select_all.not_chosen",
+				"not_chosen",
 				`\`chosen\` and \`not_chosen\` are both \`${chosen.code}\`.`,
 				"Give each its own value, or the data can't tell them apart.",
 			),
 		);
-	if (findings.length > 0 || chosen === undefined || notChosen === undefined)
+	if (
+		syntax.length > 0 ||
+		findings.length > 0 ||
+		chosen === undefined ||
+		notChosen === undefined
+	)
 		return usual(...findings);
 	return {
 		value: {

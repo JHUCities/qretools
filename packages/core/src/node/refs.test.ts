@@ -180,23 +180,24 @@ describe("the codes a condition compares a bank answer with", () => {
 		// The usual coding is written nowhere: there is nowhere to follow it to.
 		expect(codes('b.news_1 = "1"')).toEqual([]);
 		const recoded = bankOf({
-			"bank.yaml":
-				'agency: org.example\nselect_all:\n  chosen: { "1": Selected }\n  not_chosen: { "2": Not selected }\n',
+			"bank.yaml": "agency: org.example\n",
+			"select_all.yaml":
+				'chosen: { "1": Selected }\nnot_chosen: { "2": Not selected }\n',
 			"questions/t/news.yaml":
 				'name: news\ntext: Which?\nintent: Which.\nselect: many\nresponses:\n  "1": Paper\n  "2": Radio\n',
 		});
 		expect(codes('b.news_1 = "1" or b.news_1 = "2"', recoded)).toEqual([
 			{
 				written: '"1"',
-				path: "bank.yaml",
-				at: "select_all.chosen.1",
+				path: "select_all.yaml",
+				at: "chosen.1",
 				about:
 					"`Selected`, as this bank stores a select-all-that-apply option.",
 			},
 			{
 				written: '"2"',
-				path: "bank.yaml",
-				at: "select_all.not_chosen.2",
+				path: "select_all.yaml",
+				at: "not_chosen.2",
 				about:
 					"`Not selected`, as this bank stores a select-all-that-apply option.",
 			},

@@ -13,12 +13,3 @@ agency:
 # that lacks it. Remove the # at the start of these two lines to require a title:
 #required:
 #  - title
-
-# How a select-all-that-apply answer is stored. Each option of such a question
-# is its own variable in the data, holding one of two values: one when the
-# respondent chose the option, one when they didn't. Left out, as here, they
-# are 1 for Yes and 0 for No. To store them another way, remove the # at the
-# start of these three lines and write your two values, each with its label:
-#select_all:
-#  chosen: { "1": Yes }
-#  not_chosen: { "0": No }

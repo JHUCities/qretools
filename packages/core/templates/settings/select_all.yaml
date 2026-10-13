@@ -1,0 +1,7 @@
+# How a select-all-that-apply answer is stored. Each option of such a question
+# is its own variable in the data, holding one of two values: one when the
+# respondent chose the option, one when they didn't. Without this file they
+# are 1 for Yes and 0 for No. To store them another way, write your two
+# values here, each with its label.
+chosen: { "1": Yes }
+not_chosen: { "0": No }

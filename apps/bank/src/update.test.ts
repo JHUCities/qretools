@@ -1,4 +1,5 @@
 import {
+	DEFAULT_SELECT_ALL,
 	definedVariables,
 	EMPTY_ENV,
 	evaluate,
@@ -447,16 +448,19 @@ describe("a quick fix", () => {
 		).toBe(inline);
 	});
 
-	it("reads how a bank stores select-all answers from its details, as they are typed", () => {
+	it("reads how a bank stores select-all answers from its own file, as it is typed", () => {
+		// Before the file exists, the usual coding, by reference.
+		expect(envIn(fresh(), "").selectAll).toBe(DEFAULT_SELECT_ALL);
 		const m = update(fresh(), {
 			kind: "schemeCreateOpened",
-			scheme: "bank",
+			scheme: "select_all",
 			bank: "",
 		})[0];
+		// It starts as the usual coding, written out.
 		expect(envIn(m, "").selectAll.chosen).toEqual({ code: "1", label: "Yes" });
 		const typed = update(m, {
 			kind: "edited",
-			text: 'agency: org.example\nselect_all:\n  chosen: { "1": Selected }\n  not_chosen: { "2": Not selected }\n',
+			text: 'chosen: { "1": Selected }\nnot_chosen: { "2": Not selected }\n',
 		})[0];
 		expect(envIn(typed, "").selectAll).toEqual({
 			chosen: { code: "1", label: "Selected" },
@@ -466,7 +470,7 @@ describe("a quick fix", () => {
 		// Half-written, the usual coding stays in effect.
 		const half = update(typed, {
 			kind: "edited",
-			text: 'agency: org.example\nselect_all:\n  chosen: { "1": Selected }\n',
+			text: 'chosen: { "1": Selected }\n',
 		})[0];
 		expect(envIn(half, "").selectAll.notChosen).toEqual({
 			code: "0",

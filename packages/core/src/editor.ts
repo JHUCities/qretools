@@ -58,6 +58,7 @@ export {
 	labelsJsonSchema,
 	nameFrom,
 	questionJsonSchema,
+	selectAllFileJsonSchema,
 	textEntryJsonSchema,
 	workspaceFileJsonSchema,
 } from "./surface/schema.ts";

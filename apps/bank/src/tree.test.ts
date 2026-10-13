@@ -205,6 +205,7 @@ describe("schemeSections", () => {
 			["universe", []],
 			["instruction", []],
 			["missing", [["missing", undefined]]],
+			["select_all", []],
 			["bank", []],
 		]);
 	});
