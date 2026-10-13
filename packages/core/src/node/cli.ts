@@ -1,12 +1,12 @@
 /**
- * The `qretools` command: `check` a workspace directory's findings (its banks', its
+ * The `qretools` command: `check` a workspace directory's findings (its bank's, its
  * instruments' and its own file's), as compilers report them, or `export` a bank's DDI. `main` takes its output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
-import { type Address, addressOf } from "../address.ts";
+import { type Address, addressOf, HERE, notHere } from "../address.ts";
 import {
 	collisions,
 	type DdiDocument,
@@ -24,12 +24,7 @@ import {
 } from "../findings.ts";
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
-import {
-	banksIn,
-	type RemoteBank,
-	remotesOf,
-	workspaceOf,
-} from "../workspace.ts";
+import { type RemoteBank, remotesOf, workspaceOf } from "../workspace.ts";
 import { WORKSPACE } from "../workspacefile.ts";
 import { readBank, readWorkspace } from "./index.ts";
 
@@ -51,10 +46,9 @@ const USAGE = `Usage:
   qretools instrument export <file> --agency <agency> [--bank alias=dir]... [-o file]
 
 dir is the bank's or workspace's folder (default: the current directory). A workspace
-holds banks (each a folder with bank.yaml, or its root), instruments/ and workspace.yaml.
-An instrument's banks are read from the folders its \`uses\` names by relative path
-(\`./banks/x\`), from another repository at its tag (\`owner/repo@v1\`, with git), or
-from --bank for an alias.
+holds a bank at its root (questions/, scales/ and so on), instruments/ and workspace.yaml.
+An instrument's banks are read from its own workspace (\`../\` in its \`uses\`), from
+another repository at its tag (\`owner/repo@v1\`, with git), or from --bank for an alias.
 --strict  also fail on warnings.
 --agency  the DDI agency the instrument is published under.`;
 
@@ -106,12 +100,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		return USAGE_ERROR;
 	}
 	if (Object.keys(files).length === 0) {
-		// A workspace whose banks are in folders: say which to export.
-		const folders = Object.keys(banksIn(await readWorkspace(dir)).banks).sort();
 		io.err(
-			folders.length > 0
-				? `${dir} is a workspace with banks at ${folders.join(", ")}; export one: qretools export ${join(dir, folders[0] ?? "")}\n`
-				: `No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
+			`No bank files in ${dir}: a bank has questions/, scales/, bank.yaml and so on.\n`,
 		);
 		return USAGE_ERROR;
 	}
@@ -358,7 +348,7 @@ async function validate(document: DdiDocument): Promise<readonly Finding[]> {
 
 /**
  * `qretools instrument check|export <file>`: the instrument read against its banks,
- * each read from the folder `uses` names by relative path or `--bank` gives.
+ * each read from its own workspace (`../`), another repository, or the folder `--bank` gives.
  */
 async function instrument(
 	args: ReturnType<typeof parse>,
@@ -397,7 +387,7 @@ async function instrument(
 		const eq = b.indexOf("=");
 		if (eq <= 0 || eq === b.length - 1) {
 			io.err(
-				`\`--bank ${b}\` names a bank as alias=<dir>, such as --bank bas=../banks/bas.\n`,
+				`\`--bank ${b}\` names a bank as alias=<dir>, such as --bank bas=../bas.\n`,
 			);
 			return USAGE_ERROR;
 		}
@@ -424,6 +414,15 @@ async function instrument(
 			}
 			banks[use.alias] = scopeOf(read.files);
 			continue;
+		}
+		// Its own workspace, as `resolveUses` has it: one spelling, and no other folder.
+		if (
+			address?.kind === "local" &&
+			address.path !== HERE &&
+			!given.has(use.alias)
+		) {
+			io.err(`Can't read \`${use.alias}\`: ${notHere(address.path)}\n`);
+			return USAGE_ERROR;
 		}
 		const dir =
 			given.get(use.alias) ??

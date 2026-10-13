@@ -1,9 +1,18 @@
 /**
- * Where a bank an instrument uses is, as its `uses` writes it: a folder beside the
- * instrument (`../banks/hh`, starting `./` or `../`), or a folder in another repository
- * at a version (`owner/repo@v1`, `owner/repo/banks/hh@v1`: the version last, after the
- * whole place). Read once here; nothing downstream looks at the text again. Pure.
+ * Where a bank an instrument uses is, as its `uses` writes it: its own workspace
+ * (`../`, from `instruments/`), or a workspace in another repository at a version
+ * (`owner/repo@v1`, or a folder of one, `owner/repo/surveys/hh@v1`: the version last,
+ * after the whole place). The grammar reads any path starting `./` or `../` as local;
+ * that only `../` is accepted is the workspace's rule (`resolveUses`). Read once here;
+ * nothing downstream looks at the text again. Pure.
  */
+
+/** How an instrument writes its own workspace: the one local address there is. */
+export const HERE = "../";
+
+/** Why a local address other than `HERE` is refused, in the author's words. */
+export const notHere = (path: string): string =>
+	`\`${path}\`: an instrument uses its own workspace as \`${HERE}\`, and another workspace as \`owner/repo@v1\`.`;
 
 export type Address =
 	/** A folder relative to the instrument's own, `/`-separated, as written. */
@@ -47,11 +56,11 @@ const badRef = (ref: string): boolean =>
 	ref.endsWith(".lock");
 
 const EXAMPLE =
-	"Write a folder beside this instrument (`../banks/hh`), or a repository and version (`owner/bank@v1`).";
+	"Write this instrument's own workspace (`../`), or a repository and version (`owner/repo@v1`).";
 
 /**
  * `text` as an address, or why it isn't one. The version follows the last `@`, so a
- * version can't contain `@`; a folder beside the instrument takes none.
+ * version can't contain `@`; the instrument's own workspace takes none.
  */
 export function addressOf(text: string): Address {
 	const t = text.trim();
@@ -59,14 +68,14 @@ export function addressOf(text: string): Address {
 		return t.includes("@")
 			? {
 					kind: "invalid",
-					reason: `\`${t}\`: a folder beside this instrument has no version; it's read with the instrument. Write \`${t.slice(0, t.indexOf("@"))}\`.`,
+					reason: `\`${t}\`: this instrument's own workspace has no version; it's read with the instrument. Write \`${t.slice(0, t.indexOf("@"))}\`.`,
 				}
 			: { kind: "local", path: t };
 	const at = t.lastIndexOf("@");
 	if (at === -1)
 		return {
 			kind: "invalid",
-			reason: `\`${t}\` has no version: a bank in another repository is read at one, such as \`${t}@v1\`. A folder beside this instrument starts \`./\` or \`../\`.`,
+			reason: `\`${t}\` has no version: a bank in another repository is read at one, such as \`${t}@v1\`. This instrument's own workspace is \`../\`.`,
 		};
 	const place = t.slice(0, at).replace(/\/+$/, "");
 	const ref = t.slice(at + 1);
@@ -105,20 +114,4 @@ export function joinFolder(base: string, relative: string): string | undefined {
 		else if (out.pop() === undefined) return undefined;
 	}
 	return out.join("/");
-}
-
-/**
- * How a folder beside `base` is written from it, `joinFolder`'s inverse: `../banks/hh`
- * from `instruments`, `../` for the root, `./` for `base` itself. Always starts `./` or
- * `../`, so `addressOf` reads it as local.
- */
-export function relativeFolder(base: string, to: string): string {
-	const from = base.split("/").filter((p) => p !== "");
-	const target = to.split("/").filter((p) => p !== "");
-	let shared = 0;
-	while (shared < from.length && from[shared] === target[shared]) shared++;
-	const up = from.length - shared;
-	const down = target.slice(shared).join("/");
-	const head = up === 0 ? "./" : "../".repeat(up);
-	return `${head}${down}`;
 }

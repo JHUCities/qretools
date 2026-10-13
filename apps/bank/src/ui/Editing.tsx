@@ -447,7 +447,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 							layout="compact"
 							actionsLayout="inline"
 							title="New here?"
-							description="Explore an example instrument, which asks questions from the example bank."
+							description="Explore an example instrument, which asks this workspace's example questions."
 							primaryAction={
 								<Banner.PrimaryAction
 									onClick={() =>

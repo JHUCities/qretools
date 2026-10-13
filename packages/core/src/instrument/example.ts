@@ -1,8 +1,9 @@
 /**
- * An example instrument, to copy or delete: written by hand for the example bank
- * (consent, a computed value, a follow-up filled from an answer's label, a check, a form
- * experiment, a roster). It is offered only where it reads with nothing to fill in, so
- * an example never opens as a page of holes in a bank it wasn't written for.
+ * An example instrument, to copy or delete: written by hand for the example questions a
+ * new workspace starts with, in `questions/example/` (consent, a computed value, a
+ * follow-up filled from an answer's label, a check, a form experiment, a roster). It is
+ * offered only where it reads with nothing to fill in, so an example never opens as a
+ * page of holes in a workspace it wasn't written for.
  */
 import type { BankScope } from "../evaluate.ts";
 import { parseInstrument } from "./parse.ts";
@@ -11,8 +12,8 @@ import { parseInstrument } from "./parse.ts";
 const ALIAS = "bank";
 
 /**
- * Written for the example bank as the template ships it (`fixtures/bank` is its copy,
- * and the test that this reads there is what keeps the two together).
+ * Written for the example questions as the template ships them (`fixtures/bank` is its
+ * copy, and the test that this reads there is what keeps the two together).
  */
 const WRITTEN = `name:
 title: Example instrument
@@ -67,7 +68,7 @@ flow:
 
 /**
  * The example instrument named `name`, reading the bank at `address` (as `uses:` writes
- * it, relative to the instrument) whose questions are `bank`; undefined where it would
+ * it: `../`, its own workspace) whose questions are `bank`; undefined where it would
  * not read there with nothing to fill in and nothing wrong (the bank's questions have
  * changed, or are older than this text): no example is better than a page of holes.
  */

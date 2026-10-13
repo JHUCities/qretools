@@ -148,13 +148,9 @@ export type Fix =
 			readonly word: string;
 	  }
 	| {
-			/**
-			 * A bank for an instrument's `uses` entry at `path`: a new one in this workspace
-			 * (its folder named in a dialog), or one on GitHub (its address given in one).
-			 */
+			/** A bank on GitHub for an instrument's `uses` entry at `path`, its address given in a dialog. */
 			readonly kind: "bank";
 			readonly label: string;
-			readonly how: "new" | "import";
 			readonly path: string;
 	  }
 	| {

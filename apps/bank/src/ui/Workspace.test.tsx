@@ -2,9 +2,8 @@
 
 import { resolve } from "node:path";
 /**
- * A workspace of several banks, drawn: each bank under its own heading with its own
- * questions and shared files, and New asking which bank first. A workspace of one bank
- * is drawn as a bank always was (the header's and the browser's own tests).
+ * A workspace, drawn: its instruments first, then its questions and shared files, and
+ * what New makes in it.
  */
 import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
@@ -28,24 +27,23 @@ const file = (path: string, text: string) => ({
 	sha: `sha-${path}`,
 	text,
 });
-/** The example bank as the template ships it (the library's fixture), at `banks/example`. */
-const EXAMPLE_BANK = Object.entries(
+/** The example questions as the template ships them (the library's fixture), in `questions/example/`. */
+const EXAMPLE_QUESTIONS = Object.entries(
 	// From the package's folder, where Vitest runs: jsdom gives this module no file URL.
 	await readBank(resolve("../../packages/core/fixtures/bank")),
-).map(([path, text]) => file(`banks/example/${path}`, text));
+).map(([path, text]) => file(path, text));
 
 const QUESTION = (name: string) =>
 	`name: ${name}\ntext: Is it so?\nintent: To see.\nresponses: yn\n`;
 const FILES = [
 	file("workspace.yaml", "agency: org.example\n"),
-	file("banks/a/bank.yaml", "agency: org.example\n"),
-	file("banks/a/scales/yn.yaml", 'labels:\n  "1": Yes\n  "2": No\n'),
-	file("banks/a/questions/t/alpha.yaml", QUESTION("alpha")),
-	file("banks/b/bank.yaml", "agency: org.example\n"),
-	file("banks/b/questions/u/beta.yaml", QUESTION("beta")),
+	file("bank.yaml", "agency: org.example\n"),
+	file("scales/yn.yaml", 'labels:\n  "1": Yes\n  "2": No\n'),
+	file("questions/t/alpha.yaml", QUESTION("alpha")),
+	file("questions/u/beta.yaml", QUESTION("beta")),
 	file(
 		"instruments/wave1.yaml",
-		"name: wave1\nuses:\n  a: ../banks/a\nflow:\n  - ask: a.alpha\n  - section: Close\n    flow:\n      - say: Thank you.\n",
+		"name: wave1\nuses:\n  a: ../\nflow:\n  - ask: a.alpha\n  - section: Close\n    flow:\n      - say: Thank you.\n",
 	),
 ];
 
@@ -110,53 +108,30 @@ function renderWorkspace(files = FILES, access = { kind: "write" }) {
 	return app;
 }
 
-describe("a workspace of several banks", () => {
-	it("shows each bank under its own heading, with its own questions and shared files", async () => {
-		renderWorkspace();
+describe("a workspace's bank", () => {
+	it("is its root alone: one set of questions and shared files, and New asks no bank", async () => {
+		renderWorkspace([
+			...FILES,
+			// A bank file in a folder makes no bank of it.
+			file("banks/b/bank.yaml", "agency: org.example\n"),
+		]);
 		await act(async () => {});
 		const nav = screen.getByRole("navigation", { name: "Question bank" });
-		for (const [bank, folder] of [
-			["banks/a", "t"],
-			["banks/b", "u"],
-		] as const) {
-			const region = within(nav).getByRole("region", { name: bank });
+		expect(within(nav).queryByRole("region", { name: "banks/b" })).toBeNull();
+		expect(
+			within(nav).getAllByRole("heading", { name: "Questions" }),
+		).toHaveLength(1);
+		for (const folder of ["t", "u"])
 			expect(
-				within(region).getByRole("heading", { level: 4, name: "Questions" }),
-			).toBeTruthy();
-			expect(
-				within(region).getByRole("treeitem", {
+				within(nav).getByRole("treeitem", {
 					name: new RegExp(`^${folder}\\b`),
 				}),
 			).toBeTruthy();
-		}
-		// The scale is bank a's alone: bank a's shared scales count it, bank b's don't.
-		const a = within(nav).getByRole("region", { name: "banks/a" });
-		const b = within(nav).getByRole("region", { name: "banks/b" });
-		const scales = (region: HTMLElement) =>
-			within(region).getByRole("treeitem", { name: "Scales" });
-		expect(within(scales(a)).getByText("1")).toBeTruthy();
-		expect(within(scales(b)).getByText("0")).toBeTruthy();
-	});
-
-	it("asks which bank a new file goes in, and puts it there", async () => {
-		const app = renderWorkspace();
-		await act(async () => {});
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
-		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
-			"Instrument…",
-			"Bank…",
-			"banks/a",
-			"banks/b",
-		]);
-		fireEvent.click(screen.getByRole("menuitem", { name: "banks/b" }));
-		fireEvent.click(
-			await screen.findByRole("menuitem", { name: "Blank question" }),
-		);
-		const { model } = app.store.getState();
-		const made = Object.values(model.local.questions).find(
-			(q) => q.base === undefined,
-		);
-		expect(made?.bank).toBe("banks/b");
+		const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+		expect(items[0]).toBe("Instrument…");
+		expect(items).not.toContain("Bank…");
+		expect(items).toContain("Blank question");
 	});
 });
 
@@ -172,14 +147,14 @@ describe("a workspace's instruments", () => {
 		URL.revokeObjectURL = revokeObjectURL;
 	});
 
-	it("come first, then each bank, and hold only instruments", async () => {
+	it("come first, then the questions, and hold only instruments", async () => {
 		renderWorkspace();
 		await act(async () => {});
 		const nav = screen.getByRole("navigation", { name: "Question bank" });
 		const headings = within(nav)
 			.getAllByRole("heading", { level: 3 })
 			.map((h) => h.textContent);
-		expect(headings.slice(0, 2)).toEqual(["Instruments", "banks/a"]);
+		expect(headings.slice(0, 2)).toEqual(["Instruments", "Questions"]);
 		const tree = within(nav).getByRole("tree", { name: "Instruments" });
 		const items = within(tree)
 			.getAllByRole("treeitem")
@@ -226,7 +201,7 @@ describe("a workspace's instruments", () => {
 		await act(async () => {});
 		const alpha = Object.values(
 			app.store.getState().model.local.questions,
-		).find((q) => q.base?.path === "banks/a/questions/t/alpha.yaml");
+		).find((q) => q.base?.path === "questions/t/alpha.yaml");
 		act(() => app.dispatch({ kind: "fileOpened", id: alpha?.id ?? -1 }));
 		await act(async () => {});
 		const heading = screen.getByRole("heading", { name: /^Used by/ });
@@ -242,7 +217,7 @@ describe("a workspace's instruments", () => {
 			...FILES.filter((f) => f.path !== "instruments/wave1.yaml"),
 			file(
 				"instruments/wave1.yaml",
-				"name: wave1\nuses:\n  a: ../banks/a\ninputs:\n  x:\n    responses: a.yn\nflow:\n  - ask: a.alpha\n",
+				"name: wave1\nuses:\n  a: ../\ninputs:\n  x:\n    responses: a.yn\nflow:\n  - ask: a.alpha\n",
 			),
 		]);
 		await act(async () => {});
@@ -252,7 +227,7 @@ describe("a workspace's instruments", () => {
 		act(() => app.dispatch({ kind: "fileOpened", id: yn?.id ?? -1 }));
 		await act(async () => {});
 		// Opening it opens its section: the tree's count is the pane's, both kinds of file.
-		expect(screen.getAllByText("used by 2").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("used by 3").length).toBeGreaterThan(0);
 		// The previews (ScrollableRegion names itself only while it scrolls, which jsdom
 		// never measures).
 		const previews = document.querySelector(".split .right") as HTMLElement;
@@ -281,7 +256,7 @@ describe("a workspace's instruments", () => {
 		).toBeTruthy();
 		const words = screen.getByRole("link", { name: "Is it so?" });
 		expect(words.getAttribute("href")).toMatch(
-			/file=banks%2Fa%2Fquestions%2Ft%2Falpha\.yaml/,
+			/file=questions%2Ft%2Falpha\.yaml/,
 		);
 	});
 
@@ -311,7 +286,7 @@ describe("a workspace's instruments", () => {
 		).toContain("wave2");
 	});
 
-	it("are all a workspace with no bank of its own shows, and New makes them, or a bank", async () => {
+	it("are all a workspace with no bank of its own shows, and all New makes there", async () => {
 		renderWorkspace([
 			file("workspace.yaml", "agency: org.example\n"),
 			file(
@@ -329,7 +304,6 @@ describe("a workspace's instruments", () => {
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
 			"Instrument…",
-			"Bank…",
 		]);
 	});
 
@@ -342,30 +316,6 @@ describe("a workspace's instruments", () => {
 			b.getAttribute("aria-label"),
 		);
 		expect(labels).toEqual(["Choose a bank", "Choose a question"]);
-	});
-
-	it("add a new bank from New: named, listed, its details open", async () => {
-		const app = renderWorkspace();
-		await act(async () => {});
-		fireEvent.click(screen.getByRole("button", { name: "New" }));
-		fireEvent.click(screen.getByRole("menuitem", { name: "Bank…" }));
-		const dialog = await screen.findByRole("dialog", { name: "New bank" });
-		fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), {
-			target: { value: "survey" },
-		});
-		expect(within(dialog).getByText("banks/survey")).toBeTruthy();
-		fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
-		await act(async () => {});
-		const nav = screen.getByRole("navigation", { name: "Question bank" });
-		expect(
-			within(nav).getByRole("region", { name: "banks/survey" }),
-		).toBeTruthy();
-		const { model } = app.store.getState();
-		const id = model.screen.kind === "editing" ? model.screen.id : undefined;
-		expect(id !== undefined && model.local.schemes[id]).toMatchObject({
-			kind: "bank",
-			bank: "banks/survey",
-		});
 	});
 
 	it("leave an empty repository as it was: one bank to start, at its root", async () => {
@@ -434,7 +384,7 @@ describe("a workspace's instruments", () => {
 			...FILES.filter((f) => f.path !== "instruments/wave1.yaml"),
 			file(
 				"instruments/wave1.yaml",
-				"name: wave1\nuses:\n  a: ../banks/a\n  far: o/elsewhere@v1\nflow:\n  - ask: a.alpha\n  - ask: far.far\n",
+				"name: wave1\nuses:\n  a: ../\n  far: o/elsewhere@v1\nflow:\n  - ask: a.alpha\n  - ask: far.far\n",
 			),
 		]);
 		await act(async () => {});
@@ -449,10 +399,10 @@ describe("a workspace's instruments", () => {
 
 	// The owner's reversal (2026-10-09): the section stays with none yet, a bank at the
 	// root included, so instruments are found where a team starts.
-	it("say there are none yet, and the first offers the example where a bank is called example", async () => {
+	it("say there are none yet, and the first offers the example where the example questions are", async () => {
 		const app = renderWorkspace([
 			file("workspace.yaml", "agency: org.example\n"),
-			...EXAMPLE_BANK,
+			...EXAMPLE_QUESTIONS,
 		]);
 		await act(async () => {});
 		expect(screen.getByRole("heading", { name: "Instruments" })).toBeTruthy();
@@ -481,14 +431,14 @@ describe("a workspace's instruments", () => {
 		const made = Object.values(app.store.getState().model.local.workspace).find(
 			(e) => e.kind === "instrument" && e.name === "example",
 		);
-		// It reads the bank called `example`.
-		expect(made?.source).toContain("uses:\n  bank: ../banks/example\n");
+		// It asks its own workspace's questions.
+		expect(made?.source).toContain("uses:\n  bank: ../\n");
 		expect(made?.source).toContain("rating: label(bank.service_satisfaction)");
 		// Two instruments now: neither offers it again.
 		expect(screen.queryByText("New here?")).toBeNull();
 	});
 
-	it("say there are none yet in a workspace that is one bank alone, where the first offers no example", async () => {
+	it("say there are none yet in a workspace without the example questions, where the first offers no example", async () => {
 		renderWorkspace([
 			file("bank.yaml", "agency: org.example\n"),
 			file("questions/t/alpha.yaml", QUESTION("alpha")),
@@ -504,14 +454,14 @@ describe("a workspace's instruments", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Create" }));
 		await act(async () => {});
 		expect(screen.getByRole("tree", { name: "Instruments" })).toBeTruthy();
-		// No bank called `example`: nothing to offer.
+		// No question in `questions/example/`: nothing to offer.
 		expect(screen.queryByText("New here?")).toBeNull();
 	});
 
 	it("stop offering the example once the offer is dismissed", async () => {
 		const app = renderWorkspace([
 			file("workspace.yaml", "agency: org.example\n"),
-			...EXAMPLE_BANK,
+			...EXAMPLE_QUESTIONS,
 		]);
 		await act(async () => {});
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
@@ -534,13 +484,13 @@ describe("a fix in the Findings list", () => {
 			"How strongly do you agree that residents are treated fairly by police officers in your own neighborhood these days";
 		const app = renderWorkspace([
 			file("workspace.yaml", "agency: org.example\n"),
-			file("banks/a/bank.yaml", "agency: org.example\n"),
+			file("bank.yaml", "agency: org.example\n"),
 			file(
-				"banks/a/questions/t/alpha.yaml",
+				"questions/t/alpha.yaml",
 				`name: alpha\ntext: ${LONG} here?\nintent: To see.\nopen: {}\n`,
 			),
 			file(
-				"banks/a/questions/t/beta.yaml",
+				"questions/t/beta.yaml",
 				`name: beta\ntext: ${LONG} now?\nintent: To see.\nopen: {}\n`,
 			),
 		]);

@@ -132,11 +132,6 @@ function NewMenu({
 					>
 						Instrument…
 					</ActionList.Item>
-					<ActionList.Item
-						onSelect={() => dispatch({ kind: "bankAddOpened", how: "new" })}
-					>
-						Bank…
-					</ActionList.Item>
 					{workspaceOnly ? null : banks.length <= 1 ? (
 						<>
 							<ActionList.Divider />
@@ -682,7 +677,7 @@ export function App() {
 			{addingBank && (
 				<AddBankDialog
 					adding={addingBank}
-					problem={bankAddProblem(model, addingBank)}
+					problem={bankAddProblem(addingBank)}
 					dispatch={dispatch}
 				/>
 			)}

@@ -66,9 +66,9 @@ responses:
 		validator.ok && validator.value(evaluation.ddi); // → []
 		expect(validator.ok && validator.value(evaluation.ddi)).toEqual([]);
 
-		const file = "fixtures/instruments/households.yaml";
+		const file = "fixtures/households/instruments/households.yaml";
 		const source = await readFile(file, "utf8");
-		importsOf(source); // → [{ alias: "hh", address: "../households" }]
+		importsOf(source); // → [{ alias: "hh", address: "../" }]
 		const households = bankOf(await readBank("fixtures/households"));
 		const instrument = instrumentOf(source, {
 			banks: { hh: households },
@@ -77,9 +77,7 @@ responses:
 		instrument.findings.filter((f) => f.severity !== "info"); // → []
 		Object.keys(instrument.ddi.Instrument ?? {});
 		// → ["org.example:instrument-households:1"]
-		expect(importsOf(source)).toEqual([
-			{ alias: "hh", address: "../households" },
-		]);
+		expect(importsOf(source)).toEqual([{ alias: "hh", address: "../" }]);
 		expect(instrument.findings.filter((f) => f.severity !== "info")).toEqual(
 			[],
 		);

@@ -10,7 +10,7 @@ const here = (path: string): string =>
 describe("where an instrument names its banks' files", () => {
 	it("is each ask's question and each named universe, by the place the name is written", async () => {
 		const source = await readFile(
-			here("../../fixtures/instruments/households.yaml"),
+			here("../../fixtures/households/instruments/households.yaml"),
 			"utf8",
 		);
 		const hh = bankOf(await readBank(here("../../fixtures/households")));
@@ -36,7 +36,7 @@ describe("where an instrument names its banks' files", () => {
 
 	it("is nothing for a name its bank doesn't have", () => {
 		const { refs } = instrumentOf(
-			"name: x\nuses:\n  hh: ../hh\nflow:\n  - ask: hh.nope\n",
+			"name: x\nuses:\n  hh: ../\nflow:\n  - ask: hh.nope\n",
 			{
 				banks: {},
 			},
@@ -46,7 +46,7 @@ describe("where an instrument names its banks' files", () => {
 
 	it("follows the names conditions and placeholders read: a bank's answer, or the instrument's own", async () => {
 		const source = await readFile(
-			here("../../fixtures/instruments/households.yaml"),
+			here("../../fixtures/households/instruments/households.yaml"),
 			"utf8",
 		);
 		const hh = bankOf(await readBank(here("../../fixtures/households")));
@@ -91,7 +91,7 @@ describe("where an instrument names its banks' files", () => {
 	it("follows an input's shared scale into its bank", async () => {
 		const hh = bankOf(await readBank(here("../../fixtures/households")));
 		const source =
-			"name: x\nuses:\n  hh: ../hh\ninputs:\n  feel:\n    responses: hh.yes_no\nflow:\n  - say: Hello.\n";
+			"name: x\nuses:\n  hh: ../\ninputs:\n  feel:\n    responses: hh.yes_no\nflow:\n  - say: Hello.\n";
 		const { refs } = instrumentOf(source, { banks: { hh } });
 		expect(refs).toContainEqual({
 			kind: "bank",

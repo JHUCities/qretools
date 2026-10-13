@@ -19,20 +19,14 @@ let remote: string;
 beforeAll(async () => {
 	hh = await readBank(here("../../fixtures/households"));
 	households = await readFile(
-		here("../../fixtures/instruments/households.yaml"),
+		here("../../fixtures/households/instruments/households.yaml"),
 		"utf8",
 	);
 	remote = await readFile(
-		here("../../fixtures/instruments/remote.yaml"),
+		here("../../fixtures/households/instruments/remote.yaml"),
 		"utf8",
 	);
 });
-
-/** A bank's files placed in a folder of the workspace. */
-const at = (folder: string, files: Readonly<Record<string, string>>) =>
-	Object.fromEntries(
-		Object.entries(files).map(([p, t]) => [`${folder}/${p}`, t]),
-	);
 
 const codes = (
 	findings: readonly { code: string; path: string }[],
@@ -48,15 +42,15 @@ describe("a workspace", () => {
 		expect(ws.ignored).toEqual([]);
 	});
 
-	it("reads each instrument against the banks beside it, under its own agency, as instrumentOf does", () => {
+	it("reads each instrument against its own bank, under its own agency, as instrumentOf does", () => {
 		const ws = workspaceOf({
-			...at("households", hh),
+			...hh,
 			"instruments/households.yaml": households,
 			"workspace.yaml": "agency: org.example\n",
 			"README.md": "# A workspace\n",
 		});
 		const read = ws.instruments["instruments/households.yaml"];
-		expect(read?.uses).toEqual({ hh: { kind: "local", folder: "households" } });
+		expect(read?.uses).toEqual({ hh: { kind: "local", folder: "" } });
 		const direct = instrumentOf(households, {
 			banks: { hh: bankOf(hh) },
 			agency: "org.example",
@@ -69,7 +63,7 @@ describe("a workspace", () => {
 
 	it("publishes under the agency as written, so a wrong one is said on the instrument", () => {
 		const ws = workspaceOf({
-			...at("households", hh),
+			...hh,
 			"instruments/households.yaml": households,
 			"workspace.yaml": "agency: Not An Agency\n",
 		});
@@ -165,7 +159,7 @@ flow:
 	it("says once, on the use, why a bank couldn't be had", () => {
 		const said = (source: string, remoteBank?: { reason: string }) => {
 			const ws = workspaceOf(
-				{ ...at("households", hh), "instruments/x.yaml": source },
+				{ ...hh, "instruments/x.yaml": source },
 				remoteBank === undefined
 					? {}
 					: {
@@ -180,23 +174,52 @@ flow:
 		};
 		const uses = (address: string) =>
 			`name: x\nuses:\n  b: ${address}\nflow:\n  - say: Hi.\n`;
-		expect(said(uses("../nowhere"))).toEqual([
-			"This workspace has no bank at `nowhere`.",
-		]);
-		expect(said(uses("../../out"))).toEqual([
-			"`../../out` leads out of the workspace.",
-		]);
-		expect(said(uses("../households@v1"))).toEqual([
-			expect.stringContaining("Write `../households`."),
+		// Its own workspace has one spelling; any other local path is refused, saying so.
+		expect(said(uses("../"))).toEqual([]);
+		for (const other of [
+			".././",
+			"../.",
+			"./",
+			"../questions",
+			"../banks/x",
+			"../../out",
+		])
+			expect(said(uses(other)), other).toEqual([
+				`\`${other}\`: an instrument uses its own workspace as \`../\`, and another workspace as \`owner/repo@v1\`.`,
+			]);
+		expect(said(uses("../@v1"))).toEqual([
+			expect.stringContaining("Write `../`."),
 		]);
 		expect(said(uses("o/r@v1"), { reason: "GitHub has no tag v1." })).toEqual([
 			"GitHub has no tag v1.",
 		]);
 	});
 
-	it("reports YAML that is neither a bank's, an instrument nor its own, and nothing else", () => {
+	it("says a workspace whose root holds no bank has none, on the use", () => {
+		const read = workspaceOf({ "instruments/households.yaml": households })
+			.instruments["instruments/households.yaml"];
+		expect(read?.uses).toEqual({ hh: { kind: "missing", folder: "" } });
+		expect(codes(read?.instrument.findings ?? [], "uses.hh")).toHaveLength(1);
+	});
+
+	it("takes a bank file in a folder for no bank, and says the folder's files are ignored", () => {
+		const nested = {
+			"banks/x/bank.yaml": "agency: org.example\n",
+			"banks/x/questions/t/q.yaml": "name: q\n",
+		};
+		// With no bank at the root, the workspace says so.
+		const none = workspaceOf({ ...nested, "workspace.yaml": "" });
+		expect(none.banks).toEqual({});
+		expect(none.ignored).toEqual(Object.keys(nested));
+		// With one, they're its files, read as nothing, and said the same way.
+		const ws = workspaceOf({ ...hh, ...nested });
+		expect(Object.keys(ws.banks)).toEqual([""]);
+		expect(ws.ignored).toEqual(Object.keys(nested));
+	});
+
+	it("reports YAML that is neither the bank's, an instrument nor its own, and nothing else", () => {
 		const ws = workspaceOf({
-			...at("households", hh),
+			...hh,
 			"instruments/deeper/x.yaml": "name: x\n",
 			"stray.yaml": "",
 			"notes.yml": "",
@@ -210,18 +233,19 @@ flow:
 });
 
 describe("the banks a workspace's instruments use", () => {
-	it("are resolved from the instrument's own folder", () => {
-		const uses = [
-			{ alias: "a", address: "../banks/a" },
-			{ alias: "b", address: "./b" },
-			{ alias: "c" },
-		];
-		expect(
-			resolveUses("instruments/x.yaml", uses, new Set(["banks/a"])),
-		).toEqual({
-			a: { kind: "local", folder: "banks/a" },
-			b: { kind: "missing", folder: "instruments/b" },
+	it("are its own workspace's, written `../` from instruments/, and nothing else local", () => {
+		const uses = [{ alias: "a", address: "../" }, { alias: "c" }];
+		const root = new Set([""]);
+		expect(resolveUses("instruments/x.yaml", uses, root)).toEqual({
+			a: { kind: "local", folder: "" },
 		});
+		expect(resolveUses("instruments/x.yaml", uses, new Set())).toEqual({
+			a: { kind: "missing", folder: "" },
+		});
+		// From anywhere else `../` isn't the workspace.
+		expect(resolveUses("instruments/deeper/x.yaml", uses, root).a?.kind).toBe(
+			"unreadable",
+		);
 	});
 
 	it("in other repositories, are each listed once, however they're capitalised", () => {
@@ -231,7 +255,7 @@ describe("the banks a workspace's instruments use", () => {
 				"instruments/a.yaml": use("O/R@v1"),
 				"instruments/b.yaml": use("o/r@v1"),
 				"instruments/c.yaml": use("o/r/banks/x@v2"),
-				"instruments/d.yaml": use("../local"),
+				"instruments/d.yaml": use("../"),
 				"banks/x/questions/t/q.yaml": use("z/z@v1"),
 			}).map((a) => a.key),
 		).toEqual(["o/r/banks/x@v2", "o/r@v1"]);

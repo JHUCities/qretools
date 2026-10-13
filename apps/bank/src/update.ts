@@ -9,6 +9,7 @@ import {
 	exampleInstrument,
 	FOLDER_PATTERN,
 	FOLDER_RULE_TEXT,
+	HERE,
 	type InstrumentIn,
 	inBank,
 	instrumentOf,
@@ -24,7 +25,6 @@ import {
 	type Range,
 	type RemoteBank,
 	type Result,
-	relativeFolder,
 	relIn,
 	remotesOf,
 	SCHEME_NAME,
@@ -327,7 +327,6 @@ function step(model: Model, msg: Msg): Step {
 						browser: {
 							...model.browser,
 							addingBank: {
-								how: fix.how,
 								text: "",
 								use: { id: q.id, path: fix.path },
 							},
@@ -751,15 +750,6 @@ function step(model: Model, msg: Msg): Step {
 			return persist([{ ...added, screen: { kind: "editing", id } }, []]);
 		}
 
-		case "bankAddOpened":
-			return [
-				{
-					...model,
-					browser: { ...model.browser, addingBank: { how: msg.how, text: "" } },
-				},
-				[],
-			];
-
 		case "bankAddChanged": {
 			const adding = model.browser.addingBank;
 			return adding === undefined
@@ -781,37 +771,19 @@ function step(model: Model, msg: Msg): Step {
 
 		case "bankAddConfirmed": {
 			const adding = model.browser.addingBank;
-			if (adding === undefined || bankAddProblem(model, adding) !== undefined)
+			if (adding === undefined || bankAddProblem(adding) !== undefined)
 				return [model, []];
 			const closed = { ...model, browser: withoutAdding(model.browser) };
-			// A new bank is its `bank.yaml`, from the template; one on GitHub is its address.
-			const folder = newBankFolder(adding.text);
-			const [added, id] =
-				adding.how === "new"
-					? add(closed, {
-							kind: "bank",
-							name: "bank",
-							bank: folder,
-							source: SCHEME_TEMPLATES.bank,
-						})
-					: [closed, undefined];
-			const address =
-				adding.how === "new"
-					? relativeFolder(WORKSPACE.instruments, folder)
-					: adding.text.trim();
 			// Written where it was asked for, as the `uses` picker writes a bank chosen
-			// there, and the caret after it; from New, the new bank's details open.
-			const written =
-				adding.use === undefined
-					? undefined
-					: writeLivelit(added, adding.use.id, adding.use.path, address);
-			if (written !== undefined) return persist(written);
-			return persist([
-				id === undefined
-					? added
-					: { ...added, screen: { kind: "editing", id } },
-				[],
-			]);
+			// there, and the caret after it.
+			return persist(
+				writeLivelit(
+					closed,
+					adding.use.id,
+					adding.use.path,
+					adding.text.trim(),
+				) ?? [closed, []],
+			);
 		}
 
 		case "tabShown":
@@ -2345,30 +2317,34 @@ function freeExampleName(model: Model): string {
 }
 
 /**
- * The bank the example instrument asks: the workspace's own bank called `example`
- * (`banks/example`, where New makes a bank; any case, as GitHub may hold it), or
- * undefined. Without it there is no example to make (owner, 2026-10-13).
+ * Where the example instrument's questions are, as a new workspace's template ships
+ * them. A folder name with meaning, as `banks/example` was, against the rule that no
+ * file's name means anything: tolerated because it only gates an onboarding offer.
+ * Nothing is read differently for being there, and the offer still depends on the
+ * example reading cleanly (`exampleSource`), so a folder of other questions offers none.
  */
-export const exampleBank = (model: Pick<Model, "banks">): string | undefined =>
-	model.banks.find(
-		(b) => b.toLowerCase() === newBankFolder("example").toLowerCase(),
+const EXAMPLE_QUESTIONS = "questions/example/";
+
+/** Whether the workspace has a question saved among the example's (`EXAMPLE_QUESTIONS`). */
+const hasExampleQuestions = (model: Pick<Model, "remote">): boolean =>
+	Object.keys(model.remote.questions).some((p) =>
+		p.startsWith(EXAMPLE_QUESTIONS),
 	);
 
 /**
- * The example instrument named `name`, reading the example bank beside it
- * (`../banks/example`); undefined where there is none to make: no bank called `example`,
- * or one the example doesn't read in (its questions changed, or aren't saved yet).
- * `update` evaluates the bank afresh; the view passes the app's kept evaluations.
+ * The example instrument named `name`, asking its own workspace's questions (`../`);
+ * undefined where there is none to make: no example questions saved, or a workspace
+ * the example doesn't read in (its questions changed). `update` evaluates the bank
+ * afresh; the view passes the app's kept evaluations.
  */
 export function exampleSource(
 	model: Pick<Model, "local" | "remote" | "banks">,
 	name: string,
 	evaluations: Evaluations = createEvaluations(),
 ): string | undefined {
-	const bank = exampleBank(model);
-	return bank === undefined
-		? undefined
-		: exampleInstrument(name, `../${bank}`, evaluations.scope(model, bank));
+	return hasExampleQuestions(model)
+		? exampleInstrument(name, HERE, evaluations.scope(model, ""))
+		: undefined;
 }
 
 export function instrumentNameProblem(
@@ -2627,12 +2603,13 @@ export function blockage(model: Model): Blockage | undefined {
 
 /**
  * Whether the open instrument offers the example beside it: the author's first
- * instrument, never saved, the workspace holding no other here or on GitHub, and a bank
- * called `example` to ask (`exampleBank`), until they dismiss the offer. The cheap half
- * of the rule: the view also asks that the example reads there (`exampleSource`). Not tied to its text, so typing never takes the offer away.
+ * instrument, never saved, the workspace holding no other here or on GitHub, and a
+ * question saved among the example's (`EXAMPLE_QUESTIONS`), until they dismiss the
+ * offer. The cheap half of the rule: the view also asks that the example reads there
+ * (`exampleSource`). Not tied to its text, so typing never takes the offer away.
  */
 export const offersExample = (
-	model: Pick<Model, "local" | "remote" | "browser" | "banks">,
+	model: Pick<Model, "local" | "remote" | "browser">,
 	id: Id,
 ): boolean => {
 	const e = model.local.workspace[id];
@@ -2640,7 +2617,7 @@ export const offersExample = (
 		e?.kind === "instrument" &&
 		e.base === undefined &&
 		model.browser.exampleHintDismissed !== true &&
-		exampleBank(model) !== undefined &&
+		hasExampleQuestions(model) &&
 		Object.values(model.local.workspace).every(
 			(o) => o.kind !== "instrument" || o.id === id,
 		) &&
@@ -2811,32 +2788,18 @@ function writeLivelit(
 			];
 }
 
-/** Where a new bank named `name` goes: `banks/<name>`, as the template's layout has it. */
-export const newBankFolder = (name: string): string => `banks/${name.trim()}`;
-
 /**
- * Why this bank can't be added, or undefined: a new one needs a folder name no bank has;
- * one on GitHub needs an address in another repository at a version (a folder here is
- * chosen from the `uses` picker's list instead).
+ * Why this bank can't be added, or undefined: one on GitHub needs an address in another
+ * repository at a version (this workspace's own is chosen from the `uses` picker's list
+ * instead).
  */
-export function bankAddProblem(
-	model: Pick<Model, "banks">,
-	adding: AddingBank,
-): string | undefined {
+export function bankAddProblem(adding: AddingBank): string | undefined {
 	const text = adding.text.trim();
-	if (adding.how === "new") {
-		if (text === "") return "Give it a name.";
-		if (!FOLDER_PATTERN.test(text)) return FOLDER_RULE_TEXT;
-		const folder = newBankFolder(text).toLowerCase();
-		return model.banks.some((b) => b.toLowerCase() === folder)
-			? `There's already a bank in \`${newBankFolder(text)}\`.`
-			: undefined;
-	}
 	if (text === "") return "Give its address.";
 	const address = addressOf(text);
 	if (address.kind === "invalid") return address.reason;
 	return address.kind === "local"
-		? "That's a folder in this workspace: choose it from the list instead."
+		? "That's in this workspace: choose its own bank from the list instead."
 		: undefined;
 }
 
@@ -2934,8 +2897,7 @@ function add(model: Model, file: NewFile): [Model, Id] {
 /**
  * The workspace's banks after a file is added or removed here, by the load's rule: those
  * GitHub has (a bank of `model.banks` holding a file of `remote`), and those the working
- * copies are in. A new bank's draft `bank.yaml` lists it; deleting the last file of a bank
- * GitHub hasn't got unlists it. The same list (same reference) when nothing changes, so
+ * copies are in (only the root, now a workspace has one bank). The same list (same reference) when nothing changes, so
  * what is memoised on it holds.
  */
 function withBanks(model: Model): Model {

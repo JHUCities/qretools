@@ -32,16 +32,23 @@ import {
 } from "./update.js";
 import { instrumentsUsing, instrumentUses } from "./usedBy.js";
 
+const fixture = (name: string) =>
+	readWorkspace(
+		fileURLToPath(
+			new URL(`../../../packages/core/fixtures/${name}`, import.meta.url),
+		),
+	);
+
+/** The households workspace: its bank, and its instruments using it as `../`. */
 let files: Record<string, string>;
+/** The example questions a new workspace starts with, in `questions/example/`. */
+let example: Record<string, string>;
 beforeAll(async () => {
 	files = {
-		...(await readWorkspace(
-			fileURLToPath(
-				new URL("../../../packages/core/fixtures", import.meta.url),
-			),
-		)),
+		...(await fixture("households")),
 		"workspace.yaml": "agency: org.example\n",
 	};
+	example = await fixture("bank");
 });
 
 /** Signed in, with the fixture workspace loaded from the author's branch. */
@@ -49,20 +56,18 @@ function loaded(): Model {
 	return loading()[0];
 }
 
-/** The fixture workspace with its sample bank also at `banks/example`, saved, as the template has it. */
-const withExampleBank = (): Model =>
-	loading(
-		Object.fromEntries(
-			Object.entries(files).flatMap(([path, text]) =>
-				path.startsWith("bank/")
-					? [[`banks/example/${path.slice("bank/".length)}`, text]]
-					: [],
-			),
-		),
-	)[0];
+/** A workspace of the example questions, saved, as the template has it. */
+const withExampleQuestions = (): Model => loading({}, example)[0];
+
+/** A question no instrument asks, for what a save or a count must leave out. */
+const UNASKED = "questions/other/unasked.yaml";
+const UNASKED_TEXT = "name: unasked\ntext: Why?\nintent: i\nopen: {}\n";
 
 /** The same, with what the load asked for; `more` files are on the branch too. */
-function loading(more: Record<string, string> = {}): ReturnType<typeof update> {
+function loading(
+	more: Record<string, string> = {},
+	base: Record<string, string> = files,
+): ReturnType<typeof update> {
 	const [start] = init({
 		work: ok(undefined),
 		hasToken: true,
@@ -80,7 +85,7 @@ function loading(more: Record<string, string> = {}): ReturnType<typeof update> {
 	return update(connected, {
 		kind: "workspaceLoaded",
 		result: ok({
-			files: Object.entries({ ...files, ...more }).map(([path, text]) => ({
+			files: Object.entries({ ...base, ...more }).map(([path, text]) => ({
 				path,
 				sha: `sha-${path}`,
 				text,
@@ -124,9 +129,9 @@ const save = (m: Model, path: string) =>
 	update(m, { kind: "saveRequested", id: at(m, path).id });
 
 const HOUSEHOLDS = "instruments/households.yaml";
-const CONSENT = "households/questions/household/consent.yaml";
-const YES_NO = "households/scales/yes_no.yaml";
-const TENURE = "households/questions/household/tenure.yaml";
+const CONSENT = "questions/household/consent.yaml";
+const YES_NO = "scales/yes_no.yaml";
+const TENURE = "questions/household/tenure.yaml";
 
 describe("saving an instrument", () => {
 	it("takes along the questions it asks that have unsaved changes, and their shared files", () => {
@@ -151,8 +156,8 @@ describe("saving an instrument", () => {
 
 	it("leaves out what it doesn't ask", () => {
 		const m = edit(
-			edit(loaded(), HOUSEHOLDS),
-			"bank/questions/examples/library_visits.yaml",
+			edit(loading({ [UNASKED]: UNASKED_TEXT })[0], HOUSEHOLDS),
+			UNASKED,
 		);
 		expect(
 			commitOf(save(m, HOUSEHOLDS)[1])?.changes.map((c) => c.path),
@@ -280,7 +285,7 @@ describe("an open instrument", () => {
 		const e = at(loadedModel, HOUSEHOLDS) as InstrumentEntry;
 		// Only an input reads the scale: no question it asks is changed.
 		const source =
-			"name: households\nuses:\n  hh: ../households\ninputs:\n  eligible:\n    responses: hh.yes_no\nflow:\n  - say: Hello.\n";
+			"name: households\nuses:\n  hh: ../\ninputs:\n  eligible:\n    responses: hh.yes_no\nflow:\n  - say: Hello.\n";
 		const m = edit(
 			{
 				...loadedModel,
@@ -317,14 +322,6 @@ describe("an open instrument", () => {
 	});
 });
 
-/** The workspace with an empty bank called `example` added in this tab, as New, Bank… makes one. */
-const withEmptyExampleBank = (m: Model): Model =>
-	[
-		{ kind: "bankAddOpened", how: "new" },
-		{ kind: "bankAddChanged", text: "example" },
-		{ kind: "bankAddConfirmed" },
-	].reduce<Model>((at, msg) => update(at, msg as Msg)[0], m);
-
 /** The workspace with no instrument here or on GitHub. */
 const withoutInstruments = (m: Model): Model => ({
 	...m,
@@ -356,22 +353,26 @@ describe("a new instrument", () => {
 			) as InstrumentEntry;
 			return [made, mine];
 		};
-		// No bank called `example` to ask: nothing to offer, and nothing to make.
+		// No question in `questions/example/` to ask: nothing to offer, and nothing to make.
 		const bare = withoutInstruments(loaded());
 		const [without, lone] = first(bare);
 		expect(offersExample(without, lone.id)).toBe(false);
 		expect(
 			update(without, { kind: "instrumentCreateOpened", example: true })[0],
 		).toBe(without);
-		// One the example doesn't read in (empty, made in this tab): the cheap rule still
-		// offers, and the example itself says there is none to make.
-		const [hollow, sole] = first(withEmptyExampleBank(bare));
+		// Questions there the example doesn't read in: the cheap rule still offers, and
+		// the example itself says there is none to make.
+		const [hollow, sole] = first(
+			withoutInstruments(
+				loading({ "questions/example/unasked.yaml": UNASKED_TEXT })[0],
+			),
+		);
 		expect(offersExample(hollow, sole.id)).toBe(true);
 		expect(exampleSource(hollow, "example")).toBeUndefined();
 		expect(
 			update(hollow, { kind: "instrumentCreateOpened", example: true })[0],
 		).toBe(hollow);
-		const [made, mine] = first(withoutInstruments(withExampleBank()));
+		const [made, mine] = first(withoutInstruments(withExampleQuestions()));
 		expect(offersExample(made, mine.id)).toBe(true);
 		expect(exampleSource(made, "example")).toContain("roster: members");
 		// Saved: it has a base.
@@ -489,8 +490,8 @@ describe("the workspace details", () => {
 });
 
 describe("the example instrument", () => {
-	it("is named already, never over one taken, and reads the bank called example", () => {
-		const m = withExampleBank();
+	it("is named already, never over one taken, and asks its own workspace's questions", () => {
+		const m = withExampleQuestions();
 		const [asked] = update(m, {
 			kind: "instrumentCreateOpened",
 			example: true,
@@ -503,7 +504,7 @@ describe("the example instrument", () => {
 		const e = Object.values(made.local.workspace).find(
 			(f) => f.kind === "instrument" && f.name === "example",
 		);
-		expect(e?.source).toContain("uses:\n  bank: ../banks/example\n");
+		expect(e?.source).toContain("uses:\n  bank: ../\n");
 		expect(made.screen).toEqual({ kind: "editing", id: e?.id });
 		const [again] = update(made, {
 			kind: "instrumentCreateOpened",
@@ -570,9 +571,9 @@ describe("the instruments a question is used by", () => {
 		const m = withInstrument(
 			loaded(),
 			"twice",
-			"name: twice\nuses:\n  hh: ../households\nflow:\n  - ask: hh.size\n    checks:\n      - ensure: hh.size > 0 and hh.size < 30\n        severity: info\n        message: Is that right?\n",
+			"name: twice\nuses:\n  hh: ../\nflow:\n  - ask: hh.size\n    checks:\n      - ensure: hh.size > 0 and hh.size < 30\n        severity: info\n        message: Is that right?\n",
 		);
-		const use = usesOf(m, "households/questions/household/size.yaml").find(
+		const use = usesOf(m, "questions/household/size.yaml").find(
 			(u) => u.name === "twice",
 		);
 		expect(use?.places).toEqual([{ at: "flow.0.ask", label: "Ask hh.size" }]);
@@ -603,11 +604,11 @@ describe("the instruments a question is used by", () => {
 
 	it("counts an option variable read in a condition, by any alias for the bank", () => {
 		const m = withInstrument(
-			loaded(),
+			withExampleQuestions(),
 			"news",
-			'name: news\nuses:\n  b: ../bank\n  again: ../bank\nflow:\n  - if: again.news_sources_1 = "1"\n    then:\n      - say: Reads the paper.\n',
+			'name: news\nuses:\n  b: ../\n  again: ../\nflow:\n  - if: again.news_sources_1 = "1"\n    then:\n      - say: Reads the paper.\n',
 		);
-		expect(usesOf(m, "bank/questions/examples/news_sources.yaml")).toEqual([
+		expect(usesOf(m, "questions/example/news_sources.yaml")).toEqual([
 			{ name: "news", places: [expect.objectContaining({ at: "flow.0.if" })] },
 		]);
 	});
@@ -623,7 +624,7 @@ describe("the instruments a question is used by", () => {
 				workspace: { ...m.local.workspace, [e.id]: { ...e, source } },
 			},
 		};
-		const universe = at(named, "households/universes/renters.yaml");
+		const universe = at(named, "universes/renters.yaml");
 		expect(
 			instrumentsUsing(
 				instrumentUses(named, createEvaluations()),
@@ -634,7 +635,7 @@ describe("the instruments a question is used by", () => {
 
 	it("follows a draft shared file's rename into the instruments naming it", () => {
 		const steps: Msg[] = [
-			{ kind: "schemeCreateOpened", scheme: "universe", bank: "households" },
+			{ kind: "schemeCreateOpened", scheme: "universe", bank: "" },
 			{ kind: "schemeNameChanged", name: "r" },
 			{ kind: "schemeTextChanged", text: "Renters" },
 			{ kind: "schemeNamingConfirmed" },
@@ -666,10 +667,8 @@ describe("the instruments a question is used by", () => {
 	});
 
 	it("is none for a question no instrument here names, or one never saved", () => {
-		const m = loaded();
-		expect(usesOf(m, "bank/questions/examples/library_visits.yaml")).toEqual(
-			[],
-		);
+		const m = loading({ [UNASKED]: UNASKED_TEXT })[0];
+		expect(usesOf(m, UNASKED)).toEqual([]);
 		const draft = { ...(at(m, CONSENT) as Question) };
 		delete (draft as { base?: unknown }).base;
 		expect(
@@ -714,7 +713,7 @@ describe("go to definition in an instrument", () => {
 		const [m] = follow("hh.renters");
 		expect(m.screen).toEqual({
 			kind: "editing",
-			id: at(m, "households/universes/renters.yaml").id,
+			id: at(m, "universes/renters.yaml").id,
 		});
 	});
 
@@ -777,7 +776,7 @@ describe("go to definition in an instrument", () => {
 		};
 		const nope = press(
 			HOUSEHOLDS,
-			"name: households\nuses:\n  hh: ../households\nflow:\n  - ask: hh.nope\n",
+			"name: households\nuses:\n  hh: ../\nflow:\n  - ask: hh.nope\n",
 			"hh.nope",
 		);
 		expect(nope[1]).toEqual([]);
@@ -1010,13 +1009,10 @@ describe("following an instrument's question, editing it, and coming back", () =
 });
 
 describe("a name from a bank in another repository", () => {
+	/** The households bank, as another repository would hold it: no instruments. */
 	const hh = () =>
 		Object.fromEntries(
-			Object.entries(files).flatMap(([path, text]) =>
-				path.startsWith("households/")
-					? [[path.slice("households/".length), text]]
-					: [],
-			),
+			Object.entries(files).filter(([path]) => !path.includes("instruments/")),
 		);
 	/** F12 on `word` in an instrument using `address` as `bas`, that bank read. */
 	const follow = (address: string, key: string, word = "bas.consent") => {
@@ -1052,13 +1048,13 @@ describe("a name from a bank in another repository", () => {
 
 	it("opens within the bank's folder when the address names one", () => {
 		const [, cmds] = follow(
-			"Owner/Bank/banks/hh@release/2026.1",
-			"owner/bank/banks/hh@release/2026.1",
+			"Owner/Bank/surveys/hh@release/2026.1",
+			"owner/bank/surveys/hh@release/2026.1",
 		);
 		expect(cmds).toEqual([
 			{
 				kind: "openExternal",
-				url: "https://github.com/Owner/Bank/blob/release/2026.1/banks/hh/questions/household/consent.yaml",
+				url: "https://github.com/Owner/Bank/blob/release/2026.1/surveys/hh/questions/household/consent.yaml",
 			},
 		]);
 	});
@@ -1079,14 +1075,14 @@ describe("an instrument's pickers", () => {
 		expect(source).toContain("  - ask: hh.tenure\n  - stop: hh.consent");
 		const end = source.indexOf("hh.tenure") + "hh.tenure".length;
 		expect(cmds[0]).toEqual({ kind: "revealRange", range: [end, end] });
-		// The bank written at `uses` is a folder beside the instrument.
+		// The bank written at `uses` is the one chosen, as its picker spells it.
 		const [bank] = update(open, {
 			kind: "livelitChosen",
 			id,
 			livelit: "uses.hh",
-			value: "../banks/hh",
+			value: "Owner/Bank@v1",
 		});
-		expect(bank.local.workspace[id]?.source).toContain("  hh: ../banks/hh\n");
+		expect(bank.local.workspace[id]?.source).toContain("  hh: Owner/Bank@v1\n");
 	});
 
 	it("write the codes ticked in a condition's set, escaped for its value", () => {
@@ -1115,53 +1111,23 @@ describe("an instrument's pickers", () => {
 });
 
 describe("adding a bank", () => {
-	const fromUses = (how: "new" | "import") => {
+	const fromUses = () => {
 		const m = loaded();
 		const id = at(m, HOUSEHOLDS).id;
 		const open: Model = { ...m, screen: { kind: "editing", id } };
-		const fix = { kind: "bank" as const, label: "", how, path: "uses.hh" };
+		const fix = { kind: "bank" as const, label: "", path: "uses.hh" };
 		return { id, m: update(open, { kind: "fixApplied", id, fix })[0] };
 	};
 	const typed = (m: Model, text: string) =>
 		update(m, { kind: "bankAddChanged", text })[0];
 	const confirmed = (m: Model) => update(m, { kind: "bankAddConfirmed" });
 
-	it("makes a new one here, lists it, and writes its folder at the `uses` entry", () => {
-		const { id, m } = fromUses("new");
-		expect(m.browser.addingBank).toEqual({
-			how: "new",
-			text: "",
-			use: { id, path: "uses.hh" },
-		});
-		const [next, cmds] = confirmed(typed(m, "survey"));
-		expect(next.banks).toContain("banks/survey");
-		expect(next.browser.addingBank).toBeUndefined();
-		const bank = Object.values(next.local.schemes).find(
-			(s) => s.bank === "banks/survey",
-		);
-		expect(bank).toMatchObject({ kind: "bank", name: "bank" });
-		expect(next.local.workspace[id]?.source).toContain(
-			"  hh: ../banks/survey\n",
-		);
-		// The author stays in the instrument, the caret after what was written.
-		expect(next.screen).toEqual({ kind: "editing", id });
-		expect(cmds[0]?.kind).toBe("revealRange");
-		// Deleting its only file, a draft, unlists it; a bank GitHub has stays listed.
-		const gone = update(
-			update(next, { kind: "deleteRequested", id: bank?.id ?? 0 })[0],
-			{ kind: "deleteRequested", id: bank?.id ?? 0 },
-		)[0];
-		expect(gone.banks).not.toContain("banks/survey");
-		expect(gone.banks).toEqual(loaded().banks);
-	});
-
-	it("keeps a bank GitHub has when its files here are all gone", () => {
+	it("keeps the bank GitHub has when its files here are all gone", () => {
 		const m = loaded();
-		const inHouseholds = [
+		const dropped = [
 			...Object.values(m.local.questions),
 			...Object.values(m.local.schemes),
-		].filter((f) => f.bank === "households");
-		const dropped = inHouseholds.reduce(
+		].reduce(
 			(acc, f) =>
 				update(update(acc, { kind: "deleteRequested", id: f.id })[0], {
 					kind: "deleteRequested",
@@ -1169,45 +1135,31 @@ describe("adding a bank", () => {
 				})[0],
 			m,
 		);
-		expect(dropped.banks).toContain("households");
-	});
-
-	it("refuses a folder no bank can be in, or one a bank has", () => {
-		const { m } = fromUses("new");
-		const problem = (text: string) => {
-			const next = typed(m, text);
-			return next.browser.addingBank === undefined
-				? "closed"
-				: bankAddProblem(next, next.browser.addingBank);
-		};
-		expect(problem("")).toBe("Give it a name.");
-		expect(problem("Has Space")).toBeDefined();
-		expect(problem("survey")).toBeUndefined();
-		const made = confirmed(typed(m, "survey"))[0];
-		expect(bankAddProblem(made, { how: "new", text: " survey " })).toMatch(
-			/already a bank/,
-		);
+		expect(dropped.banks).toEqual([""]);
 	});
 
 	it("uses one on GitHub: its address written, and its read started at once", () => {
-		const { id, m } = fromUses("import");
-		expect(bankAddProblem(m, { how: "import", text: "../households" })).toMatch(
-			/choose it from the list/,
-		);
-		expect(bankAddProblem(m, { how: "import", text: "o/r" })).toMatch(
-			/no version/,
-		);
+		const { id, m } = fromUses();
+		expect(m.browser.addingBank).toEqual({
+			text: "",
+			use: { id, path: "uses.hh" },
+		});
+		const use = { id, path: "uses.hh" };
+		// Its own workspace is in the picker's list; no other folder here is a bank.
+		for (const local of ["../", "../banks/x"])
+			expect(bankAddProblem({ text: local, use }), local).toMatch(
+				/from the list/,
+			);
+		expect(bankAddProblem({ text: "o/r", use })).toMatch(/no version/);
+		expect(bankAddProblem({ text: " ", use })).toBe("Give its address.");
+		// Refused while it can't be added: the dialog stays, and nothing is written.
+		expect(confirmed(typed(m, "o/r"))[0].browser.addingBank).toBeDefined();
 		const [next, cmds] = confirmed(typed(m, "Owner/Bank@v2"));
+		expect(next.browser.addingBank).toBeUndefined();
 		expect(next.local.workspace[id]?.source).toContain("  hh: Owner/Bank@v2\n");
+		// The author stays in the instrument, the caret after what was written.
+		expect(next.screen).toEqual({ kind: "editing", id });
+		expect(cmds[0]?.kind).toBe("revealRange");
 		expect(cmds.some((c) => c.kind === "loadRemoteBanks" && c.now)).toBe(true);
-	});
-
-	it("from New, opens the new bank's details", () => {
-		const m = update(loaded(), { kind: "bankAddOpened", how: "new" })[0];
-		const [next] = confirmed(typed(m, "survey"));
-		const id = next.screen.kind === "editing" ? next.screen.id : undefined;
-		expect(id !== undefined && next.local.schemes[id]?.bank).toBe(
-			"banks/survey",
-		);
 	});
 });

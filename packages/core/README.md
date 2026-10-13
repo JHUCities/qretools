@@ -29,9 +29,9 @@ DDI's control constructs, with a Variable for everything it records. What a
 resolver must fetch first, `importsOf` says without reading anything else.
 
 ```ts
-const file = "fixtures/instruments/households.yaml";
+const file = "fixtures/households/instruments/households.yaml";
 const source = await readFile(file, "utf8");
-importsOf(source); // → [{ alias: "hh", address: "../households" }]
+importsOf(source); // → [{ alias: "hh", address: "../" }]
 const households = bankOf(await readBank("fixtures/households"));
 const instrument = instrumentOf(source, {
 	banks: { hh: households },
@@ -52,10 +52,10 @@ qretools check path/to/bank --strict   # warnings fail too
 qretools export path/to/bank -o bank.json   # the bank's DDI, validated
 ```
 
-`check` also reads a workspace: a folder holding banks (each a folder with
-`bank.yaml`, or its root), `instruments/` and `workspace.yaml`. It reports every bank's
-findings, every instrument's (read against the banks beside it, under the agency
-`workspace.yaml` gives), and notes YAML files it reads as nothing.
+`check` also reads a workspace: a folder holding a bank at its root (`questions/`,
+the shared folders, `bank.yaml`), `instruments/` and `workspace.yaml`. It reports the
+bank's findings, every instrument's (read against its own workspace's bank, written
+`../`, under the agency `workspace.yaml` gives), and notes YAML files it reads as nothing.
 
 A bank in another repository (`owner/repo@v1`, or `owner/repo/folder@v1`) is read at
 that tag with your own `git`, so whatever credentials git has reach a private

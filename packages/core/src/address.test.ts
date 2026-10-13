@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { addressOf, joinFolder, relativeFolder } from "./address.ts";
+import { addressOf, HERE, joinFolder } from "./address.ts";
 
 describe("a bank's address", () => {
-	it("is a folder beside the instrument when it starts ./ or ../", () => {
-		expect(addressOf("../banks/hh")).toEqual({
-			kind: "local",
-			path: "../banks/hh",
-		});
+	it("is local when it starts ./ or ../, as the instrument's own workspace does", () => {
+		expect(addressOf(HERE)).toEqual({ kind: "local", path: "../" });
+		expect(joinFolder("instruments", HERE)).toBe("");
+		// Read as written: which local paths are accepted is the workspace's rule.
 		expect(addressOf(" ./hh ")).toEqual({ kind: "local", path: "./hh" });
 	});
 
@@ -20,10 +19,10 @@ describe("a bank's address", () => {
 			key: "jhucities/qretools-bank-template@v1",
 		});
 		expect(addressOf("o/r@v1.0.0+2026")).toMatchObject({ ref: "v1.0.0+2026" });
-		expect(addressOf("o/r/banks/Hh/@release/2026.1")).toMatchObject({
-			path: "banks/Hh",
+		expect(addressOf("o/r/surveys/Hh/@release/2026.1")).toMatchObject({
+			path: "surveys/Hh",
 			ref: "release/2026.1",
-			key: "o/r/banks/Hh@release/2026.1",
+			key: "o/r/surveys/Hh@release/2026.1",
 		});
 	});
 
@@ -48,7 +47,7 @@ describe("a bank's address", () => {
 			"o/r//b@v1",
 			"o/r@v 1",
 			"o/../b@v1",
-			"../banks/hh@v1",
+			"../@v1",
 			"o/r@v1..2",
 			"o/r@.v1",
 			"o/r@v1/.x",
@@ -62,12 +61,15 @@ describe("a bank's address", () => {
 		expect(
 			addressOf("o/r").kind === "invalid" && addressOf("o/r"),
 		).toMatchObject({ reason: expect.stringContaining("`o/r@v1`") });
+		expect(addressOf("../@v1")).toMatchObject({
+			reason: expect.stringContaining("Write `../`."),
+		});
 	});
 });
 
 describe("a folder from a folder", () => {
 	it("follows . and .. and ignores empty parts", () => {
-		expect(joinFolder("instruments", "../banks/hh")).toBe("banks/hh");
+		expect(joinFolder("instruments", "../surveys/hh")).toBe("surveys/hh");
 		expect(joinFolder("", "./hh/")).toBe("hh");
 		expect(joinFolder("p/instruments", "../../shared/./b")).toBe("shared/b");
 		expect(joinFolder("a", "..")).toBe("");
@@ -75,23 +77,5 @@ describe("a folder from a folder", () => {
 
 	it("leads nowhere above the root", () => {
 		expect(joinFolder("instruments", "../../hh")).toBeUndefined();
-	});
-});
-
-describe("a folder written from a folder", () => {
-	it("is joinFolder's inverse, always local", () => {
-		const cases: [string, string, string][] = [
-			["instruments", "banks/hh", "../banks/hh"],
-			["instruments", "", "../"],
-			["", "hh", "./hh"],
-			["", "", "./"],
-			["p/instruments", "p/banks/x", "../banks/x"],
-			["a/b", "a/b/c", "./c"],
-		];
-		for (const [base, to, written] of cases) {
-			expect(relativeFolder(base, to)).toBe(written);
-			expect(joinFolder(base, written)).toBe(to);
-			expect(addressOf(written).kind).toBe("local");
-		}
 	});
 });
