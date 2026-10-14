@@ -462,7 +462,7 @@ export function bankChoices(
 	remote: readonly Extract<Address, { kind: "remote" }>[],
 ): readonly Choice[] {
 	return [
-		{ name: HERE, detail: "This workspace's bank" },
+		{ name: HERE, detail: "This workspace's questions" },
 		...remote.map((a) => ({
 			name: `${a.owner}/${a.repo}${a.path === "" ? "" : `/${a.path}`}@${a.ref}`,
 			detail: "A bank on GitHub",

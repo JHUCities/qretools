@@ -310,7 +310,7 @@ describe("what the pickers offer", () => {
 		const remote = addressOf("JHUCities/Bank/surveys/hh@v1");
 		const remotes = remote.kind === "remote" ? [remote] : [];
 		expect(bankChoices(remotes)).toEqual([
-			{ name: "../", detail: "This workspace's bank" },
+			{ name: "../", detail: "This workspace's questions" },
 			// As written, not the lowercased key.
 			{ name: "JHUCities/Bank/surveys/hh@v1", detail: "A bank on GitHub" },
 		]);

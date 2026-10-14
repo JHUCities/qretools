@@ -40,7 +40,8 @@ export const SCHEME_LABELS: Readonly<Record<SchemeKind, string>> = {
 	universe: "Universes",
 	instruction: "Instructions",
 	missing: "Missing values",
-	select_all: "Select-all-that-apply values",
+	// Short, for the tree: its file and the New menu say it in full.
+	select_all: "Select all that apply",
 	workspace: "Workspace details",
 };
 
