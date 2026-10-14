@@ -13,7 +13,13 @@ import {
 	type Question,
 	type SchemeEntry,
 } from "./model.js";
-import { openFolder, schemeSections, treeOf, UNFILED } from "./tree.js";
+import {
+	openFolder,
+	schemeSections,
+	settingsRows,
+	treeOf,
+	UNFILED,
+} from "./tree.js";
 
 const bank = (
 	id: number,
@@ -193,8 +199,6 @@ describe("schemeSections", () => {
 			["unit", []],
 			["universe", []],
 			["instruction", []],
-			["missing", [["missing", undefined]]],
-			["select_all", []],
 		]);
 	});
 
@@ -205,12 +209,50 @@ describe("schemeSections", () => {
 			),
 		).toEqual(["scale"]);
 		expect(
-			sections({ ...m, screen: { kind: "editing", id: 12 } }).find(
-				(x) => x.kind === "missing",
+			sections({ ...m, screen: { kind: "editing", id: 10 } }).find(
+				(x) => x.kind === "scale",
 			)?.expanded,
 		).toBe(false);
-		expect(openFolder({ ...m, screen: { kind: "editing", id: 12 } })).toBe(
-			"scheme:missing",
+		expect(openFolder({ ...m, screen: { kind: "editing", id: 10 } })).toBe(
+			"scheme:scale",
 		);
+		// A workspace's own file is a Settings row: no section to open.
+		expect(
+			openFolder({ ...m, screen: { kind: "editing", id: 12 } }),
+		).toBeUndefined();
+	});
+});
+
+describe("settingsRows", () => {
+	const rows = (mm: Model) =>
+		settingsRows(mm, (e) => evaluateScheme(e.kind, e.source, envIn(mm)));
+	const missing: SchemeEntry = {
+		id: 12,
+		kind: "missing",
+		name: "missing",
+		source: 'labels:\n  "-8": NR\n',
+		base: { path: "missing.yaml", sha: "s", text: 'labels:\n  "-8": NR\n' },
+	};
+	const m: Model = {
+		...model,
+		local: { ...model.local, schemes: { 12: missing } },
+	};
+
+	it("lists the workspace's own files, there or not, saying what applies without one", () => {
+		expect(
+			rows(m).map((r) => [r.label, r.leaf?.id, r.absent?.shown, r.status.kind]),
+		).toEqual([
+			["Workspace details", undefined, undefined, "incomplete"],
+			["Missing values", 12, undefined, "complete"],
+			["Select all that apply", undefined, "usual", "complete"],
+		]);
+	});
+
+	it("filters by label", () => {
+		expect(
+			rows({ ...m, browser: { ...m.browser, filter: "missing" } }).map(
+				(r) => r.kind,
+			),
+		).toEqual(["missing"]);
 	});
 });

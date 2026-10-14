@@ -1,7 +1,6 @@
 /** The page: a split layout with the bank tree in the pane and the open file in the content. */
 
 import {
-	GearIcon,
 	GitBranchIcon,
 	GitPullRequestIcon,
 	PlusIcon,
@@ -24,7 +23,6 @@ import {
 } from "@primer/react";
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import {
-	absentRoot,
 	type Index,
 	indexOf,
 	instrumentAt,
@@ -50,7 +48,6 @@ import { useMemo } from "react";
 import { SOURCE_URL } from "../config.js";
 import {
 	type Dispatch,
-	detailsOf,
 	fileOf,
 	type Id,
 	isScheme,
@@ -60,9 +57,9 @@ import {
 import { alsoSaves, claimOf, isUnsaved, usersIn } from "../sync.js";
 import {
 	bankFolders,
-	detailsButton,
 	SHARED_KINDS,
 	schemeSections,
+	settingsRows,
 	treeOf,
 	workspaceLeaves,
 } from "../tree.js";
@@ -206,6 +203,10 @@ export function App() {
 			),
 		[treeInput, evaluations, env, index, instrumentUses],
 	);
+	const settings = useMemo(
+		() => settingsRows(treeInput, (e) => evaluations.scheme(e, env)),
+		[treeInput, evaluations, env],
+	);
 	// The workspace's own files, read as their author sees them.
 	const workspace = useMemo(() => {
 		const slices = {
@@ -217,24 +218,6 @@ export function App() {
 			statusOf(evaluations.instrument(slices, e).instrument.findings),
 		);
 	}, [treeInput, evaluations, local, model.remote, model.remoteBanks]);
-	// What the details' button says (unsaved, to fill in or fix, advice), as a tree
-	// item's marks would. A workspace with no details yet has its agency to fill in.
-	const detailsEntry = detailsOf(local.schemes);
-	const details = useMemo(
-		() =>
-			detailsButton(
-				treeInput,
-				statusOf(
-					detailsEntry === undefined
-						? absentRoot("workspace")
-						: evaluations.scheme(detailsEntry, env).findings,
-				),
-			),
-		[treeInput, evaluations, detailsEntry, env],
-	);
-	// The workspace's details are open: said on the button beside its name.
-	const detailsOpen =
-		screen.kind === "editing" && screen.id === detailsEntry?.id;
 	const naming = model.browser.naming;
 	const namingInstrument = model.browser.namingInstrument;
 	const addingBank = model.browser.addingBank;
@@ -451,35 +434,10 @@ export function App() {
 							 * The landmark keeps a name of its own: the title holds a link.
 							 */}
 							<div className="band">
-								{/*
-								 * The workspace's details sit by its name, as a repository's settings
-								 * by its name on github.com: they are about the whole workspace.
-								 */}
-								<div className="band-row">
-									<Heading as="h2" variant="small" className="pane-title">
-										<VisuallyHidden>Question bank: </VisuallyHidden>
-										<Bank model={model} />
-									</Heading>
-									<IconButton
-										icon={GearIcon}
-										// Medium, as the pull-request button: at small the dot covers the icon.
-										variant="invisible"
-										aria-label={details.label}
-										{...(details.attention && {
-											notificationIndicator: "icon" as const,
-										})}
-										// No selected look on a button: the open file's header says it,
-										// and assistive technology hears it here.
-										aria-current={detailsOpen ? "page" : undefined}
-										// One per workspace: opened if it exists, else started.
-										onClick={() =>
-											dispatch({
-												kind: "schemeCreateOpened",
-												scheme: "workspace",
-											})
-										}
-									/>
-								</div>
+								<Heading as="h2" variant="small" className="pane-title">
+									<VisuallyHidden>Question bank: </VisuallyHidden>
+									<Bank model={model} />
+								</Heading>
 							</div>
 							{/* The branch, the filter and the foot stay put; the tree between scrolls. */}
 							<div className="sidebar-body">
@@ -495,6 +453,7 @@ export function App() {
 									<Browser
 										folders={folders}
 										sections={sections}
+										settings={settings}
 										workspace={workspace}
 										noInstruments={
 											!Object.values(local.workspace).some(

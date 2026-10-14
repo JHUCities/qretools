@@ -6,15 +6,19 @@
  * `update` (`openFolder`), so the user can still close it.
  */
 import {
+	absentRoot,
+	DEFAULT_SELECT_ALL,
 	type Evaluation,
 	type Index,
 	isRoot,
 	labelOf,
+	type RootKind,
 	SCHEME_KINDS,
 	SCHEME_LABELS,
 	type SchemeEvaluation,
 	type SchemeKind,
 	type Status,
+	selectAllText,
 	status,
 	usedBy,
 } from "@qretools/core";
@@ -33,7 +37,6 @@ export type TreeInput = Pick<
 	"local" | "browser" | "screen" | "activity"
 >;
 
-import { detailsOf } from "./model.js";
 import { claimOf, isUnsaved } from "./sync.js";
 import { type InstrumentUses, instrumentsUsing } from "./usedBy.js";
 
@@ -121,7 +124,7 @@ const marks = (model: TreeInput, e: Entry) => {
 
 export interface SchemeLeaf extends Omit<Leaf, "name" | "title"> {
 	readonly name: string;
-	/** How many questions write this name, resolved or not. Absent for the missing list, which every variable uses. */
+	/** How many questions write this name, resolved or not. Absent for a Settings row, which nothing names. */
 	readonly usedBy?: number;
 }
 
@@ -152,7 +155,9 @@ export function openFolder(model: TreeInput): string | undefined {
 	const question = model.local.questions[id];
 	if (question !== undefined) return folderOfQuestion(question);
 	const scheme = model.local.schemes[id];
-	return scheme === undefined ? undefined : sectionKey(scheme.kind);
+	return scheme === undefined || isRoot(scheme.kind)
+		? undefined
+		: sectionKey(scheme.kind);
 }
 
 export function schemeSections(
@@ -197,16 +202,81 @@ export function schemeSections(
 }
 
 /**
- * The kinds the tree's Shared sections and the New menu list: every one but the
- * workspace's details, whose one way in is the button beside the workspace's name.
+ * The kinds the tree's Shared sections and the New menu list: those a question names.
+ * A workspace's one-per-workspace files are its Settings (`settingsRows`).
  */
 export const SHARED_KINDS: readonly SchemeKind[] = SCHEME_KINDS.filter(
-	(k) => k !== "workspace",
+	(k) => !isRoot(k),
 );
+
+/** The Settings section's rows, in order: the details first, the one to fill in. */
+const SETTINGS: readonly RootKind[] = ["workspace", "missing", "select_all"];
+
+/**
+ * What applies while a workspace has no such file: a word beside its row (the label
+ * mustn't lose to its value at the sidebar's width), and in full where it's heard.
+ */
+const ABSENT: Readonly<
+	Record<RootKind, { shown: string; heard: string } | undefined>
+> = {
+	workspace: undefined, // its status says it: to fill in
+	missing: { shown: "none", heard: "none" },
+	select_all: {
+		shown: "usual",
+		heard: `usual coding: ${selectAllText(DEFAULT_SELECT_ALL)}`,
+	},
+};
+
+export interface SettingsRow {
+	readonly kind: RootKind;
+	readonly label: string;
+	/** The file's own marks, while the workspace has it. */
+	readonly leaf?: SchemeLeaf;
+	/** Absent: what applies without the file (`absentRoot`), and in words. */
+	readonly status: Status;
+	readonly absent?: { readonly shown: string; readonly heard: string };
+}
+
+/**
+ * The workspace's own files, one row each, there or not: selecting one opens it, or
+ * starts it. While filtering, only rows whose label matches.
+ */
+export function settingsRows(
+	model: TreeInput,
+	evaluate: (e: SchemeEntry) => SchemeEvaluation,
+): readonly SettingsRow[] {
+	const filter = model.browser.filter.trim().toLowerCase();
+	const entries = Object.values(model.local.schemes);
+	return SETTINGS.flatMap((kind): SettingsRow[] => {
+		const label = SCHEME_LABELS[kind];
+		if (filter !== "" && !label.toLowerCase().includes(filter)) return [];
+		const e = entries.find((x) => x.kind === kind);
+		if (e === undefined) {
+			const absent = ABSENT[kind];
+			return [
+				{
+					kind,
+					label,
+					status: status(absentRoot(kind)),
+					...(absent !== undefined && { absent }),
+				},
+			];
+		}
+		const s = status(evaluate(e).findings);
+		return [
+			{
+				kind,
+				label,
+				leaf: { ...marks(model, e), name: label, status: s },
+				status: s,
+			},
+		];
+	});
+}
 
 /**
  * The workspace's instruments, flat, by name. Its details (`workspace.yaml`) are about
- * the whole workspace, so they open from beside its name, never from this list.
+ * the whole workspace, so they're a Settings row (`settingsRows`), never in this list.
  */
 export function workspaceLeaves(
 	model: TreeInput,
@@ -222,31 +292,6 @@ export function workspaceLeaves(
 		.map(leaf)
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.filter((l) => filter === "" || l.name.toLowerCase().includes(filter));
-}
-
-/**
- * What the button for the workspace's details says, now they're out of the tree: its
- * name, and what the tree's marks said (unsaved changes, something to fill in or fix,
- * advice), with whether that calls for its dot. `status` is the details' own, or,
- * while the workspace has none, what the core says of that (`absentRoot`).
- */
-export function detailsButton(
-	model: TreeInput,
-	status: Status | undefined,
-): { readonly label: string; readonly attention: boolean } {
-	const details = detailsOf(model.local.schemes);
-	const said = [
-		...(details !== undefined && isUnsaved(details) ? ["unsaved changes"] : []),
-		...(status?.kind === "incomplete" ? ["to fill in or fix"] : []),
-		...(status?.kind === "advice" ? ["has advice"] : []),
-	];
-	return {
-		label:
-			said.length === 0
-				? "Workspace details"
-				: `Workspace details (${said.join("; ")})`,
-		attention: said.length > 0,
-	};
 }
 
 /** The folders the bank has, for the save and move dialogs. Drafts do not count: they are not filed yet. */
