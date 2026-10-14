@@ -37,7 +37,6 @@ export function Browser({
 	sections,
 	settings = [],
 	workspace = [],
-	noInstruments = false,
 	filter,
 	open,
 	dispatch,
@@ -51,8 +50,6 @@ export function Browser({
 	settings?: readonly SettingsRow[];
 	/** The workspace's own files (`workspaceLeaves`): its instruments. */
 	workspace?: readonly SchemeLeaf[];
-	/** The workspace has no instrument at all: its section says so. */
-	noInstruments?: boolean;
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
@@ -72,19 +69,12 @@ export function Browser({
 				<SkeletonText lines={3} size="bodyMedium" />
 			</Stack>
 		);
-	// What is asked comes first, then what it is asked from: with no instrument yet,
-	// its section says so, so instruments are found where a team starts (New, in the
-	// header, starts one).
-	const none = noInstruments && filter === "";
+	// What is asked comes first, then what it is asked from. A workspace of questions
+	// alone is a whole one (a bank): no section says it lacks instruments.
 	return (
 		<Stack gap="normal">
-			{(workspace.length > 0 || none) && (
-				<Instruments
-					leaves={workspace}
-					none={none}
-					open={open}
-					dispatch={dispatch}
-				/>
+			{workspace.length > 0 && (
+				<Instruments leaves={workspace} open={open} dispatch={dispatch} />
 			)}
 			<BankTrees
 				folders={folders}
@@ -172,13 +162,10 @@ function Settings({
 /** The workspace's instruments: one flat tree, named by its heading. */
 function Instruments({
 	leaves,
-	none,
 	open,
 	dispatch,
 }: {
 	leaves: readonly SchemeLeaf[];
-	/** No instrument yet: a line saying so. */
-	none: boolean;
 	open: Id | undefined;
 	dispatch: Dispatch;
 }) {
@@ -188,24 +175,21 @@ function Instruments({
 			<h3 id={id} className="browser-heading">
 				Instruments
 			</h3>
-			{none && <p className="quiet browser-empty">No instruments yet.</p>}
-			{leaves.length > 0 && (
-				<TreeView aria-labelledby={id}>
-					{leaves.map((leaf) => (
-						<TreeView.Item
-							key={leaf.id}
-							id={`w:${leaf.id}`}
-							current={leaf.id === open}
-							onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
-						>
-							{leaf.name}
-							<TreeView.TrailingVisual label={marksLabel(leaf)}>
-								<Marks leaf={leaf} />
-							</TreeView.TrailingVisual>
-						</TreeView.Item>
-					))}
-				</TreeView>
-			)}
+			<TreeView aria-labelledby={id}>
+				{leaves.map((leaf) => (
+					<TreeView.Item
+						key={leaf.id}
+						id={`w:${leaf.id}`}
+						current={leaf.id === open}
+						onSelect={() => dispatch({ kind: "fileOpened", id: leaf.id })}
+					>
+						{leaf.name}
+						<TreeView.TrailingVisual label={marksLabel(leaf)}>
+							<Marks leaf={leaf} />
+						</TreeView.TrailingVisual>
+					</TreeView.Item>
+				))}
+			</TreeView>
 		</Stack>
 	);
 }

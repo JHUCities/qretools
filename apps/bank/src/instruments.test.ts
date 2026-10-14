@@ -547,7 +547,7 @@ describe("the example instrument", () => {
 		const e = Object.values(made.local.workspace).find(
 			(f) => f.kind === "instrument" && f.name === "example",
 		);
-		expect(e?.source).toContain("uses:\n  bank: ../\n");
+		expect(e?.source).toContain("uses:\n  example: ../\n");
 		expect(made.screen).toEqual({ kind: "editing", id: e?.id });
 		const [again] = update(made, {
 			kind: "instrumentCreateOpened",

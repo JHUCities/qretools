@@ -29,12 +29,12 @@ import {
 	isRoot,
 	kindAt,
 	plainText,
+	ROOT,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 	status as statusOf,
 	UNNAMED,
 	usedBy,
-	WORKSPACE_DETAILS,
 } from "@qretools/core";
 import { installUrl } from "@qretools/shell";
 import {
@@ -114,13 +114,12 @@ function NewMenu({ dispatch }: { dispatch: Dispatch }) {
 						Instrument…
 					</ActionList.Item>
 					<ActionList.Divider />
+					<ActionList.GroupHeading>Question</ActionList.GroupHeading>
 					<ActionList.Item
 						onSelect={() => dispatch({ kind: "questionCreated", text: "" })}
 					>
 						Blank question
 					</ActionList.Item>
-					<ActionList.Divider />
-					<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
 					{TEMPLATES.map((t) => (
 						<ActionList.Item
 							key={t.label}
@@ -246,11 +245,11 @@ export function App() {
 	const confirmName =
 		confirm === undefined
 			? undefined
-			: // An instrument and the workspace's details say what they are.
+			: // An instrument says what it is; a workspace's own file is its file name.
 				confirm.kind === "instrument"
 				? `instrument ${confirm.name}`
-				: confirm.kind === "workspace"
-					? WORKSPACE_DETAILS
+				: isScheme(confirm) && isRoot(confirm.kind)
+					? ROOT[confirm.kind]
 					: confirm.base !== undefined
 						? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
 						: confirm.kind === "question"
@@ -455,11 +454,6 @@ export function App() {
 										sections={sections}
 										settings={settings}
 										workspace={workspace}
-										noInstruments={
-											!Object.values(local.workspace).some(
-												(e) => e.kind === "instrument",
-											)
-										}
 										loading={loading}
 										filter={model.browser.filter}
 										open={open}
@@ -585,8 +579,8 @@ export function App() {
 							? (evaluations.get(f, env).draft.name ?? UNNAMED)
 							: f.kind === "instrument"
 								? `instrument ${f.name}`
-								: f.kind === "workspace"
-									? WORKSPACE_DETAILS
+								: isRoot(f.kind)
+									? ROOT[f.kind]
 									: `${SCHEME_NAME[f.kind]} ${f.name}`,
 					)}
 					saving={signingOut.phase === "saving"}

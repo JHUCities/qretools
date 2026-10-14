@@ -242,13 +242,13 @@ describe("settingsRows", () => {
 		expect(
 			rows(m).map((r) => [r.label, r.leaf?.id, r.absent?.shown, r.status.kind]),
 		).toEqual([
-			["Workspace details", undefined, undefined, "incomplete"],
-			["Missing values", 12, undefined, "complete"],
-			["Select all that apply", undefined, "usual", "complete"],
+			["workspace.yaml", undefined, undefined, "incomplete"],
+			["missing.yaml", 12, undefined, "complete"],
+			["select_all.yaml", undefined, "usual", "complete"],
 		]);
 	});
 
-	it("filters by label", () => {
+	it("filters by file name", () => {
 		expect(
 			rows({ ...m, browser: { ...m.browser, filter: "missing" } }).map(
 				(r) => r.kind,

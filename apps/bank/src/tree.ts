@@ -12,6 +12,7 @@ import {
 	type Index,
 	isRoot,
 	labelOf,
+	ROOT,
 	type RootKind,
 	SCHEME_KINDS,
 	SCHEME_LABELS,
@@ -238,8 +239,8 @@ export interface SettingsRow {
 }
 
 /**
- * The workspace's own files, one row each, there or not: selecting one opens it, or
- * starts it. While filtering, only rows whose label matches.
+ * The workspace's own files, one row each, there or not, by file name: selecting one
+ * opens it, or starts it. While filtering, only rows whose name matches.
  */
 export function settingsRows(
 	model: TreeInput,
@@ -248,7 +249,7 @@ export function settingsRows(
 	const filter = model.browser.filter.trim().toLowerCase();
 	const entries = Object.values(model.local.schemes);
 	return SETTINGS.flatMap((kind): SettingsRow[] => {
-		const label = SCHEME_LABELS[kind];
+		const label = ROOT[kind];
 		if (filter !== "" && !label.toLowerCase().includes(filter)) return [];
 		const e = entries.find((x) => x.kind === kind);
 		if (e === undefined) {

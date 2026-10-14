@@ -19,7 +19,7 @@ const here = (path: string): string =>
 
 /** Its holes and errors in `bank`: none, for an example. */
 const wrong = (text: string, bank: ReturnType<typeof bankOf>) =>
-	parseInstrument(text, { bank })
+	parseInstrument(text, { example: bank })
 		.findings.filter((f) => f.severity === "hole" || f.severity === "error")
 		.map((f) => f.message);
 
@@ -34,10 +34,10 @@ describe("the example instrument", async () => {
 	it("reads beside the example questions with nothing to fill in, named and pointed at its workspace", () => {
 		const text = exampleInstrument("demo", HERE, example) ?? "";
 		expect(text).toMatch(/^name: demo$/m);
-		expect(text).toContain("uses:\n  bank: ../\n");
-		expect(text).toContain("rating: label(bank.service_satisfaction)");
+		expect(text).toContain("uses:\n  example: ../\n");
+		expect(text).toContain("rating: label(example.service_satisfaction)");
 		expect(text).toContain(
-			"  - roster: members\n    count: bank.household_size",
+			"  - roster: members\n    count: example.household_size",
 		);
 		expect(text).toContain("      - if: dissatisfied");
 		expect(wrong(text, example)).toEqual([]);
@@ -47,7 +47,7 @@ describe("the example instrument", async () => {
 		const files = await readWorkspace(here("../../fixtures/bank"));
 		const asked = [
 			...(exampleInstrument("demo", HERE, example) ?? "").matchAll(
-				/\bbank\.(\w+)/g,
+				/\bexample\.(\w+)/g,
 			),
 		].map((m) => m[1]);
 		// Every question it names is one of that folder's, and no other folder has any.
@@ -61,7 +61,7 @@ describe("the example instrument", async () => {
 			"workspace.yaml": "agency: org.example\n",
 			"instruments/demo.yaml": exampleInstrument("demo", HERE, example) ?? "",
 		}).instruments["instruments/demo.yaml"];
-		expect(read?.uses).toEqual({ bank: { kind: "local" } });
+		expect(read?.uses).toEqual({ example: { kind: "local" } });
 		expect(
 			read?.instrument.findings.filter(
 				(f) => f.severity === "hole" || f.severity === "error",
@@ -81,7 +81,7 @@ describe("the example instrument", async () => {
 		if (!validator.ok) throw new Error(validator.error.message);
 		const instrument = instrumentOf(
 			exampleInstrument("demo", HERE, example) ?? "",
-			{ banks: { bank: example }, agency: "org.example" },
+			{ banks: { example }, agency: "org.example" },
 		);
 		expect(instrument.findings.filter((f) => f.severity !== "info")).toEqual(
 			[],
