@@ -63,7 +63,7 @@ const UNTITLED = "untitled-question";
 /** The bank's missing-value list: one managed representation, referenced by every Variable. */
 const MISSING_ID = "missing-values";
 /** The code list every select-all option's variable is coded on: the bank's two values. */
-const SELECT_ALL_ID = "select-all";
+export const SELECT_ALL_ID = "select-all";
 
 /**
  * What is known of the versions a question's items take: its own file's, and each

@@ -6,9 +6,11 @@
 import { isMap, isScalar, parseDocument } from "yaml";
 import { HERE } from "../address.ts";
 import type { Collision, DdiDocument } from "../ddi/document.ts";
+import { SELECT_ALL_ID } from "../ddi/elaborate.ts";
 import type { BankScope } from "../evaluate.ts";
 import { type Finding, inDocumentOrder, type Range } from "../findings.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
+import { DEFAULT_SELECT_ALL, selectAllText } from "../selectAll.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
 import type { Livelit } from "../surface/livelits.ts";
 import { inspectInstrument } from "./check.ts";
@@ -86,12 +88,7 @@ export function instrumentOf(
 						},
 					]
 				: [];
-	const clashes: Finding[] = collisions.map((c) => ({
-		code: "name-clash",
-		severity: "error",
-		path: "",
-		message: `\`${c.urn}\` would name two different items, from ${c.keys.join(", ")}.`,
-	}));
+	const clashes = clashFindings(collisions, parsed.draft.uses);
 	// A bank with no agency would publish its questions under `invalid`: say so where it's
 	// used. Not for the instrument's own workspace (`../`): its agency is the instrument's,
 	// and the finding above already says it is missing or wrong.
@@ -129,6 +126,52 @@ export function instrumentOf(
 		refs: instrumentRefs(parsed, source),
 		livelits: instrumentLivelits(source, parsed, checked.fills),
 	};
+}
+
+/**
+ * One finding per identity two different items would share; the codings of select all
+ * that apply (a code list and its two categories) from workspaces under one agency are
+ * said once, on the `uses` line written last among them.
+ */
+function clashFindings(
+	collisions: readonly Collision<string>[],
+	uses: readonly Use[],
+): Finding[] {
+	const generic: Finding[] = [];
+	const codings = new Map<string, { agency: string; aliases: string[] }>();
+	for (const c of collisions) {
+		// `urn:ddi:agency:id:version`: neither an agency nor an ID holds a colon.
+		const [, , agency = "", id = ""] = c.urn.split(":");
+		if (!id.startsWith(`${SELECT_ALL_ID}.`)) {
+			generic.push({
+				code: "name-clash",
+				severity: "error",
+				path: "",
+				message: `\`${c.urn}\` would name two different items, from ${c.keys.join(", ")}.`,
+			});
+			continue;
+		}
+		const aliases = [
+			...new Set(c.keys.map((k) => k.split(":")[0] ?? k)),
+		].sort();
+		codings.set(`${agency} ${aliases.join(" ")}`, { agency, aliases });
+	}
+	const coding = [...codings.values()].map(({ agency, aliases }): Finding => {
+		const last = uses.findLast((u) => aliases.includes(u.alias))?.alias;
+		const names = aliases.map((a) => `\`${a}\``);
+		const who =
+			names.length === 2
+				? `${names[0]} and ${names[1]} both`
+				: `${names.slice(0, -1).join(", ")} and ${names.at(-1)} all`;
+		return {
+			code: "name-clash",
+			severity: "error",
+			path: last === undefined ? "" : `uses.${last}`,
+			message: `${who} publish as \`${agency}\` but don't agree on how a select-all-that-apply option is stored.`,
+			hint: `Make their \`select_all.yaml\` files agree. A workspace without one stores ${selectAllText(DEFAULT_SELECT_ALL)}.`,
+		};
+	});
+	return [...generic, ...coding];
 }
 
 /**
