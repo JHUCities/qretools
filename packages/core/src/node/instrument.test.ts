@@ -275,7 +275,7 @@ describe("qretools instrument", () => {
 			"name: x\nuses:\n  hh: ../households\nflow:\n  - ask: hh.size\n",
 		);
 		const refused =
-			"Can't read `hh`: `../households`: an instrument names its own workspace as `../`, never one of its folders. It takes only the questions its flow asks for by name (`ask: hh.<name>`), wherever they sit under `questions/`.\n";
+			"Can't read `hh`: `../households` isn't valid. To use the questions in this instrument's own workspace, `../` is enough.\n";
 		expect(await run("instrument", "check", file)).toMatchObject({
 			code: 2,
 			err: refused,

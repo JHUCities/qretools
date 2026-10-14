@@ -424,7 +424,7 @@ async function instrument(
 				address.kind === "invalid"
 					? address.reason
 					: address.path !== HERE
-						? notHere(address.path, use.alias)
+						? notHere(address.path)
 						: offline !== undefined
 							? `it's this instrument's own workspace (\`${HERE}\`), read from the folder above it; \`--bank\` is for one written as \`owner/repo@v1\`.`
 							: // The folder above is read whole, so it must be a workspace's: the app's rule too.

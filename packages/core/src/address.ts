@@ -12,12 +12,12 @@ export const HERE = "../";
 
 /**
  * Why a local address other than `HERE` is refused, in the author's words. A folder
- * inside the workspace (`../banks/example`) is said apart: `../` isn't more than they
- * asked for, since an instrument takes only the questions its flow names.
+ * inside the workspace (`../banks/example`) is said apart: `../` is all it takes, since
+ * an instrument takes only the questions its flow asks for.
  */
-export const notHere = (path: string, alias: string): string =>
+export const notHere = (path: string): string =>
 	/^\.\.\/[^./]/.test(path)
-		? `\`${path}\`: an instrument names its own workspace as \`${HERE}\`, never one of its folders. It takes only the questions its flow asks for by name (\`ask: ${alias}.<name>\`), wherever they sit under \`questions/\`.`
+		? `\`${path}\` isn't valid. To use the questions in this instrument's own workspace, \`${HERE}\` is enough.`
 		: `\`${path}\`: an instrument uses its own workspace as \`${HERE}\`, and another workspace as \`owner/repo@v1\`.`;
 
 export type Address =

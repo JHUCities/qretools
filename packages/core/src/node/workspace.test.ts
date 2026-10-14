@@ -223,7 +223,7 @@ flow:
 		// A folder inside it: `../` is no more than that, since only what's asked is taken.
 		for (const folder of ["../questions", "../banks/x"])
 			expect(said(uses(folder)), folder).toEqual([
-				`\`${folder}\`: an instrument names its own workspace as \`../\`, never one of its folders. It takes only the questions its flow asks for by name (\`ask: b.<name>\`), wherever they sit under \`questions/\`.`,
+				`\`${folder}\` isn't valid. To use the questions in this instrument's own workspace, \`../\` is enough.`,
 			]);
 		expect(said(uses("../@v1"))).toEqual([
 			expect.stringContaining("Write `../`."),
