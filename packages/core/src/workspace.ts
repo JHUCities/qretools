@@ -94,7 +94,7 @@ export function resolveUses(
 			out[u.alias] =
 				address.path === HERE
 					? { kind: "local" }
-					: { kind: "unreadable", reason: notHere(address.path) };
+					: { kind: "unreadable", reason: notHere(address.path, u.alias) };
 		else {
 			const read = remote[address.key];
 			out[u.alias] =

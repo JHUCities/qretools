@@ -216,16 +216,14 @@ flow:
 			`name: x\nuses:\n  b: ${address}\nflow:\n  - say: Hi.\n`;
 		// Its own workspace has one spelling; any other local path is refused, saying so.
 		expect(said(uses("../"))).toEqual([]);
-		for (const other of [
-			".././",
-			"../.",
-			"./",
-			"../questions",
-			"../banks/x",
-			"../../out",
-		])
+		for (const other of [".././", "../.", "./", "../../out"])
 			expect(said(uses(other)), other).toEqual([
 				`\`${other}\`: an instrument uses its own workspace as \`../\`, and another workspace as \`owner/repo@v1\`.`,
+			]);
+		// A folder inside it: `../` is no more than that, since only what's asked is taken.
+		for (const folder of ["../questions", "../banks/x"])
+			expect(said(uses(folder)), folder).toEqual([
+				`\`${folder}\`: an instrument names its own workspace as \`../\`, never one of its folders. It takes only the questions its flow asks for by name (\`ask: b.<name>\`), wherever they sit under \`questions/\`.`,
 			]);
 		expect(said(uses("../@v1"))).toEqual([
 			expect.stringContaining("Write `../`."),
