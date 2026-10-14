@@ -227,16 +227,6 @@ exports[`one bank, as the app has always held it > at the repository's root 1`] 
           "select_one complete used by 4",
         ],
       },
-      {
-        "kind": "missing",
-        "leaves": [
-          "missing complete used by -",
-        ],
-      },
-      {
-        "kind": "select_all",
-        "leaves": [],
-      },
     ],
     "tree": [
       {

@@ -223,41 +223,55 @@ describe("a workspace's instruments", () => {
 		expect(items[0]).toMatch(/^wave1/);
 	});
 
-	it("leave the workspace's details to the button beside its name, which says when they're open", async () => {
+	it("list the workspace's own files under Settings, one row each, and nowhere else", async () => {
 		const app = renderWorkspace();
 		await act(async () => {});
 		const nav = screen.getByRole("navigation", { name: "Question bank" });
-		const gear = within(nav).getByRole("button", { name: "Workspace details" });
-		expect(gear.getAttribute("aria-current")).toBeNull();
-		fireEvent.click(gear);
+		const settings = within(nav).getByRole("tree", { name: "Settings" });
+		const row = (name: RegExp) =>
+			within(settings).getByRole("treeitem", { name });
+		// No file of select all that apply: what applies is said beside its row,
+		// in full where it's heard, with no verdict on a file that isn't there.
+		const selectAll = within(settings).getByRole("treeitem", {
+			name: "Select all that apply",
+			description: "usual coding: 0 = No, 1 = Yes",
+		});
+		expect(selectAll.textContent).toContain("usual");
+		const details = row(/^Workspace details/);
+		expect(details.getAttribute("aria-current")).toBeNull();
+		fireEvent.click(details);
 		await act(async () => {});
 		const { model } = app.store.getState();
-		const details = detailsOf(model.local.schemes);
-		expect(details?.base?.path).toBe("workspace.yaml");
-		expect(model.screen).toEqual({ kind: "editing", id: details?.id });
-		expect(gear.getAttribute("aria-current")).toBe("page");
-		// Its one way in: neither the tree's Shared sections nor New list it.
+		const entry = detailsOf(model.local.schemes);
+		expect(entry?.base?.path).toBe("workspace.yaml");
+		expect(model.screen).toEqual({ kind: "editing", id: entry?.id });
+		expect(row(/^Workspace details/).getAttribute("aria-current")).toBe("true");
+		// Not a shared kind: neither Shared nor New lists them.
+		const shared = within(nav).getByRole("tree", { name: "Shared" });
 		expect(
-			within(nav).queryByRole("treeitem", { name: /details/i }),
+			within(shared).queryByRole("treeitem", {
+				name: /details|missing|select all/i,
+			}),
 		).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		expect(
 			screen
 				.getAllByRole("menuitem")
 				.map((i) => i.textContent)
-				.filter((t) => /details/i.test(t ?? "")),
+				.filter((t) => /details|missing|select-all/i.test(t ?? "")),
 		).toEqual([]);
 	});
 
-	it("say on that button that a workspace with no details has its agency to fill in, and start them there", async () => {
+	it("start the workspace's details from their row when it has none, which says they're to fill in", async () => {
 		const app = renderWorkspace(
 			FILES.filter((f) => f.path !== "workspace.yaml"),
 		);
 		await act(async () => {});
-		const nav = screen.getByRole("navigation", { name: "Question bank" });
+		const settings = screen.getByRole("tree", { name: "Settings" });
 		fireEvent.click(
-			within(nav).getByRole("button", {
-				name: "Workspace details (to fill in or fix)",
+			within(settings).getByRole("treeitem", {
+				name: "Workspace details",
+				description: /has fields to fill in/,
 			}),
 		);
 		await act(async () => {});
@@ -266,23 +280,6 @@ describe("a workspace's instruments", () => {
 		expect(details).toMatchObject({ kind: "workspace" });
 		expect(details?.base).toBeUndefined();
 		expect(model.screen).toEqual({ kind: "editing", id: details?.id });
-	});
-
-	it("say on that button what the tree's marks said: unsaved, and something to fill in", async () => {
-		const app = renderWorkspace();
-		await act(async () => {});
-		const nav = screen.getByRole("navigation", { name: "Question bank" });
-		fireEvent.click(
-			within(nav).getByRole("button", { name: "Workspace details" }),
-		);
-		await act(async () => {});
-		act(() => app.dispatch({ kind: "edited", text: "agency:\n" }));
-		await act(async () => {});
-		expect(
-			within(nav).getByRole("button", {
-				name: "Workspace details (unsaved changes; to fill in or fix)",
-			}),
-		).toBeTruthy();
 	});
 
 	it("are listed on a question they use, as links to them", async () => {

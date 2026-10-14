@@ -20,15 +20,22 @@ import {
 	SkeletonBox,
 	SkeletonText,
 } from "@primer/react/experimental";
-import { isRoot, SCHEME_SINGULAR, type Status, UNNAMED } from "@qretools/core";
+import { SCHEME_SINGULAR, type Status, UNNAMED } from "@qretools/core";
 import { StatusIcon } from "@qretools/shell/ui";
 import { useId } from "react";
 import type { Dispatch, Id } from "../model.js";
-import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
+import type {
+	Folder,
+	Leaf,
+	SchemeLeaf,
+	SchemeSection,
+	SettingsRow,
+} from "../tree.js";
 
 export function Browser({
 	folders,
 	sections,
+	settings = [],
 	workspace = [],
 	noInstruments = false,
 	filter,
@@ -40,6 +47,8 @@ export function Browser({
 	folders: readonly Folder[];
 	/** Its shared files by kind (`schemeSections`). */
 	sections: readonly SchemeSection[];
+	/** The workspace's one-per-workspace files (`settingsRows`). */
+	settings?: readonly SettingsRow[];
 	/** The workspace's own files (`workspaceLeaves`): its instruments. */
 	workspace?: readonly SchemeLeaf[];
 	/** The workspace has no instrument at all: its section says so. */
@@ -58,6 +67,8 @@ export function Browser({
 				<h3 className="browser-heading">Questions</h3>
 				<SkeletonText lines={6} size="bodyMedium" />
 				<h3 className="browser-heading">Shared</h3>
+				<SkeletonText lines={3} size="bodyMedium" />
+				<h3 className="browser-heading">Settings</h3>
 				<SkeletonText lines={3} size="bodyMedium" />
 			</Stack>
 		);
@@ -82,6 +93,78 @@ export function Browser({
 				open={open}
 				dispatch={dispatch}
 			/>
+			{settings.length > 0 && (
+				<Settings rows={settings} open={open} dispatch={dispatch} />
+			)}
+		</Stack>
+	);
+}
+
+/**
+ * The workspace's own files, one row each whether it has them or not: neither
+ * questions nor shared names, but about everything. Selecting a row opens its file,
+ * or starts it.
+ */
+function Settings({
+	rows,
+	open,
+	dispatch,
+}: {
+	rows: readonly SettingsRow[];
+	open: Id | undefined;
+	dispatch: Dispatch;
+}) {
+	const id = useId();
+	return (
+		<Stack gap="condensed">
+			<h3 id={id} className="browser-heading">
+				Settings
+			</h3>
+			<TreeView aria-labelledby={id}>
+				{rows.map((row) => (
+					<TreeView.Item
+						key={row.kind}
+						id={`settings:${row.kind}`}
+						current={row.leaf !== undefined && row.leaf.id === open}
+						onSelect={() =>
+							dispatch({ kind: "schemeCreateOpened", scheme: row.kind })
+						}
+					>
+						{row.label}
+						{row.leaf !== undefined ? (
+							<TreeView.TrailingVisual label={marksLabel(row.leaf)}>
+								<Marks leaf={row.leaf} />
+							</TreeView.TrailingVisual>
+						) : (
+							<TreeView.TrailingVisual
+								// No file, nothing to judge: only a hole is said.
+								label={[
+									row.absent?.heard,
+									row.status.kind === "complete"
+										? undefined
+										: STATUS_TEXT(row.status),
+								]
+									.filter((x) => x !== undefined)
+									.join(", ")}
+							>
+								<Stack
+									as="span"
+									direction="horizontal"
+									align="center"
+									gap="condensed"
+								>
+									{row.absent !== undefined && (
+										<span className="quiet">{row.absent.shown}</span>
+									)}
+									{row.status.kind !== "complete" && (
+										<StatusIcon status={row.status} />
+									)}
+								</Stack>
+							</TreeView.TrailingVisual>
+						)}
+					</TreeView.Item>
+				))}
+			</TreeView>
 		</Stack>
 	);
 }
@@ -245,13 +328,9 @@ function FolderItem({
 	);
 }
 
-/** A section's count, heard: "3 scales"; a bank's one root file is there or not. */
+/** A section's count, heard: "3 scales". */
 const sectionCount = (s: SchemeSection): string =>
-	isRoot(s.kind)
-		? s.leaves.length > 0
-			? "defined"
-			: "none yet"
-		: countLabel(s.leaves.length, SCHEME_SINGULAR[s.kind]);
+	countLabel(s.leaves.length, SCHEME_SINGULAR[s.kind]);
 
 function SectionItem({
 	section,

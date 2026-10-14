@@ -472,7 +472,7 @@ describe("a new instrument", () => {
 });
 
 describe("the workspace details", () => {
-	// What the gear beside the workspace's name sends.
+	// What the Settings row for the workspace's details sends.
 	const opened = {
 		kind: "schemeCreateOpened",
 		scheme: "workspace",
