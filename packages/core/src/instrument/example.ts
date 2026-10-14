@@ -8,8 +8,8 @@
 import type { BankScope } from "../evaluate.ts";
 import { parseInstrument } from "./parse.ts";
 
-/** The alias the example reads its bank by. */
-const ALIAS = "bank";
+/** The alias the example reads its workspace's questions by: named for what they are. */
+const ALIAS = "example";
 
 /**
  * Written for the example questions as the template ships them (`fixtures/bank` is its
@@ -18,9 +18,9 @@ const ALIAS = "bank";
 const WRITTEN = `name:
 title: Example instrument
 description: A short instrument asking this workspace's example questions, to copy or delete.
-universe: bank.all_respondents
+universe: example.all_respondents
 uses:
-  bank:
+  example:
 inputs:
   form:
     responses:
@@ -29,41 +29,41 @@ inputs:
     description: Which half of the response-order experiment, assigned before the interview.
 flow:
   - say: Thank you for taking part. This survey takes about five minutes.
-  - ask: bank.consent
-  - stop: bank.consent = "2"
+  - ask: example.consent
+  - stop: example.consent = "2"
     say: Thank you for your time.
   - section: The service
     flow:
-      - ask: bank.service_satisfaction
+      - ask: example.service_satisfaction
       - compute: dissatisfied
-        value: bank.service_satisfaction in {"4", "5"}
+        value: example.service_satisfaction in {"4", "5"}
       - if: dissatisfied
         then:
-          - ask: bank.service_comments
+          - ask: example.service_comments
             universe: Respondents dissatisfied with the service
             fill:
-              rating: label(bank.service_satisfaction)
+              rating: label(example.service_satisfaction)
   - section: Libraries and parks
     flow:
-      - ask: bank.library_visits
+      - ask: example.library_visits
         checks:
-          - ensure: bank.library_visits < 25
+          - ensure: example.library_visits < 25
             severity: info
-            message: "{{bank.library_visits}} days is most of the month. Is that right?"
+            message: "{{example.library_visits}} days is most of the month. Is that right?"
       - if: form = "1"
         then:
-          - ask: bank.parks_spending
+          - ask: example.parks_spending
             universe: Respondents on form 1
         else:
-          - ask: bank.parks_spending_reversed
+          - ask: example.parks_spending_reversed
             universe: Respondents on form 2
-  - ask: bank.news_sources
-  - ask: bank.household_size
+  - ask: example.news_sources
+  - ask: example.household_size
   - roster: members
-    count: bank.household_size
+    count: example.household_size
     flow:
       - say: The next question is about person {{index}} in your household.
-      - ask: bank.member_age
+      - ask: example.member_age
 `;
 
 /**
@@ -78,7 +78,7 @@ export function exampleInstrument(
 	bank: BankScope,
 ): string | undefined {
 	const written = WRITTEN.replace(/^name:[ \t]*$/m, `name: ${name}`).replace(
-		/^ {2}bank:[ \t]*$/m,
+		/^ {2}example:[ \t]*$/m,
 		`  ${ALIAS}: ${address}`,
 	);
 	return parseInstrument(written, { [ALIAS]: bank }).findings.every(

@@ -233,11 +233,11 @@ describe("a workspace's instruments", () => {
 		// No file of select all that apply: what applies is said beside its row,
 		// in full where it's heard, with no verdict on a file that isn't there.
 		const selectAll = within(settings).getByRole("treeitem", {
-			name: "Select all that apply",
+			name: "select_all.yaml",
 			description: "usual coding: 0 = No, 1 = Yes",
 		});
 		expect(selectAll.textContent).toContain("usual");
-		const details = row(/^Workspace details/);
+		const details = row(/^workspace\.yaml/);
 		expect(details.getAttribute("aria-current")).toBeNull();
 		fireEvent.click(details);
 		await act(async () => {});
@@ -245,12 +245,12 @@ describe("a workspace's instruments", () => {
 		const entry = detailsOf(model.local.schemes);
 		expect(entry?.base?.path).toBe("workspace.yaml");
 		expect(model.screen).toEqual({ kind: "editing", id: entry?.id });
-		expect(row(/^Workspace details/).getAttribute("aria-current")).toBe("true");
+		expect(row(/^workspace\.yaml/).getAttribute("aria-current")).toBe("true");
 		// Not a shared kind: neither Shared nor New lists them.
 		const shared = within(nav).getByRole("tree", { name: "Shared" });
 		expect(
 			within(shared).queryByRole("treeitem", {
-				name: /details|missing|select all/i,
+				name: /\.yaml$|details|missing|select all/i,
 			}),
 		).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
@@ -270,7 +270,7 @@ describe("a workspace's instruments", () => {
 		const settings = screen.getByRole("tree", { name: "Settings" });
 		fireEvent.click(
 			within(settings).getByRole("treeitem", {
-				name: "Workspace details",
+				name: "workspace.yaml",
 				description: /has fields to fill in/,
 			}),
 		);
@@ -484,14 +484,12 @@ describe("a workspace's instruments", () => {
 		expect(away.map((e) => e.textContent)).toEqual(["far.far"]);
 	});
 
-	// The owner's reversal (2026-10-09): the section stays with none yet, a bank at the
-	// root included, so instruments are found where a team starts.
-	it("say there are none yet, and the first offers the example where the example questions are", async () => {
+	// The owner (2026-10-14): a workspace of questions alone is normal, so with no
+	// instrument there's no section saying so.
+	it("show no section until there's one, and the first offers the example where the example questions are", async () => {
 		const app = renderWorkspace([...EXAMPLE_QUESTIONS]);
 		await act(async () => {});
-		expect(screen.getByRole("heading", { name: "Instruments" })).toBeTruthy();
-		expect(screen.queryByRole("tree", { name: "Instruments" })).toBeNull();
-		expect(screen.getByText("No instruments yet.")).toBeTruthy();
+		expect(screen.queryByRole("heading", { name: "Instruments" })).toBeNull();
 		// The section offers nothing itself (owner, 2026-10-13): New, in the header, starts
 		// one, and the first one offers the example beside it.
 		expect(screen.queryByRole("button", { name: "New instrument" })).toBeNull();
@@ -502,7 +500,7 @@ describe("a workspace's instruments", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Create" }));
 		await act(async () => {});
-		expect(screen.queryByText("No instruments yet.")).toBeNull();
+		expect(screen.getByRole("tree", { name: "Instruments" })).toBeTruthy();
 		// Primer's Banner draws its action twice, for its wide and narrow layouts.
 		const [open] = screen.getAllByRole("button", { name: "Open the example" });
 		fireEvent.click(open as HTMLElement);
@@ -516,20 +514,21 @@ describe("a workspace's instruments", () => {
 			(e) => e.kind === "instrument" && e.name === "example",
 		);
 		// It asks its own workspace's questions.
-		expect(made?.source).toContain("uses:\n  bank: ../\n");
-		expect(made?.source).toContain("rating: label(bank.service_satisfaction)");
+		expect(made?.source).toContain("uses:\n  example: ../\n");
+		expect(made?.source).toContain(
+			"rating: label(example.service_satisfaction)",
+		);
 		// Two instruments now: neither offers it again.
 		expect(screen.queryByText("New here?")).toBeNull();
 	});
 
-	it("say there are none yet in a workspace without the example questions, where the first offers no example", async () => {
+	it("show no section in a workspace without the example questions, where the first offers no example", async () => {
 		renderWorkspace([
 			file("workspace.yaml", "agency: org.example\n"),
 			file("questions/t/alpha.yaml", QUESTION("alpha")),
 		]);
 		await act(async () => {});
-		expect(screen.getByRole("heading", { name: "Instruments" })).toBeTruthy();
-		expect(screen.getByText("No instruments yet.")).toBeTruthy();
+		expect(screen.queryByRole("heading", { name: "Instruments" })).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
 		fireEvent.click(screen.getByRole("menuitem", { name: "Instrument…" }));
 		fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {

@@ -390,11 +390,6 @@ code,
 	font-weight: var(--base-text-weight-semibold);
 	color: var(--fgColor-muted);
 }
-/* A section with nothing in it yet: one line, in the body's size, the Stack's gap around it. */
-.browser-empty {
-	margin: 0;
-	font-size: var(--text-body-size-medium);
-}
 .used-by {
 	margin: 0;
 	padding-left: var(--base-size-20);
