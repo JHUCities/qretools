@@ -25,13 +25,12 @@ import {
 	type Fix,
 	fileFindings,
 	type Index,
+	inDocumentOrder,
 	inScope,
 	isRoot,
 	type Mark,
 	othersOf,
-	placeOf,
 	type Range,
-	relIn,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 	type SchemeEvaluation,
@@ -72,7 +71,6 @@ import {
 } from "@qretools/shell/ui";
 import { memo, type ReactNode, useCallback, useId, useMemo } from "react";
 import {
-	bankFileOf,
 	detailsOf,
 	type Entry,
 	envOfRemote,
@@ -86,6 +84,7 @@ import {
 } from "../model.js";
 import {
 	alsoSaves,
+	bankFileAt,
 	claimOf,
 	isUnsaved,
 	remoteBlob,
@@ -187,7 +186,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
 	const activity = useModel((m) => m.activity);
-	const env = useEnv(q.bank);
+	const env = useEnv();
 	const { dispatch, onTarget, onFix, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, env);
@@ -196,8 +195,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	// Until the bank declares its agency, say so beside its DDI (not while it loads).
 	const loading = useModel(bankLoading);
 	const declare = useCallback(
-		() =>
-			dispatch({ kind: "schemeCreateOpened", scheme: "workspace", bank: "" }),
+		() => dispatch({ kind: "schemeCreateOpened", scheme: "workspace" }),
 		[dispatch],
 	);
 	// One element while nothing changes: the DDI pane is memoised, and a new notice per
@@ -222,8 +220,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		[findings, ev.ranges, onFix],
 	);
 	const also = useMemo(
-		() => alsoSaves(local, remote, ev.symbols.mentions, usersIn(index), q.bank),
-		[local, remote, ev.symbols.mentions, index, q.bank],
+		() => alsoSaves(local, remote, ev.symbols.mentions, usersIn(index)),
+		[local, remote, ev.symbols.mentions, index],
 	);
 	// Schema validation runs over the whole document: only when the document changes,
 	// never on a caret move.
@@ -313,11 +311,10 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 function useSlices() {
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
-	const banks = useModel((m) => m.banks);
 	const remoteBanks = useModel((m) => m.remoteBanks);
 	return useMemo(
-		() => ({ local, remote, banks, remoteBanks }),
-		[local, remote, banks, remoteBanks],
+		() => ({ local, remote, remoteBanks }),
+		[local, remote, remoteBanks],
 	);
 }
 
@@ -375,7 +372,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const own =
 		details === undefined
 			? undefined
-			: evaluations.scheme(details, evaluations.env(slices, "")).findings;
+			: evaluations.scheme(details, evaluations.env(slices)).findings;
 	const { findings, ranges, draft, ddi } = instrument;
 	const [listed, flushFindings] = useSettled(findings, SETTLE_MS, e.id);
 	const outline = useMemo(() => outlineOf(draft), [draft]);
@@ -394,13 +391,10 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 				instrumentDependencies(
 					slices,
 					read,
-					(q) =>
-						evaluations.get(q, evaluations.env(slices, q.bank)).symbols
-							.mentions,
+					(q) => evaluations.get(q, evaluations.env(slices)).symbols.mentions,
 				),
 				(q) =>
-					evaluations.get(q, evaluations.env(slices, q.bank)).draft.name ??
-					UNNAMED,
+					evaluations.get(q, evaluations.env(slices)).draft.name ?? UNNAMED,
 			),
 		[slices, read, evaluations],
 	);
@@ -558,28 +552,31 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const blocked = useModel(writeBlocked);
 	const questions = useModel((m) => m.local.questions);
 	const activity = useModel((m) => m.activity);
-	const env = useEnv(e.bank);
+	const env = useEnv();
 	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const eStale = useStale(e);
 	const ev = evaluations.scheme(e, env);
 	// The workspace's details are also told of the folders they name that hold no saved
-	// question: only the workspace knows its folders (`unknownFolders`).
+	// question: only the workspace knows its folders (`unknownFolders`). Not while it
+	// loads: the questions aren't here yet, so every folder would read as unknown.
+	const loading = useModel(bankLoading);
 	const own = useMemo(
 		() =>
-			e.kind === "workspace"
-				? [
-						...ev.findings,
-						...unknownFolders(
-							env.requiredIn,
-							Object.values(questions).flatMap((q) =>
-								q.base === undefined || q.bank !== e.bank
-									? []
-									: [relIn(q.bank, q.base.path)],
+			e.kind === "workspace" && !loading
+				? inDocumentOrder(
+						[
+							...ev.findings,
+							...unknownFolders(
+								env.requiredIn,
+								Object.values(questions).flatMap((q) =>
+									q.base === undefined ? [] : [q.base.path],
+								),
 							),
-						),
-					]
+						],
+						ev.ranges,
+					)
 				: ev.findings,
-		[e.kind, e.bank, ev.findings, env.requiredIn, questions],
+		[e.kind, loading, ev.findings, ev.ranges, env.requiredIn, questions],
 	);
 	const { findings, related } = useBankFindings(
 		e.id,
@@ -811,9 +808,7 @@ function useBankFindings(
 	const repo = useModel((m) => m.settings.repo);
 	const folder = useModel((m) => m.settings.path);
 	const branch = useModel(linkBranch);
-	// The files a bank finding cites are in this file's bank: the index is that bank's.
-	const bank = useModel((m) => bankFileOf(m, id)?.bank ?? "");
-	const env = useEnv(bank);
+	const env = useEnv();
 	return useMemo(() => {
 		// Another file's name, as a bank-level finding cites it.
 		const label = (other: Id): string => {
@@ -911,7 +906,7 @@ function Inspector({
 	index: Index<Id>;
 }) {
 	const { dispatch } = useApp();
-	const env = useEnv(q.bank);
+	const env = useEnv();
 	const cursor = useModel((m) => m.cursor);
 	const schemes = useModel((m) => m.local.schemes);
 	const at =
@@ -926,9 +921,7 @@ function Inspector({
 		);
 	const m = at.mention;
 	const file =
-		m === undefined
-			? undefined
-			: schemeFileNamed(schemes, m.scheme, m.name, q.bank);
+		m === undefined ? undefined : schemeFileNamed(schemes, m.scheme, m.name);
 	const users =
 		m === undefined
 			? 0
@@ -1083,18 +1076,12 @@ export function ForeignView({
 	);
 	const file = screen.file;
 	// One value per path, so the evaluations below keep theirs between renders.
-	const banks = useModel((m) => m.banks);
-	const place = useMemo(
-		() => placeOf(screen.path, banks),
-		[screen.path, banks],
-	);
-	const at = place?.at;
+	const at = useMemo(() => bankFileAt(screen.path), [screen.path]);
 	const kind = at?.kind;
 	// A question of theirs reads as its folder has it on their branch (`envAt`), as their own does.
-	const rel = place?.rel;
 	const placed = useMemo(
-		() => (kind === "question" ? envAt(env, rel) : env),
-		[kind, env, rel],
+		() => (kind === "question" ? envAt(env, screen.path) : env),
+		[kind, env, screen.path],
 	);
 	const ev = useMemo(
 		() =>

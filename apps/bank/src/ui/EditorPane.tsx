@@ -90,7 +90,8 @@ export function EditorPane(
 							}
 							if (source.kind === "banks")
 								return bankChoices(
-									model.banks.includes(""),
+									// The workspace's root is always its bank.
+									true,
 									remotesOf(
 										Object.fromEntries(
 											Object.values(model.local.workspace).flatMap((w) =>
@@ -106,7 +107,7 @@ export function EditorPane(
 								model.local.schemes[open.current];
 							return f === undefined || source.kind !== "scheme"
 								? []
-								: choicesOf(evaluations.env(model, f.bank), source.scheme);
+								: choicesOf(evaluations.env(model), source.scheme);
 						},
 						choose: (livelit: Livelit, value: string | readonly string[]) =>
 							dispatch({

@@ -26,33 +26,22 @@ import { useId } from "react";
 import type { Dispatch, Id } from "../model.js";
 import type { Folder, Leaf, SchemeLeaf, SchemeSection } from "../tree.js";
 
-/** One bank's part of the tree: its questions by folder, and its shared files by kind. */
-export interface BankTree {
-	/** The bank's folder in the workspace, "" for its root. */
-	readonly bank: string;
-	readonly folders: readonly Folder[];
-	readonly sections: readonly SchemeSection[];
-}
-
-/** How a bank is named where several are shown: by its folder; the root by its place. */
-export const bankLabel = (bank: string): string =>
-	bank === "" ? "Workspace root" : bank;
-
 export function Browser({
-	banks,
+	folders,
+	sections,
 	workspace = [],
-	workspaceOnly = false,
 	noInstruments = false,
 	filter,
 	open,
 	dispatch,
 	loading = false,
 }: {
-	banks: readonly BankTree[];
+	/** The bank's questions by folder (`treeOf`). */
+	folders: readonly Folder[];
+	/** Its shared files by kind (`schemeSections`). */
+	sections: readonly SchemeSection[];
 	/** The workspace's own files (`workspaceLeaves`): its instruments. */
 	workspace?: readonly SchemeLeaf[];
-	/** The workspace has no bank of its own: only its instruments are shown. */
-	workspaceOnly?: boolean;
 	/** The workspace has no instrument at all: its section says so. */
 	noInstruments?: boolean;
 	filter: string;
@@ -72,53 +61,27 @@ export function Browser({
 				<SkeletonText lines={3} size="bodyMedium" />
 			</Stack>
 		);
-	const [only] = banks;
-	// What is asked comes first, then what it is asked from.
-	// Shown in every workspace, a bank at the root included: with none yet, it says so,
-	// so instruments are found where a team starts (New, in the header, starts one).
+	// What is asked comes first, then what it is asked from: with no instrument yet,
+	// its section says so, so instruments are found where a team starts (New, in the
+	// header, starts one).
 	const none = noInstruments && filter === "";
-	const instruments = (workspace.length > 0 || none) && (
-		<Instruments
-			leaves={workspace}
-			none={none}
-			open={open}
-			dispatch={dispatch}
-		/>
-	);
-	if (workspaceOnly) return instruments || null;
-	// One bank, as a bank has always been shown: its questions, then its shared files.
-	if (banks.length <= 1) {
-		const trees = (
+	return (
+		<Stack gap="normal">
+			{(workspace.length > 0 || none) && (
+				<Instruments
+					leaves={workspace}
+					none={none}
+					open={open}
+					dispatch={dispatch}
+				/>
+			)}
 			<BankTrees
-				tree={only ?? { bank: "", folders: [], sections: [] }}
-				level={3}
+				folders={folders}
+				sections={sections}
 				filter={filter}
 				open={open}
 				dispatch={dispatch}
 			/>
-		);
-		return instruments ? (
-			<Stack gap="normal">
-				{instruments}
-				{trees}
-			</Stack>
-		) : (
-			trees
-		);
-	}
-	// Several: each bank under its own heading, one level down.
-	return (
-		<Stack gap="normal">
-			{instruments}
-			{banks.map((tree) => (
-				<BankSection
-					key={tree.bank}
-					tree={tree}
-					filter={filter}
-					open={open}
-					dispatch={dispatch}
-				/>
-			))}
 		</Stack>
 	);
 }
@@ -164,62 +127,32 @@ function Instruments({
 	);
 }
 
-function BankSection({
-	tree,
-	filter,
-	open,
-	dispatch,
-}: {
-	tree: BankTree;
-	filter: string;
-	open: Id | undefined;
-	dispatch: Dispatch;
-}) {
-	const id = useId();
-	return (
-		<section aria-labelledby={id}>
-			<h3 id={id} className="browser-bank">
-				{bankLabel(tree.bank)}
-			</h3>
-			<BankTrees
-				tree={tree}
-				level={4}
-				filter={filter}
-				open={open}
-				dispatch={dispatch}
-			/>
-		</section>
-	);
-}
-
-/** A bank's two trees, each named by its visible heading. */
+/** The bank's two trees, each named by its visible heading. */
 function BankTrees({
-	tree,
-	level,
+	folders,
+	sections,
 	filter,
 	open,
 	dispatch,
 }: {
-	tree: BankTree;
-	level: 3 | 4;
+	folders: readonly Folder[];
+	sections: readonly SchemeSection[];
 	filter: string;
 	open: Id | undefined;
 	dispatch: Dispatch;
 }) {
 	const questionsId = useId();
 	const sharedId = useId();
-	const H = level === 3 ? "h3" : "h4";
-	const { folders, sections } = tree;
 	return (
 		<Stack gap="condensed">
-			<H id={questionsId} className="browser-heading">
+			<h3 id={questionsId} className="browser-heading">
 				Questions
-			</H>
+			</h3>
 			{folders.length > 0 ? (
 				<TreeView aria-labelledby={questionsId}>
 					{folders.map((f) => (
 						<FolderItem
-							key={f.key}
+							key={f.name}
 							folder={f}
 							open={open}
 							dispatch={dispatch}
@@ -228,7 +161,7 @@ function BankTrees({
 				</TreeView>
 			) : (
 				<Blankslate narrow>
-					<Blankslate.Heading as={level === 3 ? "h4" : "h5"}>
+					<Blankslate.Heading as="h4">
 						{filter === "" ? "No questions yet" : "No questions match"}
 					</Blankslate.Heading>
 					<Blankslate.Description>
@@ -240,9 +173,9 @@ function BankTrees({
 			)}
 			{sections.length > 0 && (
 				<>
-					<H id={sharedId} className="browser-heading">
+					<h3 id={sharedId} className="browser-heading">
 						Shared
-					</H>
+					</h3>
 					<TreeView aria-labelledby={sharedId}>
 						{sections.map((s) => (
 							<SectionItem
@@ -277,10 +210,10 @@ function FolderItem({
 }) {
 	return (
 		<TreeView.Item
-			id={`folder:${folder.key}`}
+			id={`folder:${folder.name}`}
 			expanded={folder.expanded}
 			onExpandedChange={() =>
-				dispatch({ kind: "folderToggled", folder: folder.key })
+				dispatch({ kind: "folderToggled", folder: folder.name })
 			}
 			containIntrinsicSize="2rem"
 		>

@@ -4,6 +4,7 @@
  * document order, and a DDI document.
  */
 import { isMap, isScalar, parseDocument } from "yaml";
+import { HERE } from "../address.ts";
 import type { Collision, DdiDocument } from "../ddi/document.ts";
 import type { BankScope } from "../evaluate.ts";
 import { type Finding, inDocumentOrder, type Range } from "../findings.ts";
@@ -91,8 +92,11 @@ export function instrumentOf(
 		path: "",
 		message: `\`${c.urn}\` would name two different items, from ${c.keys.join(", ")}.`,
 	}));
-	// A bank with no agency would publish its questions under `invalid`: say so where it's used.
+	// A bank with no agency would publish its questions under `invalid`: say so where it's
+	// used. Not for the instrument's own workspace (`../`): its agency is the instrument's,
+	// and the finding above already says it is missing or wrong.
 	const banksWithout: Finding[] = parsed.draft.uses.flatMap((u): Finding[] =>
+		u.address?.trim() !== HERE &&
 		context.banks[u.alias] !== undefined &&
 		context.banks[u.alias]?.agency === undefined
 			? [

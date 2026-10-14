@@ -10,7 +10,6 @@
 import {
 	type Address,
 	type AddressKey,
-	bankAt,
 	bankEnv,
 	compact,
 	type Env,
@@ -58,8 +57,8 @@ export type Id = number;
 
 /**
  * A path in the workspace (the settings' folder of the repository): GitHub's identity
- * for a file, as the store reads and writes it. Built and split only by the core's
- * `inBank` and `relIn`.
+ * for a file, as the store reads and writes it. The workspace's root is its bank, so a
+ * bank file's path here is its path in the bank.
  */
 export type Path = string;
 
@@ -88,8 +87,6 @@ export type Activity =
 export interface Question {
 	readonly kind: "question";
 	readonly id: Id;
-	/** The bank it belongs to: its folder in the workspace, "" for the root. A draft's too. */
-	readonly bank: string;
 	readonly source: string;
 	readonly base?: Base;
 }
@@ -99,8 +96,6 @@ export interface SchemeEntry {
 	readonly kind: SchemeKind;
 	readonly name: string;
 	readonly id: Id;
-	/** The bank it belongs to: its folder in the workspace, "" for the root. */
-	readonly bank: string;
 	readonly source: string;
 	readonly base?: Base;
 }
@@ -114,10 +109,10 @@ export interface InstrumentEntry {
 	readonly base?: Base;
 }
 
-/** A file of the workspace itself, in no bank. */
+/** A file of the workspace itself, not its bank's. */
 export type WorkspaceEntry = InstrumentEntry;
 
-/** A file of one of the workspace's banks. */
+/** A file of the workspace's bank. */
 export type BankEntry = Question | SchemeEntry;
 
 /** Everything the browser holds. */
@@ -135,8 +130,8 @@ export interface Local {
 	readonly questions: Readonly<Record<Id, Question>>;
 	readonly schemes: Readonly<Record<Id, SchemeEntry>>;
 	/**
-	 * The workspace's own files, apart from every bank's: an instrument keystroke
-	 * replaces only this slice, so no bank's environment can change with it.
+	 * The workspace's own files, apart from its bank's: an instrument keystroke
+	 * replaces only this slice, so the bank's environment can't change with it.
 	 */
 	readonly workspace: Readonly<Record<Id, WorkspaceEntry>>;
 }
@@ -270,14 +265,6 @@ export type Bank =
 export interface Model {
 	readonly local: Local;
 	/**
-	 * The workspace's bank folders ("" for its root), as last loaded, or as this tab's
-	 * work names them before then: what a path is classified against (`placeOf`). Set
-	 * wherever `remote` is replaced whole (at start, on a load, on signing out), never
-	 * on its own, so the two can't disagree. Not derived from `remote`: a path is in
-	 * `remote` only once a bank holds it.
-	 */
-	readonly banks: readonly string[];
-	/**
 	 * The banks in other repositories the workspace's instruments use, by address, as
 	 * read at their tags this session: being read, or read (files, or why not). Absent
 	 * means not asked for yet, which an instrument reads as pending. Never persisted, and
@@ -338,8 +325,6 @@ export type ThemeChoice = "system" | "light" | "dark";
 export interface Naming {
 	readonly kind: NamedScheme;
 	readonly name: string;
-	/** The bank the file is in or goes to, where its name must be free and is read. */
-	readonly bank: string;
 	/** A universe's or instruction's wording; unused for a scale. */
 	readonly text: string;
 	readonly purpose:
@@ -397,18 +382,11 @@ export type Msg =
 			readonly text: string;
 	  }
 	| { readonly kind: "folderToggled"; readonly folder: string }
-	/** A new question; in `bank` when chosen (a workspace of several), else `newBank`'s. */
-	| {
-			readonly kind: "questionCreated";
-			readonly text: string;
-			readonly bank?: string;
-	  }
+	| { readonly kind: "questionCreated"; readonly text: string }
 	/** New scheme file: `missing` is created at once (it has one name); the others ask for a name. */
 	| {
 			readonly kind: "schemeCreateOpened";
 			readonly scheme: SchemeKind;
-			/** The bank it goes to, when chosen; else the naming question's, else `newBank`'s. */
-			readonly bank?: string;
 			/** Prefilled, as when the inspector offers to create a name a question already uses. */
 			readonly name?: string;
 			/** The question and place that named it, to be pointed at the name chosen. */
@@ -433,7 +411,6 @@ export type Msg =
 	| { readonly kind: "bankAddChanged"; readonly text: string }
 	| { readonly kind: "bankAddCancelled" }
 	| { readonly kind: "bankAddConfirmed" }
-	/** The workspace details: opened if they exist, else started. One per workspace. */
 	/** A read of a bank in another repository has started: now it is being read. */
 	| { readonly kind: "remoteBankStarted"; readonly key: AddressKey }
 	| {
@@ -597,15 +574,13 @@ export type Cmd =
 	/** Put a link in the address bar: a new history entry, or in place. */
 	| { readonly kind: "setLink"; readonly hash: string; readonly push: boolean }
 	/**
-	 * Read one file from another author's branch, for a link, with its bank's shared
-	 * files: `target` is that bank (its folder in the repository), `rel` the file's path
-	 * in it, and `path` its path in the workspace, echoed in the reply.
+	 * Read one file from another author's branch, for a link, with that branch's shared
+	 * files: `path` is its path in the workspace, echoed in the reply.
 	 */
 	| {
 			readonly kind: "readAt";
 			readonly target: BranchTarget;
 			readonly path: Path;
-			readonly rel: string;
 	  };
 
 export type Dispatch = (msg: Msg) => void;
@@ -670,8 +645,6 @@ export interface Flags {
 	readonly settings?: BankSettings;
 	/** The build's default bank, used when nothing is stored; absent means an empty field. */
 	readonly defaultBank?: BankRef;
-	/** Said once at startup (what an upgrade could not bring along). */
-	readonly notices?: readonly Failure[];
 	/** Whether a token is on hand, so connecting can start at once. */
 	readonly hasToken: boolean;
 	/**
@@ -705,7 +678,6 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 	};
 	const opened: Model = {
 		local,
-		banks: banksOfLocal(local),
 		remoteBanks: {},
 		...(stored?.login !== undefined && { author: stored.login }),
 		// The last GitHub state this browser knew is exactly what its bases record.
@@ -721,7 +693,6 @@ export function init(flags: Flags): readonly [Model, readonly Cmd[]] {
 		loading: { kind: "bundled" },
 		failures: [
 			...(flags.work.ok ? [] : [flags.work.error]),
-			...(flags.notices ?? []),
 			...(flags.signInFailure === undefined ? [] : [flags.signInFailure]),
 		],
 		ddiSchema: { kind: "loading" },
@@ -785,7 +756,6 @@ export function signedOut(model: Model): Model {
 	return compact({
 		...model,
 		local,
-		banks: banksOfLocal(local),
 		remoteBanks: {},
 		remote: remoteOfBases(local),
 		requests: {},
@@ -800,30 +770,6 @@ export function signedOut(model: Model): Model {
 			expanded: model.browser.expanded,
 		},
 	});
-}
-
-/** The banks the working copies belong to; the root alone while there are none. */
-export function banksOfLocal(local: Local): readonly string[] {
-	const banks = [
-		...new Set(
-			[...Object.values(local.questions), ...Object.values(local.schemes)].map(
-				(f) => f.bank,
-			),
-		),
-	].sort();
-	return banks.length === 0 ? [""] : banks;
-}
-
-/**
- * The bank a new file goes to: the open file's, else the workspace's first. A choice of
- * bank, where there are several, comes with the workspace's tree.
- */
-export function newBank(model: Model): string {
-	const open =
-		model.screen.kind === "editing"
-			? bankFileOf(model, model.screen.id)
-			: undefined;
-	return open?.bank ?? model.banks[0] ?? "";
 }
 
 export function remoteOfBases(local: Local): Remote {
@@ -851,20 +797,17 @@ export const fileOf = (model: Model, id: Id): Entry | undefined =>
 	model.local.schemes[id] ??
 	model.local.workspace[id];
 
-/** A working file of one of the banks by id: a question or a shared file. */
+/** A working file of the bank by id: a question or a shared file. */
 export const bankFileOf = (model: Model, id: Id): BankEntry | undefined =>
 	model.local.questions[id] ?? model.local.schemes[id];
 
-/** The shared file of this kind and name in a bank, among the working copies, if any. */
+/** The shared file of this kind and name among the working copies, if any. */
 export const schemeFileNamed = (
 	schemes: Readonly<Record<Id, SchemeEntry>>,
 	kind: SchemeKind,
 	name: string,
-	bank: string,
 ): SchemeEntry | undefined =>
-	Object.values(schemes).find(
-		(e) => e.kind === kind && e.name === name && e.bank === bank,
-	);
+	Object.values(schemes).find((e) => e.kind === kind && e.name === name);
 
 export const allFiles = (local: Local): readonly Entry[] => [
 	...Object.values(local.questions),
@@ -872,48 +815,35 @@ export const allFiles = (local: Local): readonly Entry[] => [
 	...Object.values(local.workspace),
 ];
 
-/** A bank's own shared files among the working copies. */
-export const schemesOf = (
-	schemes: Local["schemes"],
-	bank: string,
-): readonly SchemeEntry[] =>
-	Object.values(schemes).filter((e) => e.bank === bank);
-
 /** The workspace's details, `workspace.yaml`, among the working copies; absent while it has none. */
 export const detailsOf = (schemes: Local["schemes"]): SchemeEntry | undefined =>
-	Object.values(schemes).find((e) => e.kind === "workspace" && e.bank === "");
+	Object.values(schemes).find((e) => e.kind === "workspace");
 
-/** Whether GitHub's copy holds any shared file of this bank yet, the workspace's details included. */
-export const knownBank = (
-	remoteSchemes: Remote["schemes"],
-	bank: string,
-	banks: readonly string[],
-): boolean => Object.keys(remoteSchemes).some((p) => bankAt(p, banks) === bank);
+/** Whether GitHub's copy holds any shared file yet, the workspace's details included. */
+export const knownBank = (remoteSchemes: Remote["schemes"]): boolean =>
+	Object.keys(remoteSchemes).length > 0;
 
 /**
- * A bank's environment, built from its working scheme files: what its questions are
+ * The bank's environment, built from its working scheme files: what its questions are
  * shown against, so a scale edit updates its questions live and a new universe is
- * usable at once (owner, step 9). Every bank has its own: one bank's names mean nothing
- * in another. While GitHub holds none of the bank's shared files (`known` false), the
- * bundled example scales stand in beneath any local ones, so a first local scale does
- * not turn every question on an example scale into a hole.
+ * usable at once (owner, step 9). While GitHub holds none of the bank's shared files
+ * (`known` false), the bundled example scales stand in beneath any local ones, so a
+ * first local scale does not turn every question on an example scale into a hole.
  */
-export function envOf(schemes: readonly SchemeEntry[], known: boolean): Env {
+export function envOf(schemes: Local["schemes"], known: boolean): Env {
 	const env = schemeEnv(
-		schemes.map((e) => ({ kind: e.kind, name: e.name, text: e.source })),
+		Object.values(schemes).map((e) => ({
+			kind: e.kind,
+			name: e.name,
+			text: e.source,
+		})),
 	);
 	return known ? env : { ...env, scales: { ...EXAMPLE_SCALES, ...env.scales } };
 }
 
-/** The environment of one of the model's banks. */
-export const envIn = (
-	model: Pick<Model, "local" | "remote" | "banks">,
-	bank: string,
-): Env =>
-	envOf(
-		schemesOf(model.local.schemes, bank),
-		knownBank(model.remote.schemes, bank, model.banks),
-	);
+/** The model's environment, read afresh (the view's is kept: evaluations.ts). */
+export const envIn = (model: Pick<Model, "local" | "remote">): Env =>
+	envOf(model.local.schemes, knownBank(model.remote.schemes));
 
 /** The environment of a branch as GitHub has it: for reading another author's version. */
 export const envOfRemote = (schemes: Remote["schemes"]): Env =>

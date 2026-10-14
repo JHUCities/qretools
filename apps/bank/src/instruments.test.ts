@@ -309,8 +309,7 @@ describe("an open instrument", () => {
 		const m = edit(edit(edit(loaded(), HOUSEHOLDS), CONSENT), YES_NO);
 		const evaluations = createEvaluations();
 		const e = at(m, HOUSEHOLDS) as InstrumentEntry;
-		const read = (q: Question) =>
-			evaluations.get(q, evaluations.env(m, q.bank));
+		const read = (q: Question) => evaluations.get(q, evaluations.env(m));
 		expect(
 			instrumentAlsoSaves(
 				instrumentDependencies(
@@ -477,7 +476,6 @@ describe("the workspace details", () => {
 	const opened = {
 		kind: "schemeCreateOpened",
 		scheme: "workspace",
-		bank: "",
 	} as const;
 
 	it("are started once, as the root's `workspace.yaml`, then opened", () => {
@@ -486,7 +484,6 @@ describe("the workspace details", () => {
 		const e = detailsOf(made.local.schemes);
 		expect(e).toMatchObject({
 			kind: "workspace",
-			bank: "",
 			source: SCHEME_TEMPLATES.workspace,
 		});
 		expect(e === undefined ? undefined : claimOf(e)).toBe("workspace.yaml");
@@ -511,7 +508,7 @@ describe("the workspace details", () => {
 			},
 		};
 		const evaluations = createEvaluations();
-		expect(evaluations.env(typed, "").agency).toBe("org.typed");
+		expect(evaluations.env(typed).agency).toBe("org.typed");
 		const read = (mm: Model) =>
 			evaluations.instrument(mm, at(mm, HOUSEHOLDS) as InstrumentEntry)
 				.instrument;
@@ -681,7 +678,7 @@ describe("the instruments a question is used by", () => {
 
 	it("follows a draft shared file's rename into the instruments naming it", () => {
 		const steps: Msg[] = [
-			{ kind: "schemeCreateOpened", scheme: "universe", bank: "" },
+			{ kind: "schemeCreateOpened", scheme: "universe" },
 			{ kind: "schemeNameChanged", name: "r" },
 			{ kind: "schemeTextChanged", text: "Renters" },
 			{ kind: "schemeNamingConfirmed" },
@@ -1167,22 +1164,6 @@ describe("adding a bank", () => {
 	const typed = (m: Model, text: string) =>
 		update(m, { kind: "bankAddChanged", text })[0];
 	const confirmed = (m: Model) => update(m, { kind: "bankAddConfirmed" });
-
-	it("keeps the bank GitHub has when its files here are all gone", () => {
-		const m = loaded();
-		const dropped = [
-			...Object.values(m.local.questions),
-			...Object.values(m.local.schemes),
-		].reduce(
-			(acc, f) =>
-				update(update(acc, { kind: "deleteRequested", id: f.id })[0], {
-					kind: "deleteRequested",
-					id: f.id,
-				})[0],
-			m,
-		);
-		expect(dropped.banks).toEqual([""]);
-	});
 
 	it("uses one on GitHub: its address written, and its read started at once", () => {
 		const { id, m } = fromUses();

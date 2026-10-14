@@ -10,14 +10,13 @@
 
 import { Dialog } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
-import { bankLocation, type Draft, inBank } from "@qretools/core";
+import { bankLocation, type Draft } from "@qretools/core";
 import { useId } from "react";
 import type { Dispatch } from "../model.js";
 import { FolderField } from "./FolderField.js";
 
 export function SaveDialog({
 	draft,
-	bank,
 	folder,
 	folders,
 	taken,
@@ -25,8 +24,6 @@ export function SaveDialog({
 	dispatch,
 }: {
 	readonly draft: Draft;
-	/** The question's bank: the path shown is the workspace's. */
-	readonly bank: string;
 	readonly folder: string;
 	readonly folders: readonly string[];
 	readonly taken: (path: string) => boolean;
@@ -36,7 +33,7 @@ export function SaveDialog({
 }) {
 	const formId = useId();
 	const where = bankLocation(draft, folder);
-	const path = where.ok ? inBank(bank, where.value.path) : undefined;
+	const path = where.ok ? where.value.path : undefined;
 	const problem = !where.ok
 		? where.error.message
 		: path !== undefined && taken(path)

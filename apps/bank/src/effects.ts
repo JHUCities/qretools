@@ -332,7 +332,7 @@ export function createEffects(deps: Deps): Effects {
 							result,
 						});
 					if (!s) return reply(err(NO_TOKEN));
-					s.readWithSchemes(cmd.target, cmd.rel).then(reply);
+					s.readWithSchemes(cmd.target, cmd.path).then(reply);
 					return;
 				}
 				default:

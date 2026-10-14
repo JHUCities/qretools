@@ -6,7 +6,7 @@
  * instruments' own references, never stored on the file: a use is a fact about the
  * instrument (AGENTS: "asked" is derived).
  */
-import { inBank, type Range } from "@qretools/core";
+import type { Range } from "@qretools/core";
 import {
 	type OutlineItem,
 	type OutlinePart,
@@ -61,8 +61,8 @@ type Slices = Parameters<Evaluations["instrument"]>[0];
 export type InstrumentUses = ReadonlyMap<Path, readonly InstrumentUse[]>;
 
 /**
- * One pass over the instruments here: a ref names a file when its alias's use is a
- * bank of this workspace, at the file's path there. A use is about the file, not the
+ * One pass over the instruments here: a ref names a file when its alias's use is this
+ * workspace's own bank, at the file's path. A use is about the file, not the
  * alias: two aliases for one bank both count. Only this workspace's instruments are
  * known; one in another repository can't be.
  */
@@ -82,7 +82,7 @@ export function instrumentUses(
 			if (r.kind !== "bank") continue;
 			const use = read.uses[r.alias];
 			if (use?.kind !== "local") continue;
-			const path = inBank(use.folder, r.path);
+			const { path } = r;
 			byPath.set(path, [...(byPath.get(path) ?? []), r.range]);
 		}
 		for (const [path, ranges] of byPath) {

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import indexHtml from "../index.html?raw";
 import {
-	LEGACY_KEY,
-	migrate,
-	RETIRED_KEY,
-	readPersisted,
 	readSettings,
 	readStartup,
 	readTheme,
@@ -42,155 +38,22 @@ class MemoryStorage implements Storage {
 	}
 }
 
-/** Settings as older versions stored them, inside their work; no folder. */
+/** Settings as stored for a workspace at its repository's root: no folder. */
 const legacy = { owner: "o", repo: "r", remember: false };
 const settings = { ...legacy, path: "" };
 const base = { path: "questions/q/q.yaml", sha: "abc", text: "name: q\n" };
-
-describe("readPersisted", () => {
-	it("accepts nothing, a valid value, and reports the rest as failures", () => {
-		expect(readPersisted(null)).toEqual({ ok: true, value: undefined });
-		const good = {
-			version: 4,
-			nextId: 3,
-			questions: [{ kind: "question", id: 1, source: "name: q2\n", base }],
-			schemes: [{ kind: "scale", name: "yn", id: 2, source: "labels: {}\n" }],
-			settings: legacy,
-			workOf: { repo: "o/r", login: "iain" },
-			kept: {
-				"x/y@ann": {
-					questions: [{ kind: "question", id: 4, source: "name: a\n" }],
-					schemes: [],
-				},
-			},
-		};
-		expect(readPersisted(JSON.stringify(good))).toEqual({
-			ok: true,
-			value: good,
-		});
-		expect(readPersisted("{not json").ok).toBe(false);
-		const wrong = readPersisted(JSON.stringify({ ...good, version: 5 }));
-		expect(!wrong.ok && wrong.error.kind).toBe("unreadable");
-		// A scheme file without its name is not readable: the name is its identity.
-		const nameless = readPersisted(
-			JSON.stringify({
-				...good,
-				schemes: [{ ...good.schemes[0], name: undefined }],
-			}),
-		);
-		expect(nameless.ok).toBe(false);
-	});
-
-	it("reads version 3: its one pool of work is its own bank's, by a person not recorded", () => {
-		const v3 = {
-			version: 3,
-			nextId: 3,
-			questions: [{ kind: "question", id: 1, source: "name: q2\n", base }],
-			schemes: [],
-			settings: legacy,
-		};
-		expect(readPersisted(JSON.stringify(v3))).toEqual({
-			ok: true,
-			value: { ...v3, version: 4, workOf: { repo: "o/r" }, kept: {} },
-		});
-	});
-
-	it("reads version 2: a bank origin becomes a base, a draft has none, files split by kind", () => {
-		const v2 = {
-			version: 2,
-			nextId: 3,
-			files: [
-				{
-					id: 1,
-					kind: "question",
-					source: "name: q2\n",
-					origin: {
-						kind: "bank",
-						path: base.path,
-						sha: base.sha,
-						original: base.text,
-					},
-				},
-				{
-					id: 2,
-					kind: "scale",
-					name: "yn",
-					source: "labels: {}\n",
-					origin: { kind: "draft" },
-				},
-			],
-			settings: legacy,
-		};
-		expect(readPersisted(JSON.stringify(v2))).toEqual({
-			ok: true,
-			value: {
-				version: 4,
-				nextId: 3,
-				questions: [{ id: 1, kind: "question", source: "name: q2\n", base }],
-				schemes: [{ id: 2, kind: "scale", name: "yn", source: "labels: {}\n" }],
-				settings: legacy,
-				workOf: { repo: "o/r" },
-				kept: {},
-			},
-		});
-	});
-
-	it("reads version 1, which held only questions, through version 2", () => {
-		const v1 = {
-			version: 1,
-			nextId: 2,
-			questions: [{ id: 1, source: "name: q\n", origin: { kind: "draft" } }],
-			settings: legacy,
-		};
-		expect(readPersisted(JSON.stringify(v1))).toEqual({
-			ok: true,
-			value: {
-				version: 4,
-				nextId: 2,
-				questions: [{ id: 1, kind: "question", source: "name: q\n" }],
-				schemes: [],
-				settings: legacy,
-				workOf: { repo: "o/r" },
-				kept: {},
-			},
-		});
-	});
-
-	it("drops a branch an older version stored: saves always go to the author's own", () => {
-		const stored = {
-			version: 3,
-			nextId: 1,
-			questions: [],
-			schemes: [],
-			settings: { ...legacy, branch: "sandbox" },
-		};
-		expect(readPersisted(JSON.stringify(stored))).toEqual({
-			ok: true,
-			value: {
-				...stored,
-				version: 4,
-				settings: legacy,
-				workOf: { repo: "o/r" },
-				kept: {},
-			},
-		});
-	});
-});
 
 const work = {
 	version: 8 as const,
 	repo: "o/r",
 	login: "iain",
 	nextId: 3,
-	questions: [
-		{ kind: "question" as const, id: 1, bank: "", source: "name: q\n", base },
-	],
+	questions: [{ kind: "question" as const, id: 1, source: "name: q\n", base }],
 	schemes: [
 		{
 			kind: "scale" as const,
 			name: "yn",
 			id: 2,
-			bank: "",
 			source: "labels: {}\n",
 		},
 		// The workspace's details: a shared file of the root, as any other.
@@ -198,7 +61,6 @@ const work = {
 			kind: "workspace" as const,
 			name: "workspace",
 			id: 5,
-			bank: "",
 			source: "agency: x\n",
 		},
 	],
@@ -237,9 +99,7 @@ describe("this tab's work and the default settings", () => {
 		const v7 = {
 			...work,
 			version: 8,
-			schemes: [
-				{ kind: "bank", name: "bank", id: 2, bank: "", source: "agency: x\n" },
-			],
+			schemes: [{ kind: "bank", name: "bank", id: 2, source: "agency: x\n" }],
 			workspace: [{ kind: "workspaceFile", id: 5, source: "agency: x\n" }],
 		};
 		const local = new MemoryStorage();
@@ -253,6 +113,29 @@ describe("this tab's work and the default settings", () => {
 			expect(
 				readWork(JSON.stringify({ ...work, schemes: [], version })).ok,
 			).toBe(false);
+	});
+
+	it("sets work aside that names a bank on its files, as version 8 first wrote them", () => {
+		const banked = {
+			...work,
+			questions: work.questions.map((q) => ({ ...q, bank: "" })),
+			schemes: work.schemes.map((e) => ({ ...e, bank: "" })),
+		};
+		const local = new MemoryStorage();
+		const session = new MemoryStorage();
+		session.setItem(WORK_KEY, JSON.stringify(banked));
+		const started = readStartup(local, session);
+		expect(!started.work.ok && started.work.error.kind).toBe("unreadable");
+		expect(local.getItem(WORK_UNREADABLE_KEY)).toBe(JSON.stringify(banked));
+	});
+
+	it("leaves what versions before tabs kept their own work where it is, unread", () => {
+		const local = new MemoryStorage();
+		local.setItem("qretools.v1", "{anything");
+		expect(readStartup(local, new MemoryStorage())).toEqual({
+			work: { ok: true, value: undefined },
+		});
+		expect(local.getItem("qretools.v1")).toBe("{anything");
 	});
 
 	it("reads settings version 1; anything unreadable is simply no default", () => {
@@ -307,123 +190,6 @@ describe("this tab's work and the default settings", () => {
 			"{broken",
 			work,
 		]);
-	});
-});
-
-describe("migrating an older version's work", () => {
-	const v4 = {
-		version: 4,
-		nextId: 5,
-		questions: [{ kind: "question", id: 1, source: "name: q\n", base }],
-		schemes: [],
-		settings: legacy,
-		workOf: { repo: "a/bank", login: "iain" },
-		kept: {},
-	};
-
-	it("brings its own work into this tab and its settings into the default, and retires the old value", () => {
-		const local = new MemoryStorage();
-		const session = new MemoryStorage();
-		local.setItem(LEGACY_KEY, JSON.stringify(v4));
-		expect(migrate(local, session)).toEqual([]);
-		expect(readWork(session.getItem(WORK_KEY))).toEqual({
-			ok: true,
-			value: {
-				version: 8,
-				repo: "a/bank",
-				login: "iain",
-				nextId: 5,
-				// Version 4's work was one bank's: the root bank of its workspace.
-				questions: v4.questions.map((q) => ({ ...q, bank: "" })),
-				schemes: [],
-				workspace: [],
-			},
-		});
-		expect(readSettings(local.getItem(SETTINGS_KEY))).toEqual(settings);
-		expect(local.getItem(LEGACY_KEY)).toBeNull();
-		expect(local.getItem(RETIRED_KEY)).toBe(JSON.stringify(v4));
-		// Once: a second tab finds nothing to migrate.
-		const second = new MemoryStorage();
-		expect(migrate(local, second)).toEqual([]);
-		expect(second.getItem(WORK_KEY)).toBeNull();
-	});
-
-	it("never retires over an earlier retired value (a tab on the old version wrote again)", () => {
-		const local = new MemoryStorage();
-		local.setItem(RETIRED_KEY, "earlier");
-		local.setItem(LEGACY_KEY, JSON.stringify(v4));
-		migrate(local, new MemoryStorage());
-		expect(local.getItem(RETIRED_KEY)).toBe("earlier");
-		expect(local.getItem(`${RETIRED_KEY}.2`)).toBe(JSON.stringify(v4));
-	});
-
-	it("says once that work kept for other banks was set aside", () => {
-		const local = new MemoryStorage();
-		local.setItem(
-			LEGACY_KEY,
-			JSON.stringify({
-				...v4,
-				kept: {
-					"x/y@ann": {
-						questions: [{ kind: "question", id: 9, source: "name: a\n" }],
-						schemes: [],
-					},
-				},
-			}),
-		);
-		const [notice, ...rest] = migrate(local, new MemoryStorage());
-		expect(rest).toEqual([]);
-		expect(notice?.message).toContain(RETIRED_KEY);
-		expect(local.getItem(RETIRED_KEY)).not.toBeNull();
-	});
-
-	it("reads version 3 work as its settings' bank, with no login", () => {
-		const local = new MemoryStorage();
-		const session = new MemoryStorage();
-		local.setItem(
-			LEGACY_KEY,
-			JSON.stringify({
-				version: 3,
-				nextId: 1,
-				questions: [],
-				schemes: [],
-				settings: legacy,
-			}),
-		);
-		migrate(local, session);
-		expect(JSON.parse(session.getItem(WORK_KEY) ?? "")).toEqual({
-			version: 8,
-			repo: "o/r",
-			nextId: 1,
-			questions: [],
-			schemes: [],
-			workspace: [],
-		});
-	});
-
-	it("leaves a tab's own work alone, and retires an unreadable old value with a notice", () => {
-		const local = new MemoryStorage();
-		const session = new MemoryStorage();
-		session.setItem(WORK_KEY, JSON.stringify(work));
-		local.setItem(LEGACY_KEY, JSON.stringify(v4));
-		expect(migrate(local, session)).toEqual([]);
-		expect(local.getItem(LEGACY_KEY)).not.toBeNull();
-		const fresh = new MemoryStorage();
-		local.setItem(LEGACY_KEY, "{not json");
-		const [failure] = migrate(local, fresh);
-		expect(failure?.kind).toBe("unreadable");
-		expect(local.getItem(RETIRED_KEY)).toBe("{not json");
-		expect(fresh.getItem(WORK_KEY)).toBeNull();
-	});
-
-	it("runs as part of starting up", () => {
-		const local = new MemoryStorage();
-		const session = new MemoryStorage();
-		local.setItem(LEGACY_KEY, JSON.stringify(v4));
-		const started = readStartup(local, session);
-		expect(started.work.ok && started.work.value?.repo).toBe("a/bank");
-		expect(started.settings).toEqual(settings);
-		expect(started.notices).toEqual([]);
 	});
 });
 

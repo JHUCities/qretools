@@ -56,19 +56,32 @@ describe("the households instrument, whole", async () => {
 		return out;
 	};
 
-	it("says when a bank it uses has no agency", async () => {
+	it("says once that its own workspace has no agency, and of another's where it is used", async () => {
 		const { "workspace.yaml": _, ...files } = await readBank(
 			here("../../fixtures/households"),
 		);
-		const without = instrumentOf(await readFile(FILE, "utf8"), {
-			banks: { hh: bankOf(files) },
-			agency: "org.example",
-		});
-		expect(
-			without.findings
-				.filter((f) => f.code === "invalid-agency")
-				.map((f) => f.path),
-		).toEqual(["uses.hh"]);
+		const source = await readFile(FILE, "utf8");
+		expect(source).toContain("hh: ../\n");
+		const agencyFindings = (text: string, agency?: string) =>
+			instrumentOf(text, {
+				banks: { hh: bankOf(files) },
+				...(agency !== undefined && { agency }),
+			})
+				.findings.filter(
+					(f) => f.code === "invalid-agency" || f.message.includes("agency"),
+				)
+				.map((f) => `${f.code} ${f.path}`);
+		// Its own workspace (`../`): the instrument's own finding covers the one cause.
+		expect(agencyFindings(source)).toEqual(["hole "]);
+		expect(agencyFindings(source, "Not An Agency")).toEqual([
+			"invalid-agency ",
+		]);
+		// A workspace in another repository has its own agency to declare.
+		const remote = source.replace("hh: ../\n", "hh: owner/hh@v1\n");
+		expect(agencyFindings(remote, "org.example")).toEqual([
+			"invalid-agency uses.hh",
+		]);
+		expect(agencyFindings(remote)).toEqual(["invalid-agency uses.hh", "hole "]);
 	});
 
 	it("has every construct, and nothing but advice to say", () => {
