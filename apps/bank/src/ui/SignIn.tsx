@@ -125,8 +125,8 @@ export function SignIn({ model }: { model: Model }) {
 								onChange={(e) => setText(e.target.value)}
 							/>
 							<FormControl.Caption>
-								The GitHub repository that holds your workspace (its banks and
-								instruments), as owner/name, or owner/name/folder for a
+								The GitHub repository that holds your workspace (its questions
+								and instruments), as owner/name, or owner/name/folder for a
 								workspace in a folder.
 							</FormControl.Caption>
 							{problem !== undefined && (

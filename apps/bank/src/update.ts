@@ -1342,11 +1342,20 @@ function step(model: Model, msg: Msg): Step {
 				pendingLink: undefined,
 				// An update from the default branch ends here, with the branch as it now is.
 				updating: undefined,
-				// What GitHub wouldn't give as text is left out, and said once: this load's
-				// notice replaces an earlier load's, and a load with none clears it.
+				// What GitHub wouldn't give as text is left out, and what the workspace reads
+				// nowhere is named, each said once: this load's notice replaces an earlier
+				// load's, and a load with none clears it.
 				failures: [
-					...loadedRequest.failures.filter((f) => f.hint !== UNREAD_HINT),
+					...loadedRequest.failures.filter(
+						(f) => f.hint !== UNREAD_HINT && f.hint !== NOWHERE_HINT,
+					),
 					...(unread.length === 0 ? [] : [unreadNotice(unread)]),
+					...nowhereNotice(
+						files
+							.map((f) => f.path)
+							.filter((p) => sliceOf(p) === undefined)
+							.sort(),
+					),
 				],
 			});
 			// A link that waited for the bank opens now.
@@ -2211,6 +2220,32 @@ const unreadNotice = (
 	hint: UNREAD_HINT,
 	detail: unread.map((u) => `${u.path}: ${u.reason}`).join("\n"),
 });
+
+/** What marks the read-nowhere notice among the failures, as `UNREAD_HINT` marks its own. */
+const NOWHERE_HINT =
+	"A workspace is read from its root: `workspace.yaml`, `questions/<folder>/`, the shared folders (`scales/` and so on) and `instruments/`.";
+
+/**
+ * YAML files the workspace holds and reads as nothing: a wrong folder, or a workspace
+ * laid out another way (`banks/<name>/questions/…`), which would otherwise open empty
+ * without a word. The first few are named; all are in the detail.
+ */
+const nowhereNotice = (paths: readonly string[]): readonly Failure[] => {
+	if (paths.length === 0) return [];
+	const first = paths.slice(0, 3).map((p) => `\`${p}\``);
+	const more = paths.length - first.length;
+	return [
+		{
+			kind: "unreadable",
+			message:
+				paths.length === 1
+					? `${first[0]} is read as nothing.`
+					: `${paths.length} YAML files are read as nothing: ${first.join(", ")}${more === 0 ? "" : ` and ${more} more`}.`,
+			hint: NOWHERE_HINT,
+			detail: paths.join("\n"),
+		},
+	];
+};
 
 /** A link the app declined to open: said once, in the failures. */
 const refused = (model: Model, message: string, hint?: string): Model => ({

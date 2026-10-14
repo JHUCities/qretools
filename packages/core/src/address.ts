@@ -101,17 +101,3 @@ export function addressOf(text: string): Address {
 		key: `${owner.toLowerCase()}/${repo.toLowerCase()}${path === "" ? "" : `/${path}`}@${ref}`,
 	};
 }
-
-/**
- * The folder `relative` names from the folder `base` (both `/`-separated, "" for the
- * root), or undefined when it leads above the root.
- */
-export function joinFolder(base: string, relative: string): string | undefined {
-	const out: string[] = [];
-	for (const p of [...base.split("/"), ...relative.split("/")]) {
-		if (p === "" || p === ".") continue;
-		if (p !== "..") out.push(p);
-		else if (out.pop() === undefined) return undefined;
-	}
-	return out.join("/");
-}

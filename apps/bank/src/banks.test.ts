@@ -118,9 +118,14 @@ describe("loading a workspace", () => {
 		).toEqual(["questions/t/q.yaml", "scales/yn.yaml", "workspace.yaml"]);
 	});
 
+	/** The files of `WORKSPACE` the workspace reads: nothing else to say of it. */
+	const READ = WORKSPACE.filter(
+		(f) => !f.path.startsWith("bank") && f.path !== "notes.yaml",
+	);
+
 	it("names the files GitHub wouldn't give as text, once however often it loads", () => {
 		const unread = [{ path: "scales/big.yaml", reason: "It's too large." }];
-		const m = loaded(WORKSPACE, unread);
+		const m = loaded(READ, unread);
 		expect(m.failures).toEqual([
 			expect.objectContaining({
 				message: "`scales/big.yaml` couldn't be read, so it's left out.",
@@ -130,7 +135,7 @@ describe("loading a workspace", () => {
 			update(model, {
 				kind: "workspaceLoaded",
 				result: ok({
-					files: WORKSPACE,
+					files: READ,
 					found: true,
 					from: "branch" as const,
 					aheadBy: 0,
@@ -140,6 +145,44 @@ describe("loading a workspace", () => {
 			})[0];
 		expect(load(m, unread).failures).toHaveLength(1);
 		expect(load(m, []).failures).toEqual([]);
+	});
+
+	it("says which YAML files it reads nowhere, so a workspace laid out another way doesn't open empty without a word", () => {
+		const old = [
+			"banks/example/workspace.yaml",
+			"banks/example/questions/t/a.yaml",
+			"banks/example/questions/t/b.yaml",
+			"banks/example/scales/yn.yaml",
+		].map((path) => file(path, "name: x\n"));
+		const m = loaded(old);
+		expect(m.local.questions).toEqual({});
+		expect(m.failures).toEqual([
+			expect.objectContaining({
+				message:
+					"4 YAML files are read as nothing: `banks/example/questions/t/a.yaml`, `banks/example/questions/t/b.yaml`, `banks/example/scales/yn.yaml` and 1 more.",
+				detail: old
+					.map((f) => f.path)
+					.sort()
+					.join("\n"),
+			}),
+		]);
+		// One stray file is named alone; a workspace read whole says nothing, and clears it.
+		const stray = loaded([...READ, file("notes.yaml", "x: 1\n")]);
+		expect(stray.failures.map((f) => f.message)).toEqual([
+			"`notes.yaml` is read as nothing.",
+		]);
+		const [again] = update(stray, {
+			kind: "workspaceLoaded",
+			result: ok({
+				files: READ,
+				found: true,
+				from: "branch" as const,
+				aheadBy: 0,
+				behindBy: 0,
+				unread: [],
+			}),
+		});
+		expect(again.failures).toEqual([]);
 	});
 
 	it("starts a template question with its bank's required fields in their places; a blank one blank", () => {

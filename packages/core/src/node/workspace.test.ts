@@ -7,7 +7,7 @@ import {
 	resolveUses,
 	workspaceOf,
 } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
 
 const here = (path: string): string =>
@@ -17,7 +17,12 @@ let hh: Readonly<Record<string, string>>;
 let households: string;
 let remote: string;
 beforeAll(async () => {
-	hh = await readBank(here("../../fixtures/households"));
+	// The fixture's bank alone: each test adds the instruments it reads.
+	hh = Object.fromEntries(
+		Object.entries(
+			await readWorkspace(here("../../fixtures/households")),
+		).filter(([path]) => !path.startsWith("instruments/")),
+	);
 	households = await readFile(
 		here("../../fixtures/households/instruments/households.yaml"),
 		"utf8",
@@ -34,10 +39,9 @@ const codes = (
 ) => findings.filter((f) => f.path === path).map((f) => f.code);
 
 describe("a workspace", () => {
-	it("is, for a repository that is one bank, that bank, as bankOf reads it", () => {
+	it("is, with no instruments, its bank, as bankOf reads it", () => {
 		const ws = workspaceOf(hh);
-		expect(Object.keys(ws.banks)).toEqual([""]);
-		expect(ws.banks[""]).toEqual(bankOf(hh));
+		expect(ws.bank).toEqual(bankOf(hh));
 		expect(ws.instruments).toEqual({});
 		expect(ws.ignored).toEqual([]);
 	});
@@ -50,7 +54,7 @@ describe("a workspace", () => {
 			"README.md": "# A workspace\n",
 		});
 		const read = ws.instruments["instruments/households.yaml"];
-		expect(read?.uses).toEqual({ hh: { kind: "local", folder: "" } });
+		expect(read?.uses).toEqual({ hh: { kind: "local" } });
 		const bank = bankOf({ ...hh, "workspace.yaml": "agency: org.one\n" });
 		const direct = instrumentOf(households, {
 			banks: { hh: bank },
@@ -59,7 +63,7 @@ describe("a workspace", () => {
 		expect(read?.instrument.findings).toEqual(direct.findings);
 		expect(read?.instrument.ddi).toEqual(direct.ddi);
 		// One agency: the bank's, its questions' and the instrument's.
-		expect(ws.banks[""]?.agency).toBe("org.one");
+		expect(ws.bank.agency).toBe("org.one");
 		expect(read?.instrument.agency).toBe("org.one");
 		const agencies = new Set(
 			[
@@ -72,9 +76,9 @@ describe("a workspace", () => {
 
 	it("says once that a workspace with no `workspace.yaml` declares no agency, not once per file", () => {
 		const { "workspace.yaml": _, ...rest } = hh;
-		const bank = workspaceOf(rest).banks[""];
+		const { bank } = workspaceOf(rest);
 		expect(
-			Object.entries(bank?.findings ?? {})
+			Object.entries(bank.findings)
 				.filter(([, fs]) => fs.some((f) => f.path === "agency"))
 				.map(([path]) => path),
 		).toEqual(["workspace.yaml"]);
@@ -83,7 +87,7 @@ describe("a workspace", () => {
 	it("reads `bank.yaml` at the root as nothing, and says so", () => {
 		const ws = workspaceOf({ ...hh, "bank.yaml": "agency: org.old\n" });
 		expect(ws.ignored).toEqual(["bank.yaml"]);
-		expect(ws.banks[""]?.agency).toBe("org.example.households");
+		expect(ws.bank.agency).toBe("org.example.households");
 	});
 
 	it("takes a workspace of settings alone for a bank with no questions yet", () => {
@@ -92,9 +96,9 @@ describe("a workspace", () => {
 			"instruments/households.yaml": households,
 		});
 		expect(ws.instruments["instruments/households.yaml"]?.uses).toEqual({
-			hh: { kind: "local", folder: "" },
+			hh: { kind: "local" },
 		});
-		expect(ws.banks[""]?.questions).toEqual({});
+		expect(ws.bank.questions).toEqual({});
 	});
 
 	it("publishes under the agency as written, so a wrong one is said on the instrument", () => {
@@ -231,11 +235,50 @@ flow:
 		]);
 	});
 
-	it("says a workspace whose root holds no bank has none, on the use", () => {
+	it("reads an empty workspace's instrument against its empty bank: the use is found, the question isn't", () => {
 		const read = workspaceOf({ "instruments/households.yaml": households })
 			.instruments["instruments/households.yaml"];
-		expect(read?.uses).toEqual({ hh: { kind: "missing", folder: "" } });
-		expect(codes(read?.instrument.findings ?? [], "uses.hh")).toHaveLength(1);
+		expect(read?.uses).toEqual({ hh: { kind: "local" } });
+		expect(codes(read?.instrument.findings ?? [], "uses.hh")).toEqual([]);
+	});
+
+	it("reads an imported workspace's question against that workspace's own shared files and settings, never this one's", () => {
+		const scale = (yes: string) => `labels:\n  1: ${yes}\n  2: No\n`;
+		const ws = workspaceOf(
+			{
+				"workspace.yaml": "agency: org.local\nrequired: [universe]\n",
+				"scales/agree4.yaml": scale("Local yes"),
+				"instruments/x.yaml":
+					"name: x\nuses:\n  far: o/r@v1\nflow:\n  - ask: far.feel\n",
+			},
+			{
+				remote: {
+					"o/r@v1": {
+						kind: "files",
+						files: {
+							"workspace.yaml": "agency: org.remote\n",
+							"scales/agree4.yaml": scale("Remote yes"),
+							"questions/t/feel.yaml":
+								"name: feel\ntext: How do you feel?\nintent: Mood.\nresponses: agree4\n",
+						},
+					},
+				},
+			},
+		);
+		const feel = ws.remote["o/r@v1"]?.questions["questions/t/feel.yaml"];
+		// Its own scale of that name, and only what its own settings require.
+		expect(feel?.respondent).toMatchObject({
+			input: { options: [{ label: "Remote yes" }, { label: "No" }] },
+		});
+		expect(feel?.findings.filter((f) => f.severity === "hole")).toEqual([]);
+		const ddi = JSON.stringify(
+			ws.instruments["instruments/x.yaml"]?.instrument.ddi,
+		);
+		expect(ddi).toContain("Remote yes");
+		expect(ddi).not.toContain("Local yes");
+		// The question keeps its publisher's agency; the instrument has this workspace's.
+		expect(ddi).toContain("urn:ddi:org.remote:feel:");
+		expect(ddi).toContain("urn:ddi:org.local:");
 	});
 
 	it("takes settings in a folder for no bank, and says the folder's files are ignored", () => {
@@ -243,14 +286,14 @@ flow:
 			"banks/x/questions/t/q.yaml": "name: q\n",
 			"banks/x/workspace.yaml": "agency: org.example\n",
 		};
-		// With no bank at the root, the workspace says so.
+		// Alone, the root is an empty bank, and they're read as nothing.
 		const none = workspaceOf({ ...nested, "instruments/x.yaml": "name: x\n" });
-		expect(none.banks).toEqual({});
+		expect(none.bank.questions).toEqual({});
 		expect(none.ignored).toEqual(Object.keys(nested));
-		// With one, they're its files, read as nothing, and said the same way.
-		const ws = workspaceOf({ ...hh, ...nested });
-		expect(Object.keys(ws.banks)).toEqual([""]);
-		expect(ws.ignored).toEqual(Object.keys(nested));
+		// Beside the root's own files, the same.
+		expect(workspaceOf({ ...hh, ...nested }).ignored).toEqual(
+			Object.keys(nested),
+		);
 	});
 
 	it("reports YAML that is neither the bank's, an instrument nor its own, and nothing else", () => {
@@ -269,19 +312,17 @@ flow:
 });
 
 describe("the banks a workspace's instruments use", () => {
-	it("are its own workspace's, written `../` from instruments/, and nothing else local", () => {
-		const uses = [{ alias: "a", address: "../" }, { alias: "c" }];
-		const root = new Set([""]);
-		expect(resolveUses("instruments/x.yaml", uses, root)).toEqual({
-			a: { kind: "local", folder: "" },
+	it("are its own workspace's, written `../`, and nothing else local", () => {
+		expect(
+			resolveUses([
+				{ alias: "a", address: "../" },
+				{ alias: "b", address: "../questions" },
+				{ alias: "c" },
+			]),
+		).toEqual({
+			a: { kind: "local" },
+			b: { kind: "unreadable", reason: expect.stringContaining("`../`") },
 		});
-		expect(resolveUses("instruments/x.yaml", uses, new Set())).toEqual({
-			a: { kind: "missing", folder: "" },
-		});
-		// From anywhere else `../` isn't the workspace.
-		expect(resolveUses("instruments/deeper/x.yaml", uses, root).a?.kind).toBe(
-			"unreadable",
-		);
 	});
 
 	it("in other repositories, are each listed once, however they're capitalised", () => {

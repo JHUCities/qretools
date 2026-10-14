@@ -1,29 +1,30 @@
 # @qretools/core
 
-The library under QREtools: survey questions and a question bank's shared files,
-written in a small YAML surface language, read with holes, checked, and elaborated to
-[DDI-Lifecycle 4.0](https://ddialliance.org/). It runs in the browser and in Node.
-Questions, banks, findings and DDI are plain values. A broken draft still evaluates:
+The library under QREtools: a workspace's survey questions, the shared files they name
+and its instruments, written in a small YAML surface language, read with holes, checked,
+and elaborated to [DDI-Lifecycle 4.0](https://ddialliance.org/). It runs in the browser
+and in Node. Questions, workspaces, findings and DDI are plain values. A broken draft still evaluates:
 what's missing is a finding with a path into the text, never an exception.
 
 Three entry points, split by what they need:
 
 | Import | What it gives |
 |---|---|
-| `@qretools/core` | Read, check and elaborate questions and shared files, a whole bank at once (`bankOf`), and validate the DDI. Pure. |
+| `@qretools/core` | Read, check and elaborate questions and shared files, a workspace's at once (`bankOf`; with its instruments, `workspaceOf`), and validate the DDI. Pure. |
 | `@qretools/core/editor` | What an editor needs as well: where the caret is, what to colour, the cursor inspector, edits and fixes, the JSON Schemas for completion. Pure. |
-| `@qretools/core/node` | `readBank(dir)`: a bank's files read from a directory. The only entry that does I/O. |
+| `@qretools/core/node` | `readWorkspace(dir)`: a workspace's files read from a directory. The only entry that does I/O. |
 
 The DDI schema the output is checked against is exported as
 `@qretools/core/schema.json`.
 
 ## Instruments
 
-An instrument composes bank questions into a questionnaire: the banks it uses (each
-under an alias), the inputs it receives from outside, and a flow of steps (`ask`,
+An instrument composes questions into a questionnaire: what it uses, each under an alias
+(its own workspace, `bank: ../`, or another at a tag, `owner/repo@v1`, read with that
+workspace's own shared files and settings), the inputs it receives from outside, and a flow of steps (`ask`,
 `say`, `section`, `if`, `stop`, `compute`, `roster`, `each`) whose conditions are
 written in a subset of VTL 2.1, the SDMX standard. `instrumentOf` reads it against
-its banks, checks its flow (every answer asked before it's read, asked once on a path,
+what it uses, checks its flow (every answer asked before it's read, asked once on a path,
 every branch reachable), and elaborates it to DDI: an `Instrument` whose flow is
 DDI's control constructs, with a Variable for everything it records. What a
 resolver must fetch first, `importsOf` says without reading anything else.
@@ -32,7 +33,7 @@ resolver must fetch first, `importsOf` says without reading anything else.
 const file = "fixtures/households/instruments/households.yaml";
 const source = await readFile(file, "utf8");
 importsOf(source); // → [{ alias: "hh", address: "../" }]
-const households = bankOf(await readBank("fixtures/households"));
+const households = bankOf(await readWorkspace("fixtures/households"));
 const instrument = instrumentOf(source, {
 	banks: { hh: households },
 	agency: "org.example",
@@ -44,33 +45,34 @@ Object.keys(instrument.ddi.Instrument ?? {});
 
 ## The `qretools` command
 
-For a bank checked out on disk, in CI or at a terminal:
+For a workspace checked out on disk, in CI or at a terminal:
 
 ```sh
-qretools check path/to/bank            # findings, one per line; exit 1 on anything to fill in or fix
-qretools check path/to/bank --strict   # warnings fail too
-qretools export path/to/bank -o bank.json   # the bank's DDI, validated
+qretools check path/to/workspace            # findings, one per line; exit 1 on anything to fill in or fix
+qretools check path/to/workspace --strict   # warnings fail too
+qretools export path/to/workspace -o questions.json   # its questions' DDI, validated
 ```
 
-`check` also reads a workspace: a folder holding a bank at its root (`questions/`,
-the shared folders, `workspace.yaml`) and `instruments/`. It reports the bank's
-findings, every instrument's (read against its own workspace's bank, written `../`,
-under the agency `workspace.yaml` gives its questions too), and notes YAML files it
-reads as nothing.
+A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
+shared folders (`scales/` and so on), `missing.yaml`, `select_all.yaml` and
+`instruments/`. `check` reports the findings of its questions and shared files and of
+every instrument (read against its own workspace, written `../`, under the agency
+`workspace.yaml` gives its questions too), and notes YAML files it reads as nothing.
 
-A bank in another repository (`owner/repo@v1`, or `owner/repo/folder@v1`) is read at
+A workspace in another repository (`owner/repo@v1`, or `owner/repo/folder@v1`) is read at
 that tag with your own `git`, so whatever credentials git has reach a private
 repository. Only `refs/tags/v1` is fetched, never a branch of that name, shallow and
 only its folder, into a cache by tag and folder (`$XDG_CACHE_HOME/qretools`, else
 `~/.cache/qretools`) beside the commit it resolved to; later runs read the cache. A tag
 is immutable by convention only: to read one that was moved, delete its entry in the
-cache. In CI, a private bank needs git credentials for it, such as `GITHUB_TOKEN` given
+cache. In CI, a private one needs git credentials for it, such as `GITHUB_TOKEN` given
 to git (`git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf https://github.com/`)
 or a deploy key.
 
 For one instrument, `qretools instrument check <file>` and `qretools instrument export
-<file> --agency <agency>`; its banks are read from the folders `uses` names by relative
-path, from another repository at its tag, or from `--bank alias=dir`.
+<file> --agency <agency>`: it reads its own workspace (`../`, the folder above it) and
+others at their tags; `--bank alias=dir` reads an alias written as `owner/repo@v1` from a
+directory instead, to work offline. Any other local address is refused.
 
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses
@@ -96,10 +98,10 @@ import {
 	makeValidator,
 	status,
 } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 ```
 
-A question, evaluated against its bank's shared files (here none, and the agency its
+A question, evaluated against its workspace's shared files (here none, and the agency its
 DDI is published under): its findings, the respondent's view, the codebook entry and
 its DDI, all from the text.
 
@@ -127,9 +129,9 @@ draft.findings.map((f) => [f.severity, f.path]);
 // → [["hole", "text"], ["hole", "intent"], ["hole", ""]]
 ```
 
-A whole bank from a directory: each file's evaluation and findings by path, the
-shared files' environment, the paths that aren't bank files, and the DDI agency the
-workspace declares in `workspace.yaml`. A bank without one is reported once, under
+A workspace's questions and shared files from a directory: each file's evaluation and
+findings by path, the shared files' environment, the paths read as nothing, and the DDI
+agency `workspace.yaml` declares. A workspace without one is reported once, under
 `workspace.yaml`, and its items are published under `invalid` until it has one.
 
 `workspace.yaml` has three fields: `agency`; `required`, the fields every question must
@@ -138,9 +140,11 @@ the questions in one folder must also have, by the folder's path (`questions/hea
 with a list under it). A folder only adds to `required`, and a folder named there that
 holds no question is a warning on `workspace.yaml`. `envAt(env, path)` is the
 environment the question at a path is read against; `bankOf` applies it to each.
+`select_all.yaml` holds the two values a select-all-that-apply option is stored as
+(absent: 1 Yes, 0 No).
 
 ```ts
-const bank = bankOf(await readBank("fixtures/bank"));
+const bank = bankOf(await readWorkspace("fixtures/bank"));
 Object.keys(bank.questions).length; // → 9
 bank.ignored; // → []
 bank.agency; // → "org.example"

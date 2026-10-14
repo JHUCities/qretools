@@ -90,7 +90,7 @@ export interface Repo {
 }
 
 /**
- * Which bank: a repository, and the folder in it that holds the bank (`banks/bas`),
+ * Which bank: a repository, and the folder in it that holds the bank (`surveys/hh`),
  * empty for its root. The folder has no leading or trailing slash. Paths inside the
  * bank are relative to it everywhere but the GitHub adapter, which adds it.
  */

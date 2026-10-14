@@ -11,7 +11,6 @@ export {
 	type AddressKey,
 	addressOf,
 	HERE,
-	joinFolder,
 } from "./address.ts";
 export {
 	type BankLocation,
@@ -199,23 +198,17 @@ export {
 	usedBy,
 } from "./symbols.ts";
 export {
-	bankAt,
-	banksIn,
-	fileAt,
 	type InstrumentIn,
-	inBank,
+	instrumentAt,
 	instrumentIn,
 	instrumentPath,
-	placeOf,
 	type RemoteBank,
 	type Resolution,
 	readsInWorkspace,
-	relIn,
 	remotesOf,
 	resolveUses,
 	skippedFolder,
 	WORKSPACE,
 	type Workspace,
-	type WorkspacePlace,
 	workspaceOf,
 } from "./workspace.ts";

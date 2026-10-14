@@ -1,19 +1,20 @@
 /**
  * The bank app's build configuration read once at startup: the template a new
- * workspace starts from, and the bank offered first (sign-in's is the shell's, `signInConfig`).
+ * workspace starts from, and the workspace offered first (sign-in's is the shell's, `signInConfig`).
  * Build-time configuration, never constants (AGENTS.md, step 10).
  */
 import { type BankRef, parseBank, parseRepo } from "@qretools/shell";
 
 /**
- * Where qretools itself lives: a fact about the tool, not about any bank, so one literal
+ * Where qretools itself lives: a fact about the tool, not about any workspace, so one literal
  * (a team running its own copy still runs qretools).
  */
 export const SOURCE_URL = "https://github.com/JHUCities/qretools";
 
 /**
- * The template a new workspace starts from (`VITE_TEMPLATE`, as owner/name): a folder
- * of example questions and no instrument, since the app makes one (New, Instrument; the
+ * The template a new workspace starts from (`VITE_TEMPLATE`, as owner/name): one
+ * `workspace.yaml`, the shared folders, `select_all.yaml`, a folder of example questions
+ * (`questions/example/`) and no instrument, since the app makes one (New, Instrument; the
  * first offers an example where the workspace has questions in `questions/example/`).
  * The sign-in page links GitHub's "Use this template" for it. Configuration, not a
  * constant: another team points it at its own. Absent or malformed means no link.
@@ -28,8 +29,8 @@ export function template(env: ImportMetaEnv): string | undefined {
 }
 
 /**
- * The bank the sign-in page offers first (`VITE_DEFAULT_BANK`, as owner/name[/folder]). Its own
- * setting, not the template's: a team may reuse a template and keep its own bank.
+ * The workspace the sign-in page offers first (`VITE_DEFAULT_BANK`, as owner/name[/folder]).
+ * Its own setting, not the template's: a team may reuse a template and keep its own.
  * Absent or malformed means an empty field.
  */
 export function defaultBank(env: ImportMetaEnv): BankRef | undefined {

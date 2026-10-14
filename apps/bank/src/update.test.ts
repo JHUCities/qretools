@@ -1134,6 +1134,10 @@ describe("the environment's identity", () => {
 		expect(edited.local.schemes).not.toBe(loaded.local.schemes);
 		expect(edited.local.questions).toBe(loaded.local.questions);
 		expect(edited.remote).toBe(loaded.remote);
+		// And so the environment is built again, as a question's edit never makes it.
+		const evaluations = createEvaluations();
+		const before = evaluations.env(loaded);
+		expect(evaluations.env(edited)).not.toBe(before);
 	});
 
 	it("a load that brings nothing new keeps every slice", () => {

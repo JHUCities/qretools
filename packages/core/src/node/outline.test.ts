@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { bankOf } from "../evaluate.ts";
 import { instrumentOf } from "../instrument/instrument.ts";
 import { type OutlineItem, outlineOf } from "../instrument/outline.ts";
-import { readBank } from "./index.ts";
+import { readWorkspace } from "./index.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
@@ -26,7 +26,7 @@ const lines = (items: readonly OutlineItem[], depth = 0): string[] =>
 
 describe("an instrument's outline", async () => {
 	const banks = {
-		hh: bankOf(await readBank(here("../../fixtures/households"))),
+		hh: bankOf(await readWorkspace(here("../../fixtures/households"))),
 	};
 
 	it("follows the flow, nested as it nests, each item at its path", async () => {

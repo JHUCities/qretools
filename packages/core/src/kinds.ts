@@ -14,8 +14,8 @@ import type { NamedScheme } from "./surface/env.ts";
 export type RootKind = "missing" | "select_all" | "workspace";
 
 /**
- * Where each root kind's one file lives, from which paths, the loader and `readBank`
- * all derive. A root file's name is its kind.
+ * Where each root kind's one file lives, from which paths and the loader derive. A root
+ * file's name is its kind.
  */
 export const ROOT: Readonly<Record<RootKind, string>> = {
 	missing: "missing.yaml",

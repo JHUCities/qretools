@@ -306,16 +306,13 @@ describe("what the pickers offer", () => {
 		);
 	});
 
-	it("lists this workspace's bank as `../` when it has one, then GitHub's", () => {
+	it("lists this workspace's bank as `../`, then GitHub's", () => {
 		const remote = addressOf("JHUCities/Bank/surveys/hh@v1");
 		const remotes = remote.kind === "remote" ? [remote] : [];
-		expect(bankChoices(true, remotes)).toEqual([
+		expect(bankChoices(remotes)).toEqual([
 			{ name: "../", detail: "This workspace's bank" },
 			// As written, not the lowercased key.
 			{ name: "JHUCities/Bank/surveys/hh@v1", detail: "A bank on GitHub" },
-		]);
-		expect(bankChoices(false, remotes).map((c) => c.name)).toEqual([
-			"JHUCities/Bank/surveys/hh@v1",
 		]);
 	});
 });

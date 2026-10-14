@@ -8,7 +8,7 @@ import {
 	makeValidator,
 	status,
 } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -48,7 +48,7 @@ responses:
 			["hole", ""],
 		]);
 
-		const bank = bankOf(await readBank("fixtures/bank"));
+		const bank = bankOf(await readWorkspace("fixtures/bank"));
 		Object.keys(bank.questions).length; // → 9
 		bank.ignored; // → []
 		bank.agency; // → "org.example"
@@ -69,7 +69,7 @@ responses:
 		const file = "fixtures/households/instruments/households.yaml";
 		const source = await readFile(file, "utf8");
 		importsOf(source); // → [{ alias: "hh", address: "../" }]
-		const households = bankOf(await readBank("fixtures/households"));
+		const households = bankOf(await readWorkspace("fixtures/households"));
 		const instrument = instrumentOf(source, {
 			banks: { hh: households },
 			agency: "org.example",

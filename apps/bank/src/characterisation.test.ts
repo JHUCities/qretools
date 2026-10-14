@@ -6,7 +6,7 @@
  */
 import { fileURLToPath } from "node:url";
 import { evaluate, evaluateScheme, indexOf, ok } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import type { File } from "@qretools/shell";
 import { beforeAll, describe, expect, it } from "vitest";
 import { envIn, init, type Model, type Msg } from "./model.js";
@@ -17,7 +17,7 @@ type Step = ReturnType<typeof update>;
 
 let files: readonly File[];
 beforeAll(async () => {
-	const read = await readBank(
+	const read = await readWorkspace(
 		fileURLToPath(
 			new URL("../../../packages/core/fixtures/bank", import.meta.url),
 		),

@@ -11,7 +11,7 @@ import {
 	status,
 	UNDECLARED_AGENCY,
 } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it } from "vitest";
 
 /** A path beside this file, whatever directory the tests run from. */
@@ -35,7 +35,7 @@ async function validator() {
 
 describe("a bank only read (scopeOf)", () => {
 	it("is what a whole check of it gives an instrument, without the check's findings", async () => {
-		const files = await readBank(here("../../fixtures/households"));
+		const files = await readWorkspace(here("../../fixtures/households"));
 		const whole = bankOf(files);
 		const scope = scopeOf(files);
 		expect(scope).toEqual({
@@ -51,7 +51,7 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 	let files: Readonly<Record<string, string>>;
 	let bank: Bank;
 	beforeAll(async () => {
-		files = await readBank(SAMPLE);
+		files = await readWorkspace(SAMPLE);
 		bank = bankOf(files);
 	});
 
@@ -157,7 +157,7 @@ describe.skipIf(!existsSync(REFERENCE))(
 	"the reference bank, when present",
 	() => {
 		it("evaluates whole, and every question's DDI is valid", async () => {
-			const bank = bankOf(await readBank(REFERENCE));
+			const bank = bankOf(await readWorkspace(REFERENCE));
 			expect(Object.keys(bank.questions).length).toBeGreaterThan(0);
 			const validate = await validator();
 			for (const [path, ev] of Object.entries(bank.questions))

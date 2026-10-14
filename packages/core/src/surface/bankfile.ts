@@ -308,7 +308,9 @@ function readRequired(
 			findings: [
 				hole(
 					at,
-					`\`${at}\` is empty.`,
+					at === "required"
+						? "`required` is empty."
+						: `\`${at.slice(at.indexOf(".") + 1)}\` lists no fields.`,
 					`List fields, one per line as \`- title\`, from ${REQUIRABLE_TEXT}; or remove the line.`,
 				),
 			],

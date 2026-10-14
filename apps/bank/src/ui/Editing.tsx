@@ -28,6 +28,7 @@ import {
 	inDocumentOrder,
 	inScope,
 	isRoot,
+	kindAt,
 	type Mark,
 	othersOf,
 	type Range,
@@ -84,7 +85,6 @@ import {
 } from "../model.js";
 import {
 	alsoSaves,
-	bankFileAt,
 	claimOf,
 	isUnsaved,
 	remoteBlob,
@@ -1076,7 +1076,7 @@ export function ForeignView({
 	);
 	const file = screen.file;
 	// One value per path, so the evaluations below keep theirs between renders.
-	const at = useMemo(() => bankFileAt(screen.path), [screen.path]);
+	const at = useMemo(() => kindAt(screen.path), [screen.path]);
 	const kind = at?.kind;
 	// A question of theirs reads as its folder has it on their branch (`envAt`), as their own does.
 	const placed = useMemo(

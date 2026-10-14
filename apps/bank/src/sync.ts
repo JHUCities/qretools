@@ -6,13 +6,13 @@
  */
 import {
 	type Index,
+	instrumentAt,
 	instrumentPath,
 	isRoot,
 	kindAt,
 	type Mention,
 	schemePath,
 	usedBy,
-	WORKSPACE,
 } from "@qretools/core";
 import type { File } from "@qretools/shell";
 import type {
@@ -81,27 +81,13 @@ export function syncOf(
 	return source === base.text || source === remote.text ? "behind" : "conflict";
 }
 
-const INSTRUMENTS = `${WORKSPACE.instruments}/`;
-const INSTRUMENT = new RegExp(`^${INSTRUMENTS}([^/]+)\\.yaml$`);
-
-/** The name of the instrument at a workspace path (`instruments/<name>.yaml`), if it is one. */
-export const instrumentAt = (path: Path): string | undefined =>
-	INSTRUMENT.exec(path)?.[1];
-
 /**
- * What the bank reads a workspace path as (`kindAt`): the workspace's root is its bank.
- * Nothing under `instruments/`, which is the workspace's own.
- */
-export const bankFileAt = (path: Path): ReturnType<typeof kindAt> =>
-	path.startsWith(INSTRUMENTS) ? undefined : kindAt(path);
-
-/**
- * Which remote slice a workspace path belongs to; undefined for a file the workspace
- * does not read.
+ * Which remote slice a workspace path belongs to (an instrument, or what `kindAt` reads
+ * it as: a workspace path is the bank's); undefined for a file the workspace does not read.
  */
 export function sliceOf(path: Path): keyof Remote | undefined {
 	if (instrumentAt(path) !== undefined) return "workspace";
-	const at = bankFileAt(path);
+	const at = kindAt(path);
 	return at === undefined
 		? undefined
 		: at.kind === "question"
@@ -229,7 +215,7 @@ export function rebase(
 	schemes = added(
 		schemes,
 		(path, blob, fid): SchemeEntry | undefined => {
-			const at = bankFileAt(path);
+			const at = kindAt(path);
 			return at === undefined || at.kind === "question"
 				? undefined
 				: {
