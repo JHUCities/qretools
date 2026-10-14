@@ -25,14 +25,12 @@ import {
 import { AriaStatus, SkeletonAvatar } from "@primer/react/experimental";
 import {
 	absentRoot,
-	fileAt,
 	type Index,
 	indexOf,
 	isRoot,
 	plainText,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
-	type Symbols,
 	status as statusOf,
 	UNNAMED,
 	usedBy,
@@ -46,23 +44,27 @@ import {
 	ThemeToggle,
 	Wordmark,
 } from "@qretools/shell/ui";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { SOURCE_URL } from "../config.js";
 import {
-	bankFileOf,
 	type Dispatch,
 	detailsOf,
 	fileOf,
 	type Id,
 	isScheme,
 	type Model,
-	newBank,
 	TEMPLATES,
 } from "../model.js";
-import { alsoSaves, claimOf, isUnsaved, usersIn } from "../sync.js";
+import {
+	alsoSaves,
+	bankFileAt,
+	claimOf,
+	instrumentAt,
+	isUnsaved,
+	usersIn,
+} from "../sync.js";
 import {
 	bankFolders,
-	banksShown,
 	detailsButton,
 	SHARED_KINDS,
 	schemeSections,
@@ -93,7 +95,7 @@ import {
 	useModel,
 } from "./AppContext.js";
 import { BlockedDialog } from "./BlockedDialog.js";
-import { BankFilter, type BankTree, Browser, bankLabel } from "./Browser.js";
+import { BankFilter, Browser } from "./Browser.js";
 import { Editing, ForeignView } from "./Editing.js";
 import { type FileKind, FileSkeleton } from "./FileSkeleton.js";
 import { InstrumentNameDialog } from "./InstrumentNameDialog.js";
@@ -103,23 +105,8 @@ import { SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";
 import { SignOutDialog } from "./SignOutDialog.js";
 
-/**
- * New: a question, from a template or blank, or a shared file. In a workspace of several
- * banks, first which bank (the open file's first), as a submenu each.
- */
-function NewMenu({
-	banks,
-	first,
-	workspaceOnly,
-	dispatch,
-}: {
-	banks: readonly string[];
-	first: string;
-	/** A workspace with no bank of its own: nothing here makes one (`workspaceOnly`). */
-	workspaceOnly: boolean;
-	dispatch: Dispatch;
-}) {
-	const ordered = [first, ...banks.filter((b) => b !== first)];
+/** New: an instrument, a question (from a template or blank), or a shared file. */
+function NewMenu({ dispatch }: { dispatch: Dispatch }) {
 	return (
 		<ActionMenu>
 			<ActionMenu.Anchor>
@@ -134,100 +121,53 @@ function NewMenu({
 					>
 						Instrument…
 					</ActionList.Item>
-					{workspaceOnly ? null : banks.length <= 1 ? (
-						<>
-							<ActionList.Divider />
-							<NewItems dispatch={dispatch} />
-						</>
-					) : (
-						<>
-							<ActionList.Divider />
-							<ActionList.GroupHeading>In bank</ActionList.GroupHeading>
-							{ordered.map((bank) => (
-								<ActionMenu key={bank}>
-									<ActionMenu.Anchor>
-										<ActionList.Item>{bankLabel(bank)}</ActionList.Item>
-									</ActionMenu.Anchor>
-									<ActionMenu.Overlay>
-										<ActionList>
-											<NewItems bank={bank} dispatch={dispatch} />
-										</ActionList>
-									</ActionMenu.Overlay>
-								</ActionMenu>
-							))}
-						</>
-					)}
+					<ActionList.Divider />
+					<ActionList.Item
+						onSelect={() => dispatch({ kind: "questionCreated", text: "" })}
+					>
+						Blank question
+					</ActionList.Item>
+					<ActionList.Divider />
+					<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
+					{TEMPLATES.map((t) => (
+						<ActionList.Item
+							key={t.label}
+							onSelect={() =>
+								dispatch({ kind: "questionCreated", text: t.text })
+							}
+						>
+							{t.label}
+						</ActionList.Item>
+					))}
+					<ActionList.Divider />
+					<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
+					{SHARED_KINDS.map((k) => (
+						<ActionList.Item
+							key={k}
+							onSelect={() =>
+								dispatch({ kind: "schemeCreateOpened", scheme: k })
+							}
+						>
+							{capitalise(SCHEME_SINGULAR[k])}
+						</ActionList.Item>
+					))}
 				</ActionList>
 			</ActionMenu.Overlay>
 		</ActionMenu>
 	);
 }
 
-/** What New makes, in `bank` when one was chosen. */
-function NewItems({ bank, dispatch }: { bank?: string; dispatch: Dispatch }) {
-	const inBank = bank === undefined ? {} : { bank };
-	return (
-		<>
-			<ActionList.Item
-				onSelect={() =>
-					dispatch({ kind: "questionCreated", text: "", ...inBank })
-				}
-			>
-				Blank question
-			</ActionList.Item>
-			<ActionList.Divider />
-			<ActionList.GroupHeading>Templates</ActionList.GroupHeading>
-			{TEMPLATES.map((t) => (
-				<ActionList.Item
-					key={t.label}
-					onSelect={() =>
-						dispatch({ kind: "questionCreated", text: t.text, ...inBank })
-					}
-				>
-					{t.label}
-				</ActionList.Item>
-			))}
-			<ActionList.Divider />
-			<ActionList.GroupHeading>Shared</ActionList.GroupHeading>
-			{SHARED_KINDS.map((k) => (
-				<ActionList.Item
-					key={k}
-					onSelect={() =>
-						dispatch({ kind: "schemeCreateOpened", scheme: k, ...inBank })
-					}
-				>
-					{capitalise(SCHEME_SINGULAR[k])}
-				</ActionList.Item>
-			))}
-		</>
-	);
-}
-
 /** The shape a file at a workspace path will have, while it is on its way. */
-function skeletonKind(path: string, banks: readonly string[]): FileKind {
-	const at = fileAt(path, banks);
-	return at === undefined
-		? "question"
-		: at.kind === "bank"
-			? at.at.kind
-			: at.kind;
-}
-
-/** A bank with no files yet indexes nothing. */
-const NO_INDEX: Index<Id> = indexOf([]);
+const skeletonKind = (path: string): FileKind =>
+	instrumentAt(path) !== undefined
+		? "instrument"
+		: (bankFileAt(path)?.kind ?? "question");
 
 export function App() {
 	const { dispatch, evaluations, signIn: signInConfig } = useApp();
 	const model = useModel((m) => m);
-	// Each bank's environment, memoised per bank in the evaluations (see evaluations.ts).
-	const envFor = useCallback(
-		(bank: string) =>
-			evaluations.env(
-				{ local: model.local, remote: model.remote, banks: model.banks },
-				bank,
-			),
-		[evaluations, model.local, model.remote, model.banks],
-	);
+	// The bank's environment, kept in the evaluations (see evaluations.ts).
+	const env = evaluations.env(model);
 	const { local, browser, screen, activity } = model;
 	// There is no editor without a bank: signed out is a sign-in page.
 	const signedIn =
@@ -241,70 +181,47 @@ export function App() {
 		() => ({ local, browser, screen, activity }),
 		[local, browser, screen, activity],
 	);
-	// Each bank's symbol table: what each file defines, names and writes, questions and
-	// shared files alike, within its bank (one bank's names are not another's). Rebuilt
-	// from cached evaluations, so cheap per keystroke.
-	const indexes = useMemo(() => {
-		const byBank = new Map<string, { key: Id; symbols: Symbols }[]>();
-		const put = (bank: string, key: Id, symbols: Symbols) =>
-			byBank.set(bank, [...(byBank.get(bank) ?? []), { key, symbols }]);
-		for (const q of Object.values(model.local.questions))
-			put(q.bank, q.id, evaluations.get(q, envFor(q.bank)).symbols);
-		for (const e of Object.values(model.local.schemes))
-			put(e.bank, e.id, evaluations.scheme(e, envFor(e.bank)).symbols);
-		return new Map(
-			[...byBank].map(([bank, entries]) => [bank, indexOf(entries)]),
-		);
-	}, [model.local, evaluations, envFor]);
-	const indexFor = useCallback(
-		(bank: string): Index<Id> => indexes.get(bank) ?? NO_INDEX,
-		[indexes],
+	// The bank's symbol table: what each file defines, names and writes, questions and
+	// shared files alike. Rebuilt from cached evaluations, so cheap per keystroke.
+	const index = useMemo(
+		(): Index<Id> =>
+			indexOf([
+				...Object.values(local.questions).map((q) => ({
+					key: q.id,
+					symbols: evaluations.get(q, env).symbols,
+				})),
+				...Object.values(local.schemes).map((e) => ({
+					key: e.id,
+					symbols: evaluations.scheme(e, env).symbols,
+				})),
+			]),
+		[local, evaluations, env],
 	);
-	// The banks the tree shows, each with its questions and its shared files.
-	const shownBanks = useMemo(
-		() => banksShown({ banks: model.banks, local }),
-		[model.banks, local],
+	const folders = useMemo(
+		() => treeOf(treeInput, (q) => evaluations.get(q, env)),
+		[treeInput, evaluations, env],
 	);
-	const trees = useMemo(
+	const sections = useMemo(
 		() =>
-			shownBanks.map(
-				(bank): BankTree => ({
-					bank,
-					folders: treeOf(
-						treeInput,
-						(q) => evaluations.get(q, envFor(q.bank)),
-						bank,
-					),
-					sections: schemeSections(
-						treeInput,
-						(e) => evaluations.scheme(e, envFor(e.bank)),
-						indexFor(bank),
-						bank,
-						instrumentUses,
-					),
-				}),
+			schemeSections(
+				treeInput,
+				(e) => evaluations.scheme(e, env),
+				index,
+				instrumentUses,
 			),
-		[shownBanks, treeInput, evaluations, envFor, indexFor, instrumentUses],
+		[treeInput, evaluations, env, index, instrumentUses],
 	);
 	// The workspace's own files, read as their author sees them.
 	const workspace = useMemo(() => {
 		const slices = {
 			local,
 			remote: model.remote,
-			banks: model.banks,
 			remoteBanks: model.remoteBanks,
 		};
 		return workspaceLeaves(treeInput, (e) =>
 			statusOf(evaluations.instrument(slices, e).instrument.findings),
 		);
-	}, [
-		treeInput,
-		evaluations,
-		local,
-		model.remote,
-		model.banks,
-		model.remoteBanks,
-	]);
+	}, [treeInput, evaluations, local, model.remote, model.remoteBanks]);
 	// What the details' button says (unsaved, to fill in or fix, advice), as a tree
 	// item's marks would. A workspace with no details yet has its agency to fill in.
 	const detailsEntry = detailsOf(local.schemes);
@@ -315,18 +232,14 @@ export function App() {
 				statusOf(
 					detailsEntry === undefined
 						? absentRoot("workspace")
-						: evaluations.scheme(detailsEntry, envFor("")).findings,
+						: evaluations.scheme(detailsEntry, env).findings,
 				),
 			),
-		[treeInput, evaluations, detailsEntry, envFor],
+		[treeInput, evaluations, detailsEntry, env],
 	);
 	// The workspace's details are open: said on the button beside its name.
 	const detailsOpen =
 		screen.kind === "editing" && screen.id === detailsEntry?.id;
-	// A workspace whose files are all instruments has no bank to show or to make
-	// questions in: an empty repository still starts as one bank at its root.
-	const workspaceOnly =
-		shownBanks.length === 0 && Object.keys(local.workspace).length > 0;
 	const naming = model.browser.naming;
 	const namingInstrument = model.browser.namingInstrument;
 	const addingBank = model.browser.addingBank;
@@ -363,7 +276,7 @@ export function App() {
 					: confirm.base !== undefined
 						? (confirm.base.path.split("/").at(-1) ?? "").replace(/\.yaml$/, "")
 						: confirm.kind === "question"
-							? evaluations.get(confirm, envFor(confirm.bank)).draft.name
+							? evaluations.get(confirm, env).draft.name
 							: confirm.name;
 	// Deleting a scheme file others name turns each of those names into a hole: say how many.
 	// Nothing names an instrument or the workspace details: no count for them.
@@ -375,11 +288,8 @@ export function App() {
 	const confirmUsers =
 		confirm === undefined || !isScheme(confirm) || isRoot(confirm.kind)
 			? 0
-			: new Set(
-					usedBy(indexFor(confirm.bank), confirm.kind, confirm.name).map(
-						(s) => s.key,
-					),
-				).size;
+			: new Set(usedBy(index, confirm.kind, confirm.name).map((s) => s.key))
+					.size;
 
 	return (
 		<>
@@ -481,12 +391,7 @@ export function App() {
 						</Button>
 					)}
 					{model.session.kind === "connected" && (
-						<NewMenu
-							banks={shownBanks}
-							first={newBank(model)}
-							workspaceOnly={workspaceOnly}
-							dispatch={dispatch}
-						/>
+						<NewMenu dispatch={dispatch} />
 					)}
 					<ThemeToggle
 						onChoose={(theme) => dispatch({ kind: "themeChosen", theme })}
@@ -576,7 +481,6 @@ export function App() {
 											dispatch({
 												kind: "schemeCreateOpened",
 												scheme: "workspace",
-												bank: "",
 											})
 										}
 									/>
@@ -594,9 +498,9 @@ export function App() {
 								</div>
 								<div className="trees">
 									<Browser
-										banks={trees}
+										folders={folders}
+										sections={sections}
 										workspace={workspace}
-										workspaceOnly={workspaceOnly}
 										noInstruments={
 											!Object.values(local.workspace).some(
 												(e) => e.kind === "instrument",
@@ -621,7 +525,7 @@ export function App() {
 								<ForeignView screen={model.screen} />
 							) : open === undefined && waiting && model.pendingLink ? (
 								<FileSkeleton
-									kind={skeletonKind(model.pendingLink.file ?? "", model.banks)}
+									kind={skeletonKind(model.pendingLink.file ?? "")}
 									onBack={() => dispatch({ kind: "listOpened" })}
 								/>
 							) : open === undefined ? (
@@ -634,10 +538,7 @@ export function App() {
 									</p>
 								</div>
 							) : (
-								<Editing
-									id={open}
-									index={indexFor(bankFileOf(model, open)?.bank ?? "")}
-								/>
+								<Editing id={open} index={index} />
 							)}
 						</main>
 					</div>
@@ -646,23 +547,17 @@ export function App() {
 			{moving && movingQuestion?.base && (
 				<MoveDialog
 					from={movingQuestion.base.path}
-					current={folderOfPath(movingQuestion.base.path, movingQuestion.bank)}
-					to={movedPath(
-						movingQuestion.base.path,
-						moving.folder,
-						movingQuestion.bank,
-					)}
+					current={folderOfPath(movingQuestion.base.path)}
+					to={movedPath(movingQuestion.base.path, moving.folder)}
 					folder={moving.folder}
-					folders={bankFolders(model, movingQuestion.bank)}
+					folders={bankFolders(model)}
 					problem={moveProblem(model, movingQuestion, moving.folder)}
 					blocked={writeBlocked(model)}
 					also={alsoSaves(
 						model.local,
 						model.remote,
-						evaluations.get(movingQuestion, envFor(movingQuestion.bank)).symbols
-							.mentions,
-						usersIn(indexFor(movingQuestion.bank)),
-						movingQuestion.bank,
+						evaluations.get(movingQuestion, env).symbols.mentions,
+						usersIn(index),
 					)}
 					dispatch={dispatch}
 				/>
@@ -704,20 +599,15 @@ export function App() {
 			)}
 			{saving && savingQuestion && (
 				<SaveDialog
-					draft={
-						evaluations.get(savingQuestion, envFor(savingQuestion.bank)).draft
-					}
+					draft={evaluations.get(savingQuestion, env).draft}
 					folder={saving.folder}
-					folders={bankFolders(model, savingQuestion.bank)}
-					bank={savingQuestion.bank}
+					folders={bankFolders(model)}
 					taken={(path) => path in model.remote.questions}
 					also={alsoSaves(
 						model.local,
 						model.remote,
-						evaluations.get(savingQuestion, envFor(savingQuestion.bank)).symbols
-							.mentions,
-						usersIn(indexFor(savingQuestion.bank)),
-						savingQuestion.bank,
+						evaluations.get(savingQuestion, env).symbols.mentions,
+						usersIn(index),
 					)}
 					dispatch={dispatch}
 				/>
@@ -734,11 +624,11 @@ export function App() {
 					}
 					workspaceDetails={signOut.save.some((f) => f.kind === "workspace")}
 					discard={signOut.discard.map(
-						(q) => evaluations.get(q, envFor(q.bank)).draft.name ?? UNNAMED,
+						(q) => evaluations.get(q, env).draft.name ?? UNNAMED,
 					)}
 					blocked={signOut.blocked.map((f) =>
 						f.kind === "question"
-							? (evaluations.get(f, envFor(f.bank)).draft.name ?? UNNAMED)
+							? (evaluations.get(f, env).draft.name ?? UNNAMED)
 							: f.kind === "instrument"
 								? `instrument ${f.name}`
 								: f.kind === "workspace"

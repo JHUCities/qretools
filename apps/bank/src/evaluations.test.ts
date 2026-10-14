@@ -5,10 +5,11 @@
  */
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import * as core from "@qretools/core";
 import { type Evaluation, ok, workspaceOf } from "@qretools/core";
 import { instrumentCompletion } from "@qretools/core/editor";
 import { readBank, readWorkspace } from "@qretools/core/node";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
 	type InstrumentEntry,
@@ -17,6 +18,12 @@ import {
 	type Question,
 } from "./model.js";
 import { update } from "./update.js";
+
+// The settings' agency is counted as it is read; everything else is the core's own.
+vi.mock("@qretools/core", async (original) => {
+	const actual = await original<typeof import("@qretools/core")>();
+	return { ...actual, agencyWritten: vi.fn(actual.agencyWritten) };
+});
 
 /** An instrument on its own workspace's bank, one in another repository, and a folder that is neither. */
 const BOTH = `name: both
@@ -127,7 +134,7 @@ describe("a question read as its folder has it", () => {
 	it("keeps an unchanged question's evaluation, and one environment per folder", () => {
 		const model = m();
 		const evaluations = createEvaluations();
-		const env = evaluations.env(model, "");
+		const env = evaluations.env(model);
 		const a = questionAt(model, "questions/nhd/a.yaml");
 		const b = questionAt(model, "questions/other/b.yaml");
 		const first = evaluations.get(a, env);
@@ -145,7 +152,7 @@ describe("a question read as its folder has it", () => {
 	it("reads a question again when it is saved from a draft or moved to another folder", () => {
 		const model = m();
 		const evaluations = createEvaluations();
-		const env = evaluations.env(model, "");
+		const env = evaluations.env(model);
 		const b = questionAt(model, "questions/other/b.yaml");
 		if (b.base === undefined) throw new Error("not saved");
 		const { base: _, ...draft } = b;
@@ -233,10 +240,10 @@ describe("an instrument read live", () => {
 		);
 		expect(reread).not.toBe(households);
 		// Typing in one instrument changes no bank and no other instrument.
-		const scope = evaluations.scope(edited, "");
+		const scope = evaluations.scope(edited);
 		const e = instrument(edited, "both");
 		const typing = typed(edited, e, `${e.source}# edited\n`);
-		expect(evaluations.scope(typing, "")).toBe(scope);
+		expect(evaluations.scope(typing)).toBe(scope);
 		expect(
 			evaluations.instrument(typing, instrument(typing, "households")),
 		).toBe(reread);
@@ -339,3 +346,38 @@ describe.skipIf(!existsSync(REFERENCE))(
 		});
 	},
 );
+
+describe("the workspace's agency, for an instrument", () => {
+	it("is read once per text of the settings, not once per reading of an instrument", () => {
+		const model = loaded(files);
+		const evaluations = createEvaluations();
+		const read = vi.mocked(core.agencyWritten);
+		read.mockClear();
+		const e = instrument(model, "households");
+		const first = evaluations.instrument(model, e);
+		const typing = typed(model, e, `${e.source}# edited\n`);
+		evaluations.instrument(typing, instrument(typing, "households"));
+		// Read a third time (the typed text took its place in the cache).
+		expect(evaluations.instrument(model, e)).not.toBe(first);
+		expect(read).toHaveBeenCalledTimes(1);
+		// The settings edited: read again, once.
+		const details = Object.values(model.local.schemes).find(
+			(s) => s.kind === "workspace",
+		);
+		if (details === undefined) throw new Error("no settings");
+		const retyped: Model = {
+			...model,
+			local: {
+				...model.local,
+				schemes: {
+					...model.local.schemes,
+					[details.id]: { ...details, source: "agency: org.other\n" },
+				},
+			},
+		};
+		expect(evaluations.instrument(retyped, e).instrument.agency).toBe(
+			"org.other",
+		);
+		expect(read).toHaveBeenCalledTimes(2);
+	});
+});

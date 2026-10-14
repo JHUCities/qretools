@@ -45,31 +45,27 @@ const loadedMsg = (loaded: readonly File[]): Msg => ({
 
 /** What the tree shows of a loaded model, and which paths it holds as GitHub's copy. */
 function view(m: Model) {
-	const envFor = (bank: string) => envIn(m, bank);
-	const indexFor = (bank: string) =>
-		indexOf(
-			Object.values(m.local.questions)
-				.filter((q) => q.bank === bank)
-				.map((q) => ({
-					key: q.id,
-					symbols: evaluate(q.source, envFor(bank)).symbols,
-				})),
-		);
+	const env = envIn(m);
+	const index = indexOf(
+		Object.values(m.local.questions).map((q) => ({
+			key: q.id,
+			symbols: evaluate(q.source, env).symbols,
+		})),
+	);
 	return {
 		remote: {
 			questions: Object.keys(m.remote.questions).sort(),
 			schemes: Object.keys(m.remote.schemes).sort(),
 		},
 		// One bank, at the workspace's root.
-		tree: treeOf(m, (q) => evaluate(q.source, envFor(q.bank)), "").map((f) => ({
+		tree: treeOf(m, (q) => evaluate(q.source, env)).map((f) => ({
 			folder: f.name,
 			leaves: f.leaves.map((l) => `${l.name} ${l.status.kind}`),
 		})),
 		shared: schemeSections(
 			m,
-			(e) => evaluateScheme(e.kind, e.source, envFor(e.bank)),
-			indexFor(""),
-			"",
+			(e) => evaluateScheme(e.kind, e.source, env),
+			index,
 		).map((s) => ({
 			kind: s.kind,
 			leaves: s.leaves.map(

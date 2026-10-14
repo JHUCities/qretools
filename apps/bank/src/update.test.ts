@@ -101,7 +101,6 @@ const bankQuestion = (
 ): Question => ({
 	kind: "question",
 	id,
-	bank: "",
 	source,
 	base: { path, sha, text },
 });
@@ -135,7 +134,6 @@ describe("init", () => {
 				{
 					id: 3,
 					kind: "question" as const,
-					bank: "",
 					source: "name: q\n",
 					base: { path: "questions/q/q.yaml", sha: "abc", text: "name: q\n" },
 				},
@@ -351,7 +349,6 @@ describe("a quick fix", () => {
 			const m = named(OPTIONS);
 			expect(m.browser.naming).toMatchObject({
 				kind: "scale",
-				bank: m.local.questions[1]?.bank,
 				purpose: {
 					kind: "create",
 					use: { id: 1, path: "responses" },
@@ -394,7 +391,7 @@ describe("a quick fix", () => {
 			});
 			const vars = (m: Model) =>
 				definedVariables(
-					parseSurface(m.local.questions[1]?.source ?? "", envIn(m, "")).draft,
+					parseSurface(m.local.questions[1]?.source ?? "", envIn(m)).draft,
 				).map((v) => v.name);
 			expect(vars(next)).toEqual(["q_b", "q_w"]);
 		});
@@ -450,19 +447,18 @@ describe("a quick fix", () => {
 
 	it("reads how a bank stores select-all answers from its own file, as it is typed", () => {
 		// Before the file exists, the usual coding, by reference.
-		expect(envIn(fresh(), "").selectAll).toBe(DEFAULT_SELECT_ALL);
+		expect(envIn(fresh()).selectAll).toBe(DEFAULT_SELECT_ALL);
 		const m = update(fresh(), {
 			kind: "schemeCreateOpened",
 			scheme: "select_all",
-			bank: "",
 		})[0];
 		// It starts as the usual coding, written out.
-		expect(envIn(m, "").selectAll.chosen).toEqual({ code: "1", label: "Yes" });
+		expect(envIn(m).selectAll.chosen).toEqual({ code: "1", label: "Yes" });
 		const typed = update(m, {
 			kind: "edited",
 			text: 'chosen: { "1": Selected }\nnot_chosen: { "2": Not selected }\n',
 		})[0];
-		expect(envIn(typed, "").selectAll).toEqual({
+		expect(envIn(typed).selectAll).toEqual({
 			chosen: { code: "1", label: "Selected" },
 			notChosen: { code: "2", label: "Not selected" },
 			first: "chosen",
@@ -472,7 +468,7 @@ describe("a quick fix", () => {
 			kind: "edited",
 			text: 'chosen: { "1": Selected }\n',
 		})[0];
-		expect(envIn(half, "").selectAll.notChosen).toEqual({
+		expect(envIn(half).selectAll.notChosen).toEqual({
 			code: "0",
 			label: "No",
 		});
@@ -482,7 +478,6 @@ describe("a quick fix", () => {
 		const m = update(fresh(), {
 			kind: "schemeCreateOpened",
 			scheme: "workspace",
-			bank: "",
 		})[0];
 		const id = firstId(m);
 		const typed = update(m, {
@@ -883,7 +878,7 @@ describe("connecting", () => {
 			"missing:missing",
 		]);
 		// Questions are read against the saved schemes; an unreadable one contributes nothing.
-		const env = envIn(m3, "");
+		const env = envIn(m3);
 		expect(Object.keys(env.scales)).toEqual(["agree4"]);
 		expect(env.universes.renters?.text).toBe("Renters");
 		expect(env.missing.map((c) => c.code)).toEqual(["-8"]);
@@ -901,7 +896,7 @@ describe("connecting", () => {
 			{ ...m, screen: { kind: "editing", id } },
 			{ kind: "edited", text: "labels:\n  1: Yes\n  2: No\n" },
 		);
-		expect(envIn(edited, "").scales.yn?.codes).toHaveLength(2);
+		expect(envIn(edited).scales.yn?.codes).toHaveLength(2);
 		// GitHub's copy is untouched until a save.
 		expect(edited.remote).toBe(m.remote);
 	});
@@ -1019,11 +1014,10 @@ describe("scheme files", () => {
 			kind: "scale",
 			name: "",
 			text: "",
-			bank: "",
 			purpose: { kind: "create" },
 		});
-		expect(schemeNameProblem(asked, "scale", "", "")).toMatch(/name/);
-		expect(schemeNameProblem(asked, "scale", "Agree 5", "")).toMatch(
+		expect(schemeNameProblem(asked, "scale", "")).toMatch(/name/);
+		expect(schemeNameProblem(asked, "scale", "Agree 5")).toMatch(
 			/Lowercase letters, digits and underscores/,
 		);
 		// Confirming an unusable name does nothing.
@@ -1041,11 +1035,11 @@ describe("scheme files", () => {
 		expect(made.local.schemes[id]?.base).toBeUndefined();
 		expect(made.screen).toEqual({ kind: "editing", id });
 		expect(made.browser.naming).toBeUndefined();
-		expect(schemeNameProblem(made, "scale", "agree5", "")).toMatch(
+		expect(schemeNameProblem(made, "scale", "agree5")).toMatch(
 			/already exists/,
 		);
 		// A universe may share a scale's name: they are different namespaces.
-		expect(schemeNameProblem(made, "universe", "agree5", "")).toBeUndefined();
+		expect(schemeNameProblem(made, "universe", "agree5")).toBeUndefined();
 	});
 
 	it("missing values are one list: created once, then opened", () => {
@@ -1129,7 +1123,7 @@ describe("the environment's identity", () => {
 		expect(edited.local.schemes).toBe(loaded.local.schemes);
 		expect(edited.remote).toBe(loaded.remote);
 		const evaluations = createEvaluations();
-		expect(evaluations.env(edited, "")).toBe(evaluations.env(loaded, ""));
+		expect(evaluations.env(edited)).toBe(evaluations.env(loaded));
 	});
 
 	it("editing a scheme file touches only local.schemes", () => {
@@ -1212,7 +1206,7 @@ describe("writing waits for this session's load", () => {
 			{ kind: "schemeNameChanged", name: "mine" },
 			{ kind: "schemeNamingConfirmed" },
 		);
-		const env = envIn(m, "");
+		const env = envIn(m);
 		expect(Object.keys(env.scales)).toContain("agree4");
 		// A workspace whose details are on GitHub is known: nothing it lacks stands in.
 		const known = {
@@ -1222,7 +1216,7 @@ describe("writing waits for this session's load", () => {
 				schemes: { "workspace.yaml": { sha: "w", text: "agency: org.x\n" } },
 			},
 		};
-		expect(Object.keys(envIn(known, "").scales)).toEqual(["mine"]);
+		expect(Object.keys(envIn(known).scales)).toEqual(["mine"]);
 	});
 });
 
@@ -1325,7 +1319,7 @@ describe("the cursor inspector's messages", () => {
 			kind: "universe",
 			name: "renters",
 		});
-		expect(schemeNameProblem(m, "universe", "renters", "")).toBeUndefined();
+		expect(schemeNameProblem(m, "universe", "renters")).toBeUndefined();
 	});
 });
 
@@ -1338,7 +1332,6 @@ describe("change sets", () => {
 	): SchemeEntry => ({
 		kind: "scale",
 		id,
-		bank: "",
 		name,
 		source: text,
 		...(base !== undefined && {
@@ -1744,7 +1737,6 @@ describe("moving a question", () => {
 		const yn: SchemeEntry = {
 			kind: "scale",
 			id: 10,
-			bank: "",
 			name: "yn",
 			source: "labels:\n  1: Yes\n  2: No\n",
 			base: {
@@ -1879,7 +1871,7 @@ describe("moving a question", () => {
 	});
 
 	it("only the folder changes, never the filename", () => {
-		expect(movedPath("questions/svy/dem_latx.yaml", "dem", "")).toBe(
+		expect(movedPath("questions/svy/dem_latx.yaml", "dem")).toBe(
 			"questions/dem/dem_latx.yaml",
 		);
 	});
@@ -2515,14 +2507,13 @@ describe("signing out", () => {
 				workspace: {},
 				questions: {
 					...m.local.questions,
-					3: { kind: "question", id: 3, bank: "", source: "name: draft\n" },
+					3: { kind: "question", id: 3, source: "name: draft\n" },
 				},
 				schemes: {
 					4: {
 						kind: "scale",
 						name: "yn",
 						id: 4,
-						bank: "",
 						source: "labels:\n  1: Y\n",
 					},
 				},
@@ -2775,7 +2766,6 @@ describe("making a concept shared from a question", () => {
 			kind: "concept",
 			name: "racial_identification",
 			text: "Racial identification",
-			bank: "",
 			purpose: { kind: "create", use: { id: 1, path: "concept" } },
 		});
 		const [done] = update(asked, { kind: "schemeNamingConfirmed" });

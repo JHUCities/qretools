@@ -111,12 +111,11 @@ describe("loading a workspace", () => {
 
 	it("holds the root's bank, and no other folder's, whatever settings it has", () => {
 		const m = loaded(WORKSPACE);
-		expect(m.banks).toEqual([""]);
 		expect(
 			[...Object.values(m.local.questions), ...Object.values(m.local.schemes)]
-				.map((f) => `${f.bank} ${f.base?.path}`)
+				.map((f) => f.base?.path)
 				.sort(),
-		).toEqual([" questions/t/q.yaml", " scales/yn.yaml", " workspace.yaml"]);
+		).toEqual(["questions/t/q.yaml", "scales/yn.yaml", "workspace.yaml"]);
 	});
 
 	it("names the files GitHub wouldn't give as text, once however often it loads", () => {
@@ -153,7 +152,6 @@ describe("loading a workspace", () => {
 			const [m] = update(loaded(requiring), {
 				kind: "questionCreated",
 				text,
-				bank: "",
 			});
 			const id = Math.max(...Object.keys(m.local.questions).map(Number));
 			return { m, q: m.local.questions[id] as Question };
@@ -161,7 +159,7 @@ describe("loading a workspace", () => {
 		const { m, q } = created(TEMPLATES[0]?.text ?? "");
 		expect(q.source).toMatch(/^intent:\nconcept:\nresponses:$/m);
 		// Read as its bank reads it: holes only, the template's and the bank's.
-		const findings = parseSurface(q.source, envIn(m, "")).findings;
+		const findings = parseSurface(q.source, envIn(m)).findings;
 		expect(findings.filter((f) => f.severity !== "hole")).toEqual([]);
 		expect(findings.map((f) => f.path)).toContain("concept");
 		expect(created("").q.source).toBe("");
@@ -175,7 +173,6 @@ describe("loading a workspace", () => {
 		let [m] = update(loaded(WORKSPACE), {
 			kind: "questionCreated",
 			text: "name: brand_new\ntext: New?\nintent: To see.\nopen: {}\n",
-			bank: "",
 		});
 		const draft = Math.max(...Object.keys(m.local.questions).map(Number));
 		[m] = update(m, { kind: "saveRequested", id: draft });
@@ -187,7 +184,6 @@ describe("loading a workspace", () => {
 		let [n] = update(loaded(WORKSPACE), {
 			kind: "schemeCreateOpened",
 			scheme: "universe",
-			bank: "",
 		});
 		[n] = update(n, { kind: "schemeNameChanged", name: "renters" });
 		[n] = update(n, { kind: "schemeTextChanged", text: "Renters" });
@@ -214,7 +210,6 @@ describe("loading a workspace", () => {
 					branch: "qretools-ann",
 				}),
 				path,
-				rel: "scales/yn.yaml",
 			}),
 		);
 		const [shown] = update(opened, {

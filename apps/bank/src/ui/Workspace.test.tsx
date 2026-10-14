@@ -19,6 +19,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { detailsOf } from "../model.js";
+import type { Work } from "../persist.js";
 import { createApp } from "../store.js";
 import { App } from "./App.js";
 import { AppContext } from "./AppContext.js";
@@ -47,7 +48,12 @@ const FILES = [
 	),
 ];
 
-function renderWorkspace(files = FILES, access = { kind: "write" }) {
+function renderWorkspace(
+	files = FILES,
+	access = { kind: "write" },
+	/** This tab's kept work, and a load that waits for `loading`. */
+	start: { work?: Work; loading?: Promise<void> } = {},
+) {
 	const store = {
 		whoAmI: () =>
 			Promise.resolve(
@@ -76,7 +82,7 @@ function renderWorkspace(files = FILES, access = { kind: "write" }) {
 				}),
 			),
 		loadWorkspace: () =>
-			Promise.resolve(
+			(start.loading ?? Promise.resolve()).then(() =>
 				ok({
 					files,
 					found: true,
@@ -89,7 +95,7 @@ function renderWorkspace(files = FILES, access = { kind: "write" }) {
 	} as unknown as Store;
 	const app = createApp(
 		{
-			work: ok(undefined),
+			work: ok(start.work),
 			settings: { owner: "o", repo: "r", path: "", remember: false },
 			hasToken: true,
 		},
@@ -136,6 +142,56 @@ describe("a workspace's bank", () => {
 		expect(items[0]).toBe("Instrument…");
 		expect(items).not.toContain("Bank…");
 		expect(items).toContain("Blank question");
+	});
+});
+
+describe("the workspace's details, open while the workspace loads", () => {
+	it("aren't told a folder holds no question until the questions are here", async () => {
+		const required =
+			"agency: org.example\nrequired_in:\n  questions/t:\n    - universe\n  questions/gone:\n    - universe\n";
+		let arrive = () => {};
+		const loading = new Promise<void>((done) => {
+			arrive = done;
+		});
+		// Kept from before a reload: the details with unsaved changes, and no question
+		// (a clean copy is never kept; the load brings it).
+		const app = renderWorkspace(
+			FILES,
+			{ kind: "write" },
+			{
+				loading,
+				work: {
+					version: 8,
+					repo: "o/r",
+					login: "me",
+					nextId: 2,
+					questions: [],
+					schemes: [
+						{
+							kind: "workspace",
+							name: "workspace",
+							id: 1,
+							source: required,
+							base: {
+								path: "workspace.yaml",
+								sha: "sha-workspace.yaml",
+								text: "agency: org.example\n",
+							},
+						},
+					],
+					workspace: [],
+				},
+			},
+		);
+		await act(async () => {});
+		await act(async () => app.dispatch({ kind: "fileOpened", id: 1 }));
+		expect(app.store.getState().model.loading.kind).toBe("loading");
+		expect(screen.queryByText(/No questions are saved in/)).toBeNull();
+		await act(async () => arrive());
+		await waitFor(() =>
+			expect(screen.getAllByText(/No questions are saved in/)).toHaveLength(1),
+		);
+		expect(app.store.getState().model.loading.kind).toBe("loaded");
 	});
 });
 
@@ -207,7 +263,7 @@ describe("a workspace's instruments", () => {
 		await act(async () => {});
 		const { model } = app.store.getState();
 		const details = detailsOf(model.local.schemes);
-		expect(details).toMatchObject({ kind: "workspace", bank: "" });
+		expect(details).toMatchObject({ kind: "workspace" });
 		expect(details?.base).toBeUndefined();
 		expect(model.screen).toEqual({ kind: "editing", id: details?.id });
 	});
@@ -319,8 +375,8 @@ describe("a workspace's instruments", () => {
 		).toContain("wave2");
 	});
 
-	it("are all a workspace with no bank of its own shows, and all New makes there", async () => {
-		// Not even its details: `workspace.yaml` alone is a bank with no questions yet.
+	it("come with the bank's empty sections in a workspace of instruments alone, and New makes a question there", async () => {
+		// The workspace's root is its bank, with or without a file in it yet.
 		renderWorkspace([
 			file(
 				"instruments/w.yaml",
@@ -331,13 +387,14 @@ describe("a workspace's instruments", () => {
 		const nav = screen.getByRole("navigation", { name: "Question bank" });
 		expect(within(nav).getByRole("tree", { name: "Instruments" })).toBeTruthy();
 		expect(
-			within(nav).queryByRole("heading", { name: "Questions" }),
-		).toBeNull();
-		expect(within(nav).queryByRole("heading", { name: "Shared" })).toBeNull();
+			within(nav).getByRole("heading", { name: "Questions" }),
+		).toBeTruthy();
+		expect(within(nav).getByText("No questions yet")).toBeTruthy();
+		expect(within(nav).getByRole("heading", { name: "Shared" })).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "New" }));
-		expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
-			"Instrument…",
-		]);
+		const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+		expect(items[0]).toBe("Instrument…");
+		expect(items).toContain("Blank question");
 	});
 
 	it("draw their pickers: a question at each ask, a bank at each use", async () => {

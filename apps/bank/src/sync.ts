@@ -5,15 +5,14 @@
  * three; nothing about it is stored.
  */
 import {
-	fileAt,
 	type Index,
-	inBank,
 	instrumentPath,
 	isRoot,
+	kindAt,
 	type Mention,
-	placeOf,
 	schemePath,
 	usedBy,
+	WORKSPACE,
 } from "@qretools/core";
 import type { File } from "@qretools/shell";
 import type {
@@ -43,7 +42,7 @@ export type Sync =
 
 /**
  * The path a file lives at, or will: its base, or the one its kind and name give (a
- * shared file in its bank, an instrument in `instruments/`).
+ * shared file's folder, an instrument in `instruments/`).
  * A question's is chosen when it is first saved.
  */
 export function claimOf(f: Entry): Path | undefined {
@@ -54,7 +53,7 @@ export function claimOf(f: Entry): Path | undefined {
 		case "instrument":
 			return instrumentPath(f.name);
 		default:
-			return inBank(f.bank, schemePath(f.kind, f.name));
+			return schemePath(f.kind, f.name);
 	}
 }
 
@@ -82,22 +81,32 @@ export function syncOf(
 	return source === base.text || source === remote.text ? "behind" : "conflict";
 }
 
+const INSTRUMENTS = `${WORKSPACE.instruments}/`;
+const INSTRUMENT = new RegExp(`^${INSTRUMENTS}([^/]+)\\.yaml$`);
+
+/** The name of the instrument at a workspace path (`instruments/<name>.yaml`), if it is one. */
+export const instrumentAt = (path: Path): string | undefined =>
+	INSTRUMENT.exec(path)?.[1];
+
 /**
- * Which remote slice a workspace path belongs to, among the workspace's `banks`;
- * undefined for a file the workspace does not read (`fileAt`).
+ * What the bank reads a workspace path as (`kindAt`): the workspace's root is its bank.
+ * Nothing under `instruments/`, which is the workspace's own.
  */
-export function sliceOf(
-	path: Path,
-	banks: readonly string[],
-): keyof Remote | undefined {
-	const place = fileAt(path, banks);
-	return place === undefined
+export const bankFileAt = (path: Path): ReturnType<typeof kindAt> =>
+	path.startsWith(INSTRUMENTS) ? undefined : kindAt(path);
+
+/**
+ * Which remote slice a workspace path belongs to; undefined for a file the workspace
+ * does not read.
+ */
+export function sliceOf(path: Path): keyof Remote | undefined {
+	if (instrumentAt(path) !== undefined) return "workspace";
+	const at = bankFileAt(path);
+	return at === undefined
 		? undefined
-		: place.kind !== "bank"
-			? "workspace"
-			: place.at.kind === "question"
-				? "questions"
-				: "schemes";
+		: at.kind === "question"
+			? "questions"
+			: "schemes";
 }
 
 export const remoteBlob = (remote: Remote, f: Entry): Blob | undefined => {
@@ -109,18 +118,14 @@ export const remoteBlob = (remote: Remote, f: Entry): Blob | undefined => {
  * GitHub's state after a full load. A slice whose shas all match keeps its old
  * reference, so a reload that brings nothing new does not rebuild the environment.
  */
-export function remoteOf(
-	previous: Remote,
-	files: readonly File[],
-	banks: readonly string[],
-): Remote {
+export function remoteOf(previous: Remote, files: readonly File[]): Remote {
 	const next: Record<keyof Remote, Record<Path, Blob>> = {
 		questions: {},
 		schemes: {},
 		workspace: {},
 	};
 	for (const f of files) {
-		const slice = sliceOf(f.path, banks);
+		const slice = sliceOf(f.path);
 		if (slice !== undefined) next[slice][f.path] = { sha: f.sha, text: f.text };
 	}
 	return {
@@ -159,7 +164,6 @@ export function rebase(
 	local: Local,
 	remote: Remote,
 	nextId: Id,
-	banks: readonly string[],
 ): { local: Local; nextId: Id } {
 	// Every path a working file holds or will hold, computed first as a value. A file
 	// dropped below as a clean deletion still counts; its path is not on GitHub anyway.
@@ -214,31 +218,24 @@ export function rebase(
 	};
 	questions = added(
 		questions,
-		(path, blob, fid): Question | undefined => {
-			const place = placeOf(path, banks);
-			return place === undefined
-				? undefined
-				: {
-						kind: "question",
-						id: fid,
-						bank: place.bank,
-						source: blob.text,
-						base: { path, ...blob },
-					};
-		},
+		(path, blob, fid): Question => ({
+			kind: "question",
+			id: fid,
+			source: blob.text,
+			base: { path, ...blob },
+		}),
 		remote.questions,
 	);
 	schemes = added(
 		schemes,
 		(path, blob, fid): SchemeEntry | undefined => {
-			const place = placeOf(path, banks);
-			return place === undefined || place.at.kind === "question"
+			const at = bankFileAt(path);
+			return at === undefined || at.kind === "question"
 				? undefined
 				: {
-						kind: place.at.kind,
-						name: place.at.name,
+						kind: at.kind,
+						name: at.name,
 						id: fid,
-						bank: place.bank,
 						source: blob.text,
 						base: { path, ...blob },
 					};
@@ -248,11 +245,11 @@ export function rebase(
 	workspace = added(
 		workspace,
 		(path, blob, fid): WorkspaceEntry | undefined => {
-			const place = fileAt(path, banks);
-			return place?.kind === "instrument"
+			const name = instrumentAt(path);
+			return name !== undefined
 				? {
 						kind: "instrument",
-						name: place.name,
+						name,
 						id: fid,
 						source: blob.text,
 						base: { path, ...blob },
@@ -282,14 +279,11 @@ export function dependencies(
 	local: Local,
 	remote: Remote,
 	mentions: readonly Mention[],
-	/** The question's bank: the only one whose names it reads. */
-	bank: string,
 ): { include: readonly SchemeEntry[]; blocked: readonly SchemeEntry[] } {
 	const named = new Set<SchemeEntry>();
 	for (const m of mentions)
 		for (const e of Object.values(local.schemes))
-			if (e.bank === bank && e.kind === m.scheme && e.name === m.name)
-				named.add(e);
+			if (e.kind === m.scheme && e.name === m.name) named.add(e);
 	const include: SchemeEntry[] = [];
 	const blocked: SchemeEntry[] = [];
 	for (const e of named) {
@@ -319,9 +313,8 @@ export function alsoSaves(
 	remote: Remote,
 	mentions: readonly Mention[],
 	usersOf: (e: SchemeEntry) => readonly Id[],
-	bank: string,
 ): readonly string[] {
-	return dependencies(local, remote, mentions, bank).include.map((e) => {
+	return dependencies(local, remote, mentions).include.map((e) => {
 		const saved = usersOf(e).filter((id) => {
 			const q = local.questions[id];
 			return q !== undefined && syncOf(q, remoteBlob(remote, q)) === "inSync";

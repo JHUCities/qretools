@@ -21,15 +21,14 @@ export function useModel<T>(select: (model: Model) => T): T {
 }
 
 /**
- * The environment a bank's questions are read against. Keeps its identity until one of
- * that bank's scheme files changes; see evaluations.ts.
+ * The environment the bank's questions are read against. Keeps its identity until one
+ * of its scheme files changes; see evaluations.ts.
  */
-export function useEnv(bank: string): Env {
+export function useEnv(): Env {
 	const { evaluations } = useApp();
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
-	const banks = useModel((m) => m.banks);
-	return evaluations.env({ local, remote, banks }, bank);
+	return evaluations.env({ local, remote });
 }
 
 /**
@@ -40,11 +39,10 @@ export function useInstrumentUses(): InstrumentUses {
 	const { evaluations } = useApp();
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
-	const banks = useModel((m) => m.banks);
 	const remoteBanks = useModel((m) => m.remoteBanks);
 	return useMemo(
-		() => instrumentUses({ local, remote, banks, remoteBanks }, evaluations),
-		[local, remote, banks, remoteBanks, evaluations],
+		() => instrumentUses({ local, remote, remoteBanks }, evaluations),
+		[local, remote, remoteBanks, evaluations],
 	);
 }
 

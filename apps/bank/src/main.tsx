@@ -21,10 +21,7 @@ import { AppContext, useModel } from "./ui/AppContext.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 if (root) {
-	let started: ReturnType<typeof readStartup> = {
-		work: ok(undefined),
-		notices: [],
-	};
+	let started: ReturnType<typeof readStartup> = { work: ok(undefined) };
 	try {
 		started = readStartup(localStorage, sessionStorage);
 	} catch {
@@ -59,7 +56,6 @@ if (root) {
 			...(started.settings !== undefined && { settings: started.settings }),
 			...(started.theme !== undefined && { theme: started.theme }),
 			...(bank !== undefined && { defaultBank: bank }),
-			notices: started.notices,
 			hasToken:
 				browserCredentialStore.load() !== null || returned !== undefined,
 			...(refused !== undefined && { signInFailure: refused }),

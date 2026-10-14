@@ -2,15 +2,14 @@
  * Pure caches. Not state: the same inputs always give the same outputs; the caches
  * only save work.
  *
- * Each bank's environment is memoised on the list of its own scheme entries, element
- * by element, as Elm's `lazy` does on a reference. That is exact because entries are
- * immutable values: editing a question replaces no scheme entry, and editing a scale
- * replaces only that scale's entry, so every other bank's list holds the same
- * references and keeps its environment, and its questions their evaluations.
+ * The bank's environment is memoised on the working scheme files' slice, by reference,
+ * as Elm's `lazy` does. That is exact because `update` replaces that slice only when a
+ * scheme file changes: editing a question keeps the environment, and every other
+ * question its evaluation.
  *
- * An instrument is read against the banks it uses as they are being edited: each
- * bank's scope (`bankFrom`) is built from the evaluations kept here, and kept for as
- * long as they are, so a keystroke in one bank re-reads only the instruments that use it.
+ * An instrument is read against the banks it uses as they are being edited: this
+ * workspace's scope (`bankFrom`) is built from the evaluations kept here, and kept for
+ * as long as they are, so a keystroke in an instrument that doesn't use it builds nothing.
  */
 import {
 	type AddressKey,
@@ -27,7 +26,6 @@ import {
 	instrumentIn,
 	instrumentPath,
 	type RemoteBank,
-	relIn,
 	resolveUses,
 	type SchemeEvaluation,
 	type SchemeFileEvaluation,
@@ -43,23 +41,23 @@ import {
 	type Model,
 	type Question,
 	type SchemeEntry,
-	schemesOf,
 } from "./model.js";
 import { claimOf } from "./sync.js";
 
 /** The slices of the Model a bank's or an instrument's evaluation reads. */
-type Slices = Pick<Model, "local" | "remote" | "banks">;
+type Slices = Pick<Model, "local" | "remote">;
 /** An instrument also reads the banks in other repositories read so far. */
 type WorkspaceSlices = Slices & Pick<Model, "remoteBanks">;
 
 export interface Evaluations {
-	/** A bank's environment, from the model's slices it is built from. */
-	env(model: Slices, bank: string): Env;
+	/** The bank's environment, from the model's slices it is built from. */
+	env(model: Slices): Env;
 	/**
-	 * What an instrument reads of a bank: its working copies, unsaved edits included.
-	 * A question never saved has no path, so no instrument can ask it until it is.
+	 * What an instrument reads of this workspace's bank: its working copies, unsaved
+	 * edits included. A question never saved has no path, so no instrument can ask it
+	 * until it is.
 	 */
-	scope(model: Slices, bank: string): BankScope;
+	scope(model: Slices): BankScope;
 	/**
 	 * The banks in other repositories as an instrument is given them: each read one's
 	 * files or why not (one still being read is left out, so it reads as pending), and
@@ -87,11 +85,6 @@ export interface Evaluations {
 	schema(env: Env): Record<string, unknown>;
 }
 
-const sameEntries = (
-	a: readonly SchemeEntry[],
-	b: readonly SchemeEntry[],
-): boolean => a.length === b.length && a.every((e, i) => e === b[i]);
-
 const sameList = <T>(a: readonly T[], b: readonly T[]): boolean =>
 	a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -99,6 +92,9 @@ export interface RemoteGiven {
 	readonly reads: Readonly<Record<AddressKey, RemoteBank>>;
 	readonly scopes: Readonly<Record<AddressKey, BankScope>>;
 }
+
+/** The workspace's root is always its bank here, with or without questions yet. */
+const ROOT_BANK: ReadonlySet<string> = new Set([""]);
 
 /** A remote bank's files, read: one evaluation per read, never per keystroke. */
 const remoteScopes = new WeakMap<object, BankScope>();
@@ -116,27 +112,22 @@ export function createEvaluations(): Evaluations {
 		Id,
 		{ source: string; name: string; env: Env; ev: SchemeEvaluation }
 	>();
-	const envs = new Map<
-		string,
-		{ entries: readonly SchemeEntry[]; known: boolean; env: Env }
-	>();
-	// A bank's environment as each folder has it, kept for as long as the bank's is.
+	let kept:
+		| { schemes: Model["local"]["schemes"]; known: boolean; env: Env }
+		| undefined;
+	// The settings' agency, per text: an instrument is read on every keystroke in it.
+	let agencyOf: { source: string; agency: string | undefined } | undefined;
+	// The bank's environment as each folder has it, kept for as long as the bank's is.
 	const placed = new WeakMap<Env, Map<string, Env>>();
-	// A bank's editor schema, kept for as long as its environment is.
+	// The editor's schema, kept for as long as its environment is.
 	const schemas = new WeakMap<Env, Record<string, unknown>>();
-	const scopes = new Map<
-		string,
-		{
-			env: Env;
-			keys: readonly unknown[];
-			scope: BankScope;
-		}
-	>();
+	let scoped:
+		| { env: Env; keys: readonly unknown[]; scope: BankScope }
+		| undefined;
 	const instruments = new Map<
 		Id,
 		{
 			source: string;
-			banks: readonly string[];
 			remote: Readonly<Record<AddressKey, RemoteBank>>;
 			agency: string | undefined;
 			used: readonly BankScope[];
@@ -157,20 +148,19 @@ export function createEvaluations(): Evaluations {
 			given = { banks: remoteBanks, given: { reads, scopes } };
 			return given.given;
 		},
-		env(model, bank) {
-			const entries = schemesOf(model.local.schemes, bank);
-			const known = knownBank(model.remote.schemes, bank, model.banks);
-			const hit = envs.get(bank);
-			if (hit && hit.known === known && sameEntries(hit.entries, entries))
-				return hit.env;
-			const env = envOf(entries, known);
-			envs.set(bank, { entries, known, env });
+		env(model) {
+			const { schemes } = model.local;
+			const known = knownBank(model.remote.schemes);
+			if (kept && kept.known === known && kept.schemes === schemes)
+				return kept.env;
+			const env = envOf(schemes, known);
+			kept = { schemes, known, env };
 			return env;
 		},
 		at(q, base) {
 			// A draft has no folder yet: it is read against the bank's own.
 			if (q.base === undefined) return base;
-			const path = relIn(q.bank, q.base.path);
+			const { path } = q.base;
 			const folder = path.slice(0, path.lastIndexOf("/") + 1);
 			const kept = placed.get(base) ?? new Map<string, Env>();
 			placed.set(base, kept);
@@ -210,25 +200,24 @@ export function createEvaluations(): Evaluations {
 			schemas.set(env, schema);
 			return schema;
 		},
-		scope(model, bank) {
-			const env = self.env(model, bank);
+		scope(model) {
+			const env = self.env(model);
 			const questions: [string, Evaluation][] = [];
 			for (const q of Object.values(model.local.questions))
-				if (q.bank === bank && q.base !== undefined)
-					questions.push([relIn(bank, q.base.path), self.get(q, env)]);
+				if (q.base !== undefined)
+					questions.push([q.base.path, self.get(q, env)]);
 			const shared: [string, SchemeEntry, SchemeEvaluation][] = [];
-			for (const e of schemesOf(model.local.schemes, bank)) {
+			for (const e of Object.values(model.local.schemes)) {
 				const at = claimOf(e);
-				if (at !== undefined)
-					shared.push([relIn(bank, at), e, self.scheme(e, env)]);
+				if (at !== undefined) shared.push([at, e, self.scheme(e, env)]);
 			}
 			// The scope is the same while every path and evaluation is.
 			const keys = [
 				...questions.flat(),
 				...shared.flatMap(([path, , ev]) => [path, ev]),
 			];
-			const hit = scopes.get(bank);
-			if (hit && hit.env === env && sameList(hit.keys, keys)) return hit.scope;
+			if (scoped && scoped.env === env && sameList(scoped.keys, keys))
+				return scoped.scope;
 			const schemes: Record<string, SchemeFileEvaluation> = {};
 			for (const [path, e, ev] of shared)
 				schemes[path] = { ...ev, kind: e.kind, name: e.name };
@@ -237,35 +226,35 @@ export function createEvaluations(): Evaluations {
 				questions: Object.fromEntries(questions),
 				schemes,
 			});
-			scopes.set(bank, { env, keys, scope });
+			scoped = { env, keys, scope };
 			return scope;
 		},
 		instrument(model, e) {
 			const path = instrumentPath(e.name);
 			const hit = instruments.get(e.id);
 			const { reads: remote, scopes: remoteBanks } = self.remote(model);
-			// Only the banks its uses name are built, so editing another leaves it alone.
+			// This workspace's bank is built only when its uses name it, so editing the
+			// bank leaves an instrument that doesn't use it alone.
 			const used: Record<string, BankScope> = {};
-			const uses = resolveUses(
-				path,
-				importsOf(e.source),
-				new Set(model.banks),
-				remote,
-			);
+			const uses = resolveUses(path, importsOf(e.source), ROOT_BANK, remote);
 			for (const r of Object.values(uses))
 				if (r.kind === "local" && !(r.folder in used))
-					used[r.folder] = self.scope(model, r.folder);
+					used[r.folder] = self.scope(model);
 			const scopes = Object.values(used);
 			// As `workspace.yaml` writes it while it is being edited, valid or not.
 			const details = detailsOf(model.local.schemes);
-			const agency =
-				details === undefined ? undefined : agencyWritten(details.source);
+			if (details === undefined) agencyOf = undefined;
+			else if (agencyOf?.source !== details.source)
+				agencyOf = {
+					source: details.source,
+					agency: agencyWritten(details.source),
+				};
+			const agency = agencyOf?.agency;
 			if (
 				hit &&
 				hit.source === e.source &&
 				hit.agency === agency &&
 				hit.remote === remote &&
-				sameList(hit.banks, model.banks) &&
 				sameList(hit.used, scopes)
 			)
 				return hit.read;
@@ -277,7 +266,6 @@ export function createEvaluations(): Evaluations {
 			});
 			instruments.set(e.id, {
 				source: e.source,
-				banks: model.banks,
 				remote,
 				agency,
 				used: scopes,
@@ -290,8 +278,7 @@ export function createEvaluations(): Evaluations {
 			return Object.fromEntries(
 				Object.entries(self.instrument(model, e).uses).flatMap(
 					([alias, r]): [string, BankScope][] => {
-						if (r.kind === "local")
-							return [[alias, self.scope(model, r.folder)]];
+						if (r.kind === "local") return [[alias, self.scope(model)]];
 						const scope = r.kind === "remote" ? scopes[r.key] : undefined;
 						return scope === undefined ? [] : [[alias, scope]];
 					},

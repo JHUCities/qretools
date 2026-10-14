@@ -6,12 +6,10 @@
  * `update` (`openFolder`), so the user can still close it.
  */
 import {
-	bankAt,
 	type Evaluation,
 	type Index,
 	isRoot,
 	labelOf,
-	relIn,
 	SCHEME_KINDS,
 	SCHEME_LABELS,
 	type SchemeEvaluation,
@@ -54,8 +52,6 @@ export interface Leaf {
 
 export interface Folder {
 	readonly name: string;
-	/** The key in `browser.expanded`: the name, within its bank (`folderKey`). */
-	readonly key: string;
 	readonly leaves: readonly Leaf[];
 	readonly expanded: boolean;
 }
@@ -63,40 +59,16 @@ export interface Folder {
 export const folderOfQuestion = (q: Question): string =>
 	// A saved question is where its path puts it; a draft is nowhere yet, whatever
 	// its name (no convention of one bank, such as a topic prefix, is read into it).
-	q.base !== undefined
-		? (relIn(q.bank, q.base.path).split("/")[1] ?? UNFILED)
-		: UNFILED;
+	q.base !== undefined ? (q.base.path.split("/")[1] ?? UNFILED) : UNFILED;
 
-/**
- * A folder's or section's key in `browser.expanded`, within its bank: a root bank's
- * keys are as they always were; another bank's carry its folder in front, so two banks'
- * `nhd` folders open and close apart.
- */
-export const folderKey = (bank: string, key: string): string =>
-	bank === "" ? key : `${bank}/${key}`;
-
-/** The banks the tree shows: the workspace's, and any a working file names, in order. */
-export const banksShown = (
-	model: Pick<Model, "banks" | "local">,
-): readonly string[] =>
-	[
-		...new Set([
-			...model.banks,
-			...Object.values(model.local.questions).map((q) => q.bank),
-			...Object.values(model.local.schemes).map((e) => e.bank),
-		]),
-	].sort();
-
-/** A bank's questions, by folder. */
+/** The questions, by folder. A folder's key in `browser.expanded` is its name. */
 export function treeOf(
 	model: TreeInput,
 	evaluate: (q: Question) => Evaluation,
-	bank: string,
 ): readonly Folder[] {
 	const filter = model.browser.filter.trim().toLowerCase();
 	const byFolder = new Map<string, Leaf[]>();
 	for (const q of Object.values(model.local.questions)) {
-		if (q.bank !== bank) continue;
 		const ev = evaluate(q);
 		const leaf: Leaf = {
 			...marks(model, q),
@@ -122,7 +94,6 @@ export function treeOf(
 		.sort(([a], [b]) => byName(a, b))
 		.map(([name, leaves]) => ({
 			name,
-			key: folderKey(bank, name),
 			// Named first, by name; an unnamed draft last ("~" sorted first by locale).
 			leaves: [...leaves].sort((a, b) =>
 				a.name === undefined
@@ -133,8 +104,7 @@ export function treeOf(
 						? -1
 						: a.name.localeCompare(b.name),
 			),
-			expanded:
-				filter !== "" || model.browser.expanded.includes(folderKey(bank, name)),
+			expanded: filter !== "" || model.browser.expanded.includes(name),
 		}));
 }
 
@@ -169,9 +139,8 @@ export interface SchemeSection {
  * discoverable; while filtering, only sections with a match. A section is open like a
  * folder: toggled by the user (or opened once with its file), or while filtering.
  */
-/** A section's key in `browser.expanded`, within its bank. */
-const sectionKey = (bank: string, kind: SchemeKind): string =>
-	folderKey(bank, `scheme:${kind}`);
+/** A section's key in `browser.expanded`: no folder's name has a colon. */
+const sectionKey = (kind: SchemeKind): string => `scheme:${kind}`;
 
 /**
  * The key in `browser.expanded` of the folder or section holding the open file, if
@@ -181,27 +150,21 @@ export function openFolder(model: TreeInput): string | undefined {
 	if (model.screen.kind !== "editing") return undefined;
 	const { id } = model.screen;
 	const question = model.local.questions[id];
-	if (question !== undefined)
-		return folderKey(question.bank, folderOfQuestion(question));
+	if (question !== undefined) return folderOfQuestion(question);
 	const scheme = model.local.schemes[id];
-	return scheme === undefined
-		? undefined
-		: sectionKey(scheme.bank, scheme.kind);
+	return scheme === undefined ? undefined : sectionKey(scheme.kind);
 }
 
 export function schemeSections(
 	model: TreeInput,
 	evaluate: (e: SchemeEntry) => SchemeEvaluation,
-	/** The bank's symbol table: a file is used by questions of its own bank only. */
+	/** The bank's symbol table. */
 	index: Index<Id>,
-	bank: string,
 	/** The instruments here naming each bank file, by path: they use it too. */
 	instruments: InstrumentUses = new Map(),
 ): readonly SchemeSection[] {
 	const filter = model.browser.filter.trim().toLowerCase();
-	const entries = Object.values(model.local.schemes).filter(
-		(e) => e.bank === bank,
-	);
+	const entries = Object.values(model.local.schemes);
 	return SHARED_KINDS.flatMap((kind) => {
 		const mine = entries.filter((e) => e.kind === kind);
 		const leaves = mine
@@ -220,7 +183,7 @@ export function schemeSections(
 			)
 			.sort((a, b) => a.name.localeCompare(b.name));
 		if (filter !== "" && leaves.length === 0) return [];
-		const key = sectionKey(bank, kind);
+		const key = sectionKey(kind);
 		return [
 			{
 				kind,
@@ -286,15 +249,11 @@ export function detailsButton(
 	};
 }
 
-/** The folders a bank has, for the save and move dialogs. Drafts do not count: they are not filed yet. */
-export const bankFolders = (model: Model, bank: string): readonly string[] =>
+/** The folders the bank has, for the save and move dialogs. Drafts do not count: they are not filed yet. */
+export const bankFolders = (model: Pick<Model, "remote">): readonly string[] =>
 	[
 		...new Set(
-			Object.keys(model.remote.questions).flatMap((p) =>
-				bankAt(p, model.banks) === bank
-					? [relIn(bank, p).split("/")[1] ?? ""]
-					: [],
-			),
+			Object.keys(model.remote.questions).map((p) => p.split("/")[1] ?? ""),
 		),
 	]
 		.filter((f) => f !== "")

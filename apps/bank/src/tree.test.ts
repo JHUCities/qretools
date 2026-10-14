@@ -13,13 +13,7 @@ import {
 	type Question,
 	type SchemeEntry,
 } from "./model.js";
-import {
-	folderKey,
-	openFolder,
-	schemeSections,
-	treeOf,
-	UNFILED,
-} from "./tree.js";
+import { openFolder, schemeSections, treeOf, UNFILED } from "./tree.js";
 
 const bank = (
 	id: number,
@@ -29,14 +23,12 @@ const bank = (
 ): Question => ({
 	id,
 	kind: "question",
-	bank: "",
 	source,
 	base: { path, sha: "s", text },
 });
 const draft = (id: number, source: string): Question => ({
 	id,
 	kind: "question",
-	bank: "",
 	source,
 });
 const base = init({ work: ok(undefined), hasToken: false })[0];
@@ -57,8 +49,7 @@ const model: Model = {
 		},
 	},
 };
-const tree = (m: Model) =>
-	treeOf(m, (q) => evaluate(q.source, envIn(m, "")), "");
+const tree = (m: Model) => treeOf(m, (q) => evaluate(q.source, envIn(m)));
 
 describe("treeOf", () => {
 	it("files bank questions by their path, and every draft, named or not, under unfiled", () => {
@@ -142,7 +133,6 @@ describe("schemeSections", () => {
 	): SchemeEntry => ({
 		id,
 		kind,
-		bank: "",
 		name,
 		source: text,
 		base: { path: schemePath(kind, name), sha: "s", text },
@@ -176,15 +166,14 @@ describe("schemeSections", () => {
 		indexOf(
 			Object.values(mm.local.questions).map((q) => ({
 				key: q.id,
-				symbols: evaluate(q.source, envIn(mm, "")).symbols,
+				symbols: evaluate(q.source, envIn(mm)).symbols,
 			})),
 		);
 	const sections = (mm: Model) =>
 		schemeSections(
 			mm,
-			(e) => evaluateScheme(e.kind, e.source, envIn(mm, "")),
+			(e) => evaluateScheme(e.kind, e.source, envIn(mm)),
 			index(mm),
-			"",
 		);
 
 	it("shows every kind, even empty, with how many questions name each file", () => {
@@ -223,16 +212,5 @@ describe("schemeSections", () => {
 		expect(openFolder({ ...m, screen: { kind: "editing", id: 12 } })).toBe(
 			"scheme:missing",
 		);
-	});
-});
-
-describe("folder keys", () => {
-	it("keep a root bank's as they were, and never collide with another bank's", () => {
-		expect(folderKey("", "nhd")).toBe("nhd");
-		// A topic folder is one segment (FOLDER_PATTERN has no "/"), so a root folder
-		// named like a bank can't meet that bank's folders.
-		expect(folderKey("", "x")).not.toBe(folderKey("x", "nhd"));
-		expect(folderKey("x", "nhd")).toBe("x/nhd");
-		expect(folderKey("banks/a", "nhd")).not.toBe(folderKey("banks/b", "nhd"));
 	});
 });

@@ -1,12 +1,9 @@
 /**
  * What survives a reload. Two values, each validated by a Zod schema on the way back in:
  * the tab's own work in session storage (gone when the tab closes; owner, 2026-09-28),
- * and the Bank panel's settings in local storage, a default for the next new tab.
+ * and the sign-in page's settings in local storage, a default for the next new tab.
  * Anything unparseable is a Failure, not a crash, and is set aside, never dropped. The
  * token is kept separately and never in either value.
- *
- * Versions 1 to 4 lived in local storage under `qretools.v1`, shared by every tab; they
- * are read once, by `migrate`, and retired.
  */
 
 import {
@@ -19,29 +16,6 @@ import {
 import { type BankSettings, type Failure, parseBank } from "@qretools/shell";
 import { z } from "zod";
 
-const OriginSchema = z.discriminatedUnion("kind", [
-	z.strictObject({ kind: z.literal("draft") }),
-	z.strictObject({
-		kind: z.literal("bank"),
-		path: z.string(),
-		sha: z.string(),
-		original: z.string(),
-	}),
-]);
-
-/**
- * The Bank panel's settings. Older versions also stored a branch; saves now always go
- * to the author's own branch, so a stored one is read and dropped.
- */
-const SettingsSchema = z
-	.strictObject({
-		owner: z.string(),
-		repo: z.string(),
-		branch: z.string().optional(),
-		remember: z.boolean(),
-	})
-	.transform(({ owner, repo, remember }) => ({ owner, repo, remember }));
-
 const BaseSchema = z.strictObject({
 	path: z.string(),
 	sha: z.string(),
@@ -50,34 +24,6 @@ const BaseSchema = z.strictObject({
 
 // Every kind the core knows. Widening it reads older work unchanged: no version bump.
 const SCHEME_KIND = z.enum(SCHEME_KINDS as [SchemeKind, ...SchemeKind[]]);
-
-/**
- * Version 3: working copies split by kind, each with the base it started from. The
- * remote slice is not stored: on load it is rebuilt from the bases, which record
- * exactly the last GitHub state this browser knew.
- */
-const V3Schema = z.strictObject({
-	version: z.literal(3),
-	nextId: z.int().positive(),
-	questions: z.array(
-		z.strictObject({
-			kind: z.literal("question"),
-			id: z.int().positive(),
-			source: z.string(),
-			base: BaseSchema.optional(),
-		}),
-	),
-	schemes: z.array(
-		z.strictObject({
-			kind: SCHEME_KIND,
-			name: z.string(),
-			id: z.int().positive(),
-			source: z.string(),
-			base: BaseSchema.optional(),
-		}),
-	),
-	settings: SettingsSchema,
-});
 
 const QuestionSchema = z.strictObject({
 	kind: z.literal("question"),
@@ -93,167 +39,7 @@ const SchemeSchema = z.strictObject({
 	base: BaseSchema.optional(),
 });
 
-/**
- * Version 4: working copies belong to one bank and one person. `workOf` says whose the
- * current ones are (`owner/repo`, and the login once known); `kept` holds the others,
- * by `owner/repo@login`, set aside when someone signs in to another bank or as
- * someone else, and brought back when they return. Nothing in `kept` is ever dropped.
- */
-export const PersistedSchema = z.strictObject({
-	version: z.literal(4),
-	nextId: z.int().positive(),
-	questions: z.array(QuestionSchema),
-	schemes: z.array(SchemeSchema),
-	settings: SettingsSchema,
-	workOf: z
-		.strictObject({ repo: z.string(), login: z.string().optional() })
-		.optional(),
-	kept: z.record(
-		z.string(),
-		z.strictObject({
-			questions: z.array(QuestionSchema),
-			schemes: z.array(SchemeSchema),
-		}),
-	),
-});
-
-/**
- * Version 3's work was one pool, saved while connected to its settings' repository:
- * it is that bank's, by a person not recorded (assumed to be whoever signs in there next).
- */
-const v3ToV4 = (v3: z.infer<typeof V3Schema>): Persisted => ({
-	...v3,
-	version: 4,
-	workOf: { repo: `${v3.settings.owner}/${v3.settings.repo}` },
-	kept: {},
-});
-
-type V3 = z.infer<typeof V3Schema>;
-
-const baseOf = (origin: z.infer<typeof OriginSchema>) =>
-	origin.kind === "bank"
-		? { base: { path: origin.path, sha: origin.sha, text: origin.original } }
-		: {};
-
-/** Version 2: one list of files, each with an origin. */
-const V2Schema = z.strictObject({
-	version: z.literal(2),
-	nextId: z.int().positive(),
-	files: z.array(
-		z.discriminatedUnion("kind", [
-			z.strictObject({
-				id: z.int().positive(),
-				kind: z.literal("question"),
-				source: z.string(),
-				origin: OriginSchema,
-			}),
-			z.strictObject({
-				id: z.int().positive(),
-				kind: SCHEME_KIND,
-				name: z.string(),
-				source: z.string(),
-				origin: OriginSchema,
-			}),
-		]),
-	),
-	settings: SettingsSchema,
-});
-
-const v2ToV3 = ({ nextId, files, settings }: z.infer<typeof V2Schema>): V3 => ({
-	version: 3,
-	nextId,
-	questions: files.flatMap(({ origin, ...f }) =>
-		f.kind === "question" ? [{ ...f, kind: f.kind, ...baseOf(origin) }] : [],
-	),
-	schemes: files.flatMap(({ origin, ...f }) =>
-		f.kind !== "question" ? [{ ...f, ...baseOf(origin) }] : [],
-	),
-	settings,
-});
-
-/** Version 1 held only questions. */
-const V1Schema = z.strictObject({
-	version: z.literal(1),
-	nextId: z.int().positive(),
-	questions: z.array(
-		z.strictObject({
-			id: z.int().positive(),
-			source: z.string(),
-			origin: OriginSchema,
-		}),
-	),
-	settings: SettingsSchema,
-});
-
-const v1ToV2 = ({
-	nextId,
-	questions,
-	settings,
-}: z.infer<typeof V1Schema>): z.infer<typeof V2Schema> => ({
-	version: 2,
-	nextId,
-	files: questions.map((q) => ({ ...q, kind: "question" as const })),
-	settings,
-});
-
-/** Every version this code has written, each upgraded one step at a time to the current one. */
-const StoredSchema = z.union([
-	PersistedSchema,
-	V3Schema.transform(v3ToV4),
-	V2Schema.transform((v2) => v3ToV4(v2ToV3(v2))),
-	V1Schema.transform((v1) => v3ToV4(v2ToV3(v1ToV2(v1)))),
-]);
-
-export type Persisted = z.infer<typeof PersistedSchema>;
-
-/** Where versions 1 to 4 lived: local storage, shared by every tab. Read once, then retired. */
-export const LEGACY_KEY = "qretools.v1";
-/** The old value, renamed rather than deleted once migrated: nothing is ever dropped. */
-export const RETIRED_KEY = "qretools.v1.retired";
-
-/** Versions 1 to 4, upgraded to 4. Only `migrate` reads them now. */
-export function readPersisted(
-	raw: string | null,
-): Result<Persisted | undefined, Failure> {
-	return parseStored(raw, StoredSchema, {
-		what: "The work kept in this browser by an older version",
-		key: RETIRED_KEY,
-	});
-}
-
-/**
- * Version 5: one tab's work, in session storage. `repo` is the bank it belongs to, which
- * wins over the stored settings when the tab reloads, so another tab's sign-in never
- * points this tab's work at another bank; `login` is whose it is, once someone has
- * signed in with it.
- */
-const V5Schema = z.strictObject({
-	version: z.literal(5),
-	repo: z.string(),
-	login: z.string().optional(),
-	nextId: z.int().positive(),
-	questions: z.array(QuestionSchema),
-	schemes: z.array(SchemeSchema),
-});
-
-/** Every entry of version 6 says which bank of the workspace it belongs to. */
-const inBankSchema = { bank: z.string() };
-
-/**
- * Version 6: version 5 in a workspace. `repo` is the workspace (the folder of the
- * repository signed in to); each entry names its bank's folder in it, "" for its root,
- * and paths are the workspace's.
- */
-const V6Schema = z.strictObject({
-	version: z.literal(6),
-	repo: z.string(),
-	login: z.string().optional(),
-	nextId: z.int().positive(),
-	questions: z.array(QuestionSchema.extend(inBankSchema)),
-	schemes: z.array(SchemeSchema.extend(inBankSchema)),
-});
-
-/** The workspace's own files, in no bank: its instruments. */
+/** The workspace's own files, not its bank's: its instruments. */
 const WorkspaceEntrySchema = z.strictObject({
 	kind: z.literal("instrument"),
 	name: z.string(),
@@ -263,25 +49,25 @@ const WorkspaceEntrySchema = z.strictObject({
 });
 
 /**
- * Version 8: version 6 with the workspace's instruments beside its bank's files, and
- * `workspace.yaml` among the shared files (kind `workspace`). Version 7 kept that file
- * apart and had a `bank.yaml`; its work isn't upgraded (nobody had any to keep), and
- * the number stays 8 for whatever else changes before a release.
+ * One tab's work, in session storage: the working copies, each with the base it started
+ * from (`remote` is rebuilt from the bases, which record the last GitHub state this
+ * browser knew). `repo` is the workspace it belongs to (the folder of the repository
+ * signed in to), which wins over the stored settings when the tab reloads, so another
+ * tab's sign-in never points this tab's work elsewhere; `login` is whose it is, once
+ * someone has signed in with it. Paths are the workspace's.
+ *
+ * The only version read: nothing older is upgraded (nobody had any to keep), and the
+ * number stays 8 for whatever else changes before a release. Strict, so work written
+ * with a field since dropped (an entry's `bank`) is set aside as unreadable.
  */
-export const WorkSchema = V6Schema.extend({
+export const WorkSchema = z.strictObject({
 	version: z.literal(8),
+	repo: z.string(),
+	login: z.string().optional(),
+	nextId: z.int().positive(),
+	questions: z.array(QuestionSchema),
+	schemes: z.array(SchemeSchema),
 	workspace: z.array(WorkspaceEntrySchema),
-});
-
-/**
- * Version 5's work was one bank's, at the folder it signed in to: in version 6 that
- * folder is the workspace and the bank is its root, so every path stays as it was.
- */
-const v5ToV6 = (v5: z.infer<typeof V5Schema>): z.infer<typeof V6Schema> => ({
-	...v5,
-	version: 6,
-	questions: v5.questions.map((q) => ({ ...q, bank: "" })),
-	schemes: v5.schemes.map((e) => ({ ...e, bank: "" })),
 });
 
 export type Work = z.infer<typeof WorkSchema>;
@@ -396,68 +182,8 @@ function parseStored<T>(
 }
 
 /**
- * The older versions' work, as this tab's: the bank and person it was recorded for
- * (the settings' bank when none was), with the settings as the new default. Work kept
- * for other banks and people has no tab to go to; `setAside` says whether there was any.
- */
-export function fromLegacy(p: Persisted): {
-	readonly work: Work;
-	readonly settings: BankSettings;
-	readonly setAside: boolean;
-} {
-	return {
-		work: {
-			...v5ToV6({
-				version: 5,
-				repo: p.workOf?.repo ?? `${p.settings.owner}/${p.settings.repo}`,
-				...(p.workOf?.login !== undefined && { login: p.workOf.login }),
-				nextId: p.nextId,
-				questions: p.questions,
-				schemes: p.schemes,
-			}),
-			version: 8,
-			workspace: [],
-		},
-		settings: { ...p.settings, path: "" },
-		setAside: Object.values(p.kept).some(
-			(k) => k.questions.length + k.schemes.length > 0,
-		),
-	};
-}
-
-/**
- * Once, before the app starts: a tab with no work of its own, in a browser an older
- * version used, takes that version's work and settings, and the old value is renamed to
- * `qretools.v1.retired` (never deleted). What could not come along is said, never
- * dropped silently: the returned failures are shown once.
- */
-export function migrate(local: Storage, session: Storage): readonly Failure[] {
-	const raw = local.getItem(LEGACY_KEY);
-	if (raw === null || session.getItem(WORK_KEY) !== null) return [];
-	const stored = readPersisted(raw);
-	const notices: Failure[] = [];
-	// A tab still on an older version may write the old key again after a first
-	// migration: retire it beside, never over, what was retired before.
-	const retired = freeKey(local, RETIRED_KEY);
-	if (!stored.ok) notices.push(stored.error);
-	else if (stored.value !== undefined) {
-		const { work, settings, setAside } = fromLegacy(stored.value);
-		session.setItem(WORK_KEY, JSON.stringify(work));
-		local.setItem(SETTINGS_KEY, settingsValue(settings));
-		if (setAside)
-			notices.push({
-				kind: "unreadable",
-				message: `Unsaved work for other banks from an older version was set aside in this browser's storage (${retired}).`,
-			});
-	}
-	local.setItem(retired, raw);
-	local.removeItem(LEGACY_KEY);
-	return notices;
-}
-
-/**
- * What a tab starts with: an older version's work migrated first (once), then this
- * tab's work and the stored default settings. Unreadable work is copied to
+ * What a tab starts with: this tab's work and the stored default settings. Unreadable
+ * work is copied to
  * `qretools.work.unreadable` in local storage, so the first save does not destroy it.
  */
 export function readStartup(
@@ -467,9 +193,7 @@ export function readStartup(
 	readonly work: Result<Work | undefined, Failure>;
 	readonly settings?: BankSettings;
 	readonly theme?: "light" | "dark";
-	readonly notices: readonly Failure[];
 } {
-	const notices = migrate(local, session);
 	const raw = session.getItem(WORK_KEY);
 	const work = readWork(raw);
 	if (!work.ok && raw !== null) local.setItem(WORK_UNREADABLE_KEY, raw);
@@ -479,7 +203,6 @@ export function readStartup(
 		work,
 		...(settings !== undefined && { settings }),
 		...(theme !== undefined && { theme }),
-		notices,
 	};
 }
 
@@ -499,11 +222,4 @@ export function setAsideWork(local: Storage, work: Work): void {
 		}
 	}
 	local.setItem(WORK_ASIDE_KEY, JSON.stringify([...list, work]));
-}
-
-/** `base`, or `base.2`, `base.3`… : the first key not already holding something. */
-function freeKey(storage: Storage, base: string): string {
-	if (storage.getItem(base) === null) return base;
-	for (let n = 2; ; n++)
-		if (storage.getItem(`${base}.${n}`) === null) return `${base}.${n}`;
 }

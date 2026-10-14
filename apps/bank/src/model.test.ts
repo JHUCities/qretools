@@ -1,12 +1,10 @@
-import { evaluate, ok } from "@qretools/core";
+import { evaluate } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import {
 	EXAMPLE_SCALES,
 	envOf,
-	init,
 	instrumentSource,
 	type SchemeEntry,
-	signedOut,
 } from "./model.js";
 
 describe("EXAMPLE_SCALES", () => {
@@ -20,12 +18,12 @@ describe("EXAMPLE_SCALES", () => {
 
 describe("the workspace's agency", () => {
 	const bank = (source: string): Record<number, SchemeEntry> => ({
-		1: { id: 1, kind: "workspace", name: "workspace", bank: "", source },
+		1: { id: 1, kind: "workspace", name: "workspace", source },
 	});
 	const urns = (source: string) =>
 		Object.keys(
-			evaluate("name: q\ntext: Q?\n", envOf(Object.values(bank(source)), false))
-				.ddi.QuestionItem ?? {},
+			evaluate("name: q\ntext: Q?\n", envOf(bank(source), false)).ddi
+				.QuestionItem ?? {},
 		);
 
 	it("comes from the working copy of `workspace.yaml`, as it is typed", () => {
@@ -37,25 +35,6 @@ describe("the workspace's agency", () => {
 
 	it("is `invalid` while the workspace declares none", () => {
 		expect(urns("agency:\n")).toEqual(["invalid:q:1"]);
-	});
-});
-
-describe("signing out", () => {
-	it("keeps the banks of the work kept, not the workspace left", () => {
-		const [start] = init({ work: ok(undefined), hasToken: false });
-		const kept = signedOut({
-			...start,
-			banks: ["banks/a", "banks/b"],
-			local: {
-				workspace: {},
-				questions: {
-					1: { kind: "question", id: 1, bank: "banks/a", source: "x" },
-				},
-				schemes: {},
-			},
-		});
-		expect(kept.banks).toEqual(["banks/a"]);
-		expect(signedOut({ ...start, banks: ["banks/a"] }).banks).toEqual([""]);
 	});
 });
 

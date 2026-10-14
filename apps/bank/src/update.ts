@@ -1,8 +1,6 @@
 import {
 	addressOf,
-	bankAt,
 	bankLocation,
-	banksIn,
 	compact,
 	EMPTY_ENV,
 	evaluateScheme,
@@ -11,12 +9,10 @@ import {
 	FOLDER_RULE_TEXT,
 	HERE,
 	type InstrumentIn,
-	inBank,
 	instrumentOf,
 	instrumentPath,
 	instrumentRefAt,
 	isRoot,
-	joinFolder,
 	type Mention,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
@@ -25,7 +21,6 @@ import {
 	type Range,
 	type RemoteBank,
 	type Result,
-	relIn,
 	remotesOf,
 	SCHEME_NAME,
 	SHAPE,
@@ -94,7 +89,6 @@ import {
 	type Model,
 	type Msg,
 	type Naming,
-	newBank,
 	otherAuthor,
 	otherBank,
 	ownWork,
@@ -296,7 +290,7 @@ function step(model: Model, msg: Msg): Step {
 			const { fix } = msg;
 			// A shared entry to create: the name dialog, prefilled, pointed back at this place.
 			if (fix.kind === "create") {
-				// A shared file is made in the bank of the question that names it.
+				// Only a bank file names a shared one this way.
 				if (!isBankEntry(q)) return [model, []];
 				const { scheme, name, text, path } = fix.create;
 				return [
@@ -308,7 +302,6 @@ function step(model: Model, msg: Msg): Step {
 								kind: scheme,
 								name,
 								text,
-								bank: q.bank,
 								purpose: { kind: "create", use: { id: q.id, path } },
 							},
 						},
@@ -355,8 +348,8 @@ function step(model: Model, msg: Msg): Step {
 					[{ kind: "revealRange", range: [added.caret, added.caret] }],
 				]);
 			}
-			// Options made a shared scale: its name dialog, in the question's bank, pointed
-			// back at the options it replaces.
+			// Options made a shared scale: its name dialog, pointed back at the options it
+			// replaces.
 			if (fix.kind === "share") {
 				if (!isBankEntry(q)) return [model, []];
 				return [
@@ -368,7 +361,6 @@ function step(model: Model, msg: Msg): Step {
 								kind: "scale",
 								name: "",
 								text: "",
-								bank: q.bank,
 								purpose: {
 									kind: "create",
 									use: { id: q.id, path: fix.path },
@@ -478,8 +470,7 @@ function step(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
-			// Read in its bank's folder: in the workspace it is at the path the link names.
-			const file = { ...msg.result.value.file, path: msg.path };
+			const { file } = msg.result.value;
 			// Their version is exactly the one you started from: open your own copy.
 			const own = claimant(model, file.path);
 			if (own?.base?.sha === file.sha)
@@ -559,7 +550,7 @@ function step(model: Model, msg: Msg): Step {
 			const target =
 				m === undefined
 					? undefined
-					: schemeFileNamed(model.local.schemes, m.scheme, m.name, q.bank);
+					: schemeFileNamed(model.local.schemes, m.scheme, m.name);
 			return target === undefined
 				? [model, []]
 				: step(model, { kind: "fileOpened", id: target.id });
@@ -585,16 +576,12 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "questionCreated": {
-			const bank = msg.bank ?? newBank(model);
-			// A template takes the fields its bank also requires, empty, in their places;
+			// A template takes the fields the bank also requires, empty, in their places;
 			// a blank question stays blank (its required fields show as holes at the end).
 			const [next, id] = add(model, {
 				kind: "question",
-				bank,
 				source:
-					msg.text === ""
-						? ""
-						: withFields(msg.text, envIn(model, bank).required),
+					msg.text === "" ? "" : withFields(msg.text, envIn(model).required),
 			});
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
 		}
@@ -610,14 +597,6 @@ function step(model: Model, msg: Msg): Step {
 								kind: msg.scheme,
 								name: msg.name ?? "",
 								text: "",
-								// The bank chosen, or that of the question that named it, where
-								// the name is read.
-								bank:
-									msg.bank ??
-									(msg.use === undefined
-										? undefined
-										: model.local.questions[msg.use.id]?.bank) ??
-									newBank(model),
 								purpose: {
 									kind: "create",
 									...(msg.use !== undefined && { use: msg.use }),
@@ -627,18 +606,16 @@ function step(model: Model, msg: Msg): Step {
 					},
 					[],
 				];
-			// One file per bank: open it if it exists, else start it.
+			// One file per workspace: open it if it exists, else start it.
 			const root = msg.scheme;
-			const bank = msg.bank ?? newBank(model);
 			const existing = Object.values(model.local.schemes).find(
-				(e) => e.kind === root && e.bank === bank,
+				(e) => e.kind === root,
 			);
 			if (existing)
 				return [{ ...model, screen: { kind: "editing", id: existing.id } }, []];
 			const [next, id] = add(model, {
 				kind: root,
 				name: root,
-				bank,
 				source: SCHEME_TEMPLATES[root],
 			});
 			return persist([{ ...next, screen: { kind: "editing", id } }, []]);
@@ -657,7 +634,6 @@ function step(model: Model, msg: Msg): Step {
 							kind: e.kind,
 							name: e.name,
 							text: "",
-							bank: e.bank,
 							purpose: { kind: "rename", id: e.id },
 						},
 					},
@@ -863,7 +839,7 @@ function step(model: Model, msg: Msg): Step {
 				const renamed = withFile(closed, { ...e, name: naming.name });
 				const rewritten = inInstruments.reduce(
 					(m, [id, text]) => withSource(m, id, text),
-					renameReferences(renamed, e.kind, e.name, naming.name, e.bank),
+					renameReferences(renamed, e.kind, e.name, naming.name),
 				);
 				return persist([rewritten, []]);
 			}
@@ -891,7 +867,6 @@ function step(model: Model, msg: Msg): Step {
 			const [added, id] = add(closed, {
 				kind: naming.kind,
 				name: naming.name,
-				bank: naming.bank,
 				source,
 			});
 			const q = use === undefined ? undefined : added.local.questions[use.id];
@@ -946,7 +921,7 @@ function step(model: Model, msg: Msg): Step {
 						message:
 							q.kind === "question"
 								? describeChange(
-										parseSurface(q.base.text, envIn(model, q.bank)).draft,
+										parseSurface(q.base.text, envIn(model)).draft,
 										undefined,
 									)
 								: isBankEntry(q)
@@ -986,9 +961,7 @@ function step(model: Model, msg: Msg): Step {
 					: write(model, as, msg.id, q, path);
 			}
 			// Where it goes is the author's choice: the dialog opens with none chosen.
-			const name = saveableName(
-				parseSurface(q.source, envIn(model, q.bank)).draft,
-			);
+			const name = saveableName(parseSurface(q.source, envIn(model)).draft);
 			if (!name.ok)
 				return [refuse(model, msg.id, name.error.message, name.error.hint), []];
 			return [
@@ -1026,7 +999,7 @@ function step(model: Model, msg: Msg): Step {
 				return [model, []];
 			const closed = { ...model, browser: withoutSaving(model.browser) };
 			const where = bankLocation(
-				parseSurface(q.source, envIn(model, q.bank)).draft,
+				parseSurface(q.source, envIn(model)).draft,
 				saving.folder,
 			);
 			if (!where.ok)
@@ -1035,18 +1008,18 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				];
 			// A new draft must not silently overwrite a bank file at that path.
-			if (taken(model, inBank(q.bank, where.value.path), saving.id)) {
+			if (taken(model, where.value.path, saving.id)) {
 				return [
 					refuse(
 						closed,
 						saving.id,
-						`A question already exists at \`${inBank(q.bank, where.value.path)}\`.`,
+						`A question already exists at \`${where.value.path}\`.`,
 						"Open that question to change it, or choose another name or folder.",
 					),
 					[],
 				];
 			}
-			return write(closed, as, saving.id, q, inBank(q.bank, where.value.path));
+			return write(closed, as, saving.id, q, where.value.path);
 		}
 
 		case "moveRequested": {
@@ -1059,7 +1032,7 @@ function step(model: Model, msg: Msg): Step {
 						...model.browser,
 						moving: {
 							id: msg.id,
-							folder: msg.folder ?? folderOfPath(q.base.path, q.bank),
+							folder: msg.folder ?? folderOfPath(q.base.path),
 						},
 					},
 				},
@@ -1100,10 +1073,10 @@ function step(model: Model, msg: Msg): Step {
 			};
 			const problem = moveProblem(model, q, moving.folder);
 			if (problem !== undefined) return [refuse(closed, q.id, problem), []];
-			const to = movedPath(q.base.path, moving.folder, q.bank);
+			const to = movedPath(q.base.path, moving.folder);
 			// A move also saves (owner, 2026-09-29): the working text at the new path,
 			// the old path deleted, and the scheme files it names, as a save would.
-			const env = envIn(model, q.bank);
+			const env = envIn(model);
 			const subject = describeMove(
 				parseSurface(q.base.text, env).draft,
 				parseSurface(q.source, env).draft,
@@ -1167,7 +1140,6 @@ function step(model: Model, msg: Msg): Step {
 					absorbed.local,
 					absorbed.remote,
 					absorbed.nextId,
-					absorbed.banks,
 				);
 				const failedAt =
 					primary === undefined
@@ -1354,29 +1326,14 @@ function step(model: Model, msg: Msg): Step {
 			// shas are content addresses.
 			const { files, from, aheadBy, behindBy, unread } = msg.result.value;
 			const proposable = aheadBy > 0;
-			// The workspace's banks, as the core finds them (the CLI's rule), and any the
-			// kept work names: a draft in a bank not on GitHub yet stays in it.
-			const banks = [
-				...new Set([
-					...Object.keys(
-						banksIn(Object.fromEntries(files.map((f) => [f.path, f.text])))
-							.banks,
-					),
-					...allFiles(loadedRequest.local).flatMap((f) =>
-						isBankEntry(f) ? [f.bank] : [],
-					),
-				]),
-			].sort();
-			const remote = remoteOf(loadedRequest.remote, files, banks);
+			const remote = remoteOf(loadedRequest.remote, files);
 			const { local, nextId } = rebase(
 				loadedRequest.local,
 				remote,
 				loadedRequest.nextId,
-				banks,
 			);
 			const loaded: Model = compact({
 				...loadedRequest,
-				banks,
 				remoteBanks: keptRemote(loadedRequest.remoteBanks),
 				local,
 				remote,
@@ -1625,8 +1582,7 @@ function write(
 			? dependencies(
 					model.local,
 					model.remote,
-					parseSurface(q.source, envIn(model, q.bank)).mentions,
-					q.bank,
+					parseSurface(q.source, envIn(model)).mentions,
 				)
 			: q.kind === "instrument"
 				? savedWith(model, q)
@@ -1664,7 +1620,7 @@ function write(
 /** A bank file's name as its author wrote it: a question's own, or the shared file's. */
 const nameOf = (model: Model, f: BankEntry): string =>
 	f.kind === "question"
-		? (parseSurface(f.source, envIn(model, f.bank)).draft.name ?? UNNAMED)
+		? (parseSurface(f.source, envIn(model)).draft.name ?? UNNAMED)
 		: f.name;
 
 /**
@@ -1705,11 +1661,11 @@ export function instrumentDependencies(
 		if (ref.kind !== "bank") continue;
 		const use = read.uses[ref.alias];
 		if (use?.kind !== "local") continue;
-		const f = claims.get(inBank(use.folder, ref.path));
+		const f = claims.get(ref.path);
 		if (f === undefined) continue;
 		consider(f);
 		if (f.kind !== "question") continue;
-		const own = dependencies(model.local, model.remote, mentionsOf(f), f.bank);
+		const own = dependencies(model.local, model.remote, mentionsOf(f));
 		for (const s of own.include) include.set(s.id, s);
 		for (const s of own.blocked) blocked.set(s.id, s);
 	}
@@ -1718,7 +1674,7 @@ export function instrumentDependencies(
 
 /**
  * An instrument's dependencies read afresh, as `update` must (it can't reach the view's
- * caches): pure, and its caches end with this call. Each bank's environment once.
+ * caches): pure, and its caches end with this call. The bank's environment once.
  */
 function savedWith(
 	model: Model,
@@ -1728,7 +1684,7 @@ function savedWith(
 	return instrumentDependencies(
 		model,
 		evaluations.instrument(model, e),
-		(q) => evaluations.get(q, evaluations.env(model, q.bank)).symbols.mentions,
+		(q) => evaluations.get(q, evaluations.env(model)).symbols.mentions,
 	);
 }
 
@@ -1759,7 +1715,12 @@ export function externalUrl(
 	)?.address;
 	const address = written === undefined ? undefined : addressOf(written);
 	return address?.kind === "remote"
-		? blobUrl(address, address.ref, inBank(address.path, ref.path))
+		? blobUrl(
+				address,
+				address.ref,
+				// In that repository, under the folder its workspace is in.
+				address.path === "" ? ref.path : `${address.path}/${ref.path}`,
+			)
 		: undefined;
 }
 
@@ -1781,9 +1742,7 @@ export function followOf(
 	if (url !== undefined) return { kind: "external", url };
 	const use = read.uses[ref.alias];
 	const file =
-		use?.kind === "local"
-			? bankFileClaiming(model, inBank(use.folder, ref.path))
-			: undefined;
+		use?.kind === "local" ? bankFileClaiming(model, ref.path) : undefined;
 	return file === undefined ? undefined : { kind: "file", file };
 }
 
@@ -1965,7 +1924,7 @@ function messageOf(model: Model, q: Entry): string {
 			q.name,
 			q.base === undefined ? "add" : "update",
 		);
-	const env = envIn(model, q.bank);
+	const env = envIn(model);
 	return describeChange(
 		q.base === undefined ? undefined : parseSurface(q.base.text, env).draft,
 		parseSurface(q.source, env).draft,
@@ -2037,14 +1996,13 @@ function stale(model: Model, msg: Msg): boolean {
 	}
 }
 
-/** The folder of a question's path in its bank: `questions/<folder>/<name>.yaml`. */
-export const folderOfPath = (path: Path, bank: string): string =>
-	relIn(bank, path).split("/")[1] ?? "";
+/** The folder of a question's path: `questions/<folder>/<name>.yaml`. */
+export const folderOfPath = (path: Path): string => path.split("/")[1] ?? "";
 const fileName = (path: Path): string =>
 	(path.split("/").at(-1) ?? path).replace(/\.yaml$/, "");
-/** Only the folder changes, within its bank; the filename stays, whatever unsaved edits say the name is. */
-export const movedPath = (path: Path, folder: string, bank: string): Path =>
-	inBank(bank, `questions/${folder}/${path.split("/").at(-1) ?? ""}`);
+/** Only the folder changes; the filename stays, whatever unsaved edits say the name is. */
+export const movedPath = (path: Path, folder: string): Path =>
+	`questions/${folder}/${path.split("/").at(-1) ?? ""}`;
 
 /** Why a bank question cannot move to `folder`, or undefined when it can. */
 export function moveProblem(
@@ -2054,7 +2012,7 @@ export function moveProblem(
 ): string | undefined {
 	if (q.base === undefined) return "Only a question in the bank can move.";
 	if (!FOLDER_PATTERN.test(folder)) return FOLDER_RULE_TEXT;
-	const to = movedPath(q.base.path, folder, q.bank);
+	const to = movedPath(q.base.path, folder);
 	if (to === q.base.path) return "It's already in that folder.";
 	const sync = syncOf(q, remoteBlob(model.remote, q));
 	if (sync === "conflict" || sync === "deletedOnGitHub")
@@ -2221,9 +2179,7 @@ function openLink(model: Model, link: Link): Step {
 					[],
 				];
 	if (link.file === undefined) return [model, []];
-	// Read through its bank, so their shared files come with it, as that bank has them.
-	const bank = bankAt(link.file, model.banks) ?? "";
-	const target = targetOf(model.settings, session);
+	// Their shared files come with it, as their branch has them.
 	return [
 		{
 			...model,
@@ -2232,13 +2188,8 @@ function openLink(model: Model, link: Link): Step {
 		[
 			{
 				kind: "readAt",
-				target: {
-					...target,
-					path: joinFolder(target.path, bank) ?? target.path,
-					branch: link.branch,
-				},
+				target: { ...targetOf(model.settings, session), branch: link.branch },
 				path: link.file,
-				rel: relIn(bank, link.file),
 			},
 		],
 	];
@@ -2319,12 +2270,12 @@ const hasExampleQuestions = (model: Pick<Model, "remote">): boolean =>
  * afresh; the view passes the app's kept evaluations.
  */
 export function exampleSource(
-	model: Pick<Model, "local" | "remote" | "banks">,
+	model: Pick<Model, "local" | "remote">,
 	name: string,
 	evaluations: Evaluations = createEvaluations(),
 ): string | undefined {
 	return hasExampleQuestions(model)
-		? exampleInstrument(name, HERE, evaluations.scope(model, ""))
+		? exampleInstrument(name, HERE, evaluations.scope(model))
 		: undefined;
 }
 
@@ -2347,15 +2298,12 @@ export function schemeNameProblem(
 	model: Model,
 	kind: NamedScheme,
 	name: string,
-	/** The bank it is in or goes to: names need be free only there. */
-	bank: string,
 	self?: Id,
 ): string | undefined {
 	if (name === "") return "Give it a name.";
 	if (!NAME_PATTERN.test(name)) return NAME_RULE_TEXT;
 	return Object.values(model.local.schemes).some(
-		(e) =>
-			e.bank === bank && e.kind === kind && e.name === name && e.id !== self,
+		(e) => e.kind === kind && e.name === name && e.id !== self,
 	)
 		? `A ${SCHEME_NAME[kind]} named \`${name}\` already exists.`
 		: undefined;
@@ -2439,7 +2387,7 @@ export function namingProblem(
 ): string | undefined {
 	const self = naming.purpose.kind === "rename" ? naming.purpose.id : undefined;
 	return (
-		schemeNameProblem(model, naming.kind, naming.name, naming.bank, self) ??
+		schemeNameProblem(model, naming.kind, naming.name, self) ??
 		shareProblem(model, naming)
 	);
 }
@@ -2461,17 +2409,15 @@ function shareProblem(model: Model, naming: Naming): string | undefined {
 		: "These responses can't be shared as they are now: each must be a plain `code: label` line, with no title, variable or note of its own.";
 }
 
-/** Every question of its bank in this tab that names the file by its old name now names the new one. */
+/** Every question in this tab that names the file by its old name now names the new one. */
 function renameReferences(
 	model: Model,
 	scheme: NamedScheme,
 	from: string,
 	to: string,
-	bank: string,
 ): Model {
 	let next = model;
 	for (const q of Object.values(model.local.questions)) {
-		if (q.bank !== bank) continue;
 		const edits = renameEdits(q.source, scheme, from, to);
 		const text = edits.length === 0 ? undefined : applyEdits(q.source, edits);
 		if (text !== undefined && text !== q.source)
@@ -2499,7 +2445,7 @@ function instrumentRenames(
 		const hits = read.instrument.refs.filter((r) => {
 			if (r.kind !== "bank") return false;
 			const use = read.uses[r.alias];
-			return use?.kind === "local" && inBank(use.folder, r.path) === path;
+			return use?.kind === "local" && r.path === path;
 		});
 		if (hits.length === 0) return [];
 		// From the end, so each range still points where it did.
@@ -2740,7 +2686,7 @@ function livelitsIn(model: Model, f: Entry): readonly Livelit[] {
 	if (f.kind === "instrument")
 		return instrumentOf(f.source, { banks: {} }).livelits;
 	if (!isBankEntry(f)) return [];
-	const env = envIn(model, f.bank);
+	const env = envIn(model);
 	return f.kind === "question"
 		? livelitsOf(f.source, parseSurface(f.source, env), env)
 		: evaluateScheme(f.kind, f.source, env).livelits;
@@ -2805,7 +2751,7 @@ function withActivity(
 
 /** Record what a write, delete or reload told us about the author's branch. */
 function withGitHub(model: Model, path: Path, blob: Blob | undefined): Model {
-	return { ...model, remote: withBlob(model.remote, path, blob, model.banks) };
+	return { ...model, remote: withBlob(model.remote, path, blob) };
 }
 
 /** A save made a commit on the author's branch: it exists now, with something to propose. */
@@ -2819,13 +2765,8 @@ function committed(model: Model): Model {
 }
 
 /** GitHub's copy at one path, set or removed, in the slice the path belongs to. */
-function withBlob(
-	remote: Remote,
-	path: Path,
-	blob: Blob | undefined,
-	banks: readonly string[],
-): Remote {
-	const slice = sliceOf(path, banks);
+function withBlob(remote: Remote, path: Path, blob: Blob | undefined): Remote {
+	const slice = sliceOf(path);
 	if (slice === undefined) return remote;
 	const { [path]: _, ...rest } = remote[slice];
 	return {
@@ -2835,10 +2776,6 @@ function withBlob(
 }
 
 function without(model: Model, id: Id): Model {
-	return withBanks(withoutFile(model, id));
-}
-
-function withoutFile(model: Model, id: Id): Model {
 	const { [id]: _q, ...questions } = model.local.questions;
 	const { [id]: _s, ...schemes } = model.local.schemes;
 	const { [id]: _w, ...workspace } = model.local.workspace;
@@ -2861,47 +2798,13 @@ function withoutFile(model: Model, id: Id): Model {
 }
 
 type NewFile =
-	| Pick<Question, "kind" | "bank" | "source">
-	| Pick<SchemeEntry, "kind" | "name" | "bank" | "source">
+	| Pick<Question, "kind" | "source">
+	| Pick<SchemeEntry, "kind" | "name" | "source">
 	| Pick<InstrumentEntry, "kind" | "name" | "source">;
 
 function add(model: Model, file: NewFile): [Model, Id] {
 	const id = model.nextId;
-	return [
-		withBanks({ ...withFile(model, { ...file, id }), nextId: id + 1 }),
-		id,
-	];
-}
-
-/**
- * The workspace's banks after a file is added or removed here, by the load's rule: those
- * GitHub has (a bank of `model.banks` holding a file of `remote`), and those the working
- * copies are in (only the root, now a workspace has one bank). The same list (same reference) when nothing changes, so
- * what is memoised on it holds.
- */
-function withBanks(model: Model): Model {
-	const local = new Set(
-		allFiles(model.local).flatMap((f) => (isBankEntry(f) ? [f.bank] : [])),
-	);
-	const remote = [
-		...Object.keys(model.remote.questions),
-		...Object.keys(model.remote.schemes),
-	];
-	const onGitHub = new Set(
-		remote.flatMap((p) => {
-			const bank = bankAt(p, model.banks);
-			return bank === undefined ? [] : [bank];
-		}),
-	);
-	const kept = [
-		...new Set([...model.banks.filter((b) => onGitHub.has(b)), ...local]),
-	].sort();
-	// The root alone while there are none, as at the start (`banksOfLocal`).
-	const banks = kept.length === 0 ? [""] : kept;
-	const same =
-		banks.length === model.banks.length &&
-		banks.every((b, i) => b === model.banks[i]);
-	return same ? model : { ...model, banks };
+	return [{ ...withFile(model, { ...file, id }), nextId: id + 1 }, id];
 }
 
 /** Every change to what should survive a reload ends with a persist command. */
