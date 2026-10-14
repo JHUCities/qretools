@@ -5,7 +5,7 @@
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Address, addressOf, HERE, notHere } from "../address.ts";
 import {
@@ -24,8 +24,16 @@ import {
 	status,
 } from "../findings.ts";
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
+import { ROOT } from "../kinds.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
-import { type RemoteBank, remotesOf, workspaceOf } from "../workspace.ts";
+import { agencyWritten } from "../surface/bankfile.ts";
+import {
+	instrumentAt,
+	type RemoteBank,
+	remotesOf,
+	WORKSPACE,
+	workspaceOf,
+} from "../workspace.ts";
 import { readWorkspace } from "./index.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
@@ -43,7 +51,7 @@ const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
-  qretools instrument export <file> --agency <agency> [--bank alias=dir]... [-o file]
+  qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [-o file]
 
 dir is the workspace's folder (default: the current directory): workspace.yaml,
 questions/<folder>/, the shared folders (scales/ and so on), missing.yaml,
@@ -52,7 +60,8 @@ An instrument reads its own workspace (\`../\` in its \`uses\`) and other worksp
 a tag (\`owner/repo@v1\`, with git).
 --bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
 --strict  also fail on warnings.
---agency  the DDI agency the instrument is published under.`;
+--agency  the DDI agency the instrument is published under, when it isn't its own
+          workspace's (workspace.yaml), as for a file that uses none.`;
 
 /** What to say when a directory holds nothing the tool reads: the wrong folder, most likely. */
 const nothingIn = (dir: string): string =>
@@ -109,8 +118,12 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		);
 		return USAGE_ERROR;
 	}
-	// Its instruments are read as nothing here (`kindAt`): the export is the questions'.
-	const bank = bankOf(files);
+	// The export is the questions': its instruments aren't the bank's files.
+	const bank = bankOf(
+		Object.fromEntries(
+			Object.entries(files).filter(([p]) => instrumentAt(p) === undefined),
+		),
+	);
 	if (readIn(bank) === 0) {
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
@@ -302,7 +315,7 @@ function refused(r: Refusal, io: Io): number {
 		case "noAgency":
 			// The instrument's words: the workspace's export says its own before it gets here.
 			io.err(
-				"Not exported: give the DDI agency the instrument is published under, with --agency.\n",
+				"Not exported: the instrument has no DDI agency. Its workspace declares none (workspace.yaml, agency:) and none is given with --agency.\n",
 			);
 			break;
 		case "invalidAgency":
@@ -398,6 +411,8 @@ async function instrument(
 			return USAGE_ERROR;
 		}
 	const banks: Record<string, BankScope> = {};
+	/** Its own workspace's `workspace.yaml`, once a `../` use has read it. */
+	let own: string | undefined;
 	for (const use of uses) {
 		const address: Address =
 			use.address === undefined
@@ -412,7 +427,10 @@ async function instrument(
 						? notHere(address.path)
 						: offline !== undefined
 							? `it's this instrument's own workspace (\`${HERE}\`), read from the folder above it; \`--bank\` is for one written as \`owner/repo@v1\`.`
-							: undefined;
+							: // The folder above is read whole, so it must be a workspace's: the app's rule too.
+								basename(dirname(resolve(file))) !== WORKSPACE.instruments
+								? `\`${HERE}\` is this instrument's own workspace, and ${file} isn't in a workspace's \`${WORKSPACE.instruments}/\` folder.`
+								: undefined;
 			if (why !== undefined) {
 				io.err(`Can't read \`${use.alias}\`: ${why}\n`);
 				return USAGE_ERROR;
@@ -430,7 +448,10 @@ async function instrument(
 		}
 		const dir = offline ?? join(dirname(file), HERE);
 		try {
-			banks[use.alias] = scopeOf(await readWorkspace(dir));
+			const files = await readWorkspace(dir);
+			banks[use.alias] = scopeOf(files);
+			// Its own workspace's agency is the instrument's, as in the app: one per workspace.
+			if (offline === undefined) own = files[ROOT.workspace];
 		} catch (e) {
 			io.err(
 				`Can't read \`${use.alias}\` at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
@@ -438,9 +459,11 @@ async function instrument(
 			return USAGE_ERROR;
 		}
 	}
+	const agency =
+		args.values.agency ?? (own === undefined ? undefined : agencyWritten(own));
 	const result = instrumentOf(source, {
 		banks,
-		...(args.values.agency !== undefined && { agency: args.values.agency }),
+		...(agency !== undefined && { agency }),
 	});
 	if (command === "check") {
 		for (const f of result.findings)

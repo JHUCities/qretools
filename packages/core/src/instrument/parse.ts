@@ -519,7 +519,7 @@ function readUses(
 					"hole",
 					path,
 					`Where is \`${alias}\`? Give the bank's address.`,
-					"This workspace's own bank (`../`), or a repository and version, such as `owner/repo@v1`.",
+					"This workspace (`../`), or a repository and version, such as `owner/repo@v1`.",
 				),
 			);
 		else if (banks[alias] === undefined) {

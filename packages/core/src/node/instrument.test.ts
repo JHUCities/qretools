@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,7 +180,7 @@ describe("qretools instrument", () => {
 		expect(r.out.split("\n").filter((l) => l.includes(": error:"))).toEqual([]);
 	});
 
-	it("exports its DDI, and refuses without an agency", async () => {
+	it("exports its DDI, and refuses an agency DDI wouldn't register", async () => {
 		const r = await run(
 			"instrument",
 			"export",
@@ -197,9 +197,32 @@ describe("qretools instrument", () => {
 		const bad = await run("instrument", "export", FILE, "--agency", "my org");
 		expect(bad.code).toBe(1);
 		expect(bad.err).toMatch(/isn't a DDI agency/);
-		const none = await run("instrument", "export", FILE);
-		expect(none.code).toBe(1);
-		expect(none.err).toMatch(/--agency/);
+	});
+
+	it("publishes under its own workspace's agency unless another is given", async () => {
+		// One agency per workspace: the instrument's is the one its questions have.
+		const own = await run("instrument", "export", FILE, "-o", "x.json");
+		expect(own.code).toBe(0);
+		expect(
+			Object.keys(JSON.parse(own.written["x.json"] ?? "{}").Instrument),
+		).toEqual(["org.example.households:instrument-households:1"]);
+		expect((await run("instrument", "check", FILE)).code).toBe(0);
+	});
+
+	it("reads `../` only from a workspace's instruments folder, never whatever sits above a stray file", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-"));
+		const stray = join(dir, "stray.yaml");
+		await writeFile(
+			stray,
+			"name: stray\nuses:\n  b: ../\nflow:\n  - ask: b.q\n",
+		);
+		try {
+			const r = await run("instrument", "check", stray);
+			expect(r.code).toBe(2);
+			expect(r.err).toMatch(/isn't in a workspace's `instruments\/` folder/);
+		} finally {
+			await rm(dir, { recursive: true });
+		}
 	});
 
 	it("reads a bank in another repository at its tag, or says why it can't", async () => {

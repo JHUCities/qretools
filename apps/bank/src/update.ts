@@ -1350,12 +1350,11 @@ function step(model: Model, msg: Msg): Step {
 						(f) => f.hint !== UNREAD_HINT && f.hint !== NOWHERE_HINT,
 					),
 					...(unread.length === 0 ? [] : [unreadNotice(unread)]),
-					...nowhereNotice(
-						files
-							.map((f) => f.path)
-							.filter((p) => sliceOf(p) === undefined)
-							.sort(),
-					),
+					// Only where the workspace read nothing: one stray YAML beside a
+					// workspace's own files isn't worth a notice on every load.
+					...(files.some((f) => sliceOf(f.path) !== undefined)
+						? []
+						: nowhereNotice(files.map((f) => f.path).sort())),
 				],
 			});
 			// A link that waited for the bank opens now.
@@ -2226,9 +2225,10 @@ const NOWHERE_HINT =
 	"A workspace is read from its root: `workspace.yaml`, `questions/<folder>/`, the shared folders (`scales/` and so on) and `instruments/`.";
 
 /**
- * YAML files the workspace holds and reads as nothing: a wrong folder, or a workspace
- * laid out another way (`banks/<name>/questions/…`), which would otherwise open empty
- * without a word. The first few are named; all are in the detail.
+ * YAML files in a workspace that reads none of its files: a workspace laid out another
+ * way (`banks/<name>/questions/…`), which would otherwise open empty
+ * without a word. The first few are named and the rest counted: a whole workspace laid
+ * out the old way would otherwise fill the page with paths.
  */
 const nowhereNotice = (paths: readonly string[]): readonly Failure[] => {
 	if (paths.length === 0) return [];
@@ -2242,7 +2242,6 @@ const nowhereNotice = (paths: readonly string[]): readonly Failure[] => {
 					? `${first[0]} is read as nothing.`
 					: `${paths.length} YAML files are read as nothing: ${first.join(", ")}${more === 0 ? "" : ` and ${more} more`}.`,
 			hint: NOWHERE_HINT,
-			detail: paths.join("\n"),
 		},
 	];
 };
@@ -2760,7 +2759,7 @@ export function bankAddProblem(adding: AddingBank): string | undefined {
 	const address = addressOf(text);
 	if (address.kind === "invalid") return address.reason;
 	return address.kind === "local"
-		? "That's in this workspace: choose its own bank from the list instead."
+		? "That's this workspace: choose it from the list instead."
 		: undefined;
 }
 

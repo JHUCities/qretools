@@ -160,18 +160,14 @@ describe("loading a workspace", () => {
 			expect.objectContaining({
 				message:
 					"4 YAML files are read as nothing: `banks/example/questions/t/a.yaml`, `banks/example/questions/t/b.yaml`, `banks/example/scales/yn.yaml` and 1 more.",
-				detail: old
-					.map((f) => f.path)
-					.sort()
-					.join("\n"),
 			}),
 		]);
 		// One stray file is named alone; a workspace read whole says nothing, and clears it.
+		// A stray file beside a workspace's own isn't worth a notice on every load.
 		const stray = loaded([...READ, file("notes.yaml", "x: 1\n")]);
-		expect(stray.failures.map((f) => f.message)).toEqual([
-			"`notes.yaml` is read as nothing.",
-		]);
-		const [again] = update(stray, {
+		expect(stray.failures).toEqual([]);
+		// And a later load that reads something clears an earlier load's notice.
+		const [again] = update(m, {
 			kind: "workspaceLoaded",
 			result: ok({
 				files: READ,
