@@ -32,6 +32,7 @@ import {
 	type Mark,
 	othersOf,
 	type Range,
+	type RootKind,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 	type SchemeEvaluation,
@@ -547,6 +548,15 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 
 const SINGULAR = SCHEME_SINGULAR;
 
+/** What uses a file a workspace has one of: nothing names it, so each says its own reach. */
+const ROOT_USERS: Readonly<Record<RootKind, string>> = {
+	missing: "Every variable in the workspace uses the missing values.",
+	select_all:
+		"Every option of a select-all-that-apply question is stored as one of these two values.",
+	workspace:
+		"Every question, shared file and instrument in the workspace is read with these details.",
+};
+
 function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const { evaluations } = useApp();
 	const blocked = useModel(writeBlocked);
@@ -679,9 +689,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 							) : pane === "usedBy" ? (
 								<>
 									{users === undefined ? (
-										<p className="quiet">
-											Every variable in the bank uses the missing values.
-										</p>
+										<p className="quiet">{ROOT_USERS[e.kind as RootKind]}</p>
 									) : users.length === 0 && instrumentUsers.length === 0 ? (
 										<p className="quiet">No question or instrument names it.</p>
 									) : !inEffect ? (

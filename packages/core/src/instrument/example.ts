@@ -17,7 +17,7 @@ const ALIAS = "bank";
  */
 const WRITTEN = `name:
 title: Example instrument
-description: A short instrument asking questions of this workspace's bank, to copy or delete.
+description: A short instrument asking this workspace's example questions, to copy or delete.
 universe: bank.all_respondents
 uses:
   bank:
