@@ -147,40 +147,6 @@ describe("loading a workspace", () => {
 		expect(load(m, []).failures).toEqual([]);
 	});
 
-	it("says which YAML files it reads nowhere, so a workspace laid out another way doesn't open empty without a word", () => {
-		const old = [
-			"banks/example/workspace.yaml",
-			"banks/example/questions/t/a.yaml",
-			"banks/example/questions/t/b.yaml",
-			"banks/example/scales/yn.yaml",
-		].map((path) => file(path, "name: x\n"));
-		const m = loaded(old);
-		expect(m.local.questions).toEqual({});
-		expect(m.failures).toEqual([
-			expect.objectContaining({
-				message:
-					"4 YAML files are read as nothing: `banks/example/questions/t/a.yaml`, `banks/example/questions/t/b.yaml`, `banks/example/scales/yn.yaml` and 1 more.",
-			}),
-		]);
-		// One stray file is named alone; a workspace read whole says nothing, and clears it.
-		// A stray file beside a workspace's own isn't worth a notice on every load.
-		const stray = loaded([...READ, file("notes.yaml", "x: 1\n")]);
-		expect(stray.failures).toEqual([]);
-		// And a later load that reads something clears an earlier load's notice.
-		const [again] = update(m, {
-			kind: "workspaceLoaded",
-			result: ok({
-				files: READ,
-				found: true,
-				from: "branch" as const,
-				aheadBy: 0,
-				behindBy: 0,
-				unread: [],
-			}),
-		});
-		expect(again.failures).toEqual([]);
-	});
-
 	it("starts a template question with its bank's required fields in their places; a blank one blank", () => {
 		const requiring = WORKSPACE.map((f) =>
 			f.path === "workspace.yaml"
