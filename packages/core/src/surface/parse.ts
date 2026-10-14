@@ -126,7 +126,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	// Text that starts with a fill reads as a map: say that, not "must be text".
 	const leading = leadingFill(text, ranges.text, data.text);
 	for (const key of TEXT_KEYS) {
-		const read = readText(key, data[key], env.required);
+		const read = readText(key, data[key], env);
 		if (read.value !== undefined) fields[key] = read.value;
 		fieldFindings.push(
 			...(key === "text" && leading !== undefined ? [leading] : read.findings),
@@ -215,17 +215,18 @@ function toJs(doc: Document): Read<unknown> {
 }
 
 /**
- * A one-line field. Required by the language (`name`, `text`, `intent`) or by the bank
- * (`workspace.yaml`'s `required`), missing or empty it's a hole whose hint says what the field
- * is for; optional and empty, the hint also offers removing the line.
+ * A one-line field. Required by the language (`name`, `text`, `intent`), by the workspace
+ * (`workspace.yaml`'s `required`) or by the question's folder (`required_in`, which the
+ * hole names), missing or empty it's a hole whose hint says what the field is for; optional and empty, the hint also offers removing the line.
  */
 function readText(
 	key: TextKey,
 	value: unknown,
-	bankRequires: readonly string[],
+	env: Pick<Env, "required" | "requiredBy">,
 ): Read<string> {
 	const always = (REQUIRED_KEYS as readonly string[]).includes(key);
-	const required = always || bankRequires.includes(key);
+	const required = always || (env.required as readonly string[]).includes(key);
+	const folder = env.requiredBy?.[key];
 	if (value === undefined) {
 		return required
 			? fail(
@@ -233,7 +234,7 @@ function readText(
 						key,
 						always
 							? `\`${key}\` is required.`
-							: `\`${key}\` is required in this bank.`,
+							: `\`${key}\` is required in ${folder === undefined ? "this workspace" : `\`${folder}\``}.`,
 						describe(key),
 					),
 				)

@@ -222,7 +222,7 @@ export function scopeOf(
 }
 
 /**
- * A bank from its files: path (relative to the bank's root, `/`-separated) to text.
+ * A bank from its files: path (in its workspace, whose root it is, `/`-separated) to text.
  * The agency comes from `workspace.yaml`. Total, and independent of the order the
  * files are given in. It compares every question's wording with every other's, so
  * it's for checking a bank whole, not for every keystroke.
@@ -238,7 +238,8 @@ export function bankOf(
 	const label = (path: string): string =>
 		questions[path]?.draft.name ?? schemes[path]?.name ?? path;
 	const findings: Record<string, readonly Finding[]> = {};
-	// The settings file is also told of the folders it names that aren't there.
+	// The settings file is also told of the folders it names that aren't there, each in
+	// its place among the file's own findings (`fileFindings` orders them).
 	const folders = unknownFolders(env.requiredIn, Object.keys(questions));
 	for (const [path, ev] of byPath(questions, schemes))
 		findings[path] = fileFindings(

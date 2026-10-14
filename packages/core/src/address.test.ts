@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { addressOf, HERE, joinFolder } from "./address.ts";
+import { addressOf, HERE } from "./address.ts";
 
 describe("a bank's address", () => {
 	it("is local when it starts ./ or ../, as the instrument's own workspace does", () => {
 		expect(addressOf(HERE)).toEqual({ kind: "local", path: "../" });
-		expect(joinFolder("instruments", HERE)).toBe("");
 		// Read as written: which local paths are accepted is the workspace's rule.
 		expect(addressOf(" ./hh ")).toEqual({ kind: "local", path: "./hh" });
 	});
@@ -64,18 +63,5 @@ describe("a bank's address", () => {
 		expect(addressOf("../@v1")).toMatchObject({
 			reason: expect.stringContaining("Write `../`."),
 		});
-	});
-});
-
-describe("a folder from a folder", () => {
-	it("follows . and .. and ignores empty parts", () => {
-		expect(joinFolder("instruments", "../surveys/hh")).toBe("surveys/hh");
-		expect(joinFolder("", "./hh/")).toBe("hh");
-		expect(joinFolder("p/instruments", "../../shared/./b")).toBe("shared/b");
-		expect(joinFolder("a", "..")).toBe("");
-	});
-
-	it("leads nowhere above the root", () => {
-		expect(joinFolder("instruments", "../../hh")).toBeUndefined();
 	});
 });

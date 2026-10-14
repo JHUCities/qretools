@@ -135,8 +135,8 @@ describe("the workspace's settings file", () => {
 					f.hint !== undefined && !f.hint.includes("remove the line"),
 				]);
 		expect(holes(q)).toEqual([
-			["title", "`title` is required in this bank.", true],
-			["concept", "`concept` is required in this bank.", true],
+			["title", "`title` is required in this workspace.", true],
+			["concept", "`concept` is required in this workspace.", true],
 		]);
 		expect(holes(`${q}title:\nconcept: Housing tenure\n`)).toEqual([
 			["title", "`title` is empty.", true],
@@ -216,7 +216,10 @@ describe("the fields a folder's questions must also have", () => {
 		const at = envAt(env, "questions/nhd/sat.yaml");
 		expect(at).not.toBe(env);
 		expect(at.selectAll).toBe(DEFAULT_SELECT_ALL);
-		expect({ ...at, required: env.required }).toEqual(env);
+		// Which folder asked is said beside what it added (`requiredBy`), and nothing else.
+		const { requiredBy, ...rest } = at;
+		expect(requiredBy).toEqual({ universe: "questions/nhd" });
+		expect({ ...rest, required: env.required }).toEqual(env);
 	});
 
 	const q = (name: string) =>
@@ -237,6 +240,37 @@ describe("the fields a folder's questions must also have", () => {
 		expect(holes("questions/example/b.yaml")).toEqual(["concept"]);
 		expect(holes("questions/other/c.yaml")).toEqual([]);
 		expect(bank.findings["workspace.yaml"]).toEqual([]);
+	});
+
+	it("says who asks for a field: the question's folder, or the workspace", () => {
+		const bank = bankOf({
+			"workspace.yaml": settings,
+			"questions/nhd/a.yaml":
+				"name: a\ntext: Is it so?\nintent: To see why.\nopen: {}\n",
+		});
+		expect(
+			bank.findings["questions/nhd/a.yaml"]
+				?.filter((f) => f.severity === "hole")
+				.map((f) => f.message),
+		).toEqual([
+			"`title` is required in this workspace.",
+			"`universe` is required in `questions/nhd`.",
+		]);
+	});
+
+	it("names the folder whose list is empty, and keeps the settings' findings in the order they're written", () => {
+		const bank = bankOf({
+			"workspace.yaml":
+				"required_in:\n  questions/gone: [note]\n  questions/nhd:\nrequired:\nagency: org.example\n",
+			"questions/nhd/a.yaml": q("a"),
+		});
+		expect(
+			bank.findings["workspace.yaml"]?.map((f) => [f.code, f.message]),
+		).toEqual([
+			["unknown-folder", "No questions are saved in `questions/gone`."],
+			["hole", "`questions/nhd` lists no fields."],
+			["hole", "`required` is empty."],
+		]);
 	});
 
 	it("warns, on the settings, of a folder it names that holds no question", () => {

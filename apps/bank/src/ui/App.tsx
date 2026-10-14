@@ -27,7 +27,9 @@ import {
 	absentRoot,
 	type Index,
 	indexOf,
+	instrumentAt,
 	isRoot,
+	kindAt,
 	plainText,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
@@ -55,14 +57,7 @@ import {
 	type Model,
 	TEMPLATES,
 } from "../model.js";
-import {
-	alsoSaves,
-	bankFileAt,
-	claimOf,
-	instrumentAt,
-	isUnsaved,
-	usersIn,
-} from "../sync.js";
+import { alsoSaves, claimOf, isUnsaved, usersIn } from "../sync.js";
 import {
 	bankFolders,
 	detailsButton,
@@ -161,7 +156,7 @@ function NewMenu({ dispatch }: { dispatch: Dispatch }) {
 const skeletonKind = (path: string): FileKind =>
 	instrumentAt(path) !== undefined
 		? "instrument"
-		: (bankFileAt(path)?.kind ?? "question");
+		: (kindAt(path)?.kind ?? "question");
 
 export function App() {
 	const { dispatch, evaluations, signIn: signInConfig } = useApp();

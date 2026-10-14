@@ -1,6 +1,6 @@
 /**
- * The `qretools` command: `check` a workspace directory's findings (its bank's and its
- * instruments'), as compilers report them, or `export` a bank's DDI. `main` takes its
+ * The `qretools` command: `check` a workspace directory's findings (its questions',
+ * shared files' and instruments'), as compilers report them, or `export` its questions' DDI. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
@@ -26,33 +26,43 @@ import {
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
 import { type RemoteBank, remotesOf, workspaceOf } from "../workspace.ts";
-import { readBank, readWorkspace } from "./index.ts";
+import { readWorkspace } from "./index.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
 export interface Io {
 	readonly out: (text: string) => void;
 	readonly err: (text: string) => void;
 	readonly writeFile: (path: string, text: string) => Promise<void>;
-	/** A bank in another repository, read at its tag (the command uses git: `readTagged`). */
+	/** A workspace in another repository, read at its tag (the command uses git: `readTagged`). */
 	readonly readRemote: (address: RemoteAddress) => Promise<RemoteBank>;
 }
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
 
 const USAGE = `Usage:
-  qretools check [dir] [--strict]   Report a bank's or workspace's findings; fail on anything to fill in or fix
-  qretools export [dir] [-o file]   Write the bank's DDI-Lifecycle 4.0 JSON
+  qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
+  qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> --agency <agency> [--bank alias=dir]... [-o file]
 
-dir is the bank's or workspace's folder (default: the current directory). A workspace
-holds a bank at its root (questions/, scales/, workspace.yaml and so on) and instruments/.
-An instrument's banks are read from its own workspace (\`../\` in its \`uses\`), from
-another repository at its tag (\`owner/repo@v1\`, with git), or from --bank for an alias.
+dir is the workspace's folder (default: the current directory): workspace.yaml,
+questions/<folder>/, the shared folders (scales/ and so on), missing.yaml,
+select_all.yaml and instruments/.
+An instrument reads its own workspace (\`../\` in its \`uses\`) and other workspaces at
+a tag (\`owner/repo@v1\`, with git).
+--bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
 --strict  also fail on warnings.
 --agency  the DDI agency the instrument is published under.`;
 
-/** Exit codes: 0 fine, 1 the bank has problems (or can't be exported), 2 the command couldn't run. */
+/** What to say when a directory holds nothing the tool reads: the wrong folder, most likely. */
+const nothingIn = (dir: string): string =>
+	`Nothing to read in ${dir}: a workspace has workspace.yaml, questions/<folder>/, scales/, instruments/ and so on.\n`;
+
+/** How many files a bank read as something: its questions and shared files. */
+const readIn = (bank: Bank): number =>
+	Object.keys(bank.questions).length + Object.keys(bank.schemes).length;
+
+/** Exit codes: 0 fine, 1 the workspace has problems (or can't be exported), 2 the command couldn't run. */
 const OK = 0;
 const PROBLEMS = 1;
 const USAGE_ERROR = 2;
@@ -92,20 +102,20 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		return checkWorkspace(dir, args.values.strict === true, io);
 	let files: Readonly<Record<string, string>>;
 	try {
-		files = await readBank(dir);
+		files = await readWorkspace(dir);
 	} catch (e) {
 		io.err(
-			`Can't read the bank at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
+			`Can't read the workspace at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
 		);
 		return USAGE_ERROR;
 	}
-	if (Object.keys(files).length === 0) {
-		io.err(
-			`No bank files in ${dir}: a bank has questions/, scales/, workspace.yaml and so on.\n`,
-		);
+	// Its instruments are read as nothing here (`kindAt`): the export is the questions'.
+	const bank = bankOf(files);
+	if (readIn(bank) === 0) {
+		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	return exportBank(bankOf(files), args.values.output, io);
+	return exportBank(bank, args.values.output, io);
 }
 
 function parse(argv: readonly string[]) {
@@ -164,11 +174,11 @@ async function checkWorkspace(
 		files = await readWorkspace(dir);
 	} catch (e) {
 		io.err(
-			`Can't read the bank at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
+			`Can't read the workspace at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
 		);
 		return USAGE_ERROR;
 	}
-	// Banks in other repositories, each read once at its tag; one that can't be says why on its use.
+	// Workspaces in other repositories, each read once at its tag; one that can't be says why on its use.
 	const remote = Object.fromEntries(
 		await Promise.all(
 			remotesOf(files).map(
@@ -188,25 +198,23 @@ async function checkWorkspace(
 		/** A YAML file read as nothing: noted, in its place among the others. */
 		readonly ignored?: true;
 	}[] = [];
-	for (const [folder, bank] of Object.entries(ws.banks))
-		for (const [path, findings] of Object.entries(bank.findings))
-			checked.push({
-				path: folder === "" ? path : `${folder}/${path}`,
-				findings,
-				ranges:
-					bank.questions[path]?.ranges ?? bank.schemes[path]?.ranges ?? {},
-			});
+	for (const [path, findings] of Object.entries(ws.bank.findings))
+		checked.push({
+			path,
+			findings,
+			ranges:
+				ws.bank.questions[path]?.ranges ?? ws.bank.schemes[path]?.ranges ?? {},
+		});
 	for (const [path, { instrument }] of Object.entries(ws.instruments))
 		checked.push({
 			path,
 			findings: instrument.findings,
 			ranges: instrument.ranges,
 		});
-	// Nothing the tool reads, whatever else is there: the wrong folder, most likely.
-	if (checked.length === 0) {
-		io.err(
-			`No bank files in ${dir}: a bank has questions/, scales/, workspace.yaml and so on.\n`,
-		);
+	// The root is always there, so "nothing here" is nothing read, whatever else there is.
+	const read = readIn(ws.bank) + Object.keys(ws.instruments).length;
+	if (read === 0) {
+		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
 	for (const path of ws.ignored)
@@ -215,12 +223,12 @@ async function checkWorkspace(
 	for (const { path, findings, ranges, ignored } of checked.sort((a, b) =>
 		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
 	)) {
-		// Said as compilers note it, at the file's start.
+		// Said as compilers note it, at the file's start; a note about the layout, not a
+		// finding in a file, so it isn't counted among them.
 		if (ignored) {
 			io.out(
-				`${join(dir, path)}:1:1: note: This file is read as nothing: it isn't in a bank's folders or instruments/. [ignored]\n`,
+				`${join(dir, path)}:1:1: note: This file is read as nothing: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]\n`,
 			);
-			counts.findings += 1;
 			continue;
 		}
 		// As the user named the folder, so a problem matcher finds the file from here.
@@ -231,12 +239,6 @@ async function checkWorkspace(
 		if (s.kind === "incomplete") counts.incomplete += 1;
 		else if (s.kind === "advice" && s.worst === "warning") counts.warnings += 1;
 	}
-	const read =
-		Object.values(ws.banks).reduce(
-			(n, b) =>
-				n + Object.keys(b.questions).length + Object.keys(b.schemes).length,
-			0,
-		) + Object.keys(ws.instruments).length;
 	io.err(
 		`${read} files, ${counts.findings} findings: ${counts.incomplete} with something to fill in or fix, ${counts.warnings} with warnings.\n`,
 	);
@@ -246,7 +248,7 @@ async function checkWorkspace(
 }
 
 /**
- * The bank's DDI: every question's items, keyed once. Refused, with reasons and nothing
+ * The workspace's questions' DDI: every question's items, keyed once. Refused, with reasons and nothing
  * written, when it would be wrong: no declared agency, two items under one identity, or
  * a document the official schema rejects. Holes don't refuse it: they leave elements out.
  * Shared items no question uses aren't in it.
@@ -298,7 +300,7 @@ async function exportBank(
 function refused(r: Refusal, io: Io): number {
 	switch (r.kind) {
 		case "noAgency":
-			// The instrument's words: the bank export says its own before it gets here.
+			// The instrument's words: the workspace's export says its own before it gets here.
 			io.err(
 				"Not exported: give the DDI agency the instrument is published under, with --agency.\n",
 			);
@@ -339,8 +341,10 @@ async function validate(document: DdiDocument): Promise<readonly Finding[]> {
 }
 
 /**
- * `qretools instrument check|export <file>`: the instrument read against its banks,
- * each read from its own workspace (`../`), another repository, or the folder `--bank` gives.
+ * `qretools instrument check|export <file>`: the instrument read against what it uses,
+ * its own workspace (`../`) from the folder above it and another at its tag, or from
+ * the directory `--bank` gives for it. Any other local address is refused, as the
+ * workspace's own check refuses it (`resolveUses`).
  */
 async function instrument(
 	args: ReturnType<typeof parse>,
@@ -379,7 +383,7 @@ async function instrument(
 		const eq = b.indexOf("=");
 		if (eq <= 0 || eq === b.length - 1) {
 			io.err(
-				`\`--bank ${b}\` names a bank as alias=<dir>, such as --bank bas=../bas.\n`,
+				`\`--bank ${b}\` gives an alias its directory as alias=<dir>, such as --bank bas=../bas.\n`,
 			);
 			return USAGE_ERROR;
 		}
@@ -389,16 +393,33 @@ async function instrument(
 	for (const alias of given.keys())
 		if (!uses.some((u) => u.alias === alias)) {
 			io.err(
-				`\`--bank ${alias}=…\` names no bank this instrument uses (${uses.map((u) => u.alias).join(", ") || "none"}).\n`,
+				`\`--bank ${alias}=…\` names nothing this instrument uses (${uses.map((u) => u.alias).join(", ") || "none"}).\n`,
 			);
 			return USAGE_ERROR;
 		}
 	const banks: Record<string, BankScope> = {};
 	for (const use of uses) {
-		const address =
-			use.address === undefined ? undefined : addressOf(use.address);
-		// In another repository, with no folder given for it: read at its tag.
-		if (address?.kind === "remote" && !given.has(use.alias)) {
+		const address: Address =
+			use.address === undefined
+				? { kind: "invalid", reason: "it has no address." }
+				: addressOf(use.address);
+		const offline = given.get(use.alias);
+		if (address.kind === "invalid" || address.kind === "local") {
+			const why =
+				address.kind === "invalid"
+					? address.reason
+					: address.path !== HERE
+						? notHere(address.path)
+						: offline !== undefined
+							? `it's this instrument's own workspace (\`${HERE}\`), read from the folder above it; \`--bank\` is for one written as \`owner/repo@v1\`.`
+							: undefined;
+			if (why !== undefined) {
+				io.err(`Can't read \`${use.alias}\`: ${why}\n`);
+				return USAGE_ERROR;
+			}
+		}
+		// In another repository, with no directory given for it: read at its tag.
+		if (address.kind === "remote" && offline === undefined) {
 			const read = await io.readRemote(address);
 			if (read.kind === "unavailable") {
 				io.err(`Can't read \`${use.alias}\`: ${read.reason}\n`);
@@ -407,31 +428,12 @@ async function instrument(
 			banks[use.alias] = scopeOf(read.files);
 			continue;
 		}
-		// Its own workspace, as `resolveUses` has it: one spelling, and no other folder.
-		if (
-			address?.kind === "local" &&
-			address.path !== HERE &&
-			!given.has(use.alias)
-		) {
-			io.err(`Can't read \`${use.alias}\`: ${notHere(address.path)}\n`);
-			return USAGE_ERROR;
-		}
-		const dir =
-			given.get(use.alias) ??
-			(address?.kind === "local"
-				? join(dirname(file), address.path)
-				: undefined);
-		if (dir === undefined) {
-			io.err(
-				`Can't read \`${use.alias}\` (${use.address ?? "no address"}) yet: give its folder with --bank ${use.alias}=<dir>.\n`,
-			);
-			return USAGE_ERROR;
-		}
+		const dir = offline ?? join(dirname(file), HERE);
 		try {
-			banks[use.alias] = bankOf(await readBank(dir));
+			banks[use.alias] = scopeOf(await readWorkspace(dir));
 		} catch (e) {
 			io.err(
-				`Can't read the bank \`${use.alias}\` at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
+				`Can't read \`${use.alias}\` at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
 			);
 			return USAGE_ERROR;
 		}

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { bankOf, instrumentOf, instrumentRefAt } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
 
 const here = (path: string): string =>
@@ -13,7 +13,7 @@ describe("where an instrument names its banks' files", () => {
 			here("../../fixtures/households/instruments/households.yaml"),
 			"utf8",
 		);
-		const hh = bankOf(await readBank(here("../../fixtures/households")));
+		const hh = bankOf(await readWorkspace(here("../../fixtures/households")));
 		const { refs: all } = instrumentOf(source, { banks: { hh } });
 		const refs = all.flatMap((r) => (r.kind === "bank" ? [r] : []));
 		expect(refs.length).toBeGreaterThan(0);
@@ -49,7 +49,7 @@ describe("where an instrument names its banks' files", () => {
 			here("../../fixtures/households/instruments/households.yaml"),
 			"utf8",
 		);
-		const hh = bankOf(await readBank(here("../../fixtures/households")));
+		const hh = bankOf(await readWorkspace(here("../../fixtures/households")));
 		const { refs } = instrumentOf(source, { banks: { hh } });
 		const written = (range: readonly [number, number]) =>
 			source.slice(range[0], range[1]);
@@ -89,7 +89,7 @@ describe("where an instrument names its banks' files", () => {
 	});
 
 	it("follows an input's shared scale into its bank", async () => {
-		const hh = bankOf(await readBank(here("../../fixtures/households")));
+		const hh = bankOf(await readWorkspace(here("../../fixtures/households")));
 		const source =
 			"name: x\nuses:\n  hh: ../\ninputs:\n  feel:\n    responses: hh.yes_no\nflow:\n  - say: Hello.\n";
 		const { refs } = instrumentOf(source, { banks: { hh } });
@@ -192,14 +192,14 @@ describe("the codes a condition compares a bank answer with", () => {
 				path: "select_all.yaml",
 				at: "chosen.1",
 				about:
-					"`Selected`, as this bank stores a select-all-that-apply option.",
+					"`Selected`, as its workspace stores a select-all-that-apply option.",
 			},
 			{
 				written: '"2"',
 				path: "select_all.yaml",
 				at: "not_chosen.2",
 				about:
-					"`Not selected`, as this bank stores a select-all-that-apply option.",
+					"`Not selected`, as its workspace stores a select-all-that-apply option.",
 			},
 		]);
 	});

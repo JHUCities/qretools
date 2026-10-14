@@ -306,7 +306,7 @@ export function instrumentRefs(
 				on(
 					ROOT.select_all,
 					`${part}.${value}`,
-					`${label}, as this bank stores a select-all-that-apply option.`,
+					`${label}, as its workspace stores a select-all-that-apply option.`,
 				);
 		} else if (domain?.kind === "responses" && domain.scale !== undefined)
 			on(

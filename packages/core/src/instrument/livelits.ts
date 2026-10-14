@@ -453,17 +453,16 @@ export function questionChoices(
 }
 
 /**
- * The banks an instrument can use: its own workspace's (`../`) when that has one
- * (`here`), then those in other repositories its instruments already use, each spelled
+ * The banks an instrument can use: its own workspace's (`../`), then those in other
+ * repositories its instruments already use, each spelled
  * as it was written there (`JHUCities/…`, not its lowercased key), so choosing one
  * changes nothing another instrument's diff would show.
  */
 export function bankChoices(
-	here: boolean,
 	remote: readonly Extract<Address, { kind: "remote" }>[],
 ): readonly Choice[] {
 	return [
-		...(here ? [{ name: HERE, detail: "This workspace's bank" }] : []),
+		{ name: HERE, detail: "This workspace's bank" },
 		...remote.map((a) => ({
 			name: `${a.owner}/${a.repo}${a.path === "" ? "" : `/${a.path}`}@${a.ref}`,
 			detail: "A bank on GitHub",

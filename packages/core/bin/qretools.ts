@@ -10,7 +10,7 @@ process.stdout.on("error", (e: NodeJS.ErrnoException) => {
 	throw e;
 });
 
-// A failure of the command itself is "couldn't run" (2), never "the bank has problems" (1).
+// A failure of the command itself is "couldn't run" (2), never "the workspace has problems" (1).
 process.exitCode = await main(process.argv.slice(2), {
 	out: (text) => process.stdout.write(text),
 	err: (text) => process.stderr.write(text),

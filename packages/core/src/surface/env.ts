@@ -55,6 +55,11 @@ export interface Env {
 	 * the folder's path. Never read for a question directly: `envAt` gives its `required`.
 	 */
 	readonly requiredIn: Readonly<Record<string, readonly RequirableKey[]>>;
+	/**
+	 * The folder that asks for each field `envAt` added to `required`, so a question is
+	 * told who requires it. Absent where no folder added any.
+	 */
+	readonly requiredBy?: Readonly<Record<string, string>>;
 	/** How the bank stores a select-all option's answer (its `select_all.yaml`). */
 	readonly selectAll: SelectAll;
 }
@@ -137,14 +142,18 @@ export function envAt(env: Env, path?: string): Env {
 	if (path === undefined) return env;
 	// Whole segments: `questions/nh` isn't above `questions/nhd/x.yaml`. Questions sit one
 	// folder deep today, so at most one key matches; every folder above would, if deeper.
-	const added = Object.entries(env.requiredIn)
-		.flatMap(([folder, fields]) =>
-			path.startsWith(`${folder}/`) ? fields : [],
-		)
-		.filter((k, i, all) => !env.required.includes(k) && all.indexOf(k) === i);
+	const by: Record<string, string> = {};
+	const added: RequirableKey[] = [];
+	for (const [folder, fields] of Object.entries(env.requiredIn))
+		if (path.startsWith(`${folder}/`))
+			for (const k of fields)
+				if (!env.required.includes(k) && !added.includes(k)) {
+					added.push(k);
+					by[k] = folder;
+				}
 	return added.length === 0
 		? env
-		: { ...env, required: [...env.required, ...added] };
+		: { ...env, required: [...env.required, ...added], requiredBy: by };
 }
 
 export interface ParsedTextEntry {

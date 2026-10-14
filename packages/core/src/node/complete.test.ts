@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Bank } from "../evaluate.ts";
 import { bankOf } from "../evaluate.ts";
 import { instrumentCompletion } from "../instrument/complete.ts";
-import { readBank } from "./index.ts";
+import { readWorkspace } from "./index.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
@@ -26,7 +26,7 @@ const HEAD = [
 
 describe("completion in an instrument", async () => {
 	const banks: Record<string, Bank> = {
-		hh: bankOf(await readBank(here("../../fixtures/households"))),
+		hh: bankOf(await readWorkspace(here("../../fixtures/households"))),
 	};
 	/** Complete at the `|` in the text, after the shared head. */
 	const at = (text: string, with_ = banks) => {

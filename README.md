@@ -21,8 +21,8 @@ Write survey questions and their documentation in the browser, and get
 
 QREtools is a question editor for survey teams that keep a question bank. Each question
 is a short YAML file; QREtools checks it as you type, shows it as a respondent and a
-codebook would, and elaborates it to DDI. The bank lives in a GitHub repository, so
-every change is a commit on your own branch and joins the bank through a pull request.
+codebook would, and elaborates it to DDI. The bank is a workspace in a GitHub repository,
+so every change is a commit on your own branch and joins the bank through a pull request.
 
 It is built for any team with a question bank. The
 [Baltimore Area Survey](https://jhucities.github.io/baltimore-area-survey-data/bas-2025/codebook.html)
@@ -70,7 +70,11 @@ written by hand: identifiers, versions and references are the tool's.
 ## Start a workspace
 
 Create one from the [template](https://github.com/JHUCities/qretools-template)
-("Use this template"): a workspace with a folder of example questions. Install the
+("Use this template"): `workspace.yaml` (the DDI agency, and the fields questions must
+have: `required` for all, `required_in` by folder), `questions/<folder>/` with a folder of
+examples, the shared folders, `missing.yaml`, `select_all.yaml` and `instruments/`. An
+instrument asks its own workspace's questions as `uses: bank: ../`, and another
+workspace's at a tag, `owner/repo@v1`. Install the
 [QREtools GitHub App](https://github.com/apps/qretools) on it, and sign in at the site
 above with the repository's `owner/name`. New, Instrument, starts an instrument; where the
 workspace has questions in `questions/example/`, the first offers an example asking them. The template's README walks through it, including

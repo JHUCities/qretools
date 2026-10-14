@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { Address } from "../address.ts";
 import type { RemoteBank } from "../workspace.ts";
-import { readBank } from "./index.ts";
+import { readWorkspace } from "./index.ts";
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
 
@@ -126,5 +126,5 @@ export async function readTagged(
 			kind: "unavailable",
 			reason: `\`${where}\`: there's no folder \`${path}\` at \`${ref}\`.`,
 		};
-	return { kind: "files", files: await readBank(folder) };
+	return { kind: "files", files: await readWorkspace(folder) };
 }

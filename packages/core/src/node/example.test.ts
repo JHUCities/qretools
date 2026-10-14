@@ -12,7 +12,7 @@ import { exampleInstrument } from "../instrument/example.ts";
 import { instrumentOf } from "../instrument/instrument.ts";
 import { parseInstrument } from "../instrument/parse.ts";
 import { workspaceOf } from "../workspace.ts";
-import { readBank } from "./index.ts";
+import { readWorkspace } from "./index.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
@@ -24,8 +24,10 @@ const wrong = (text: string, bank: ReturnType<typeof bankOf>) =>
 		.map((f) => f.message);
 
 describe("the example instrument", async () => {
-	const example = bankOf(await readBank(here("../../fixtures/bank")));
-	const households = bankOf(await readBank(here("../../fixtures/households")));
+	const example = bankOf(await readWorkspace(here("../../fixtures/bank")));
+	const households = bankOf(
+		await readWorkspace(here("../../fixtures/households")),
+	);
 
 	// This is what keeps the written text and the template's bank together: a mismatch
 	// would only show as the example no longer being offered.
@@ -42,7 +44,7 @@ describe("the example instrument", async () => {
 	});
 
 	it("reads in a workspace whose example questions are in questions/example/", async () => {
-		const files = await readBank(here("../../fixtures/bank"));
+		const files = await readWorkspace(here("../../fixtures/bank"));
 		const asked = [
 			...(exampleInstrument("demo", HERE, example) ?? "").matchAll(
 				/\bbank\.(\w+)/g,
@@ -59,7 +61,7 @@ describe("the example instrument", async () => {
 			"workspace.yaml": "agency: org.example\n",
 			"instruments/demo.yaml": exampleInstrument("demo", HERE, example) ?? "",
 		}).instruments["instruments/demo.yaml"];
-		expect(read?.uses).toEqual({ bank: { kind: "local", folder: "" } });
+		expect(read?.uses).toEqual({ bank: { kind: "local" } });
 		expect(
 			read?.instrument.findings.filter(
 				(f) => f.severity === "hole" || f.severity === "error",

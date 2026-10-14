@@ -29,7 +29,7 @@ import { useApp } from "./AppContext.js";
  * A question or shared file has its schema, which completion reads. An instrument has
  * none: completion offers the questions and names of the banks it uses instead
  * (`instrument`), read from the store when it asks, never as they were at mount; its
- * pickers offer the same questions, and the workspace's banks at `uses`.
+ * pickers offer the same questions, and at `uses` its own workspace and those others use.
  */
 export function EditorPane(
 	inputs: EditorInputs &
@@ -90,8 +90,6 @@ export function EditorPane(
 							}
 							if (source.kind === "banks")
 								return bankChoices(
-									// The workspace's root is always its bank.
-									true,
 									remotesOf(
 										Object.fromEntries(
 											Object.values(model.local.workspace).flatMap((w) =>

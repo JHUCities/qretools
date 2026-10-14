@@ -7,7 +7,7 @@ import { resolve } from "node:path";
  */
 import { ThemeProvider } from "@primer/react/next";
 import { ok } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import type { Store } from "@qretools/shell";
 import {
 	act,
@@ -32,7 +32,7 @@ const file = (path: string, text: string) => ({
 /** The example questions as the template ships them (the library's fixture), in `questions/example/`. */
 const EXAMPLE_QUESTIONS = Object.entries(
 	// From the package's folder, where Vitest runs: jsdom gives this module no file URL.
-	await readBank(resolve("../../packages/core/fixtures/bank")),
+	await readWorkspace(resolve("../../packages/core/fixtures/bank")),
 ).map(([path, text]) => file(path, text));
 
 const QUESTION = (name: string) =>

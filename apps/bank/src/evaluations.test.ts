@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import * as core from "@qretools/core";
 import { type Evaluation, ok, workspaceOf } from "@qretools/core";
 import { instrumentCompletion } from "@qretools/core/editor";
-import { readBank, readWorkspace } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createEvaluations } from "./evaluations.js";
 import {
@@ -314,7 +314,7 @@ describe.skipIf(!existsSync(REFERENCE))(
 	"the reference bank, when present",
 	() => {
 		it("re-reads an instrument of 150 questions within a keystroke's budget", async () => {
-			const bank = await readBank(REFERENCE);
+			const bank = await readWorkspace(REFERENCE);
 			const names = Object.entries(bank)
 				.filter(([path]) => path.startsWith("questions/"))
 				.flatMap(([, text]) => /^name: (\w+)$/m.exec(text)?.[1] ?? [])

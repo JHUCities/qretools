@@ -24,7 +24,6 @@ import {
 	type InstrumentIn,
 	importsOf,
 	instrumentIn,
-	instrumentPath,
 	type RemoteBank,
 	resolveUses,
 	type SchemeEvaluation,
@@ -66,7 +65,7 @@ export interface Evaluations {
 	remote(model: Pick<Model, "remoteBanks">): RemoteGiven;
 	/** An instrument, read against the banks it uses as they are being edited. */
 	instrument(model: WorkspaceSlices, e: InstrumentEntry): InstrumentIn;
-	/** The banks an instrument uses that are in this workspace, by its alias for each: what completion offers. */
+	/** The banks an instrument uses that are read (this workspace's, and others'), by its alias for each: what completion offers. */
 	usedScopes(
 		model: WorkspaceSlices,
 		e: InstrumentEntry,
@@ -92,9 +91,6 @@ export interface RemoteGiven {
 	readonly reads: Readonly<Record<AddressKey, RemoteBank>>;
 	readonly scopes: Readonly<Record<AddressKey, BankScope>>;
 }
-
-/** The workspace's root is always its bank here, with or without questions yet. */
-const ROOT_BANK: ReadonlySet<string> = new Set([""]);
 
 /** A remote bank's files, read: one evaluation per read, never per keystroke. */
 const remoteScopes = new WeakMap<object, BankScope>();
@@ -130,7 +126,7 @@ export function createEvaluations(): Evaluations {
 			source: string;
 			remote: Readonly<Record<AddressKey, RemoteBank>>;
 			agency: string | undefined;
-			used: readonly BankScope[];
+			bank: BankScope | undefined;
 			read: InstrumentIn;
 		}
 	>();
@@ -230,17 +226,15 @@ export function createEvaluations(): Evaluations {
 			return scope;
 		},
 		instrument(model, e) {
-			const path = instrumentPath(e.name);
 			const hit = instruments.get(e.id);
 			const { reads: remote, scopes: remoteBanks } = self.remote(model);
 			// This workspace's bank is built only when its uses name it, so editing the
 			// bank leaves an instrument that doesn't use it alone.
-			const used: Record<string, BankScope> = {};
-			const uses = resolveUses(path, importsOf(e.source), ROOT_BANK, remote);
-			for (const r of Object.values(uses))
-				if (r.kind === "local" && !(r.folder in used))
-					used[r.folder] = self.scope(model);
-			const scopes = Object.values(used);
+			const bank = Object.values(resolveUses(importsOf(e.source), remote)).some(
+				(r) => r.kind === "local",
+			)
+				? self.scope(model)
+				: undefined;
 			// As `workspace.yaml` writes it while it is being edited, valid or not.
 			const details = detailsOf(model.local.schemes);
 			if (details === undefined) agencyOf = undefined;
@@ -255,11 +249,11 @@ export function createEvaluations(): Evaluations {
 				hit.source === e.source &&
 				hit.agency === agency &&
 				hit.remote === remote &&
-				sameList(hit.used, scopes)
+				hit.bank === bank
 			)
 				return hit.read;
-			const read = instrumentIn(path, e.source, {
-				banks: used,
+			const read = instrumentIn(e.source, {
+				bank,
 				remote,
 				remoteBanks,
 				agency,
@@ -268,7 +262,7 @@ export function createEvaluations(): Evaluations {
 				source: e.source,
 				remote,
 				agency,
-				used: scopes,
+				bank,
 				read,
 			});
 			return read;

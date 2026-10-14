@@ -8,7 +8,7 @@ import {
 	type JsonObject,
 	makeValidator,
 } from "@qretools/core";
-import { readBank } from "@qretools/core/node";
+import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
 import { type Io, main } from "./cli.ts";
 
@@ -41,7 +41,9 @@ describe("the households instrument, whole", async () => {
 	) as Schema;
 	const validator = makeValidator(schema);
 	const instrument = instrumentOf(await readFile(FILE, "utf8"), {
-		banks: { hh: bankOf(await readBank(here("../../fixtures/households"))) },
+		banks: {
+			hh: bankOf(await readWorkspace(here("../../fixtures/households"))),
+		},
 		agency: "org.example",
 	});
 	const allowed = (name: string): Set<string> => {
@@ -57,7 +59,7 @@ describe("the households instrument, whole", async () => {
 	};
 
 	it("says once that its own workspace has no agency, and of another's where it is used", async () => {
-		const { "workspace.yaml": _, ...files } = await readBank(
+		const { "workspace.yaml": _, ...files } = await readWorkspace(
 			here("../../fixtures/households"),
 		);
 		const source = await readFile(FILE, "utf8");
@@ -172,7 +174,7 @@ describe("qretools instrument", () => {
 		};
 	}
 
-	it("checks an instrument against the banks it names by relative path", async () => {
+	it("checks an instrument against its own workspace, the folder above it", async () => {
 		const r = await run("instrument", "check", FILE, "--agency", "org.example");
 		expect(r.code).toBe(0);
 		expect(r.out.split("\n").filter((l) => l.includes(": error:"))).toEqual([]);
@@ -211,14 +213,29 @@ describe("qretools instrument", () => {
 		expect(r.err).toMatch(
 			/^Can't read `bas`: `owner\/bank@v1` isn't reachable from these tests\./,
 		);
-		const elsewhere = await run(
+		// Offline: the alias written as a remote address is read from a directory instead.
+		const offline = await run(
+			"instrument",
+			"check",
+			here("../../fixtures/households/instruments/remote.yaml"),
+			"--agency",
+			"org.example",
+			"--bank",
+			`bas=${here("../../fixtures/households")}`,
+		);
+		expect(offline).toMatchObject({ code: 0, err: "0 findings.\n" });
+		// Its own workspace is never read from anywhere else.
+		const own = await run(
 			"instrument",
 			"check",
 			FILE,
 			"--bank",
 			`hh=${here("../../fixtures/households")}`,
 		);
-		expect(elsewhere.code).toBe(1); // no agency given: a hole
+		expect(own.code).toBe(2);
+		expect(own.err).toMatch(
+			/^Can't read `hh`: it's this instrument's own workspace \(`\.\.\/`\)/,
+		);
 		expect((await run("instrument", "check", FILE, "--bank", "hh")).code).toBe(
 			2,
 		);
@@ -234,10 +251,15 @@ describe("qretools instrument", () => {
 			file,
 			"name: x\nuses:\n  hh: ../households\nflow:\n  - ask: hh.size\n",
 		);
-		const r = await run("instrument", "check", file);
-		expect(r.code).toBe(2);
-		expect(r.err).toBe(
-			"Can't read `hh`: `../households`: an instrument uses its own workspace as `../`, and another workspace as `owner/repo@v1`.\n",
-		);
+		const refused =
+			"Can't read `hh`: `../households`: an instrument uses its own workspace as `../`, and another workspace as `owner/repo@v1`.\n";
+		expect(await run("instrument", "check", file)).toMatchObject({
+			code: 2,
+			err: refused,
+		});
+		// Nor with a directory given for it: `--bank` is for a remote address.
+		expect(
+			await run("instrument", "check", file, "--bank", `hh=${dir}`),
+		).toMatchObject({ code: 2, err: refused });
 	});
 });

@@ -466,7 +466,7 @@ export type Msg =
 			readonly repo: BankRef;
 			readonly result: Result<Who, Failure>;
 	  }
-	/** The whole workspace as GitHub has it: its banks, and (later) its instruments. */
+	/** The whole workspace as GitHub has it: its questions, shared files and instruments. */
 	| {
 			readonly kind: "workspaceLoaded";
 			readonly result: Result<LoadedWorkspace, Failure>;
