@@ -1,6 +1,6 @@
 name:
 title:
 uses:
-  bank:
+  bank: ../
 flow:
   - ask:
