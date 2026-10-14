@@ -10,9 +10,15 @@
 /** How an instrument writes its own workspace: the one local address there is. */
 export const HERE = "../";
 
-/** Why a local address other than `HERE` is refused, in the author's words. */
-export const notHere = (path: string): string =>
-	`\`${path}\`: an instrument uses its own workspace as \`${HERE}\`, and another workspace as \`owner/repo@v1\`.`;
+/**
+ * Why a local address other than `HERE` is refused, in the author's words. A folder
+ * inside the workspace (`../banks/example`) is said apart: `../` isn't more than they
+ * asked for, since an instrument takes only the questions its flow names.
+ */
+export const notHere = (path: string, alias: string): string =>
+	/^\.\.\/[^./]/.test(path)
+		? `\`${path}\`: an instrument names its own workspace as \`${HERE}\`, never one of its folders. It takes only the questions its flow asks for by name (\`ask: ${alias}.<name>\`), wherever they sit under \`questions/\`.`
+		: `\`${path}\`: an instrument uses its own workspace as \`${HERE}\`, and another workspace as \`owner/repo@v1\`.`;
 
 export type Address =
 	/** A folder relative to the instrument's own, `/`-separated, as written. */
