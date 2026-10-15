@@ -508,7 +508,7 @@ describe("the workspace details", () => {
 			},
 		};
 		const evaluations = createEvaluations();
-		expect(evaluations.env(typed).agency).toBe("org.typed");
+		expect(evaluations.agency(typed)).toBe("org.typed");
 		const read = (mm: Model) =>
 			evaluations.instrument(mm, at(mm, HOUSEHOLDS) as InstrumentEntry)
 				.instrument;

@@ -232,13 +232,12 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	const universes: Record<string, TextEntry> = {};
 	const instructions: Record<string, TextEntry> = {};
 	let missing: readonly Code[] = EMPTY_ENV.missing;
-	let agency: string | undefined;
 	let required: readonly RequirableKey[] = EMPTY_ENV.required;
 	let requiredIn: Env["requiredIn"] = EMPTY_ENV.requiredIn;
 	let selectAll: SelectAll = EMPTY_ENV.selectAll;
 	for (const f of files) {
 		if (f.kind === "workspace") {
-			({ agency, required, requiredIn } = parseSettingsFile(f.text));
+			({ required, requiredIn } = parseSettingsFile(f.text));
 			continue;
 		}
 		if (f.kind === "select_all") {
@@ -273,26 +272,39 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		required,
 		requiredIn,
 		selectAll,
-		...(agency !== undefined && { agency }),
 	};
 }
 
 /**
- * The environment of a bank given as files by path: every path that holds a shared
- * file, read as its kind; questions and paths the tool doesn't read are skipped.
+ * The DDI agency a workspace's `workspace.yaml` declares, among its shared files; absent
+ * while it declares none. Not part of the `Env`: names resolve without it, and only DDI
+ * needs it.
  */
+export function bankAgency(files: readonly SchemeFile[]): string | undefined {
+	const file = files.findLast((f) => f.kind === "workspace");
+	return file === undefined ? undefined : parseSettingsFile(file.text).agency;
+}
+
+/**
+ * The shared files of a bank given as files by path: every path that holds one, read as
+ * its kind; questions and paths the tool doesn't read are skipped.
+ */
+export const schemeFilesIn = (
+	files: Readonly<Record<string, string>>,
+): readonly SchemeFile[] =>
+	Object.keys(files)
+		.sort()
+		.flatMap((path) => {
+			const at = kindAt(path);
+			const text = files[path];
+			return at === undefined || at.kind === "question" || text === undefined
+				? []
+				: [{ kind: at.kind, name: at.name, text }];
+		});
+
+/** The environment of a bank given as files by path (`schemeFilesIn`). */
 export const bankEnv = (files: Readonly<Record<string, string>>): Env =>
-	schemeEnv(
-		Object.keys(files)
-			.sort()
-			.flatMap((path) => {
-				const at = kindAt(path);
-				const text = files[path];
-				return at === undefined || at.kind === "question" || text === undefined
-					? []
-					: [{ kind: at.kind, name: at.name, text }];
-			}),
-	);
+	schemeEnv(schemeFilesIn(files));
 
 /**
  * The agency items are published under while the bank declares none: `.invalid` is

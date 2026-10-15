@@ -59,6 +59,8 @@ export {
 	bankOf,
 	type Evaluation,
 	evaluate,
+	type Publishing,
+	questionItems,
 	type SchemeFileEvaluation,
 	scopeOf,
 	UNDECLARED_AGENCY,
@@ -118,6 +120,7 @@ export { err, ok, type Result } from "./result.ts";
 export {
 	absentRoot,
 	type BankFile,
+	bankAgency,
 	bankEnv,
 	evaluateScheme,
 	FOLDERS,

@@ -91,19 +91,21 @@ imports:
 import { readFile } from "node:fs/promises";
 import {
 	bankOf,
+	documentOf,
 	EMPTY_ENV,
 	evaluate,
 	importsOf,
 	instrumentOf,
 	makeValidator,
+	questionItems,
 	status,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 ```
 
-A question, evaluated against its workspace's shared files (here none, and the agency its
-DDI is published under): its findings, the respondent's view, the codebook entry and
-its DDI, all from the text.
+A question, evaluated against its workspace's shared files (here none): its findings,
+the respondent's view and the codebook entry, all from the text, as an editor shows
+them while it's typed.
 
 ```ts
 const question = `name: nhd_sat
@@ -114,10 +116,17 @@ responses:
   "2": Neither satisfied nor dissatisfied
   "3": Dissatisfied
 `;
-const env = { ...EMPTY_ENV, agency: "org.example" };
-const evaluation = evaluate(question, env);
+const evaluation = evaluate(question, EMPTY_ENV);
 status(evaluation.findings).kind; // → "complete"
-Object.keys(evaluation.ddi); // → ["QuestionItem", "CodeList", "Category", "Variable"]
+```
+
+Its DDI is one output of the question, made when asked for, under the agency the bank
+declares (`bank.agency`; a `Bank` can be passed whole).
+
+```ts
+const published = { env: EMPTY_ENV, agency: "org.example" };
+const ddi = documentOf(questionItems(evaluation.draft, published));
+Object.keys(ddi); // → ["QuestionItem", "CodeList", "Category", "Variable"]
 ```
 
 A draft with gaps is still a value. Each gap is a hole, a finding with the path it
@@ -152,8 +161,9 @@ bank.agency; // → "org.example"
 
 Every item is published at version 1 unless you say otherwise: DDI's rule is that a
 version changes whenever its item does, and only history knows that. Pass each file's
-version by path, `bankOf(files, { "scales/agree4.yaml": { number: "3" } })`, or a
-question's own and its shared files' to `evaluate(source, env, { own, shared })`.
+version by path, to `bankOf(files, { "scales/agree4.yaml": { number: "3" } })` or as
+`versions` beside the agency; `questionItems(draft, bank, path)` finds the question's
+own by its path.
 
 Validating the DDI against the official schema. Compile the validator once; it takes
 a moment.
@@ -166,5 +176,5 @@ const schema = JSON.parse(
 	),
 );
 const validator = makeValidator(schema);
-validator.ok && validator.value(evaluation.ddi); // → []
+validator.ok && validator.value(ddi); // → []
 ```

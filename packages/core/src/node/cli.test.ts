@@ -12,8 +12,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { documentOf } from "../ddi/document.ts";
-import { bankOf } from "../evaluate.ts";
+import { bankOf, questionItems } from "../evaluate.ts";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
 import { readWorkspace } from "./index.ts";
 
@@ -217,12 +216,11 @@ describe("qretools export", () => {
 		const files = await readWorkspace(SAMPLE);
 		const path = "questions/example/parks_spending.yaml";
 		const bank = bankOf(files, { [path]: { number: "3" } });
+		const ev = bank.questions[path];
+		if (ev === undefined) throw new Error(`${path} isn't in the bank`);
 		expect(
-			bank.questions[path]?.items.map((i) => i.identity.Version),
+			questionItems(ev.draft, bank, path).map((i) => i.identity.Version),
 		).toContain("3");
-		expect(documentOf(bank.questions[path]?.items ?? [])).toEqual(
-			bank.questions[path]?.ddi,
-		);
 	});
 });
 

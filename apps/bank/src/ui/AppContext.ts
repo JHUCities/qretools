@@ -31,6 +31,14 @@ export function useEnv(): Env {
 	return evaluations.env({ local, remote });
 }
 
+/** The DDI agency the bank declares, as it is being edited; absent while it declares none. */
+export function useAgency(): string | undefined {
+	const { evaluations } = useApp();
+	const local = useModel((m) => m.local);
+	const remote = useModel((m) => m.remote);
+	return evaluations.agency({ local, remote });
+}
+
 /**
  * Which instruments here use each bank file, by its path. Rebuilt with the workspace;
  * cheap, since each instrument's reading is cached in the evaluations.

@@ -5,8 +5,8 @@
  */
 
 import { compact } from "./compact.ts";
-import { type DdiDocument, documentOf, type Item } from "./ddi/document.ts";
-import { elaborateItems, type Versioning } from "./ddi/elaborate.ts";
+import type { Item } from "./ddi/document.ts";
+import { elaborateItems } from "./ddi/elaborate.ts";
 import type { Versions } from "./ddi/version.ts";
 import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
 import { ROOT } from "./kinds.ts";
@@ -19,12 +19,14 @@ import {
 } from "./render.ts";
 import {
 	absentRoot,
-	bankEnv,
+	bankAgency,
 	evaluateScheme,
 	kindAt,
 	REQUIRED_ROOTS,
 	type SchemeEvaluation,
 	type SchemeKind,
+	schemeEnv,
+	schemeFilesIn,
 	UNDECLARED_AGENCY,
 	unknownFolders,
 } from "./schemes.ts";
@@ -50,9 +52,6 @@ export interface Evaluation {
 	readonly marks: readonly Mark[];
 	/** The fields a picker of shared entries can fill (see livelits.ts). */
 	readonly livelits: readonly Livelit[];
-	/** The question's DDI items, unkeyed, for an export of many questions to gather. */
-	readonly items: readonly Item[];
-	readonly ddi: DdiDocument;
 	readonly respondent: RespondentView;
 	readonly codebook: CodebookView;
 	/** What the question defines and names, for the bank index. */
@@ -62,22 +61,11 @@ export interface Evaluation {
 export { UNDECLARED_AGENCY };
 
 /**
- * A question's evaluation. `versioning` gives its items' DDI versions when history is
- * known (see `Versioning`); without it every item is version 1.
+ * A question's evaluation: what an editor shows of it as it's typed. Its DDI is one
+ * output among others, made only when asked for (`questionItems`).
  */
-export function evaluate(
-	source: string,
-	env: Env,
-	versioning: Versioning = {},
-): Evaluation {
+export function evaluate(source: string, env: Env): Evaluation {
 	const parsed = parseSurface(source, env);
-	const items = elaborateItems(
-		parsed.draft,
-		env.agency ?? UNDECLARED_AGENCY,
-		env.missing,
-		env.selectAll,
-		versioning,
-	);
 	const { draft, findings, ranges } = parsed;
 	return {
 		draft,
@@ -88,8 +76,6 @@ export function evaluate(
 		ranges,
 		marks: parsed.marks,
 		livelits: livelitsOf(source, parsed, env),
-		items,
-		ddi: documentOf(items),
 		respondent: respondentView(draft),
 		codebook: codebookView(draft, env),
 		symbols: symbolsOf(parsed),
@@ -114,11 +100,44 @@ export interface BankScope {
 	readonly questions: Readonly<Record<string, Evaluation>>;
 	/** The bank's symbol table, keyed by path. */
 	readonly index: Index<string>;
-	/** The DDI agency the bank declares; absent while it declares none (see `evaluate`). */
+	/** The DDI agency the bank declares; absent while it declares none (see `questionItems`). */
 	readonly agency?: string;
-	/** The versions the bank was evaluated at, by path, when they were given. */
+	/** Each file's DDI version, by path, when history is known. */
 	readonly versions?: Versions;
 }
+
+/** What a bank question's DDI is published with: a `BankScope` is one. */
+export interface Publishing {
+	readonly env: Env;
+	/** Absent while the bank declares none: items go under `UNDECLARED_AGENCY`. */
+	readonly agency?: string | undefined;
+	/** Absent when history isn't known: every item is version 1. */
+	readonly versions?: Versions | undefined;
+}
+
+/**
+ * A question's DDI items, unkeyed, for an export of many questions to gather (a bank, an
+ * instrument) and key once with `documentOf`. The one way a bank question becomes DDI,
+ * so every export of it makes the same items. `path` is its file in the bank, which
+ * gives its own version; a draft has none.
+ */
+export const questionItems = (
+	draft: Draft,
+	p: Publishing,
+	path?: string,
+): readonly Item[] =>
+	elaborateItems(
+		draft,
+		p.agency ?? UNDECLARED_AGENCY,
+		p.env.missing,
+		p.env.selectAll,
+		p.versions === undefined
+			? {}
+			: compact({
+					own: path === undefined ? undefined : p.versions[path],
+					shared: p.versions,
+				}),
+	);
 
 /** A whole bank, evaluated: each file by its path. */
 export interface Bank extends BankScope {
@@ -140,20 +159,23 @@ function byPath(
 }
 
 /**
- * A bank from its files' evaluations, by path: the index built from their symbols and
- * the agency from the environment. A new object every call: memoise on the inputs.
+ * A bank from its files' evaluations, by path, and the agency it declares: the index
+ * built from their symbols. `agency` is a required key, absent or not, so no caller
+ * drops it by leaving it out. A new object every call: memoise on the inputs.
  * Every evaluation given must have been made against `env`, a question's against `env`
- * as its folder has it (`envAt`), and `versions`: a cache of
+ * as its folder has it (`envAt`): a cache of
  * evaluations is keyed on the environment, or names resolve against one and codes read
  * from another, with no finding anywhere.
  */
 export function bankFrom({
 	env,
+	agency,
 	questions,
 	schemes,
 	versions,
 }: {
 	readonly env: Env;
+	readonly agency: string | undefined;
 	readonly questions: Readonly<Record<string, Evaluation>>;
 	readonly schemes: Readonly<Record<string, SchemeFileEvaluation>>;
 	readonly versions?: Versions | undefined;
@@ -168,7 +190,7 @@ export function bankFrom({
 		env,
 		questions,
 		index,
-		...(env.agency !== undefined && { agency: env.agency }),
+		...(agency !== undefined && { agency }),
 		...(versions !== undefined && { versions }),
 	};
 }
@@ -178,11 +200,10 @@ export function bankFrom({
  * its folder has it (`envAt`): the one place, so a bank checked whole, one only read and
  * the command line agree. And the files no kind reads.
  */
-function evaluateFiles(
-	files: Readonly<Record<string, string>>,
-	versions: Versions | undefined,
-) {
-	const env = bankEnv(files);
+function evaluateFiles(files: Readonly<Record<string, string>>) {
+	const shared = schemeFilesIn(files);
+	const env = schemeEnv(shared);
+	const agency = bankAgency(shared);
 	const questions: Record<string, Evaluation> = {};
 	const schemes: Record<string, SchemeFileEvaluation> = {};
 	const ignored: string[] = [];
@@ -191,13 +212,7 @@ function evaluateFiles(
 		const at = kindAt(path);
 		if (at === undefined) ignored.push(path);
 		else if (at.kind === "question")
-			questions[path] = evaluate(
-				text,
-				envAt(env, path),
-				versions === undefined
-					? {}
-					: compact({ own: versions[path], shared: versions }),
-			);
+			questions[path] = evaluate(text, envAt(env, path));
 		else
 			schemes[path] = {
 				...evaluateScheme(at.kind, text, env),
@@ -205,7 +220,7 @@ function evaluateFiles(
 				name: at.name,
 			};
 	}
-	return { env, questions, schemes, ignored };
+	return { env, agency, questions, schemes, ignored };
 }
 
 /**
@@ -217,8 +232,8 @@ export function scopeOf(
 	files: Readonly<Record<string, string>>,
 	versions?: Versions,
 ): BankScope {
-	const { env, questions, schemes } = evaluateFiles(files, versions);
-	return bankFrom({ env, questions, schemes, versions });
+	const { env, agency, questions, schemes } = evaluateFiles(files);
+	return bankFrom({ env, agency, questions, schemes, versions });
 }
 
 /**
@@ -232,8 +247,8 @@ export function bankOf(
 	/** Each file's DDI version, by path, when history is known. */
 	versions?: Versions,
 ): Bank {
-	const { env, questions, schemes, ignored } = evaluateFiles(files, versions);
-	const scope = bankFrom({ env, questions, schemes, versions });
+	const { env, agency, questions, schemes, ignored } = evaluateFiles(files);
+	const scope = bankFrom({ env, agency, questions, schemes, versions });
 	// Another file, as a bank finding cites it: its name, else its path.
 	const label = (path: string): string =>
 		questions[path]?.draft.name ?? schemes[path]?.name ?? path;
