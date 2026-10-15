@@ -1,11 +1,13 @@
 import { readFile } from "node:fs/promises";
 import {
 	bankOf,
+	documentOf,
 	EMPTY_ENV,
 	evaluate,
 	importsOf,
 	instrumentOf,
 	makeValidator,
+	questionItems,
 	status,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
@@ -27,12 +29,14 @@ responses:
   "2": Neither satisfied nor dissatisfied
   "3": Dissatisfied
 `;
-		const env = { ...EMPTY_ENV, agency: "org.example" };
-		const evaluation = evaluate(question, env);
+		const evaluation = evaluate(question, EMPTY_ENV);
 		status(evaluation.findings).kind; // → "complete"
-		Object.keys(evaluation.ddi); // → ["QuestionItem", "CodeList", "Category", "Variable"]
 		expect(status(evaluation.findings).kind).toBe("complete");
-		expect(Object.keys(evaluation.ddi)).toEqual([
+
+		const published = { env: EMPTY_ENV, agency: "org.example" };
+		const ddi = documentOf(questionItems(evaluation.draft, published));
+		Object.keys(ddi); // → ["QuestionItem", "CodeList", "Category", "Variable"]
+		expect(Object.keys(ddi)).toEqual([
 			"QuestionItem",
 			"CodeList",
 			"Category",
@@ -63,8 +67,8 @@ responses:
 			),
 		);
 		const validator = makeValidator(schema);
-		validator.ok && validator.value(evaluation.ddi); // → []
-		expect(validator.ok && validator.value(evaluation.ddi)).toEqual([]);
+		validator.ok && validator.value(ddi); // → []
+		expect(validator.ok && validator.value(ddi)).toEqual([]);
 
 		const file = "fixtures/households/instruments/households.yaml";
 		const source = await readFile(file, "utf8");

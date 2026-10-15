@@ -3,9 +3,12 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
 	type Bank,
+	type BankScope,
 	bankFrom,
 	bankOf,
+	documentOf,
 	makeValidator,
+	questionItems,
 	ROOT,
 	scopeOf,
 	status,
@@ -19,6 +22,13 @@ const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
 
 const SAMPLE = here("../../fixtures/bank");
+
+/** Each question's DDI as its bank publishes it, by path. */
+const ddiOf = (bank: BankScope) =>
+	Object.entries(bank.questions).map(
+		([path, ev]) =>
+			[path, documentOf(questionItems(ev.draft, bank, path))] as const,
+	);
 
 /** The official schema, compiled once for the file. */
 async function validator() {
@@ -64,20 +74,22 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 	});
 
 	it("is, put together from its evaluations, what an instrument reads of it", () => {
-		const scope = bankFrom(bank);
+		const scope = bankFrom({ ...bank, agency: bank.agency });
 		expect(scope.env).toBe(bank.env);
 		expect(scope.questions).toBe(bank.questions);
 		expect(scope.index).toEqual(bank.index);
 		expect(scope.agency).toBe(bank.agency);
 		expect("versions" in scope).toBe(false);
 		const versions = { "questions/x.yaml": { number: "2" } };
-		expect(bankFrom({ ...bank, versions }).versions).toBe(versions);
+		expect(bankFrom({ ...bank, agency: bank.agency, versions }).versions).toBe(
+			versions,
+		);
 	});
 
 	it("publishes its items under the agency it declares", () => {
 		expect(bank.agency).toBe("org.example");
-		for (const ev of Object.values(bank.questions))
-			expect(JSON.stringify(ev.ddi)).not.toContain(UNDECLARED_AGENCY);
+		for (const [, ddi] of ddiOf(bank))
+			expect(JSON.stringify(ddi)).not.toContain(UNDECLARED_AGENCY);
 	});
 
 	it("without `workspace.yaml`, says so once and publishes under `invalid`", async () => {
@@ -88,11 +100,9 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 		expect(
 			without.findings["workspace.yaml"]?.map((f) => [f.severity, f.path]),
 		).toEqual([["hole", "agency"]]);
-		for (const [path, ev] of Object.entries(without.questions)) {
-			expect(JSON.stringify(ev.ddi)).toContain(
-				`"Agency":"${UNDECLARED_AGENCY}"`,
-			);
-			expect([path, validate(ev.ddi)]).toEqual([path, []]);
+		for (const [path, ddi] of ddiOf(without)) {
+			expect(JSON.stringify(ddi)).toContain(`"Agency":"${UNDECLARED_AGENCY}"`);
+			expect([path, validate(ddi)]).toEqual([path, []]);
 			expect(without.findings[path]?.some((f) => f.path === "agency")).toBe(
 				false,
 			);
@@ -119,8 +129,8 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 
 	it("elaborates every question to valid DDI", async () => {
 		const validate = await validator();
-		for (const [path, ev] of Object.entries(bank.questions))
-			expect([path, validate(ev.ddi)]).toEqual([path, []]);
+		for (const [path, ddi] of ddiOf(bank))
+			expect([path, validate(ddi)]).toEqual([path, []]);
 	});
 
 	it("takes each file's version when given, version 1 when not", async () => {
@@ -129,14 +139,15 @@ describe("the sample bank (fixtures/bank, our own)", () => {
 			[path]: { number: "3" },
 			"scales/support4.yaml": { number: "2" },
 		});
-		const ddi = JSON.stringify(versioned.questions[path]?.ddi);
+		const doc = Object.fromEntries(ddiOf(versioned))[path] ?? {};
+		const ddi = JSON.stringify(doc);
 		expect(ddi).toContain('"URN":"urn:ddi:org.example:parks_spending:3"');
 		expect(ddi).toContain('"URN":"urn:ddi:org.example:scale-support4.codes:2"');
 		expect(ddi).toContain(
 			'"URN":"urn:ddi:org.example:concept-parks_spending_support:1"',
 		);
 		const validate = await validator();
-		expect(validate(versioned.questions[path]?.ddi ?? {})).toEqual([]);
+		expect(validate(doc)).toEqual([]);
 	});
 
 	it("doesn't depend on the order the files are given in", () => {
@@ -160,8 +171,8 @@ describe.skipIf(!existsSync(REFERENCE))(
 			const bank = bankOf(await readWorkspace(REFERENCE));
 			expect(Object.keys(bank.questions).length).toBeGreaterThan(0);
 			const validate = await validator();
-			for (const [path, ev] of Object.entries(bank.questions))
-				expect([path, validate(ev.ddi)]).toEqual([path, []]);
+			for (const [path, ddi] of ddiOf(bank))
+				expect([path, validate(ddi)]).toEqual([path, []]);
 		});
 	},
 );

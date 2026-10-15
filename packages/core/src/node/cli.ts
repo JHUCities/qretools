@@ -15,7 +15,13 @@ import {
 	type Item,
 } from "../ddi/document.ts";
 import { makeValidator } from "../ddi/validate.ts";
-import { type Bank, type BankScope, bankOf, scopeOf } from "../evaluate.ts";
+import {
+	type Bank,
+	type BankScope,
+	bankOf,
+	questionItems,
+	scopeOf,
+} from "../evaluate.ts";
 import {
 	type Finding,
 	locate,
@@ -271,13 +277,16 @@ async function exportBank(
 	output: string | undefined,
 	io: Io,
 ): Promise<number> {
-	// Each question's items as `bankOf` elaborated them (its versions included).
+	// Each question's items, made as an instrument brings them.
 	const sources = Object.keys(bank.questions)
 		.sort()
-		.map((path): readonly [string, readonly Item[]] => [
-			path,
-			bank.questions[path]?.items ?? [],
-		]);
+		.map((path): readonly [string, readonly Item[]] => {
+			const ev = bank.questions[path];
+			return [
+				path,
+				ev === undefined ? [] : questionItems(ev.draft, bank, path),
+			];
+		});
 	const document = documentOf(sources.flatMap(([, items]) => items));
 	const refusal = exportRefusal(
 		{

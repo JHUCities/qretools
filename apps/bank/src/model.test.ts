@@ -1,6 +1,7 @@
-import { evaluate } from "@qretools/core";
+import { documentOf, evaluate, questionItems } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import {
+	agencyOf,
 	EXAMPLE_SCALES,
 	envOf,
 	instrumentSource,
@@ -20,11 +21,14 @@ describe("the workspace's agency", () => {
 	const bank = (source: string): Record<number, SchemeEntry> => ({
 		1: { id: 1, kind: "workspace", name: "workspace", source },
 	});
-	const urns = (source: string) =>
-		Object.keys(
-			evaluate("name: q\ntext: Q?\n", envOf(bank(source), false)).ddi
-				.QuestionItem ?? {},
-		);
+	const urns = (source: string) => {
+		const schemes = bank(source);
+		const env = envOf(schemes, false);
+		const agency = agencyOf(schemes);
+		const draft = evaluate("name: q\ntext: Q?\n", env).draft;
+		const items = questionItems(draft, { env, agency });
+		return Object.keys(documentOf(items).QuestionItem ?? {});
+	};
 
 	it("comes from the working copy of `workspace.yaml`, as it is typed", () => {
 		expect(urns("agency: org.example\n")).toEqual(["org.example:q:1"]);

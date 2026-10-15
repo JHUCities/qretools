@@ -46,8 +46,6 @@ export interface Env {
 	readonly instructions: Scheme<TextEntry>;
 	/** The bank's missing-value codes, in author order; empty when the bank declares none. */
 	readonly missing: readonly Code[];
-	/** The DDI agency the workspace declares (`workspace.yaml`); absent while it declares none. */
-	readonly agency?: string;
 	/** The fields the bank also requires of its questions (`workspace.yaml`'s `required`). */
 	readonly required: readonly RequirableKey[];
 	/**

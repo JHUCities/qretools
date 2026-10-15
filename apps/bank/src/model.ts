@@ -10,6 +10,7 @@
 import {
 	type Address,
 	type AddressKey,
+	bankAgency,
 	bankEnv,
 	compact,
 	type Env,
@@ -831,15 +832,19 @@ export const knownBank = (remoteSchemes: Remote["schemes"]): boolean =>
  * first local scale does not turn every question on an example scale into a hole.
  */
 export function envOf(schemes: Local["schemes"], known: boolean): Env {
-	const env = schemeEnv(
-		Object.values(schemes).map((e) => ({
-			kind: e.kind,
-			name: e.name,
-			text: e.source,
-		})),
-	);
+	const env = schemeEnv(Object.values(schemes).map(schemeFile));
 	return known ? env : { ...env, scales: { ...EXAMPLE_SCALES, ...env.scales } };
 }
+
+/** The DDI agency the working `workspace.yaml` declares; absent while it declares none. */
+export const agencyOf = (schemes: Local["schemes"]): string | undefined =>
+	bankAgency(Object.values(schemes).map(schemeFile));
+
+const schemeFile = (e: SchemeEntry) => ({
+	kind: e.kind,
+	name: e.name,
+	text: e.source,
+});
 
 /** The model's environment, read afresh (the view's is kept: evaluations.ts). */
 export const envIn = (model: Pick<Model, "local" | "remote">): Env =>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import selectAllTemplate from "../../templates/settings/select_all.yaml?raw";
 import workspaceTemplate from "../../templates/settings/workspace.yaml?raw";
 import { bankOf } from "../evaluate.ts";
-import { schemeEnv } from "../schemes.ts";
+import { bankAgency, schemeEnv } from "../schemes.ts";
 import {
 	DEFAULT_SELECT_ALL,
 	selectAllCodes,
@@ -67,15 +67,16 @@ describe("the workspace's settings file", () => {
 		]);
 	});
 
-	it("puts the agency in the environment, absent when there is none", () => {
-		expect(
-			schemeEnv([
-				{ kind: "workspace", name: "workspace", text: "agency: org.example\n" },
-			]).agency,
-		).toBe("org.example");
-		expect(
-			schemeEnv([{ kind: "workspace", name: "workspace", text: "agency:\n" }]),
-		).not.toHaveProperty("agency");
+	it("keeps the agency out of the environment: only DDI needs it", () => {
+		const workspace = (text: string) => [
+			{ kind: "workspace" as const, name: "workspace", text },
+		];
+		expect(bankAgency(workspace("agency: org.example\n"))).toBe("org.example");
+		expect(bankAgency(workspace("agency:\n"))).toBeUndefined();
+		expect(bankAgency([])).toBeUndefined();
+		expect(schemeEnv(workspace("agency: org.example\n"))).not.toHaveProperty(
+			"agency",
+		);
 	});
 
 	it("reads the fields it requires of its questions, and says what's wrong with the list", () => {

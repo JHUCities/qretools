@@ -16,6 +16,7 @@ import {
 import { ScrollableRegion } from "@primer/react/experimental";
 import {
 	DEFAULT_SELECT_ALL,
+	documentOf,
 	type Evaluation,
 	envAt,
 	evaluate,
@@ -31,6 +32,7 @@ import {
 	kindAt,
 	type Mark,
 	othersOf,
+	questionItems,
 	type Range,
 	type RootKind,
 	SCHEME_NAME,
@@ -106,7 +108,13 @@ import {
 	writeBlocked,
 } from "../update.js";
 import { type InstrumentUse, instrumentsUsing } from "../usedBy.js";
-import { useApp, useEnv, useInstrumentUses, useModel } from "./AppContext.js";
+import {
+	useAgency,
+	useApp,
+	useEnv,
+	useInstrumentUses,
+	useModel,
+} from "./AppContext.js";
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
 import { FileSkeleton, Panes } from "./FileSkeleton.js";
@@ -191,6 +199,13 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const { dispatch, onTarget, onFix, on } = useActions(q.id);
 	const stale = useStale(q);
 	const ev = evaluations.get(q, env);
+	const agency = useAgency();
+	// Its DDI, made from the draft (kept while the text and environment are): a draft has
+	// no path, and the app knows no history, so every item is version 1.
+	const ddi = useMemo(
+		() => documentOf(questionItems(ev.draft, { env, agency })),
+		[ev.draft, env, agency],
+	);
 	// The instruments here that use it (none before its first save: no path yet).
 	const instruments = instrumentsUsing(useInstrumentUses(), claimOf(q));
 	// Until the bank declares its agency, say so beside its DDI (not while it loads).
@@ -203,10 +218,10 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	// render would stringify the document on every caret move.
 	const notice = useMemo(
 		() =>
-			env.agency === undefined && !loading ? (
+			agency === undefined && !loading ? (
 				<AgencyNotice declare={declare} />
 			) : undefined,
-		[env.agency, loading, declare],
+		[agency, loading, declare],
 	);
 	const { findings, related } = useBankFindings(
 		q.id,
@@ -230,8 +245,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		() =>
 			ddiSchema.kind === "failed"
 				? [ddiSchema.finding]
-				: (effects.validate(ev.ddi) ?? []),
-		[ev.ddi, ddiSchema, effects],
+				: (effects.validate(ddi) ?? []),
+		[ddi, ddiSchema, effects],
 	);
 	return (
 		<>
@@ -297,7 +312,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						}
 					/>
 					<Ddi
-						document={ev.ddi}
+						document={ddi}
 						schema={ddiSchema}
 						problems={problems}
 						{...(notice !== undefined && { notice })}
@@ -563,6 +578,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const questions = useModel((m) => m.local.questions);
 	const activity = useModel((m) => m.activity);
 	const env = useEnv();
+	const agency = useAgency();
 	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const eStale = useStale(e);
 	const ev = evaluations.scheme(e, env);
@@ -611,7 +627,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 		e.kind === "missing"
 			? env.missing.length > 0
 			: e.kind === "workspace"
-				? env.agency !== undefined
+				? agency !== undefined
 				: e.kind === "select_all"
 					? env.selectAll !== DEFAULT_SELECT_ALL
 					: inScope(env, e.kind)[e.name] !== undefined;

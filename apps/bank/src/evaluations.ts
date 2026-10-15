@@ -32,6 +32,7 @@ import {
 } from "@qretools/core";
 import { questionJsonSchema } from "@qretools/core/editor";
 import {
+	agencyOf,
 	detailsOf,
 	envOf,
 	type Id,
@@ -51,6 +52,8 @@ type WorkspaceSlices = Slices & Pick<Model, "remoteBanks">;
 export interface Evaluations {
 	/** The bank's environment, from the model's slices it is built from. */
 	env(model: Slices): Env;
+	/** The DDI agency the bank declares, as it is being edited; absent while it declares none. */
+	agency(model: Slices): string | undefined;
 	/**
 	 * What an instrument reads of this workspace's bank: its working copies, unsaved
 	 * edits included. A question never saved has no path, so no instrument can ask it
@@ -109,16 +112,27 @@ export function createEvaluations(): Evaluations {
 		{ source: string; name: string; env: Env; ev: SchemeEvaluation }
 	>();
 	let kept:
-		| { schemes: Model["local"]["schemes"]; known: boolean; env: Env }
+		| {
+				schemes: Model["local"]["schemes"];
+				known: boolean;
+				env: Env;
+				agency: string | undefined;
+		  }
 		| undefined;
-	// The settings' agency, per text: an instrument is read on every keystroke in it.
-	let agencyOf: { source: string; agency: string | undefined } | undefined;
+	// The settings' agency as written, valid or not, per text: an instrument reports an
+	// invalid one, where the DDI pane and the scope use only a valid one (`agencyOf`).
+	let written: { source: string; agency: string | undefined } | undefined;
 	// The bank's environment as each folder has it, kept for as long as the bank's is.
 	const placed = new WeakMap<Env, Map<string, Env>>();
 	// The editor's schema, kept for as long as its environment is.
 	const schemas = new WeakMap<Env, Record<string, unknown>>();
 	let scoped:
-		| { env: Env; keys: readonly unknown[]; scope: BankScope }
+		| {
+				env: Env;
+				agency: string | undefined;
+				keys: readonly unknown[];
+				scope: BankScope;
+		  }
 		| undefined;
 	const instruments = new Map<
 		Id,
@@ -131,6 +145,19 @@ export function createEvaluations(): Evaluations {
 		}
 	>();
 	let given: { banks: Model["remoteBanks"]; given: RemoteGiven } | undefined;
+	/** The bank's environment and agency, kept while its scheme entries are. */
+	const bankEntry = (model: Slices) => {
+		const { schemes } = model.local;
+		const known = knownBank(model.remote.schemes);
+		if (kept && kept.known === known && kept.schemes === schemes) return kept;
+		kept = {
+			schemes,
+			known,
+			env: envOf(schemes, known),
+			agency: agencyOf(schemes),
+		};
+		return kept;
+	};
 	const self: Evaluations = {
 		remote({ remoteBanks }) {
 			if (given?.banks === remoteBanks) return given.given;
@@ -144,15 +171,8 @@ export function createEvaluations(): Evaluations {
 			given = { banks: remoteBanks, given: { reads, scopes } };
 			return given.given;
 		},
-		env(model) {
-			const { schemes } = model.local;
-			const known = knownBank(model.remote.schemes);
-			if (kept && kept.known === known && kept.schemes === schemes)
-				return kept.env;
-			const env = envOf(schemes, known);
-			kept = { schemes, known, env };
-			return env;
-		},
+		env: (model) => bankEntry(model).env,
+		agency: (model) => bankEntry(model).agency,
 		at(q, base) {
 			// A draft has no folder yet: it is read against the bank's own.
 			if (q.base === undefined) return base;
@@ -212,17 +232,24 @@ export function createEvaluations(): Evaluations {
 				...questions.flat(),
 				...shared.flatMap(([path, , ev]) => [path, ev]),
 			];
-			if (scoped && scoped.env === env && sameList(scoped.keys, keys))
+			const agency = self.agency(model);
+			if (
+				scoped &&
+				scoped.env === env &&
+				scoped.agency === agency &&
+				sameList(scoped.keys, keys)
+			)
 				return scoped.scope;
 			const schemes: Record<string, SchemeFileEvaluation> = {};
 			for (const [path, e, ev] of shared)
 				schemes[path] = { ...ev, kind: e.kind, name: e.name };
 			const scope = bankFrom({
 				env,
+				agency,
 				questions: Object.fromEntries(questions),
 				schemes,
 			});
-			scoped = { env, keys, scope };
+			scoped = { env, agency, keys, scope };
 			return scope;
 		},
 		instrument(model, e) {
@@ -237,13 +264,13 @@ export function createEvaluations(): Evaluations {
 				: undefined;
 			// As `workspace.yaml` writes it while it is being edited, valid or not.
 			const details = detailsOf(model.local.schemes);
-			if (details === undefined) agencyOf = undefined;
-			else if (agencyOf?.source !== details.source)
-				agencyOf = {
+			if (details === undefined) written = undefined;
+			else if (written?.source !== details.source)
+				written = {
 					source: details.source,
 					agency: agencyWritten(details.source),
 				};
-			const agency = agencyOf?.agency;
+			const agency = written?.agency;
 			if (
 				hit &&
 				hit.source === e.source &&

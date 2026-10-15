@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	bankOf,
+	documentOf,
 	instrumentOf,
 	type JsonObject,
 	makeValidator,
+	questionItems,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
@@ -57,6 +59,31 @@ describe("the households instrument, whole", async () => {
 		walk(name);
 		return out;
 	};
+
+	it("brings each question's items as its bank exports them, versions and all", async () => {
+		const path = "questions/household/size.yaml";
+		const bank = bankOf(
+			await readWorkspace(here("../../fixtures/households")),
+			{
+				[path]: { number: "4" },
+			},
+		);
+		const read = instrumentOf(await readFile(FILE, "utf8"), {
+			banks: { hh: bank },
+			agency: "org.example",
+		});
+		const ev = bank.questions[path];
+		if (ev === undefined) throw new Error(`${path} isn't in the bank`);
+		const exported = documentOf(questionItems(ev.draft, bank, path));
+		expect(Object.keys(exported.QuestionItem ?? {})).toEqual([
+			"org.example.households:size:4",
+		]);
+		for (const [type, byKey] of Object.entries(exported))
+			if (type !== "Variable")
+				for (const [key, it] of Object.entries(byKey ?? {}))
+					expect(read.ddi[type as "QuestionItem"]?.[key]).toEqual(it);
+		expect(read.collisions).toEqual([]);
+	});
 
 	it("says once that its own workspace has no agency, and of another's where it is used", async () => {
 		const { "workspace.yaml": _, ...files } = await readWorkspace(

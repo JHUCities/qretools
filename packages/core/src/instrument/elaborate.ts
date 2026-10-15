@@ -34,6 +34,7 @@ import {
 } from "../ddi/document.ts";
 import { sharedUniverseItem } from "../ddi/elaborate.ts";
 import { UNVERSIONED } from "../ddi/version.ts";
+import { questionItems } from "../evaluate.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import type { Code } from "../surface/draft.ts";
 import { definedVariables } from "../surface/draft.ts";
@@ -212,6 +213,18 @@ export function elaborateInstrument(
 		return made;
 	};
 
+	/** Each asked question's DDI as its bank publishes it, made once per elaboration. */
+	const published = new Map<string, readonly Item[]>();
+	const itemsOf = (q: QuestionRef): readonly Item[] => {
+		const key = `${q.alias}:${q.path}`;
+		const known = published.get(key);
+		if (known !== undefined) return known;
+		const bank = parsed.banks[q.alias];
+		const made =
+			bank === undefined ? [] : questionItems(q.evaluation.draft, bank, q.path);
+		published.set(key, made);
+		return made;
+	};
 	const banks = new Map<string, readonly Item[]>();
 	/** A question's bank items, once, without the Variables the instrument records itself. */
 	const bring = (q: QuestionRef) => {
@@ -219,11 +232,11 @@ export function elaborateInstrument(
 		if (!banks.has(key))
 			banks.set(
 				key,
-				q.evaluation.items.filter((it) => it.type !== "Variable"),
+				itemsOf(q).filter((it) => it.type !== "Variable"),
 			);
 	};
 	const questionItem = (q: QuestionRef): Item | undefined =>
-		q.evaluation.items.find((it) => it.type === "QuestionItem");
+		itemsOf(q).find((it) => it.type === "QuestionItem");
 
 	/**
 	 * The Variable the instrument records an answer in: what the bank's says about it
@@ -236,7 +249,7 @@ export function elaborateInstrument(
 		name: string,
 		universe: Item | undefined,
 	) => {
-		const theirs = q.evaluation.items.find(
+		const theirs = itemsOf(q).find(
 			(it) =>
 				it.type === "Variable" && it.identity.ID === `variable-${bankVariable}`,
 		);
