@@ -239,6 +239,57 @@ describe("shared scales and select-many", () => {
 		]);
 	});
 
+	it("says what each variable holds: one of its question's outputs, an option's naming its code", () => {
+		const sources = [
+			// On a shared scale: the scale's list, in the draft's order.
+			"name: q\ntext: Which?\nintent: i\nselect: many\nresponses: agree4\n",
+			// An option's own variable name, unrelated to the question's.
+			'name: r\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": { label: Walk, variable: on_foot }\n',
+			"name: n\ntext: How many?\nintent: i\nnumber: {}\n",
+		];
+		const read = sources.map((text) => {
+			const { draft, findings } = parseSurface(text, env);
+			expect(findings.filter((f) => f.severity !== "info")).toEqual([]);
+			const doc = elaborate(draft, AGENCY, []);
+			expect(validate(doc)).toEqual([]);
+			const q = Object.values(doc.QuestionItem ?? {})[0] ?? {};
+			const outputs = (q.OutParameter ?? []) as JsonObject[];
+			const codes = Object.values(doc.CodeList ?? {}).flatMap(
+				(l) => (l.Code ?? []) as JsonObject[],
+			);
+			return Object.values(doc.Variable ?? {}).map((v) => {
+				const name = (v.VariableName as JsonObject[])[0];
+				const source = (v.SourceParameterReference as JsonObject).ID;
+				// Among the outputs of the very question it references.
+				const output = outputs.find((o) => o.ID === source);
+				expect(output).toBeDefined();
+				const included = (
+					(output?.ValueRepresentation as JsonObject | undefined)
+						?.CodeSubsetInformation as JsonObject | undefined
+				)?.IncludedCode as JsonObject | undefined;
+				const named = ((included?.CodeReference ?? []) as JsonObject[]).map(
+					(r) =>
+						(codes.find((c) => c.ID === r.ID)?.Value as JsonObject | undefined)
+							?.StringValue,
+				);
+				return [JSON.stringify(name).match(/"Value":"([^"]+)"/)?.[1], ...named];
+			});
+		});
+		expect(read).toEqual([
+			[
+				["q_1", "1"],
+				["q_2", "2"],
+				["q_3", "3"],
+				["q_4", "4"],
+			],
+			[
+				["r_b", "b"],
+				["on_foot", "w"],
+			],
+			[["n"]],
+		]);
+	});
+
 	it("select-many yields one yes/no Variable per option, referencing the question", () => {
 		const { draft, findings } = parseSurface(demRace, EMPTY_ENV);
 		expect(findings).toEqual([]);
