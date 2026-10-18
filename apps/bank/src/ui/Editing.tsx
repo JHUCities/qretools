@@ -32,9 +32,14 @@ import {
 	kindAt,
 	type Mark,
 	othersOf,
+	placeFindings,
+	qsfOf,
+	qsfRefusal,
+	qsfTime,
 	questionItems,
 	type Range,
 	type RootKind,
+	refusalReason,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 	type SchemeEvaluation,
@@ -427,21 +432,71 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 		() => exportRefusal(instrument, problems),
 		[instrument, problems],
 	);
+	// The Qualtrics survey, made from the DDI only while the DDI itself may be exported.
+	// Its date is when it was made from this DDI: Qualtrics sets its own on import.
+	const qsf = useMemo(() => {
+		if (refusal !== undefined) return undefined;
+		const made = qsfOf(ddi, { name: e.name, created: qsfTime(new Date()) });
+		const findings = placeFindings(made.findings, instrument.places);
+		const errors = qsfRefusal(findings)?.errors;
+		return {
+			survey: errors === undefined ? made.qsf : undefined,
+			findings,
+			reason:
+				errors === undefined
+					? undefined
+					: `${errors === 1 ? "1 thing" : `${errors} things`} in this instrument can't be run in Qualtrics as the DDI says; see Qualtrics below.`,
+		};
+	}, [ddi, refusal, e.name, instrument.places]);
 	const reasonId = useId();
+	const qsfReasonId = useId();
 	const notice = useMemo(
 		() => (
 			<>
-				<DownloadReason id={reasonId} refusal={refusal} />
+				<DownloadReason
+					id={reasonId}
+					reason={refusal && refusalReason(refusal)}
+				/>
+				<DownloadReason id={qsfReasonId} reason={qsf?.reason} />
 				<WorkspaceNotice findings={own} />
+				{qsf !== undefined && qsf.findings.length > 0 && (
+					<section
+						className="qsf-findings"
+						aria-labelledby={`${qsfReasonId}-h`}
+					>
+						<h4 id={`${qsfReasonId}-h`}>Qualtrics</h4>
+						<Findings
+							findings={qsf.findings}
+							label="Qualtrics"
+							onTarget={onTarget}
+						/>
+					</section>
+				)}
 			</>
 		),
-		[reasonId, refusal, own],
+		[reasonId, qsfReasonId, refusal, qsf, own, onTarget],
 	);
 	const action = useMemo(
 		() => (
-			<Download name={e.name} ddi={ddi} refusal={refusal} reason={reasonId} />
+			<>
+				<Download
+					label="Download DDI"
+					filename={`${e.name}.ddi.json`}
+					json={ddi}
+					allowed={refusal === undefined}
+					reason={reasonId}
+				/>
+				<Download
+					label="Download QSF"
+					filename={`${e.name}.qsf`}
+					json={qsf?.survey}
+					allowed={qsf?.survey !== undefined}
+					// While the DDI is held back, so is the survey made from it, for that reason.
+					reason={qsf === undefined ? reasonId : qsfReasonId}
+				/>
+			</>
 		),
-		[e.name, ddi, refusal, reasonId],
+		[e.name, ddi, refusal, reasonId, qsf, qsfReasonId],
 	);
 	return (
 		<>

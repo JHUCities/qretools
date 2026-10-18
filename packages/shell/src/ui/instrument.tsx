@@ -1,41 +1,35 @@
 /**
  * What the apps show of an instrument beside its source: the flow as an outline, the
- * DDI download, and what its workspace's details say about the export.
+ * downloads, and what its workspace's details say about the export.
  */
 import { DownloadIcon } from "@primer/octicons-react";
 import { Button, Link, LinkButton, VisuallyHidden } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
-import {
-	type DdiDocument,
-	type Finding,
-	type Refusal,
-	ROOT,
-	refusalReason,
-	type Target,
-} from "@qretools/core";
+import { type Finding, ROOT, type Target } from "@qretools/core";
 import type { OutlineItem, OutlinePart } from "@qretools/core/editor";
 import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { inlineCode } from "./findings.tsx";
 
 /**
- * The DDI download: a link to the document as a file while it may be exported, and an
+ * A download: a link to a document as a JSON file while it may be exported, and an
  * inactive button otherwise, described by `DownloadReason` (the rule is the core's, the
  * CLI's too). Apart, so the button can sit in the pane's header, one height whatever the
  * reason, and the reason, which changes as the author types, in the body.
  */
 export function Download({
-	name,
-	ddi,
-	refusal,
+	label,
+	filename,
+	json,
+	allowed,
 	reason,
 }: {
-	name: string;
-	ddi: DdiDocument;
-	refusal: Refusal | undefined;
+	label: string;
+	filename: string;
+	json: unknown;
+	allowed: boolean;
 	/** The id of the `DownloadReason` that says why not. */
 	reason: string;
 }) {
-	const allowed = refusal === undefined;
 	// The file, made while it may be downloaded and let go when it changes: made in the
 	// effect whose cleanup lets it go, so each URL pairs with its own revoke (StrictMode
 	// runs an effect twice in development; a memo's URL would be revoked under the link).
@@ -46,22 +40,22 @@ export function Download({
 			return;
 		}
 		const url = URL.createObjectURL(
-			new Blob([`${JSON.stringify(ddi, null, 2)}\n`], {
+			new Blob([`${JSON.stringify(json, null, 2)}\n`], {
 				type: "application/json",
 			}),
 		);
 		setHref(url);
 		return () => URL.revokeObjectURL(url);
-	}, [ddi, allowed]);
+	}, [json, allowed]);
 	if (allowed && href !== undefined)
 		return (
 			<LinkButton
 				size="small"
 				href={href}
-				download={`${name}.ddi.json`}
+				download={filename}
 				leadingVisual={DownloadIcon}
 			>
-				Download DDI
+				{label}
 			</LinkButton>
 		);
 	return (
@@ -71,22 +65,22 @@ export function Download({
 			leadingVisual={DownloadIcon}
 			aria-describedby={reason}
 		>
-			Download DDI
+			{label}
 		</Button>
 	);
 }
 
-/** Why the download is held back; nothing while it isn't. */
+/** Why a download is held back; nothing while it isn't. */
 export function DownloadReason({
 	id,
-	refusal,
+	reason,
 }: {
 	id: string;
-	refusal: Refusal | undefined;
+	reason: string | undefined;
 }) {
-	return refusal === undefined ? null : (
+	return reason === undefined ? null : (
 		<p id={id} className="quiet download-reason">
-			{refusalReason(refusal)}
+			{reason}
 		</p>
 	);
 }
