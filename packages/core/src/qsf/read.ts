@@ -11,7 +11,7 @@
 import { DDI_FUNCTIONS, type Expr, holesOf } from "../cond/ast.ts";
 import { parseCondition } from "../cond/parse.ts";
 import type { DdiDocument, ItemType, JsonObject } from "../ddi/document.ts";
-import { TICKED } from "../ddi/elaborate.ts";
+import { NOT_TICKED, TICKED } from "../ddi/elaborate.ts";
 import type { Finding } from "../findings.ts";
 import { STOP } from "../instrument/draft.ts";
 
@@ -54,8 +54,12 @@ export type Source =
 			/** The asks that record it, by DDI ID: more than one in exclusive branches. */
 			readonly asks: readonly string[];
 			readonly question: Question;
-			/** For a select-all option: its code, and which value of the variable is a tick. */
-			readonly option?: { readonly code: string; readonly ticked: string };
+			/** For a select-all option: its code, and which values of the variable are a tick and none. */
+			readonly option?: {
+				readonly code: string;
+				readonly ticked: string;
+				readonly unticked: string;
+			};
 	  }
 	| {
 			readonly kind: "input";
@@ -316,7 +320,7 @@ export function readInstrument(ddi: DdiDocument): {
 			asks: asks.map((a) => a.ask),
 			question: q,
 			...(code !== undefined &&
-				ticked !== undefined && { option: { code, ticked } }),
+				ticked !== undefined && { option: { code, ...ticked } }),
 		});
 	}
 	for (const c of Object.values(ddi.ComputationItem ?? {})) {
@@ -821,18 +825,27 @@ function codeValueOf(ddi: DdiDocument, code: Obj): string | undefined {
 }
 
 /** For each select-all list (by URN), the value that is a tick, as its categories say. */
-function tickCodes(ddi: DdiDocument): ReadonlyMap<string, string> {
-	const out = new Map<string, string>();
-	for (const list of Object.values(ddi.CodeList ?? {}))
-		for (const c of asList(list.Code)) {
-			const v = asObj(c.CategoryReference)?.value;
-			const category = Array.isArray(v)
-				? ddi.Category?.[v.join(":")]
-				: undefined;
-			if (str(asObj(category?.Generation)?.Qualification) === TICKED) {
-				const value = str(asObj(c.Value)?.StringValue);
-				if (value !== undefined) out.set(str(list.URN) ?? "", value);
-			}
-		}
+function tickCodes(
+	ddi: DdiDocument,
+): ReadonlyMap<string, { ticked: string; unticked: string }> {
+	const out = new Map<string, { ticked: string; unticked: string }>();
+	for (const list of Object.values(ddi.CodeList ?? {})) {
+		const qualified = (qualification: string) =>
+			asList(list.Code)
+				.filter((c) => {
+					const v = asObj(c.CategoryReference)?.value;
+					const category = Array.isArray(v)
+						? ddi.Category?.[v.join(":")]
+						: undefined;
+					return (
+						str(asObj(category?.Generation)?.Qualification) === qualification
+					);
+				})
+				.map((c) => str(asObj(c.Value)?.StringValue))[0];
+		const ticked = qualified(TICKED);
+		const unticked = qualified(NOT_TICKED);
+		if (ticked !== undefined && unticked !== undefined)
+			out.set(str(list.URN) ?? "", { ticked, unticked });
+	}
 	return out;
 }
