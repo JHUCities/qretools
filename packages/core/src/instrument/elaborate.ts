@@ -249,16 +249,18 @@ export function elaborateInstrument(
 	 * (label, question, concept, values), under the instrument's identity and version,
 	 * of whom this instrument asks it.
 	 */
+	/** The bank's own Variable for one of a question's variables, as its export names it. */
+	const bankVariableOf = (q: QuestionRef, name: string): Item | undefined =>
+		itemsOf(q).find(
+			(it) => it.type === "Variable" && it.identity.ID === `variable-${name}`,
+		);
 	const answerVariable = (
 		q: QuestionRef,
 		bankVariable: string,
 		name: string,
 		universe: Item | undefined,
 	) => {
-		const theirs = itemsOf(q).find(
-			(it) =>
-				it.type === "Variable" && it.identity.ID === `variable-${bankVariable}`,
-		);
+		const theirs = bankVariableOf(q, bankVariable);
 		if (theirs === undefined) return;
 		const {
 			Label,
@@ -742,14 +744,11 @@ export function elaborateInstrument(
 		// What this ask records: the question's output (as the bank's variable says which)
 		// into the instrument's variable. A fill binds into the question; an answer, out of it.
 		const answerBindings = answers.flatMap((a) => {
-			const theirs = itemsOf(q).find(
-				(it) =>
-					it.type === "Variable" && it.identity.ID === `variable-${a.bank}`,
-			);
-			const output = theirs?.body.SourceParameterReference as
+			// Recorded exactly when the bank has the variable (see `answerVariable`).
+			const output = bankVariableOf(q, a.bank)?.body.SourceParameterReference as
 				| JsonObject
 				| undefined;
-			return output === undefined || !recordedAnswers.has(a.name)
+			return output === undefined
 				? []
 				: [
 						{
