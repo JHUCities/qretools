@@ -540,8 +540,8 @@ describe("writing a survey as QSF", () => {
 			findings.map((f) => `${f.severity} ${f.path}: ${f.message}`),
 		).toMatchInlineSnapshot(`
 			[
-			  "warning ask-rent: With its checks, Qualtrics no longer refuses an answer that isn't a number here.",
 			  "info check-1: Qualtrics shows its own message when this check fails: a custom validation's message comes from a library.",
+			  "warning ask-rent: With its checks, Qualtrics no longer refuses an answer here that isn't a number, or has more decimals than allowed.",
 			]
 		`);
 	});
