@@ -553,16 +553,19 @@ export function elaborateInstrument(
 		}
 	};
 
-	/** Each roster's row count, as `each` over it reads it. */
-	const rosterRows = new Map<
-		string,
-		() => { text: string; reads: { alias: string; source: Identity }[] }
-	>();
+	/** A roster's row count, as a loop over its rows reads it, and the most rows it can have. */
+	type Rows = {
+		text: string;
+		reads: { alias: string; source: Identity }[];
+		max?: number;
+	};
+	/** Each roster's rows, as `each` over it reads them. */
+	const rosterRows = new Map<string, () => Rows>();
 
 	/**
 	 * A roster: with `count`, a Loop numbering rows from 1 while the number is at most the
 	 * count; with `more`, a RepeatUntil whose rows start by counting themselves and end
-	 * when `more` isn't true. Inside, `index` is the row's number.
+	 * when `more` isn't true. Either stops at its `max`. Inside, `index` is the row's number.
 	 */
 	const roster = (node: Extract<Node, { kind: "roster" }>): readonly Item[] => {
 		if (node.name === undefined) return [];
@@ -582,6 +585,7 @@ export function elaborateInstrument(
 			rosterRows.set(name, () => ({
 				text: `${name}_rows`,
 				reads: [{ alias: `${name}_rows`, source: param }],
+				...(node.max !== undefined && { max: node.max }),
 			}));
 			return withRow(v, param, () => {
 				const body = emit(
@@ -595,11 +599,20 @@ export function elaborateInstrument(
 							"RepeatUntil",
 							id(at),
 							obj({
-								UntilCondition: command(
-									more,
-									`${at}-until`,
-									(t) => `not nvl(${t}, false)`,
-								),
+								// DDI tests the condition before each row (RepeatUntil's own
+								// definition), so it holds only once a row has been asked.
+								UntilCondition:
+									more === undefined
+										? undefined
+										: vtl(
+												`nvl(${v}, 0) >= 1 and not nvl(${printed(more)}, false)${
+													node.max === undefined
+														? ""
+														: ` or nvl(${v}, 0) >= ${node.max}`
+												}`,
+												[row, ...readsOf(more).filter((r) => r.alias !== v)],
+												`${at}-until`,
+											),
 								UntilConstructReference: ref(body),
 							}),
 						),
@@ -608,11 +621,12 @@ export function elaborateInstrument(
 			});
 		}
 		const count = node.end?.value;
-		rosterRows.set(name, () =>
-			count === undefined
+		rosterRows.set(name, () => ({
+			...(count === undefined
 				? { text: "0", reads: [] }
-				: { text: printed(count), reads: readsOf(count) },
-		);
+				: { text: printed(count), reads: readsOf(count) }),
+			...(node.max !== undefined && { max: node.max }),
+		}));
 		return [
 			loop(
 				at,
@@ -637,7 +651,7 @@ export function elaborateInstrument(
 		at: string,
 		v: string,
 		param: Identity,
-		rows: { text: string; reads: { alias: string; source: Identity }[] },
+		rows: Rows,
 		nodes: readonly Node[],
 	): Item => {
 		const row = { alias: v, source: param };
@@ -647,7 +661,7 @@ export function elaborateInstrument(
 				LoopVariableReference: { ...param, ParameterName: [intl(v)] },
 				InitialValue: vtl("1", [], `${at}-init`),
 				LoopWhile: vtl(
-					`${v} <= ${rows.text}`,
+					`${v} <= ${rows.text}${rows.max === undefined ? "" : ` and ${v} <= ${rows.max}`}`,
 					[row, ...rows.reads.filter((r) => r.alias !== v)],
 					`${at}-while`,
 				),

@@ -445,6 +445,7 @@ flow:
   - ask: bas.rent
   - roster: members
     count: bas.rent
+    max: 12
     flow:
       - say: Person {{index}}.
       - ask: bas.why
@@ -454,6 +455,7 @@ flow:
             message: Person {{index}}, check the rent.
   - roster: jobs
     more: bas.consent = "1"
+    max: 5
     flow:
       - ask: bas.tenure
       - ask: bas.consent
@@ -478,10 +480,12 @@ flow:
 		);
 		expect(commands).toEqual(
 			expect.arrayContaining([
-				"members_index <= rent",
+				// The roster's max limits it, and the `each` over it too.
+				"members_index <= rent and members_index <= 12",
 				"members_index + 1",
 				"nvl(jobs_index, 0) + 1",
-				'not nvl(consent = "1", false)',
+				// Tested before each row (RepeatUntil), so only once a row is asked; and its max.
+				'nvl(jobs_index, 0) >= 1 and not nvl(consent = "1", false) or nvl(jobs_index, 0) >= 5',
 			]),
 		);
 		// `{{index}}` in what is said is the row of the loop it's said in, never the words.

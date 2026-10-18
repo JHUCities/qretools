@@ -38,6 +38,7 @@ flow:
               rent: hh.rent
   - roster: vehicles
     more: hh.more_vehicles = "1"
+    max: 4
     flow:
       - ask: hh.vehicle
       - ask: hh.more_vehicles

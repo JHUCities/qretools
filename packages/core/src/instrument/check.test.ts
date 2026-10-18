@@ -286,6 +286,7 @@ flow:
 		const flow = `  - ask: bas.consent
   - roster: people
     more: bas.consent = "1"
+    max: 5
     flow:
       - ask: bas.why
   - each: people

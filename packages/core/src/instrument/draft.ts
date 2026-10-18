@@ -161,6 +161,8 @@ export type Node =
 			readonly end?:
 				| { readonly kind: "count"; readonly value?: Cond }
 				| { readonly kind: "more"; readonly cond?: Cond };
+			/** The most rows it can have: written, or what its count limits it to. */
+			readonly max?: number;
 			readonly flow: readonly Node[];
 	  }
 	| {

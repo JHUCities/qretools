@@ -21,6 +21,8 @@ const BAS = bankOf({
 	"questions/n/sat.yaml":
 		'name: sat\ntext: How satisfied are you?\nintent: i\nresponses:\n  "1": Satisfied\n  "2": Neutral\n  "3": Dissatisfied\n',
 	"questions/n/why.yaml": "name: why\ntext: Why?\nintent: i\nopen: {}\n",
+	"questions/h/size.yaml":
+		"name: size\ntext: How many people?\nintent: i\nnumber: { min: 0, max: 20 }\n",
 	"questions/m/modes.yaml":
 		'name: modes\ntext: How do you travel?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
 });
@@ -181,11 +183,13 @@ flow:
   - ask: bas.rent
   - roster: members
     count: bas.rent
+    max: 10
     flow:
       - say: Person {{index}}.
       - ask: bas.why
   - roster: jobs
     more: bas.sat = "1"
+    max: 5
     flow:
       - ask: bas.sat
   - each: members
@@ -202,6 +206,43 @@ flow:
 		expect(say?.kind === "say" && say.reads.map((r) => r.name)).toEqual([
 			"members.index",
 		]);
+	});
+
+	it("limits every roster's rows: by `max`, or by what its count allows", () => {
+		const roster = (end: string, max = "") =>
+			read(
+				`name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.size\n  - roster: r\n    ${end}${max}\n    flow: []\n`,
+			);
+		const maxOf = (r: ReturnType<typeof read>) => {
+			const n = r.draft.flow[1];
+			return n?.kind === "roster" ? n.max : undefined;
+		};
+		const said = (r: ReturnType<typeof read>) => r.findings.map(brief);
+		// `more` must say it; empty is the same hole.
+		expect(said(roster("more: bas.size = 1"))).toEqual([
+			"hole hole flow.1.max",
+		]);
+		expect(said(roster("more: bas.size = 1", "\n    max:"))).toEqual([
+			"hole hole flow.1.max",
+		]);
+		expect(maxOf(roster("more: bas.size = 1", "\n    max: 4"))).toBe(4);
+		// A count takes its question's own `max`, or a whole number's own value.
+		expect(maxOf(roster("count: bas.size"))).toBe(20);
+		expect(said(roster("count: bas.size"))).toEqual([]);
+		expect(maxOf(roster("count: 3"))).toBe(3);
+		// Nothing to take it from: a hole.
+		expect(said(roster("count: bas.size + 1"))).toEqual([
+			"hole hole flow.1.max",
+		]);
+		// Fewer than the question allows: later rows aren't asked.
+		const lower = roster("count: bas.size", "\n    max: 4");
+		expect(maxOf(lower)).toBe(4);
+		expect(said(lower)).toEqual(["warning max-below-count flow.1.max"]);
+		// Not a whole number from 1: said once, with no hole on top.
+		for (const bad of ["0", "-1", "2.5", "x"])
+			expect(said(roster("more: bas.size = 1", `\n    max: ${bad}`))).toEqual([
+				"error wrong-type flow.1.max",
+			]);
 	});
 
 	it("says what a roster lacks, and where a row's number can't be read", () => {
@@ -223,6 +264,7 @@ flow:
 		expect(findings.map(brief)).toEqual([
 			"hole hole flow.0.roster",
 			"error unknown-key flow.1.more",
+			"hole hole flow.1.max",
 			"error type flow.1.count",
 			"error misplaced flow.2.if",
 			"hole unknown-name flow.3.each",
