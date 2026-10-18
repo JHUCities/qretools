@@ -5,7 +5,7 @@
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { readFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Address, addressOf, HERE, notHere } from "../address.ts";
 import {
@@ -31,6 +31,7 @@ import {
 } from "../findings.ts";
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
 import { ROOT } from "../kinds.ts";
+import { placeFindings, qsfOf, qsfRefusal, qsfTime } from "../qsf/qsf.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
 import { agencyWritten } from "../surface/bankfile.ts";
 import {
@@ -57,7 +58,7 @@ const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
-  qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [-o file]
+  qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
 dir is the workspace's folder (default: the current directory): workspace.yaml,
 questions/<folder>/, the shared folders (scales/ and so on), missing.yaml,
@@ -67,7 +68,9 @@ a tag (\`owner/repo@v1\`, with git).
 --bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
 --strict  also fail on warnings.
 --agency  the DDI agency the instrument is published under, when it isn't its own
-          workspace's (workspace.yaml), as for a file that uses none.`;
+          workspace's (workspace.yaml), as for a file that uses none.
+--qsf     write the instrument as a Qualtrics survey (QSF, made from its DDI) instead of
+          its DDI; refused when anything in it can't be run in Qualtrics as the DDI says.`;
 
 /** What to say when a directory holds nothing the tool reads: the wrong folder, most likely. */
 const nothingIn = (dir: string): string =>
@@ -106,9 +109,11 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			? "--bank"
 			: args.values.agency !== undefined
 				? "--agency"
-				: command === "check"
-					? args.values.output !== undefined && "--output"
-					: args.values.strict === true && "--strict";
+				: args.values.qsf === true
+					? "--qsf"
+					: command === "check"
+						? args.values.output !== undefined && "--output"
+						: args.values.strict === true && "--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -147,6 +152,7 @@ function parse(argv: readonly string[]) {
 			output: { type: "string", short: "o" },
 			bank: { type: "string", multiple: true },
 			agency: { type: "string" },
+			qsf: { type: "boolean" },
 			help: { type: "boolean", short: "h" },
 		},
 	});
@@ -383,7 +389,8 @@ async function instrument(
 	}
 	const stray =
 		command === "check"
-			? args.values.output !== undefined && "--output"
+			? (args.values.output !== undefined && "--output") ||
+				(args.values.qsf === true && "--qsf")
 			: args.values.strict === true && "--strict";
 	if (stray) {
 		io.err(
@@ -492,7 +499,40 @@ async function instrument(
 		io.err(
 			"The instrument has something to fill in or fix; what it lacks is left out of the DDI (`qretools instrument check` lists it).\n",
 		);
+	if (args.values.qsf === true)
+		return exportQsf(file, source, result, args, io);
 	const text = `${JSON.stringify(result.ddi, null, 2)}\n`;
+	if (args.values.output === undefined) io.out(text);
+	else await io.writeFile(args.values.output, text);
+	return OK;
+}
+
+/**
+ * The instrument as a Qualtrics survey, made from its DDI: every finding said at its step,
+ * and nothing written while any is an error (`qsfRefusal`).
+ */
+async function exportQsf(
+	file: string,
+	source: string,
+	result: ReturnType<typeof instrumentOf>,
+	args: ReturnType<typeof parse>,
+	io: Io,
+): Promise<number> {
+	const { qsf, findings } = qsfOf(result.ddi, {
+		name: result.draft.name ?? basename(file, extname(file)),
+		created: qsfTime(new Date()),
+	});
+	const placed = placeFindings(findings, result.places);
+	for (const f of placed)
+		io.err(`${findingLine(file, source, result.ranges, f)}\n`);
+	const refusal = qsfRefusal(placed);
+	if (qsf === undefined || refusal !== undefined) {
+		io.err(
+			`Not exported: ${refusal?.errors ?? 1} thing${refusal?.errors === 1 ? "" : "s"} in this instrument can't be run in Qualtrics as its DDI says.\n`,
+		);
+		return PROBLEMS;
+	}
+	const text = `${JSON.stringify(qsf, null, 2)}\n`;
 	if (args.values.output === undefined) io.out(text);
 	else await io.writeFile(args.values.output, text);
 	return OK;

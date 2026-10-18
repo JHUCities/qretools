@@ -74,6 +74,10 @@ For one instrument, `qretools instrument check <file>` and `qretools instrument 
 others at their tags; `--bank alias=dir` reads an alias written as `owner/repo@v1` from a
 directory instead, to work offline. Any other local address is refused.
 
+`qretools instrument export <file> --qsf` writes the instrument as a Qualtrics survey
+(QSF) made from its DDI, to import under Projects → Create project → Survey. Everything
+Qualtrics can't run as the DDI says is reported at its line, and an error writes nothing.
+
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses
 when it would be wrong: no declared agency, two items under one identity, or a document
