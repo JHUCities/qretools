@@ -148,7 +148,7 @@ describe("an instrument as DDI", () => {
 			),
 		).toMatchInlineSnapshot(`
 			{
-			  "Category": 14,
+			  "Category": 15,
 			  "CodeList": 7,
 			  "ComputationItem": 1,
 			  "IfThenElse": 4,
@@ -337,6 +337,29 @@ describe("an instrument as DDI", () => {
 			),
 		);
 		expect(into).toHaveLength(2);
+	});
+
+	it("says what each branch is for: a stop, or a check's severity; a plain if says nothing", () => {
+		const { document } = build();
+		const kinds = Object.values(document.IfThenElse ?? {}).map(
+			(b): [string, string | undefined] => [
+				String(b.ID).split(".").at(-1) ?? "",
+				(b.TypeOfIfThenElse as JsonObject | undefined)?.StringValue as
+					| string
+					| undefined,
+			],
+		);
+		expect(kinds).toEqual(
+			expect.arrayContaining([
+				["stop-1", "stop"],
+				["ask-rent-check-1", "blocking"],
+				["ask-rent-check-2", "warning"],
+			]),
+		);
+		// An if the author wrote has no kind: a reader never takes it for a stop.
+		const ifs = kinds.filter(([id]) => id.startsWith("if"));
+		expect(ifs.length).toBeGreaterThan(0);
+		expect(ifs.every(([, kind]) => kind === undefined)).toBe(true);
 	});
 
 	it("records each answer once, in a Variable of its own, never the bank's", () => {

@@ -49,7 +49,7 @@ import type {
 	UniverseRef,
 	ValueDomain,
 } from "./draft.ts";
-import { SEVERITIES } from "./draft.ts";
+import { SEVERITIES, STOP } from "./draft.ts";
 import type { ParsedInstrument } from "./parse.ts";
 
 export interface InstrumentOptions {
@@ -387,36 +387,38 @@ export function elaborateInstrument(
 		return answers;
 	};
 
-	// The checks' severities: a code list of the instrument's own, which each check's
-	// IfThenElse names its kind from.
-	let severities: Item | undefined;
-	/** A check's kind, from the severities' list; nothing while the severity is still a hole. */
-	const severity = (s: Check["severity"]): JsonObject | undefined => {
-		if (s === undefined) return undefined;
-		if (severities === undefined) {
-			const cats = SEVERITIES.map((name, i) =>
+	// What a branch is for: a code list of the instrument's own, which each check's
+	// IfThenElse (its severity) and each stop's names its kind from.
+	let branchKinds: Item | undefined;
+	const kindOf = (name: string): JsonObject => {
+		if (branchKinds === undefined) {
+			const names = [...SEVERITIES, STOP];
+			const cats = names.map((n, i) =>
 				emit(
-					item("Category", id(`severity-cat-${i}`), {
-						Label: [structured(name)],
+					item("Category", id(`branch-kind-cat-${i}`), {
+						Label: [structured(n)],
 					}),
 				),
 			);
-			severities = emit(
-				item("CodeList", id("severities"), {
-					Label: [structured("Check severities")],
-					Code: SEVERITIES.map((name, i) => ({
-						...id(`severity-code-${i}`),
-						Value: codeValue(name),
+			branchKinds = emit(
+				item("CodeList", id("branch-kinds"), {
+					Label: [structured("Kinds of branch")],
+					Code: names.map((n, i) => ({
+						...id(`branch-kind-code-${i}`),
+						Value: codeValue(n),
 						CategoryReference: ref(cats[i] as Item),
 					})),
 				}),
 			);
 		}
 		return {
-			StringValue: s,
-			ControlledVocabularyCodeListReference: ref(severities),
+			StringValue: name,
+			ControlledVocabularyCodeListReference: ref(branchKinds),
 		};
 	};
+	/** A check's kind, its severity; nothing while the severity is still a hole. */
+	const severity = (s: Check["severity"]): JsonObject | undefined =>
+		s === undefined ? undefined : kindOf(s);
 
 	const sequence = (
 		nodes: readonly Node[],
@@ -462,6 +464,7 @@ export function elaborateInstrument(
 				"IfThenElse",
 				id(at),
 				obj({
+					TypeOfIfThenElse: kindOf(STOP),
 					IfCondition: command(node.cond, at),
 					ThenConstructReference: ref(then),
 					ElseConstructReference: ref(otherwise),

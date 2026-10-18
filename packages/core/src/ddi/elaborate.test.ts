@@ -11,7 +11,12 @@ import { EMPTY_ENV } from "../surface/env.ts";
 import { parseSurface } from "../surface/parse.ts";
 import { parseScale } from "../surface/scales.ts";
 import type { DdiDocument, ItemType, JsonObject } from "./document.ts";
-import { elaborate as elaborateWith, type Versioning } from "./elaborate.ts";
+import {
+	elaborate as elaborateWith,
+	NOT_TICKED,
+	TICKED,
+	type Versioning,
+} from "./elaborate.ts";
 import { makeValidator } from "./validate.ts";
 
 /** With the usual select-all coding, which most of these tests have nothing to say about. */
@@ -287,6 +292,41 @@ describe("shared scales and select-many", () => {
 				["on_foot", "w"],
 			],
 			[["n"]],
+		]);
+	});
+
+	it("says which of the select-all values is a tick, whichever the bank writes first", () => {
+		const draft = parseSurface(
+			'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n',
+			EMPTY_ENV,
+		).draft;
+		const ticks = (first: "chosen" | "not_chosen") => {
+			const doc = elaborateWith(draft, AGENCY, [], {
+				chosen: { code: "1", label: "Selected" },
+				notChosen: { code: "2", label: "Not selected" },
+				first,
+			});
+			expect(validate(doc)).toEqual([]);
+			const codes = (itemOf(doc, "CodeList", "select-all.codes").Code ??
+				[]) as JsonObject[];
+			return codes.map((c) => {
+				const cat = Object.values(doc.Category ?? {}).find(
+					(k) =>
+						k.ID === ((c.CategoryReference as JsonObject).value as string[])[1],
+				);
+				return [
+					(c.Value as JsonObject).StringValue,
+					(cat?.Generation as JsonObject | undefined)?.Qualification,
+				];
+			});
+		};
+		expect(ticks("chosen")).toEqual([
+			["1", TICKED],
+			["2", NOT_TICKED],
+		]);
+		expect(ticks("not_chosen")).toEqual([
+			["2", NOT_TICKED],
+			["1", TICKED],
 		]);
 	});
 
