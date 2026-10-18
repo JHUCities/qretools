@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -231,6 +231,42 @@ describe("qretools instrument", () => {
 		const bad = await run("instrument", "export", FILE, "--agency", "my org");
 		expect(bad.code).toBe(1);
 		expect(bad.err).toMatch(/isn't a DDI agency/);
+	});
+
+	it("exports it as a Qualtrics survey with `--qsf`, refused while Qualtrics can't run it", async () => {
+		// The rent warning pipes the rent on its own page: Qualtrics would show it empty.
+		const refused = await run(
+			"instrument",
+			"export",
+			FILE,
+			"--qsf",
+			"-o",
+			"x.qsf",
+		);
+		expect(refused.code).toBe(1);
+		expect(refused.written).toEqual({});
+		expect(refused.err).toMatch(
+			/households\.yaml:33:17: error: This warning shows the answer it checks/,
+		);
+		const dir = await mkdtemp(join(tmpdir(), "qretools-"));
+		try {
+			await cp(here("../../fixtures/households"), dir, { recursive: true });
+			const ok = join(dir, "instruments", "short.yaml");
+			await writeFile(
+				ok,
+				"name: short\nuses:\n  hh: ../\nflow:\n  - ask: hh.tenure\n",
+			);
+			const r = await run("instrument", "export", ok, "--qsf", "-o", "x.qsf");
+			expect(r.code).toBe(0);
+			expect(
+				JSON.parse(r.written["x.qsf"] ?? "{}").SurveyEntry.SurveyName,
+			).toBe("short");
+		} finally {
+			await rm(dir, { recursive: true });
+		}
+		const check = await run("instrument", "check", FILE, "--qsf");
+		expect(check.code).toBe(2);
+		expect(check.err).toMatch(/`--qsf` isn't an option of `instrument check`/);
 	});
 
 	it("publishes under its own workspace's agency unless another is given", async () => {
