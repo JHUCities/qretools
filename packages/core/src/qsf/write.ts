@@ -139,7 +139,16 @@ export function writeQsf(
 		const asked = [...cond.sources.values()].flatMap((s) =>
 			s.kind === "answer" && s.row === undefined ? s.asks : [],
 		);
-		if (asked.some(ctx.outside)) {
+		// A check on a looped question reads its own loop's answers at the current round.
+		const loop =
+			onPage === undefined ? undefined : numbering.loopOf.get(onPage);
+		if (
+			asked.some(
+				(a) =>
+					ctx.outside(a) &&
+					(loop === undefined || numbering.loopOf.get(a) !== loop),
+			)
+		) {
 			note(
 				"qsf-inexpressible",
 				"error",
