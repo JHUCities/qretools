@@ -22,10 +22,12 @@ describe("two workspaces under one agency", () => {
 					'chosen: { "1": Selected }\nnot_chosen: { "2": Not selected }\n',
 				// A shared scale of the same name but other labels: a clash of its own.
 				"scales/agree.yaml": 'labels:\n  "1": Agree strongly\n',
+				"questions/t/papers.yaml":
+					'name: papers\ntext: Which?\nintent: Which.\nselect: many\nresponses:\n  "1": Daily\n  "2": Weekly\n',
 			}),
 		};
 		const r = instrumentOf(
-			"name: x\nuses:\n  b: o/b@v1\n  a: o/a@v1\nflow:\n  - ask: a.news\n  - ask: b.news\n    as: news2\n  - ask: a.rate\n  - ask: b.rate\n    as: rate2\n",
+			"name: x\nuses:\n  b: o/b@v1\n  a: o/a@v1\nflow:\n  - ask: a.news\n  - ask: b.papers\n  - ask: a.rate\n  - ask: b.rate\n    as: rate2\n",
 			{ banks, agency: "org.i" },
 		);
 		const clashes = r.findings.filter((f) => f.code === "name-clash");
@@ -39,15 +41,6 @@ describe("two workspaces under one agency", () => {
 			[
 				"uses.a",
 				"`a` and `b` both publish as `org.a` but don't agree on how a select-all-that-apply option is stored.",
-			],
-			// `as` on a select-all question is refused, so both asks record its options.
-			[
-				"flow.1.ask",
-				"The variable `news_1` would be recorded by `a.news` and by `b.news`.",
-			],
-			[
-				"flow.1.ask",
-				"The variable `news_2` would be recorded by `a.news` and by `b.news`.",
 			],
 		]);
 		// The refusal itself is unchanged: every identity is still a collision.

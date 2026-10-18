@@ -513,6 +513,20 @@ flow:
 		}
 	});
 
+	it("records every option of a select-all ask whose `as` is refused, under its own names", () => {
+		const parsed = parseInstrument(
+			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.modes\n    as: trips\n",
+			{ bas: BAS },
+		);
+		const { document } = instrumentDocument(
+			elaborateInstrument(parsed, { agency: "org.example" }),
+		);
+		const names = Object.values(document.Variable ?? {}).map(
+			(v) => [...objects(v.VariableName)].find((o) => "Value" in o)?.Value,
+		);
+		expect(names).toEqual(["modes_b", "modes_w"]);
+	});
+
 	it("is total: a draft with holes still elaborates", () => {
 		const parsed = parseInstrument(
 			"name: x\nuses:\n  bas: here\nflow:\n  - if: bas.consent =\n    then:\n      - ask: bas.nope\n  - ask:\n",

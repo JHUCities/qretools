@@ -188,7 +188,8 @@ export function elaborateInstrument(
 		const parts: ({ text: string } | { parameter: Identity })[] = [];
 		let at = 0;
 		for (const [i, p] of placeholderSpans(text).entries()) {
-			const v = exported(reads[i]?.name ?? p.name);
+			const name = reads[i]?.name;
+			const v = name === undefined ? undefined : exported(name);
 			if (v === undefined) continue;
 			if (p.range[0] > at) parts.push({ text: text.slice(at, p.range[0]) });
 			parts.push({ parameter: outOf(v) });
