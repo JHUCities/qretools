@@ -17,7 +17,8 @@
  * exactly (case and spaces); an embedded field never set, or set to an empty answer, is
  * tested as a question not answered is. An embedded field is ordered as a number but
  * EqualTo compares its text ("05" isn't 5), so a number is tested for equality by >= and <=.
- * Assumed: an ask not shown has no answer, even after Back. Ordering text is refused.
+ * An ask not shown has no answer, even one given before going Back (experiment 6b).
+ * Ordering text is refused: unmeasured.
  * The writer's part: `$e{}` over an empty answer writes "{Invalid Expression}" (experiment 4),
  * so a computed field is set only where its operands are answered, else left unset.
  */
