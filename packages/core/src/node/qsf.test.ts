@@ -53,7 +53,10 @@ describe("reading the households instrument's DDI back", () => {
 
 	it("writes the households survey: blocks, questions and pipes, and what isn't written yet", async () => {
 		const { instrument } = readInstrument(await households());
-		const { qsf, findings } = writeQsf(instrument, { name: "households" });
+		const { qsf, findings } = writeQsf(instrument, {
+			name: "households",
+			created: "2026-10-18 00:00:00",
+		});
 		const elements = qsf.SurveyElements as {
 			Element: string;
 			PrimaryAttribute: string;

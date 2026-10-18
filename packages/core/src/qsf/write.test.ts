@@ -15,7 +15,10 @@ const modes: Question = {
 	},
 };
 const payloads = (instrument: ReadInstrument) => {
-	const { qsf, findings } = writeQsf(instrument, { name: "t" });
+	const { qsf, findings } = writeQsf(instrument, {
+		name: "t",
+		created: "2026-10-18 00:00:00",
+	});
 	const sq = (qsf.SurveyElements as { Element: string; Payload: unknown }[])
 		.filter((e) => e.Element === "SQ")
 		.map((e) => e.Payload as Record<string, unknown>);
@@ -56,5 +59,30 @@ describe("writing a survey as QSF", () => {
 			RecodeValues: { "1": "b", "2": "w" },
 			VariableNaming: { "1": "modes_bus", "2": "modes_walk" },
 		});
+	});
+
+	it("meets the survey header rules Qualtrics' import checks (experiment 5a)", () => {
+		const { qsf } = writeQsf(
+			{ inputs: [], flow: [] },
+			{ name: "t", created: "2026-10-18 09:30:00" },
+		);
+		const entry = qsf.SurveyEntry as Record<string, unknown>;
+		const date =
+			/^(19|20)\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+		expect(entry.SurveyOwnerID).toMatch(/^.{10,}$/);
+		expect(entry.CreatorID).toMatch(/^URH?_[a-zA-Z0-9]{11,15}$/);
+		expect(entry.SurveyBrandID).toMatch(/^.+$/);
+		expect(entry.SurveyCreationDate).toMatch(date);
+		expect(entry.LastModified).toMatch(date);
+		for (const key of [
+			"DivisionID",
+			"SurveyActiveResponseSet",
+			"SurveyStartDate",
+			"SurveyExpirationDate",
+			"LastAccessed",
+			"LastActivated",
+			"Deleted",
+		])
+			expect(entry).toHaveProperty(key);
 	});
 });
