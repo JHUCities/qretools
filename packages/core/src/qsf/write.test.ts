@@ -38,7 +38,7 @@ describe("writing a survey as QSF", () => {
 	it("keeps author text as text: HTML, pipes and line breaks escaped", () => {
 		// biome-ignore lint/suspicious/noTemplateCurlyInString: an author's literal `${`, which must not pipe.
 		expect(escapeText("Rent < $1,000 & ${q://QID1} \n next")).toBe(
-			"Rent &lt; $1,000 &amp; &#36;{q://QID1} <br> next",
+			"Rent &lt; &#36;1,000 &amp; &#36;{q://QID1} <br> next",
 		);
 	});
 
@@ -265,6 +265,105 @@ describe("writing a survey as QSF", () => {
 			[
 			  "c-half: Qualtrics' arithmetic decides what dividing by zero gives.",
 			  "stop-late: \`late\` is computed only on some paths through the survey, so Qualtrics can't test it here.",
+			]
+		`);
+	});
+
+	it("inlines nothing whose value at its reader could differ from when it was computed", () => {
+		const size: Question = {
+			id: "q-size",
+			name: "size",
+			domain: { kind: "number", decimals: 0 },
+		};
+		const answer: Source = {
+			kind: "answer",
+			variable: "size",
+			asks: ["ask-size"],
+			question: size,
+		};
+		const cond = (text: string, ...computed: string[]): Cond => ({
+			expr: parseCondition(text).expr,
+			sources: new Map<string, Source>([
+				["size", answer],
+				...computed.map((c): [string, Source] => [
+					c,
+					{ kind: "compute", variable: c },
+				]),
+			]),
+		});
+		let computes = 0;
+		const compute = (variable: string, value: Cond): Step => ({
+			kind: "compute",
+			id: `c-${++computes}`,
+			variable,
+			value,
+		});
+		const stop = (id: string, c: Cond): Step => ({
+			kind: "stop",
+			id,
+			cond: c,
+			say: [],
+		});
+		const write = (...flow: Step[]) =>
+			writeQsf(
+				{
+					inputs: [],
+					flow: [
+						{
+							kind: "ask",
+							id: "ask-size",
+							question: size,
+							records: [{ variable: "size" }],
+							text: [{ kind: "text", text: "How many?" }],
+							checks: [],
+						},
+						...flow,
+					],
+				},
+				{ name: "t", created: "2026-10-18 00:00:00" },
+			);
+		// A chain of numbers is fields, and isnull of one tests its field.
+		const chain = write(
+			compute("n", cond("size + 1")),
+			compute("m", cond("n * 2", "n")),
+			stop("stop-n", cond("isnull(n)", "n")),
+		);
+		expect(chain.findings).toEqual([]);
+		expect(
+			flowOutline(chain.qsf).filter(
+				(l) => l.includes("EmbeddedData") || l.includes("Branch stop"),
+			),
+		).toMatchInlineSnapshot(`
+			[
+			  "  EmbeddedData  n=$e{ (\${q://QID1/ChoiceTextEntryValue} + 1) }",
+			  "  EmbeddedData  m=$e{ (\${e://Field/n} * 2) }",
+			  "Branch stop if isnull(n): n Empty",
+			]
+		`);
+		// a reads b before b is computed: in the DDI a is null, so it can't be inlined as b's condition.
+		const early = write(
+			compute("a", cond("b", "b")),
+			compute("b", cond("size > 4")),
+			stop("stop-a", cond("a", "a")),
+		);
+		expect(
+			early.findings.map((f) => `${f.path}: ${f.message}`),
+		).toMatchInlineSnapshot(`
+			[
+			  "stop-a: \`b\` is read before it's computed, so Qualtrics can't test it here.",
+			]
+		`);
+		// A true-or-false value computed twice has no single value to inline, nor a field to test.
+		const twice = write(
+			compute("b", cond("size > 4")),
+			compute("b", cond("size > 6")),
+			stop("stop-b", cond("isnull(b)", "b")),
+		);
+		expect(
+			twice.findings.map((f) => `${f.path}: ${f.message}`),
+		).toMatchInlineSnapshot(`
+			[
+			  "stop-b: \`b\` is computed more than once, so Qualtrics can't test it here.",
 			]
 		`);
 	});

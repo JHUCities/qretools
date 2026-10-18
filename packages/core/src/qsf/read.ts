@@ -162,6 +162,8 @@ export type Step =
 export interface ReadInstrument {
 	readonly name?: string;
 	readonly title?: string;
+	/** Whether the bank has missing-value codes (on its variables, never a question's choices). */
+	readonly missing?: true;
 	readonly inputs: readonly Extract<Source, { kind: "input" }>[];
 	readonly flow: readonly Step[];
 }
@@ -813,6 +815,10 @@ export function readInstrument(ddi: DdiDocument): {
 		instrument: {
 			...(name !== undefined && { name }),
 			...(title !== undefined && { title }),
+			...(Object.keys(ddi.ManagedMissingValuesRepresentation ?? {}).length >
+				0 && {
+				missing: true as const,
+			}),
 			inputs,
 			flow,
 		},

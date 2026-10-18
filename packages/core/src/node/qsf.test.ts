@@ -117,8 +117,9 @@ describe("reading the households instrument's DDI back", () => {
 			findings.map((f) => `${f.severity} ${f.path}: ${f.message}`),
 		).toMatchInlineSnapshot(`
 			[
+			  "info : The bank's missing-value codes aren't offered to respondents in Qualtrics.",
 			  "error instrument-households.roster-members: A roster isn't exported to Qualtrics yet: it's left out.",
-			  "error instrument-households.ask-rent: A check isn't exported to Qualtrics yet: it's left out.",
+			  "error instrument-households.ask-rent: This is written to Qualtrics without its checks: not exported yet.",
 			  "error instrument-households.roster-vehicles: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "error instrument-households.each-members: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",

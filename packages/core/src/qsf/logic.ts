@@ -305,13 +305,18 @@ export type Compiled =
 	| { readonly kind: "problem"; readonly message: string };
 
 /**
- * A condition's four forms, or why Qualtrics can't say it. `computed` gives a computed
- * name's own condition, inlined where it's read (a computed value Qualtrics can't hold
- * as true or false); undefined when it can't be.
+ * What a computed name is in Qualtrics: a true-or-false value inlined where it's read (it
+ * has no field), a field holding a number, or neither, and why.
  */
+export type Computed =
+	| { readonly kind: "inline"; readonly value: Cond }
+	| { readonly kind: "field" }
+	| { readonly kind: "refused"; readonly why: string };
+
+/** A condition's four forms, or why Qualtrics can't say it. */
 export function compileCondition(
 	cond: Cond,
-	computed: (variable: string) => Cond | undefined = () => undefined,
+	computed: (variable: string) => Computed = () => ({ kind: "field" }),
 ): Compiled {
 	// The first problem met is the one reported; the walk goes on with a placeholder.
 	let problem: string | undefined;
@@ -321,16 +326,11 @@ export function compileCondition(
 	};
 	// The computed names being inlined, so one that reads itself is refused, not looped on.
 	const inlining = new Set<string>();
-	const inline = (variable: string): Forms => {
-		const inner = computed(variable);
-		if (inner === undefined)
-			return fail(
-				`\`${variable}\` is a computed value Qualtrics can't hold as true or false here.`,
-			);
+	const inline = (variable: string, value: Cond): Forms => {
 		if (inlining.has(variable))
 			return fail(`\`${variable}\` is computed from itself.`);
 		inlining.add(variable);
-		const forms = go(inner.expr, inner.sources);
+		const forms = go(value.expr, value.sources);
 		inlining.delete(variable);
 		return forms;
 	};
@@ -343,7 +343,16 @@ export function compileCondition(
 				return constant(null);
 			case "name": {
 				const s = sources.get(e.name);
-				if (s?.kind === "compute") return inline(s.variable);
+				if (s?.kind === "compute") {
+					const c = computed(s.variable);
+					return c.kind === "inline"
+						? inline(s.variable, c.value)
+						: fail(
+								c.kind === "refused"
+									? c.why
+									: `\`${s.variable}\` is a number, not true or false.`,
+							);
+				}
 				return fail(
 					`\`${e.name}\` alone isn't a condition Qualtrics can test.`,
 				);
@@ -380,8 +389,10 @@ export function compileCondition(
 				if (e.fn === "isnull" && x !== undefined) {
 					// A computed condition is inlined, so it has no field to be empty.
 					const s = x.kind === "name" ? sources.get(x.name) : undefined;
-					if (s?.kind === "compute" && computed(s.variable) !== undefined)
-						return unknown(inline(s.variable));
+					const c = s?.kind === "compute" ? computed(s.variable) : undefined;
+					if (s?.kind === "compute" && c?.kind === "inline")
+						return unknown(inline(s.variable, c.value));
+					if (c?.kind === "refused") return fail(c.why);
 					const subject = subjectOf(x, sources);
 					if (subject === undefined)
 						return fail("`isnull` here tests something Qualtrics can't.");
