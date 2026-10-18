@@ -105,6 +105,9 @@ export function evaluateCondition(
 				// A code's words are its bank's, which a condition's evaluation isn't given.
 				if (x.fn === "label") return UNKNOWN;
 				const args = x.args.map(go);
+				// The value, or the default when the value is null (a hole stays undecided).
+				if (x.fn === "nvl")
+					return args[0] === null ? (args[1] ?? null) : (args[0] ?? null);
 				if (args.includes(UNKNOWN)) return UNKNOWN;
 				switch (x.fn) {
 					case "isnull":

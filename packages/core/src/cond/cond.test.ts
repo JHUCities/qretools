@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type Expr, FILL_FUNCTIONS, holesOf, namesOf } from "./ast.ts";
+import {
+	DDI_FUNCTIONS,
+	type Expr,
+	FILL_FUNCTIONS,
+	holesOf,
+	namesOf,
+} from "./ast.ts";
 import { evaluateCondition, UNKNOWN, type Value } from "./eval.ts";
 import { parseCondition } from "./parse.ts";
 import { printCondition } from "./print.ts";
@@ -231,5 +237,25 @@ describe("evaluating conditions", () => {
 		expect(value("1 and 2", {})).toBe(null);
 		expect(value('n > "1"', { n: 2 })).toBe(null);
 		expect(value("between(s, 1, 3)", { s: "2" })).toBe(null);
+	});
+
+	it("reads `nvl` back from DDI only: a value, or its default when the value is null", () => {
+		const ddi = (text: string, values: Record<string, Value>) =>
+			evaluateCondition(
+				parseCondition(text, DDI_FUNCTIONS).expr,
+				(n) => values[n] ?? null,
+			);
+		expect(ddi("nvl(n, 0) + 1", {})).toBe(1);
+		expect(ddi("nvl(n, 0) + 1", { n: 2 })).toBe(3);
+		expect(ddi('not nvl(x = "1", false)', {})).toBe(true);
+		expect(ddi('nvl(n, 0) >= 1 and not nvl(x = "1", false)', {})).toBe(false);
+		expect(print("nvl(n, 0) >= 1")).not.toBe("nvl(n, 0) >= 1");
+		expect(
+			printCondition(parseCondition("nvl(n, 0) >= 1", DDI_FUNCTIONS).expr),
+		).toBe("nvl(n, 0) >= 1");
+		// An author can't write it.
+		expect(problems("nvl(n, 0) > 1")).toEqual([
+			"`nvl` isn't a function conditions can use.",
+		]);
 	});
 });

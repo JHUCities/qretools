@@ -229,6 +229,13 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 						expect(value, "code", valueExpr, "`label`");
 					return STRING;
 				}
+				// Its value's type, or its default's while the value's is unknown.
+				if (x.fn === "nvl") {
+					const [value, fallback] = args;
+					return value?.kind === "unknown"
+						? (fallback ?? UNKNOWN)
+						: (value ?? UNKNOWN);
+				}
 				if (x.fn === "between") {
 					const [v, lo, hi] = args;
 					const [vx, lox, hix] = x.args;

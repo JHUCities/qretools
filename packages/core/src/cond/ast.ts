@@ -22,10 +22,15 @@ export type BinaryOp =
 export type UnaryOp = "not" | "-" | "+";
 
 /** VTL's scalar functions in the subset. */
-export type Fn = "isnull" | "between" | "label";
+export type Fn = "isnull" | "between" | "label" | "nvl";
 export const FUNCTIONS: readonly Fn[] = ["isnull", "between"];
 /** `label(x)` is a projection used only while binding a question fill. */
 export const FILL_FUNCTIONS: readonly Fn[] = [...FUNCTIONS, "label"];
+/**
+ * `nvl(x, d)`, VTL's "x, or d when x is null", as the instrument's DDI writes it: read
+ * only when reading DDI back, never offered to an author.
+ */
+export const DDI_FUNCTIONS: readonly Fn[] = [...FUNCTIONS, "nvl"];
 
 export type Expr =
 	| { readonly kind: "hole"; readonly range: Range }

@@ -236,7 +236,7 @@ export function parseCondition(
 			return { kind: "hole", range };
 		}
 		const fn = name.text as Fn;
-		const arity = fn === "isnull" || fn === "label" ? 1 : 3;
+		const arity = fn === "isnull" || fn === "label" ? 1 : fn === "nvl" ? 2 : 3;
 		// Too few is still being written: holes. Too many is a mistake.
 		while (args.length < arity)
 			args.push({ kind: "hole", range: [range[1], range[1]] });
@@ -248,7 +248,9 @@ export function parseCondition(
 						? "`isnull` takes one value: `isnull(bas.x)`."
 						: fn === "label"
 							? "`label` takes one coded answer: `label(selected_neighborhood)`."
-							: "`between` takes a value and two bounds: `between(bas.n, 18, 64)`.",
+							: fn === "nvl"
+								? "`nvl` takes a value and what to use when it's null."
+								: "`between` takes a value and two bounds: `between(bas.n, 18, 64)`.",
 				range,
 			});
 		return { kind: "call", fn, args, range };
