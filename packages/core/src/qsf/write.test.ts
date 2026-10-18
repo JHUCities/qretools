@@ -545,4 +545,45 @@ describe("writing a survey as QSF", () => {
 			]
 		`);
 	});
+
+	it("shuffles a section of questions with Qualtrics' block randomizer, a Default block first", () => {
+		const ask = (id: string): Step => ({
+			kind: "ask",
+			id,
+			question: { ...modes, name: id },
+			records: [
+				{ variable: `${id}_b`, code: "b" },
+				{ variable: `${id}_w`, code: "w" },
+			],
+			text: [{ kind: "text", text: `${id}?` }],
+			checks: [],
+		});
+		const { qsf, findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "section",
+						id: "s",
+						title: "Travel",
+						order: "rotate",
+						flow: [ask("a"), ask("b"), ask("c")],
+					},
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(flowOutline(qsf)).toMatchInlineSnapshot(`
+			[
+			  "Block BL_qretools000001",
+			  "BlockRandomizer",
+			  "  Standard BL_qretools000002",
+			  "  Standard BL_qretools000003",
+			  "  Standard BL_qretools000004",
+			]
+		`);
+		expect(findings.map((f) => `${f.severity} ${f.path}`)).toEqual([
+			"warning s",
+		]);
+	});
 });

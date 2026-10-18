@@ -37,7 +37,12 @@ export type Node =
 				readonly value: string;
 			}[];
 	  }
-	| { readonly kind: "end" };
+	| { readonly kind: "end" }
+	/** Blocks shown in a random order, all of them (a section's `order`). */
+	| {
+			readonly kind: "randomizer";
+			readonly blocks: readonly Extract<Node, { kind: "block" }>[];
+	  };
 
 /**
  * IDs of our own, in the shapes Qualtrics' import requires (experiment 5a). It replaces the
@@ -74,49 +79,71 @@ export function toQsf(
 	const ids: string[] = [];
 	let flowIds = 1;
 	const flowId = () => `FL_${++flowIds}`;
+	const block = (n: Extract<Node, { kind: "block" }>): QsfObject => {
+		all.push(n);
+		// The first block is Qualtrics' Default block.
+		const id = n.id ?? blockId(all.length);
+		ids.push(id);
+		return all.length === 1
+			? { Type: "Block", ID: id, FlowID: flowId() }
+			: { Type: "Standard", ID: id, FlowID: flowId(), Autofill: [] };
+	};
 	const serialise = (ns: readonly Node[]): QsfObject[] =>
-		ns.map((n): QsfObject => {
+		ns.flatMap((n): QsfObject[] => {
 			switch (n.kind) {
-				case "block": {
-					all.push(n);
-					// The first block is Qualtrics' Default block.
-					const id = n.id ?? blockId(all.length);
-					ids.push(id);
-					return all.length === 1
-						? { Type: "Block", ID: id, FlowID: flowId() }
-						: { Type: "Standard", ID: id, FlowID: flowId(), Autofill: [] };
+				case "block":
+					return [block(n)];
+				case "randomizer": {
+					// A randomizer holds Standard blocks (iain-reference-2.qsf): the Default one goes first.
+					const lead =
+						all.length === 0 ? [block({ kind: "block", pages: [] })] : [];
+					return [
+						...lead,
+						{
+							Type: "BlockRandomizer",
+							FlowID: flowId(),
+							SubSet: n.blocks.length,
+							Flow: n.blocks.map(block),
+						},
+					];
 				}
 				case "branch": {
 					const id = flowId();
-					return {
-						Type: "Branch",
-						FlowID: id,
-						Description: n.description,
-						BranchLogic: n.logic,
-						Flow: serialise(n.flow),
-					};
+					return [
+						{
+							Type: "Branch",
+							FlowID: id,
+							Description: n.description,
+							BranchLogic: n.logic,
+							Flow: serialise(n.flow),
+						},
+					];
 				}
 				case "set":
-					return {
-						Type: "EmbeddedData",
-						FlowID: flowId(),
-						EmbeddedData: n.fields.map((f) => ({
-							Description: f.name,
-							Type: "Custom",
-							Field: f.name,
-							VariableType: "String",
-							DataVisibility: [],
-							AnalyzeText: false,
-							Value: f.value,
-						})),
-					};
+					return [
+						{
+							Type: "EmbeddedData",
+							FlowID: flowId(),
+							EmbeddedData: n.fields.map((f) => ({
+								Description: f.name,
+								Type: "Custom",
+								Field: f.name,
+								VariableType: "String",
+								DataVisibility: [],
+								AnalyzeText: false,
+								Value: f.value,
+							})),
+						},
+					];
 				case "end":
-					return {
-						Type: "EndSurvey",
-						FlowID: flowId(),
-						EndingType: "Advanced",
-						Options: { Advanced: "true", ResponseFlag: "Screened" },
-					};
+					return [
+						{
+							Type: "EndSurvey",
+							FlowID: flowId(),
+							EndingType: "Advanced",
+							Options: { Advanced: "true", ResponseFlag: "Screened" },
+						},
+					];
 				default:
 					return n satisfies never;
 			}

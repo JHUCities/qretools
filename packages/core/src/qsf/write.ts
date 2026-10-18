@@ -394,8 +394,7 @@ export function writeQsf(
 					break;
 				case "section":
 					flush();
-					if (s.order !== undefined) without(s.id, "its order");
-					nodes.push(...layout(s.flow, s.title));
+					nodes.push(...section(s));
 					break;
 				case "compute": {
 					// True or false: inlined where it's read, never stored.
@@ -532,6 +531,7 @@ export function writeQsf(
 					case "say":
 						return shown(statement(x), guard, x.id);
 					case "section":
+						if (x.order !== undefined) without(x.id, "its order");
 						return flat(x.flow, guard);
 					case "if": {
 						const arms = x.branches.map((b) => forms(b.cond, x.id));
@@ -588,6 +588,35 @@ export function writeQsf(
 				},
 			},
 		];
+	};
+
+	/**
+	 * A section; in a random order, Qualtrics' block randomizer showing all of its blocks
+	 * (iain-reference-2.qsf), which is exact when each of its steps lays out as one block.
+	 */
+	const section = (s: Extract<Step, { kind: "section" }>): Node[] => {
+		if (s.order === undefined) return layout(s.flow, s.title);
+		const each = s.flow.map((step) => layout([step]));
+		const blocks = each.flatMap((nodes) =>
+			nodes.length === 1 && nodes[0]?.kind === "block" ? [nodes[0]] : [],
+		);
+		if (blocks.length !== s.flow.length) {
+			note(
+				"qsf-inexpressible",
+				"error",
+				s.id,
+				"Qualtrics shuffles blocks: this section holds more than questions and statements, so it's written in its order.",
+			);
+			return each.flat();
+		}
+		if (s.order === "rotate")
+			note(
+				"qsf-inexpressible",
+				"warning",
+				s.id,
+				"Qualtrics can't rotate a section: it's shuffled instead.",
+			);
+		return blocks.length === 0 ? [] : [{ kind: "randomizer", blocks }];
 	};
 
 	/**
