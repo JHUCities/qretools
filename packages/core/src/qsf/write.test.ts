@@ -469,4 +469,80 @@ describe("writing a survey as QSF", () => {
 			RightOperand: "10000",
 		});
 	});
+
+	it("writes a blocking check as custom validation, the number's range folded in", () => {
+		const rent: Question = {
+			id: "q-rent",
+			name: "rent",
+			domain: { kind: "number", min: 0, max: 50000, decimals: 0 },
+		};
+		const sources = new Map<string, Source>([
+			[
+				"rent",
+				{
+					kind: "answer",
+					variable: "rent",
+					asks: ["ask-rent"],
+					question: rent,
+				},
+			],
+		]);
+		const { sq, findings } = payloads({
+			inputs: [],
+			flow: [
+				{
+					kind: "ask",
+					id: "ask-rent",
+					question: rent,
+					records: [{ variable: "rent" }],
+					text: [{ kind: "text", text: "Rent?" }],
+					checks: [
+						{
+							id: "check-1",
+							severity: "blocking",
+							ensure: { expr: parseCondition("rent <> 13").expr, sources },
+							message: [{ kind: "text", text: "Not 13." }],
+						},
+					],
+				},
+			],
+		});
+		const validation = sq[0]?.Validation as
+			| { Settings: Record<string, unknown> }
+			| undefined;
+		const settings = validation?.Settings ?? {};
+		expect(settings.Type).toBe("CustomValidation");
+		const logic = (
+			settings.CustomValidation as {
+				Logic: {
+					"0": Record<
+						string,
+						{ Operator?: string; RightOperand?: string; Conjuction?: string }
+					>;
+				};
+			}
+		).Logic["0"];
+		expect(
+			Object.values(logic)
+				.filter((x) => typeof x === "object")
+				.map((x) =>
+					`${x.Conjuction ?? ""} ${x.Operator} ${x.RightOperand ?? ""}`.trim(),
+				),
+		).toMatchInlineSnapshot(`
+			[
+			  "NotEqualTo 13",
+			  "And GreaterThanOrEqual 0",
+			  "And LessThanOrEqual 50000",
+			  "Or Empty",
+			]
+		`);
+		expect(
+			findings.map((f) => `${f.severity} ${f.path}: ${f.message}`),
+		).toMatchInlineSnapshot(`
+			[
+			  "warning ask-rent: With its checks, Qualtrics no longer refuses an answer that isn't a number here.",
+			  "info check-1: Qualtrics shows its own message when this check fails: a custom validation's message comes from a library.",
+			]
+		`);
+	});
 });
