@@ -95,7 +95,21 @@ export type InstrumentCode =
 	/** A roster's `max` below what it counts allows: later rows aren't asked. */
 	| "max-below-count";
 
-export type FindingCode = ParseCode | LintCode | InstrumentCode | "ddi-invalid";
+/** Reported by the Qualtrics export (`qsf/`), at a DDI item's ID. */
+export type QsfCode =
+	/** DDI the export can't read: not as an instrument's elaboration writes it. */
+	| "qsf-unread"
+	/** Something Qualtrics can't do as the DDI says it: left out, or done another way. */
+	| "qsf-inexpressible"
+	/** A condition too large to write as Qualtrics logic. */
+	| "qsf-too-large";
+
+export type FindingCode =
+	| ParseCode
+	| LintCode
+	| InstrumentCode
+	| QsfCode
+	| "ddi-invalid";
 
 /** Character offsets into the source text, `[from, to)`. */
 export type Range = readonly [from: number, to: number];
