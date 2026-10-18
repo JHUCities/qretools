@@ -86,6 +86,9 @@ describe("the entry points", () => {
 			    "piecesOf",
 			    "placeholders",
 			    "plainText",
+			    "qsfOf",
+			    "qsfRefusal",
+			    "qsfTime",
 			    "questionItems",
 			    "readsInWorkspace",
 			    "refusalReason",
@@ -103,6 +106,7 @@ describe("the entry points", () => {
 			    "toFillIn",
 			    "unknownFolders",
 			    "usedBy",
+			    "withCreated",
 			    "workspaceOf",
 			  ],
 			  "editor": [
