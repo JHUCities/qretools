@@ -188,7 +188,16 @@ const compiled = (
 	text: string,
 	computed?: (v: string) => Cond | undefined,
 ): Forms | string => {
-	const c = compileCondition(cond(text), computed);
+	const c = compileCondition(
+		cond(text),
+		computed &&
+			((v) => {
+				const value = computed(v);
+				return value === undefined
+					? { kind: "refused", why: `\`${v}\` isn't inlined` }
+					: { kind: "inline", value };
+			}),
+	);
 	return c.kind === "ok" ? c.forms : c.message;
 };
 
@@ -269,7 +278,7 @@ describe("conditions as Qualtrics logic", () => {
 		const unknown = compiled("isnull(r)", inR);
 		if (typeof unknown === "string") throw new Error(unknown);
 		expect(agrees('isnull(c = "1" and n > 5)', unknown)).toBeUndefined();
-		expect(compiled("r")).toMatch(/computed/);
+		expect(compiled("r")).toMatch(/a number/);
 		expect(compiled("r", () => cond("r or n > 5"))).toMatch(/from itself/);
 	});
 

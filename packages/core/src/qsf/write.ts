@@ -9,7 +9,14 @@
 import { type Expr, namesOf } from "../cond/ast.ts";
 import { printCondition } from "../cond/print.ts";
 import type { Finding } from "../findings.ts";
-import { type Atom, and, compileCondition, type Dnf, NEVER } from "./logic.ts";
+import {
+	type Atom,
+	and,
+	type Computed,
+	compileCondition,
+	type Dnf,
+	NEVER,
+} from "./logic.ts";
 import type {
 	Cond,
 	Part,
@@ -128,13 +135,14 @@ type Node =
 	  }
 	| { readonly kind: "end" };
 
-/** Text as Qualtrics shows it: HTML, where `${` starts a pipe. */
+/** Text as Qualtrics shows it: HTML, where `${` starts a pipe and `$e{` arithmetic. */
 export const escapeText = (text: string): string =>
 	text
 		.replace(/&/g, "&amp;")
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
-		.replace(/\$\{/g, "&#36;{")
+		// `${` pipes and `$e{` computes: an author's dollar is never either.
+		.replace(/\$/g, "&#36;")
 		.replace(/\n/g, "<br>");
 
 export function writeQsf(
@@ -161,6 +169,20 @@ export function writeQsf(
 		);
 	const numbering = number(instrument);
 	const { qids, looped } = numbering;
+	const without = (path: string, what: string) =>
+		note(
+			"qsf-inexpressible",
+			"error",
+			path,
+			`This is written to Qualtrics without ${what}: not exported yet.`,
+		);
+	if (instrument.missing)
+		note(
+			"qsf-note",
+			"info",
+			"",
+			"The bank's missing-value codes aren't offered to respondents in Qualtrics.",
+		);
 	const qidOf = (id: string) => qids.get(id) ?? "";
 	const placeOf = (id: string) => numbering.order.get(id) ?? -1;
 
@@ -189,36 +211,52 @@ export function writeQsf(
 			logical(c.step.value.expr, seen),
 		);
 
-	// Why the last computed name couldn't be inlined, for the condition that read it.
-	let notInlined: string | undefined;
 	/**
-	 * A true-or-false computed value, inlined where a condition reads it: exact only when it is
-	 * computed once, on every path, before the read, from answers asked before it.
+	 * What a computed name is where it's read. A number is a field. A true-or-false value is
+	 * inlined, which is exact only when it holds the value it had when computed: it is
+	 * computed once, on every path, before its reader; every answer it reads was asked before
+	 * it and outside a roster; every number it reads was computed only before it; and the same
+	 * holds, from its own place, for every true-or-false value it reads.
 	 */
-	const inlined = (variable: string, useAt: string): Cond | undefined => {
+	const computedAt = (
+		variable: string,
+		reader: number,
+		seen: ReadonlySet<string> = new Set(),
+	): Computed => {
 		const cs = numbering.computes.get(variable) ?? [];
 		const [c] = cs;
-		const why =
-			c === undefined
-				? undefined
-				: cs.length > 1
-					? "is computed more than once"
-					: !c.everyPath
-						? "is computed only on some paths through the survey"
-						: placeOf(c.step.id) > placeOf(useAt)
-							? "is read before it's computed"
-							: [...c.step.value.sources.values()].some(
-										(s) =>
-											s.kind === "answer" &&
-											s.asks.some((a) => placeOf(a) > placeOf(c.step.id)),
-									)
-								? "reads an answer asked after it"
-								: undefined;
-		if (c === undefined || why !== undefined) {
-			notInlined = `\`${variable}\` ${why ?? "isn't computed"}, so Qualtrics can't test it here.`;
-			return undefined;
+		const refuse = (why: string): Computed => ({
+			kind: "refused",
+			why: `\`${variable}\` ${why}, so Qualtrics can't test it here.`,
+		});
+		if (c === undefined) return refuse("isn't computed");
+		if (!isLogical(variable)) return { kind: "field" };
+		if (cs.length > 1) return refuse("is computed more than once");
+		if (seen.has(variable)) return refuse("is computed from itself");
+		if (!c.everyPath)
+			return refuse("is computed only on some paths through the survey");
+		const at = placeOf(c.step.id);
+		if (at > reader) return refuse("is read before it's computed");
+		const reads = new Set(namesOf(c.step.value.expr).map((n) => n.name));
+		for (const name of reads) {
+			const s = c.step.value.sources.get(name);
+			if (s === undefined) continue;
+			if (s.kind === "answer" && s.asks.some((a) => looped.has(a)))
+				return refuse("reads a roster's rows");
+			if (s.kind === "answer" && s.asks.some((a) => placeOf(a) > at))
+				return refuse("reads an answer asked after it");
+			if (s.kind !== "compute") continue;
+			const inner = computedAt(s.variable, at, new Set([...seen, variable]));
+			if (inner.kind === "refused") return inner;
+			if (
+				inner.kind === "field" &&
+				(numbering.computes.get(s.variable) ?? []).some(
+					(n) => placeOf(n.step.id) > at,
+				)
+			)
+				return refuse(`reads \`${s.variable}\`, computed again after it`);
 		}
-		return c.step.value;
+		return { kind: "inline", value: c.step.value };
 	};
 
 	/** An arithmetic value in Qualtrics' `$e{}`, or undefined with a finding. */
@@ -362,8 +400,21 @@ export function writeQsf(
 
 	// Export tags: a variable's name, shared only by the asks that record it.
 	const tags = new Map<string, string>();
+	const fields = new Set([
+		...instrument.inputs.map((i) => i.variable),
+		...numbering.computes.keys(),
+	]);
 	const tag = (wanted: string, owner: string, qid: string, at: string) => {
 		const held = tags.get(wanted);
+		if (fields.has(wanted)) {
+			note(
+				"qsf-note",
+				"info",
+				at,
+				`\`${wanted}\` is also an embedded data field in Qualtrics: this question's export tag is ${qid}.`,
+			);
+			return qid;
+		}
 		if (held === undefined || held === owner) {
 			tags.set(wanted, owner);
 			return wanted;
@@ -395,7 +446,7 @@ export function writeQsf(
 		if (domain.kind === "choice") {
 			const keys = domain.choices.map((_, i) => String(i + 1));
 			const exportTag = domain.many
-				? tag(q.name, s.id, qid, s.id)
+				? tag(q.name, `m:${s.records.map((r) => r.variable).join()}`, qid, s.id)
 				: tag(
 						s.records[0]?.variable ?? qid,
 						`v:${s.records[0]?.variable}`,
@@ -538,10 +589,9 @@ export function writeQsf(
 			notYet(at, "A condition on a roster's rows");
 			return undefined;
 		}
-		const compiled = compileCondition(cond, (v) => inlined(v, at));
+		const compiled = compileCondition(cond, (v) => computedAt(v, placeOf(at)));
 		if (compiled.kind === "problem") {
-			note("qsf-inexpressible", "error", at, notInlined ?? compiled.message);
-			notInlined = undefined;
+			note("qsf-inexpressible", "error", at, compiled.message);
 			return undefined;
 		}
 		if (compiled.forms.t === "too-large") {
@@ -610,8 +660,8 @@ export function writeQsf(
 		for (const s of flow) {
 			switch (s.kind) {
 				case "ask":
-					if (s.checks.length > 0) notYet(s.id, "A check");
-					if (s.options !== undefined) notYet(s.id, "Option order");
+					if (s.checks.length > 0) without(s.id, "its checks");
+					if (s.options !== undefined) without(s.id, "its options' order");
 					current.push(askQuestion(s));
 					break;
 				case "say":
@@ -619,7 +669,7 @@ export function writeQsf(
 					break;
 				case "section":
 					flush();
-					if (s.order !== undefined) notYet(s.id, "A section's order");
+					if (s.order !== undefined) without(s.id, "its order");
 					nodes.push(...layout(s.flow, s.title));
 					break;
 				case "compute": {
