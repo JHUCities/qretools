@@ -168,3 +168,20 @@ describe("reading the households instrument's DDI back", () => {
 		`);
 	});
 });
+
+describe("the households survey against its golden file", () => {
+	// The golden file is the survey Qualtrics imported and ran as written (2026-10-18): its
+	// re-export differed only in Qualtrics' own IDs, dates, theme and preview link.
+	it("writes the survey Qualtrics was shown to run", async () => {
+		const golden = fileURLToPath(
+			new URL("../../fixtures/qsf/households.qsf", import.meta.url),
+		);
+		const { qsf } = writeQsf(readInstrument(await households()).instrument, {
+			name: "households",
+			created: "2026-10-18 12:00:00",
+		});
+		expect(`${JSON.stringify(qsf, null, 2)}\n`).toBe(
+			await readFile(golden, "utf8"),
+		);
+	});
+});
