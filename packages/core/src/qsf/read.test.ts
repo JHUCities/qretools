@@ -236,6 +236,23 @@ describe("reading an instrument's DDI back", () => {
 		expect(found(ddi)).toEqual([["qsf-unread", "instrument-demo.if-1"]]);
 	});
 
+	it("refuses one ask placed twice in the flow", () => {
+		const ddi = tampered("Sequence", "if-1-else", (q) => ({
+			...q,
+			ControlConstructReference: [
+				...(q.ControlConstructReference as JsonObject[]),
+				...((
+					Object.values(demoDdi().Sequence ?? {}).find(
+						(x) => x.ID === "instrument-demo.if-1-elif-1-then",
+					)?.ControlConstructReference as JsonObject[] | undefined
+				)?.slice(0, 1) ?? []),
+			],
+		}));
+		expect(found(ddi)).toEqual([
+			["qsf-inexpressible", "instrument-demo.ask-modes"],
+		]);
+	});
+
 	it("refuses one variable recorded by asks a respondent can meet both of", () => {
 		const pets = Object.values(demoDdi().QuestionConstruct ?? {}).find(
 			(c) => c.ID === "instrument-demo.ask-pets-2",

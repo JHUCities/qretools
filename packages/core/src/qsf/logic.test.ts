@@ -6,6 +6,7 @@ import {
 	type Atom,
 	compileCondition,
 	type Dnf,
+	type Form,
 	type Forms,
 	MAX_TESTS,
 } from "./logic.ts";
@@ -132,26 +133,33 @@ const worlds = (): {
 };
 const WORLDS = worlds();
 
+/** Where a form's lists disagree with the condition's own value, or undefined; a form too large to write isn't checked. */
 const agrees = (text: string, forms: Forms) => {
 	const expr = cond(text).expr;
+	const at = (d: Form, shown: Shown, fields: Fields) =>
+		d === "too-large" ? undefined : holds(d, shown, fields);
 	for (const w of WORLDS) {
 		const v = evaluateCondition(expr, (name) => w.values[name] ?? null);
-		const got = {
-			t: holds(forms.t, w.shown, w.fields),
-			f: holds(forms.f, w.shown, w.fields),
-			n: holds(forms.n, w.shown, w.fields),
-			p: holds(forms.p, w.shown, w.fields),
-		};
 		const want = {
 			t: v === true,
 			f: v === false,
 			n: v !== true,
 			p: v !== false,
 		};
-		if (JSON.stringify(got) !== JSON.stringify(want))
-			return `${text} at ${JSON.stringify(w.values)}: ${JSON.stringify(got)}`;
+		for (const k of ["t", "f", "n", "p"] as const) {
+			const got = at(forms[k], w.shown, w.fields);
+			if (got !== undefined && got !== want[k])
+				return `${text}, ${k}, at ${JSON.stringify(w.values)}: ${got}`;
+		}
 	}
 	return undefined;
+};
+const compiled = (
+	text: string,
+	computed?: (v: string) => Cond | undefined,
+): Forms | string => {
+	const c = compileCondition(cond(text), computed);
+	return c.kind === "ok" ? c.forms : c.message;
 };
 
 const ATOMS = [
@@ -183,12 +191,14 @@ const ATOMS = [
 	"true",
 ];
 
+// The model of Qualtrics above compares numbers as numbers and treats an empty field as a
+// skipped question: assumptions, as logic.ts says, until experiment 6 measures them.
 describe("conditions as Qualtrics logic", () => {
 	it("agrees with the condition's own value, in every answer, for every test alone", () => {
 		const wrong = ATOMS.flatMap((a) =>
 			[a, `not (${a})`].flatMap((text) => {
-				const { forms, problem } = compileCondition(cond(text));
-				if (forms === undefined) return [`${text}: ${problem}`];
+				const forms = compiled(text);
+				if (typeof forms === "string") return [`${text}: ${forms}`];
 				return agrees(text, forms) ?? [];
 			}),
 		);
@@ -204,9 +214,13 @@ describe("conditions as Qualtrics logic", () => {
 						`(${a}) ${op} (${b})`,
 						`not ((${a}) ${op} (${b}))`,
 					]) {
-						const { forms, problem } = compileCondition(cond(text));
+						const forms = compiled(text);
 						const found =
-							forms === undefined ? `${text}: ${problem}` : agrees(text, forms);
+							typeof forms === "string"
+								? `${text}: ${forms}`
+								: forms.t === "too-large"
+									? `${text}: too large to say when it's true`
+									: agrees(text, forms);
 						if (found !== undefined) wrong.push(found);
 					}
 		expect(wrong.slice(0, 5)).toEqual([]);
@@ -214,21 +228,24 @@ describe("conditions as Qualtrics logic", () => {
 
 	it("inlines a computed condition where it's read, and refuses one it can't", () => {
 		const r = cond('c = "1" and n > 5');
-		const { forms } = compileCondition(cond("not r"), (v) =>
-			v === "r" ? r : undefined,
-		);
-		expect(forms && agrees('not (c = "1" and n > 5)', forms)).toBeUndefined();
-		expect(compileCondition(cond("r")).problem).toMatch(/computed/);
+		const inR = (v: string) => (v === "r" ? r : undefined);
+		const forms = compiled("not r", inR);
+		if (typeof forms === "string") throw new Error(forms);
+		expect(agrees('not (c = "1" and n > 5)', forms)).toBeUndefined();
+		const unknown = compiled("isnull(r)", inR);
+		if (typeof unknown === "string") throw new Error(unknown);
+		expect(agrees('isnull(c = "1" and n > 5)', unknown)).toBeUndefined();
+		expect(compiled("r")).toMatch(/computed/);
+		expect(compiled("r", () => cond("r or n > 5"))).toMatch(/from itself/);
 	});
 
 	it("writes the tests Qualtrics reads", () => {
-		const { forms } = compileCondition(cond('c = "1" or n >= 5'));
 		const ask = (a: string) => ({ kind: "ask", ask: a });
-		expect(forms?.t).toEqual([
+		expect((compiled('c = "1" or n >= 5') as Forms).t).toEqual([
 			[{ subject: ask("A"), op: "Selected", value: "1" }],
 			[{ subject: ask("C"), op: "GreaterThanOrEqual", value: "5" }],
 		]);
-		expect(compileCondition(cond('i <> "1"')).forms?.t).toEqual([
+		expect((compiled('i <> "1"') as Forms).t).toEqual([
 			[
 				{ subject: { kind: "field", name: "i" }, op: "NotEqualTo", value: "1" },
 				{ subject: { kind: "field", name: "i" }, op: "NotEmpty" },
@@ -236,16 +253,34 @@ describe("conditions as Qualtrics logic", () => {
 		]);
 	});
 
-	it("says what Qualtrics can't test", () => {
-		const problem = (text: string) => compileCondition(cond(text)).problem;
-		expect(problem("n + 1 > 5")).toMatch(/compares an answer/);
-		expect(problem("n > m")).toMatch(/compares an answer/);
-		expect(problem('c > "1"')).toMatch(/`=` and `<>`/);
-		const wide = Array.from(
+	it("says what Qualtrics can't test, and what the DDI shouldn't say", () => {
+		expect(compiled("n + 1 > 5")).toMatch(/compares an answer/);
+		expect(compiled("n > m")).toMatch(/compares an answer/);
+		expect(compiled('c > "1"')).toMatch(/`=` and `<>`/);
+		expect(compiled("c = 1")).toMatch(/code in quotes/);
+		expect(compiled('n = "5"')).toMatch(/with a number/);
+		expect(compiled('i > "1"')).toMatch(/ordering of text/);
+	});
+
+	it("keeps a wide condition's true list, and gives up on its else list quickly", () => {
+		const names = Array.from({ length: 14 }, (_, k) => `n${k}`);
+		const parsed = parseCondition(names.map((n) => `${n} > 5`).join(" or "));
+		const wide: Cond = {
+			expr: parsed.expr,
+			sources: new Map(names.map((n) => [n, answer(n, [n], NUMBER)])),
+		};
+		const start = Date.now();
+		const result = compileCondition(wide);
+		expect(Date.now() - start).toBeLessThan(500);
+		if (result.kind !== "ok") throw new Error(result.message);
+		const forms = result.forms;
+		expect(forms.t).not.toBe("too-large");
+		expect(forms.n).toBe("too-large");
+		const product = Array.from(
 			{ length: 9 },
 			(_, k) => `(n = ${k} or i = "${k}")`,
 		).join(" and ");
-		expect(problem(wide)).toBe("too-large");
+		expect((compiled(product) as Forms).t).toBe("too-large");
 		expect(2 ** 9).toBeGreaterThan(MAX_TESTS);
 	});
 });
