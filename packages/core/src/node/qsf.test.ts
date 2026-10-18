@@ -96,11 +96,11 @@ describe("reading the households instrument's DDI back", () => {
 			  "Branch if renter: q://QID8/SelectableChoice/2 Selected",
 			  "  Standard BL_qretools000006",
 			  "Standard BL_qretools000007",
-			  "Branch if more_vehicles = "1": q://QID12/SelectableChoice/1 Selected",
+			  "Branch if more_vehicles = "1": q://QID13/SelectableChoice/1 Selected",
 			  "  Standard BL_qretools000008",
-			  "  Branch if more_vehicles = "1": q://QID14/SelectableChoice/1 Selected",
+			  "  Branch if more_vehicles = "1": q://QID15/SelectableChoice/1 Selected",
 			  "    Standard BL_qretools000009",
-			  "    Branch if more_vehicles = "1": q://QID16/SelectableChoice/1 Selected",
+			  "    Branch if more_vehicles = "1": q://QID17/SelectableChoice/1 Selected",
 			  "      Standard BL_qretools000010",
 			  "Branch if size >= 1: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 1",
 			  "  Branch if works = "1": q://1_QID7/SelectableChoice/1 Selected",
@@ -115,7 +115,7 @@ describe("reading the households instrument's DDI back", () => {
 		).toMatchInlineSnapshot(`
 			[
 			  "info : The bank's missing-value codes aren't offered to respondents in Qualtrics.",
-			  "error instrument-households.ask-rent: This is written to Qualtrics without its checks: not exported yet.",
+			  "error instrument-households.ask-rent-check-1: This warning shows the answer it checks, which Qualtrics shows empty on the answer's own page.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
 			]
 		`);
