@@ -62,6 +62,13 @@ const UNTITLED = "untitled-question";
 
 /** The bank's missing-value list: one managed representation, referenced by every Variable. */
 const MISSING_ID = "missing-values";
+/**
+ * How the select-all list's two categories say which is a tick (`Category.Generation`'s
+ * `Qualification`): the one word a reader of the DDI keys on.
+ */
+export const TICKED = "selected";
+export const NOT_TICKED = "not selected";
+
 /** The code list every select-all option's variable is coded on: the bank's two values. */
 export const SELECT_ALL_ID = "select-all";
 
@@ -460,11 +467,14 @@ function codeListItems(
 	{
 		isMissing = false,
 		principal = false,
+		generation,
 	}: {
 		/** The bank's missing-value list: its categories are marked missing. */
 		readonly isMissing?: boolean;
 		/** The list is its file's principal item: a shared scale's. */
 		readonly principal?: boolean;
+		/** How a respondent comes to be in a code's category, when the list says. */
+		readonly generation?: (c: Code) => JsonObject;
 	} = {},
 ): { codeList: Item; categories: Item[] } {
 	const options = codes.map((c, i) => {
@@ -473,7 +483,11 @@ function codeListItems(
 			"Category",
 			`${base}.cat-${i}`,
 			version,
-			obj({ Label: [structured(c.label)], IsMissing: isMissing || undefined }),
+			obj({
+				Label: [structured(c.label)],
+				IsMissing: isMissing || undefined,
+				Generation: generation?.(c),
+			}),
 		);
 		const code: JsonObject = {
 			...identity(ctx.agency, `${base}.code-${i}`, version.number),
@@ -530,7 +544,15 @@ function variableSpecs(
 		ctx.shared("select_all", "select_all"),
 		SELECT_ALL_ID,
 		selectAllCodes(ctx.selectAll),
-		{ principal: true },
+		{
+			principal: true,
+			// Which value is a tick, said in DDI's terms, not only in its label.
+			generation: (c) => ({
+				IsDerived: false,
+				Qualification:
+					c.code === ctx.selectAll.chosen.code ? TICKED : NOT_TICKED,
+			}),
+		},
 	);
 	const yesNo = {
 		$type: "CodeDomain",
