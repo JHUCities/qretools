@@ -267,7 +267,8 @@ describe("conditions as Qualtrics logic", () => {
 						if (found !== undefined) wrong.push(found);
 					}
 		expect(wrong.slice(0, 5)).toEqual([]);
-	});
+		// Every pair in every answer: about 2 s alone, more beside the whole suite.
+	}, 30_000);
 
 	it("inlines a computed condition where it's read, and refuses one it can't", () => {
 		const r = cond('c = "1" and n > 5');
