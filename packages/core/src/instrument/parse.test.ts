@@ -265,6 +265,20 @@ flow:
 		expect(findings.map(brief)).toEqual(["error not-yet flow.1.fill.rent"]);
 	});
 
+	it("leaves a refused `as` off its ask, so it records under its own names", () => {
+		const { findings, draft } = read(
+			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.modes\n    as: trips\n  - ask: bas.why\n    as: Why\n",
+		);
+		expect(findings.map(brief)).toEqual([
+			"error not-yet flow.0.as",
+			"error wrong-type flow.1.as",
+		]);
+		expect(draft.flow.map((n) => (n.kind === "ask" ? n.as : n.kind))).toEqual([
+			undefined,
+			undefined,
+		]);
+	});
+
 	it("asks for each check's severity and message", () => {
 		const { findings } = read(
 			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.rent\n    checks:\n      - ensure: bas.rent > 0\n        severity: fatal\n      - ensure:\n",
