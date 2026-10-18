@@ -71,7 +71,7 @@ export type Severity = "info" | "warning" | "blocking";
 export const SEVERITIES: readonly Severity[] = ["info", "warning", "blocking"];
 
 /** A stop's kind in the DDI, beside the checks' severities: what a reader finds a stop by. */
-export const STOP = "stop";
+export const STOP = "stop" as const;
 
 /** A `{{name}}` in a statement or message: the name, and where the placeholder is in the source. */
 export interface Placeholder {

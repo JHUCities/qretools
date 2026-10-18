@@ -49,7 +49,7 @@ import type {
 	UniverseRef,
 	ValueDomain,
 } from "./draft.ts";
-import { SEVERITIES, STOP } from "./draft.ts";
+import { SEVERITIES, type Severity, STOP } from "./draft.ts";
 import type { ParsedInstrument } from "./parse.ts";
 
 export interface InstrumentOptions {
@@ -390,7 +390,7 @@ export function elaborateInstrument(
 	// What a branch is for: a code list of the instrument's own, which each check's
 	// IfThenElse (its severity) and each stop's names its kind from.
 	let branchKinds: Item | undefined;
-	const kindOf = (name: string): JsonObject => {
+	const kindOf = (name: Severity | typeof STOP): JsonObject => {
 		if (branchKinds === undefined) {
 			const names = [...SEVERITIES, STOP];
 			const cats = names.map((n, i) =>
