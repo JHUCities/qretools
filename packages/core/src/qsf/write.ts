@@ -938,11 +938,8 @@ function toQsf(
 				ValidationMessage: "",
 				PreviousButton: "",
 				NextButton: "",
-				// Qualtrics' simple dynamic theme, under the importer's own brand (not yet seen to stop
-				// the "static theme" notice: experiment 5b).
-				SkinType: "component",
-				Skin: { brandingId: null, templateId: "*simple", overrides: null },
-				NewScoring: 1,
+				// No theme: one needs a brand's skin library (experiment 5b), which only an account
+				// has. Qualtrics then notes the survey uses a static theme, which is harmless.
 			}),
 			...questions.map((q) =>
 				element(
