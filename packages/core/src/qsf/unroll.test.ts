@@ -151,4 +151,41 @@ flow:
 			]
 		`);
 	});
+
+	it("checks a looped question's answer at the current round", () => {
+		const source = `name: checked
+uses:
+  bas: here
+flow:
+  - ask: bas.size
+  - roster: people
+    count: bas.size
+    max: 2
+    flow:
+      - ask: bas.nick
+        checks:
+          - ensure: bas.nick <> "x"
+            severity: warning
+            message: Not x.
+`;
+		const { qsf, findings } = writeQsf(
+			readInstrument(ddiOf(source)).instrument,
+			{
+				name: "checked",
+				created: "2026-10-18 00:00:00",
+			},
+		);
+		expect(findings.filter((f) => f.severity === "error")).toEqual([]);
+		const warning = (
+			qsf.SurveyElements as { Element: string; Payload: unknown }[]
+		)
+			.map((e) => e.Payload as Record<string, unknown>)
+			.find((p) => p?.QuestionText === "Not x.") as {
+			InPageDisplayLogic: { "0": { "0": Record<string, string> } };
+		};
+		expect(warning.InPageDisplayLogic["0"]["0"]).toMatchObject({
+			LoopAndMergeLoops: "current",
+			Operator: "EqualTo",
+		});
+	});
 });
