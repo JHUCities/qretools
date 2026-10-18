@@ -396,4 +396,77 @@ describe("writing a survey as QSF", () => {
 				.map((f) => `${f.severity} ${f.path}`),
 		).toEqual(["warning b"]);
 	});
+
+	it("writes a warning check as a statement on its question's page, shown while the check fails", () => {
+		const rent: Question = {
+			id: "q-rent",
+			name: "rent",
+			domain: { kind: "number", decimals: 0 },
+		};
+		const sources = new Map<string, Source>([
+			[
+				"rent",
+				{
+					kind: "answer",
+					variable: "rent",
+					asks: ["ask-rent"],
+					question: rent,
+				},
+			],
+		]);
+		const { qsf, findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "ask",
+						id: "ask-rent",
+						question: rent,
+						records: [{ variable: "rent" }],
+						text: [{ kind: "text", text: "Rent?" }],
+						checks: [
+							{
+								id: "check-1",
+								severity: "warning",
+								ensure: { expr: parseCondition("rent < 10000").expr, sources },
+								message: [{ kind: "text", text: "That's a lot." }],
+							},
+						],
+					},
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(findings).toEqual([]);
+		const elements = qsf.SurveyElements as {
+			Element: string;
+			Payload: unknown;
+		}[];
+		const blocks = elements.find((e) => e.Element === "BL")?.Payload as
+			| { BlockElements: unknown[] }[]
+			| undefined;
+		const block = blocks?.[0];
+		// One page: no break between the question and its warning.
+		expect(block?.BlockElements).toEqual([
+			{ Type: "Question", QuestionID: "QID1" },
+			{ Type: "Question", QuestionID: "QID2" },
+		]);
+		const warning = elements.find(
+			(e) =>
+				e.Element === "SQ" &&
+				(e.Payload as { QuestionID: string }).QuestionID === "QID2",
+		)?.Payload as {
+			QuestionText: string;
+			InPageDisplayLogic: {
+				inPage: boolean;
+				"0": { "0": Record<string, string> };
+			};
+		};
+		expect(warning.QuestionText).toBe("That's a lot.");
+		expect(warning.InPageDisplayLogic.inPage).toBe(true);
+		expect(warning.InPageDisplayLogic["0"]["0"]).toMatchObject({
+			Operator: "GreaterThanOrEqual",
+			RightOperand: "10000",
+		});
+	});
 });

@@ -54,6 +54,10 @@ export function number(instrument: ReadInstrument): Numbering {
 					if (inLoop) looped.add(s.id);
 					if (s.kind === "ask" && loop !== undefined) loopOf.set(s.id, loop);
 					if (s.kind === "ask") {
+						// A warning is a statement on the ask's page, numbered right after it.
+						for (const c of s.checks)
+							if (c.severity !== "blocking")
+								qids.set(c.id, `QID${qids.size + 1}`);
 						questions.set(s.id, s.question);
 						for (const r of s.records) names.add(r.variable);
 					}

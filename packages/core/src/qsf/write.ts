@@ -19,14 +19,16 @@ import { logicOf } from "./flowlogic.ts";
 import {
 	ALWAYS,
 	and,
+	type Computed,
 	compileCondition,
 	type Dnf,
 	type Form,
+	type Forms,
 	NEVER,
 } from "./logic.ts";
 import { context, number } from "./number.ts";
 import { questionsOf } from "./questions.ts";
-import type { Cond, ReadInstrument, Step } from "./read.ts";
+import type { Cond, ReadInstrument, Source, Step } from "./read.ts";
 import { type Node, type QsfObject, toQsf } from "./skeleton.ts";
 import { baseId, countedBy, unroll } from "./unroll.ts";
 
@@ -58,7 +60,7 @@ export function writeQsf(
 	const numbering = number(instrument);
 	const ctx = context(numbering, note);
 	const { notYet, placeOf } = ctx;
-	const { askQuestion, statement } = questionsOf(ctx, instrument);
+	const { askQuestion, statement, warning } = questionsOf(ctx, instrument);
 	const without = (path: string, what: string) =>
 		note(
 			"qsf-inexpressible",
@@ -74,8 +76,17 @@ export function writeQsf(
 			"The bank's missing-value codes aren't offered to respondents in Qualtrics.",
 		);
 
-	/** The condition's "is true" list, or undefined with a finding where it can't be written. */
-	const whenTrue = (cond: Cond, at: string): Dnf | undefined => {
+	/**
+	 * One of a condition's lists, or undefined with a finding where it can't be written. A
+	 * check reads its answers on the question's own page (`onPage`), where a computed number
+	 * set from that question on hasn't been set yet.
+	 */
+	const formOf = (
+		cond: Cond,
+		at: string,
+		form: keyof Forms,
+		onPage?: string,
+	): Dnf | undefined => {
 		// An answer read at one round of a loop is placed; any other looped answer isn't.
 		const asked = [...cond.sources.values()].flatMap((s) =>
 			s.kind === "answer" && s.row === undefined ? s.asks : [],
@@ -89,14 +100,26 @@ export function writeQsf(
 			);
 			return undefined;
 		}
-		const compiled = compileCondition(cond, (v) =>
-			computedAt(ctx, v, placeOf(at)),
-		);
+		const compiled = compileCondition(cond, (v): Computed => {
+			const reader = placeOf(onPage ?? at);
+			const c = computedAt(ctx, v, reader);
+			return onPage !== undefined &&
+				c.kind === "field" &&
+				(numbering.computes.get(v) ?? []).some(
+					(n) => placeOf(n.step.id) >= reader,
+				)
+				? {
+						kind: "refused",
+						why: `\`${v}\` is computed after this question, so on its page it isn't this answer's.`,
+					}
+				: c;
+		});
 		if (compiled.kind === "problem") {
 			note("qsf-inexpressible", "error", at, compiled.message);
 			return undefined;
 		}
-		if (compiled.forms.t === "too-large") {
+		const d = compiled.forms[form];
+		if (d === "too-large") {
 			note(
 				"qsf-too-large",
 				"error",
@@ -105,8 +128,71 @@ export function writeQsf(
 			);
 			return undefined;
 		}
-		return compiled.forms.t;
+		return d;
 	};
+	const whenTrue = (cond: Cond, at: string) => formOf(cond, at, "t");
+
+	/**
+	 * A question's warning checks: each a statement on its page, shown live while the check
+	 * fails (its "is false" list as in-page display logic, experiment 4), in its own words.
+	 * `guarded`: the question is shown under a condition of a looped roster, which the
+	 * warning can't also carry while it reads more than this answer.
+	 */
+	const warnings = (
+		s: Extract<Step, { kind: "ask" }>,
+		guarded = false,
+	): QsfObject[] =>
+		s.checks.flatMap((c): QsfObject[] => {
+			if (c.severity === "blocking") {
+				without(s.id, "its blocking checks");
+				return [];
+			}
+			if (c.severity === "info")
+				note("qsf-note", "info", c.id, "An info check is shown as a warning.");
+			const own = (x: Source) => x.kind === "answer" && x.asks.includes(s.id);
+			if (
+				c.message?.some((p) => p.kind === "value" && own(p.source)) === true
+			) {
+				note(
+					"qsf-inexpressible",
+					"error",
+					c.id,
+					"This warning shows the answer it checks, which Qualtrics shows empty on the answer's own page.",
+				);
+				return [];
+			}
+			const others = [...c.ensure.sources.values()].some((x) => !own(x));
+			if (others && guarded) {
+				note(
+					"qsf-inexpressible",
+					"error",
+					c.id,
+					"This warning reads more than its question's answer, under a condition in a looped roster: Qualtrics can't hold both.",
+				);
+				return [];
+			}
+			if (others || s.question.domain.kind === "choice")
+				note(
+					"qsf-note",
+					"info",
+					c.id,
+					"How Qualtrics' live warning reads this is unmeasured (experiment 8).",
+				);
+			const fails = formOf(c.ensure, c.id, "f", s.id);
+			if (fails === undefined || fails.length === 0) return [];
+			const statement = warning(c);
+			return fails.some((g) => g.length === 0)
+				? [statement]
+				: [
+						{
+							...statement,
+							InPageDisplayLogic: {
+								...(logicOf(ctx, fails) as QsfObject),
+								inPage: true,
+							},
+						},
+					];
+		});
 	/** Steps behind a condition: as they are when it always holds, nothing when never. */
 	const behind = (
 		d: Dnf,
@@ -162,8 +248,7 @@ export function writeQsf(
 		for (const s of flow) {
 			switch (s.kind) {
 				case "ask":
-					if (s.checks.length > 0) without(s.id, "its checks");
-					current.push([askQuestion(s)]);
+					current.push([askQuestion(s), ...warnings(s)]);
 					break;
 				case "say":
 					current.push([statement(s)]);
@@ -294,8 +379,15 @@ export function writeQsf(
 			steps.flatMap((x): QsfObject[][] => {
 				switch (x.kind) {
 					case "ask":
-						if (x.checks.length > 0) without(x.id, "its checks");
-						return shown(askQuestion(x), guard, x.id);
+						// Its warnings share its page, shown whatever the question's own condition is
+						// (a hidden question has no answer to warn about, experiment 6b).
+						return shown(askQuestion(x), guard, x.id).map((page) => [
+							...page,
+							...warnings(
+								x,
+								guard !== "too-large" && !guard.some((g) => g.length === 0),
+							),
+						]);
 					case "say":
 						return shown(statement(x), guard, x.id);
 					case "section":

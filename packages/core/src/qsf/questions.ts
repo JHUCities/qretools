@@ -1,7 +1,14 @@
 /** Questions and statements as Qualtrics writes them, with values piped into their text. */
 import { isLogical } from "./computes.ts";
 import type { Ctx } from "./number.ts";
-import type { Part, Question, ReadInstrument, Source, Step } from "./read.ts";
+import type {
+	Check,
+	Part,
+	Question,
+	ReadInstrument,
+	Source,
+	Step,
+} from "./read.ts";
 import type { QsfObject } from "./skeleton.ts";
 
 /** Text as Qualtrics shows it: HTML, where `${` starts a pipe and `$e{` arithmetic. */
@@ -231,5 +238,20 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 			Validation: { Settings: { Type: "None" } },
 		};
 	};
-	return { askQuestion, statement };
+	/** A warning check's words as a statement: its message, or a plain request to check. */
+	const warning = (check: Check): QsfObject => {
+		const qid = ctx.qidOf(check.id);
+		const text =
+			check.message === undefined
+				? "Please check your answer."
+				: textOf(check.message, check.id);
+		return {
+			...common(qid, text, qid),
+			QuestionType: "DB",
+			Selector: "TB",
+			ChoiceOrder: [],
+			Validation: { Settings: { Type: "None" } },
+		};
+	};
+	return { askQuestion, statement, warning };
 }
