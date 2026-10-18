@@ -91,7 +91,9 @@ export type InstrumentCode =
 	/** A branch the flow never takes, or what follows a stop that always stops. */
 	| "unreachable"
 	/** Advice on whom a question is asked of, against the path that reaches it. */
-	| "universe";
+	| "universe"
+	/** A roster's `max` below what it counts allows: later rows aren't asked. */
+	| "max-below-count";
 
 export type FindingCode = ParseCode | LintCode | InstrumentCode | "ddi-invalid";
 

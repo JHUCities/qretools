@@ -167,7 +167,7 @@ export const FIELDS: Readonly<Record<string, readonly string[]>> = {
 	if: ["then", "else"],
 	stop: ["say"],
 	compute: ["value"],
-	roster: ["count", "more", "flow"],
+	roster: ["count", "more", "max", "flow"],
 	each: ["flow"],
 };
 /**
@@ -1141,13 +1141,98 @@ function readRoster(
 				"How many rows? Give `count` (a number asked first) or `more` (a condition asked last in each row).",
 			),
 		);
+	const max = readRosterMax(item.get("max", true), path, end, ctx);
 	return {
 		kind: "roster",
 		path,
 		...(name !== undefined && { name }),
 		...(end !== undefined && { end }),
+		...(max !== undefined && { max }),
 		flow,
 	};
+}
+
+/**
+ * The most rows a roster can have: survey software needs a limit on every loop. Written
+ * as `max`, a whole number from 1; a `more` roster must write it; a `count` roster may,
+ * and otherwise takes it from what it counts: a whole number written there, or the `max`
+ * of the number question it names.
+ */
+function readRosterMax(
+	node: unknown,
+	path: string,
+	end: Extract<Node, { kind: "roster" }>["end"],
+	ctx: Context,
+): number | undefined {
+	const at = `${path}.max`;
+	const counted =
+		end?.kind === "count" ? countedMax(end.value, ctx) : undefined;
+	const written = isScalar(node) ? node.value : node;
+	if (written !== undefined && written !== null && written !== "") {
+		if (
+			typeof written !== "number" ||
+			!Number.isInteger(written) ||
+			written < 1
+		) {
+			ctx.say(
+				problem(
+					"wrong-type",
+					"error",
+					at,
+					"`max` is a whole number of rows, 1 or more.",
+				),
+			);
+			return undefined;
+		}
+		if (counted !== undefined && written < counted.max)
+			ctx.say(
+				problem(
+					"max-below-count",
+					"warning",
+					at,
+					`\`${counted.from}\` allows up to ${counted.max}, but this roster has at most ${written} rows: rows after ${written} aren't asked.`,
+				),
+			);
+		return written;
+	}
+	if (counted !== undefined) return counted.max;
+	// How the rows end, or a count, still to be written is said already.
+	if (end === undefined || (end.kind === "count" && end.value === undefined))
+		return undefined;
+	ctx.say(
+		problem(
+			"hole",
+			"hole",
+			at,
+			end?.kind === "more"
+				? "A roster that asks `more` needs `max`: the most rows it can have."
+				: "How many rows at most? Give `max`, or count with a number question that has its own `max`.",
+			"Survey software needs a limit on every loop.",
+		),
+	);
+	return undefined;
+}
+
+/** What a count limits its rows to by itself: a whole number, or a number question's `max`. */
+function countedMax(
+	count: Cond | undefined,
+	ctx: Context,
+): { readonly max: number; readonly from: string } | undefined {
+	const e = count?.expr;
+	const whole = (n: number | undefined) =>
+		n !== undefined && Number.isInteger(n) && n >= 1 ? n : undefined;
+	if (e?.kind === "number") {
+		const max = whole(e.value);
+		return max === undefined ? undefined : { max, from: e.text };
+	}
+	if (e?.kind !== "name") return undefined;
+	const named = resolve(e.name, ctx);
+	const domain =
+		named?.kind === "bank" || named?.kind === "as"
+			? named.question?.evaluation.draft.domain
+			: undefined;
+	const max = whole(domain?.kind === "number" ? domain.max : undefined);
+	return max === undefined ? undefined : { max, from: e.name };
 }
 
 /** Over an earlier roster's rows: the roster must be one this instrument has. */
