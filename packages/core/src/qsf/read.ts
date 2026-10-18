@@ -1,0 +1,772 @@
+/**
+ * An instrument's DDI read back into a small flow, for writing it as Qualtrics' QSF. The
+ * DDI is the record of the survey; the QSF is made from it, never from the instrument's
+ * source. Only DDI as the instrument's elaboration writes it is read (instrument/elaborate.ts
+ * says how), and only through its fields: a name in a condition resolves through its
+ * command's InParameter and Binding to the OutParameter of a Variable, a computed value or
+ * a loop; an answer to the asks that bind into it; a select-all option to its code, and its
+ * tick, through the Generation of the select-all list's categories. Anything else is a
+ * finding at the DDI item's ID, never a guess from an identifier.
+ */
+import { DDI_FUNCTIONS, type Expr, holesOf } from "../cond/ast.ts";
+import { parseCondition } from "../cond/parse.ts";
+import type { DdiDocument, ItemType, JsonObject } from "../ddi/document.ts";
+import { TICKED } from "../ddi/elaborate.ts";
+import type { Finding } from "../findings.ts";
+import { STOP } from "../instrument/draft.ts";
+
+/** A code of a question or an input: its value as written, and its words. */
+export interface Choice {
+	readonly code: string;
+	readonly label: string;
+}
+
+/** How a question or an input is answered. */
+export type Domain =
+	| {
+			readonly kind: "choice";
+			/** One answer, or as many as apply (one variable per option). */
+			readonly many: boolean;
+			readonly choices: readonly Choice[];
+	  }
+	| {
+			readonly kind: "number";
+			readonly min?: number;
+			readonly max?: number;
+			readonly decimals: number;
+	  }
+	| { readonly kind: "text"; readonly maxLength?: number };
+
+/** A bank question, as its asks show it. */
+export interface Question {
+	/** Its QuestionItem's DDI ID. */
+	readonly id: string;
+	readonly name: string;
+	readonly domain: Domain;
+}
+
+/** What a name in a condition or a text stands for. */
+export type Source =
+	| {
+			readonly kind: "answer";
+			/** The variable it is recorded as (the data's column). */
+			readonly variable: string;
+			/** The asks that record it, by DDI ID: more than one in exclusive branches. */
+			readonly asks: readonly string[];
+			readonly question: Question;
+			/** For a select-all option: its code, and which value of the variable is a tick. */
+			readonly option?: { readonly code: string; readonly ticked: string };
+	  }
+	| {
+			readonly kind: "input";
+			readonly variable: string;
+			readonly domain?: Domain;
+	  }
+	| { readonly kind: "compute"; readonly variable: string }
+	/** The row number of a loop (a roster's `index`), by the loop's DDI ID. */
+	| { readonly kind: "row"; readonly loop: string };
+
+/** A condition: its expression, and what each of its names stands for. */
+export interface Cond {
+	readonly expr: Expr;
+	readonly sources: ReadonlyMap<string, Source>;
+}
+
+/** A piece of displayed text: words, or a value piped in (a coded answer's words for `label`). */
+export type Part =
+	| { readonly kind: "text"; readonly text: string }
+	| {
+			readonly kind: "value";
+			readonly source: Source;
+			readonly label?: true;
+	  };
+
+export interface Check {
+	readonly id: string;
+	readonly severity: string;
+	/** What must hold of the answers (the author's `ensure`). */
+	readonly ensure: Cond;
+	readonly message?: readonly Part[];
+}
+
+export type Step =
+	| {
+			readonly kind: "ask";
+			readonly id: string;
+			readonly question: Question;
+			/** What it records: each variable, and an option's code for a select-all. */
+			readonly records: readonly {
+				readonly variable: string;
+				readonly code?: string;
+			}[];
+			/** The question's text with its fills piped in. */
+			readonly text: readonly Part[];
+			readonly options?: "random" | "rotate";
+			readonly checks: readonly Check[];
+	  }
+	| {
+			readonly kind: "say";
+			readonly id: string;
+			readonly text: readonly Part[];
+	  }
+	| {
+			readonly kind: "compute";
+			readonly id: string;
+			readonly variable: string;
+			readonly value: Cond;
+	  }
+	| {
+			readonly kind: "if";
+			readonly id: string;
+			readonly branches: readonly {
+				readonly cond: Cond;
+				readonly then: readonly Step[];
+			}[];
+			readonly else?: readonly Step[];
+	  }
+	/** Screen out: say its words, then end the survey (what follows is its else). */
+	| {
+			readonly kind: "stop";
+			readonly id: string;
+			readonly cond: Cond;
+			readonly say: readonly Step[];
+	  }
+	/** A roster by count, or an `each` over one: rows 1 to the count, at most `max`. */
+	| {
+			readonly kind: "loop";
+			readonly id: string;
+			readonly count: Cond;
+			readonly max?: number;
+			readonly flow: readonly Step[];
+	  }
+	/** A roster by `more`: rows while `more` holds after each, at most `max`. */
+	| {
+			readonly kind: "repeat";
+			readonly id: string;
+			readonly more: Cond;
+			readonly max: number;
+			readonly flow: readonly Step[];
+	  }
+	| {
+			readonly kind: "section";
+			readonly id: string;
+			readonly title?: string;
+			readonly order?: "random" | "rotate";
+			readonly flow: readonly Step[];
+	  };
+
+export interface ReadInstrument {
+	readonly name?: string;
+	readonly title?: string;
+	readonly inputs: readonly Extract<Source, { kind: "input" }>[];
+	readonly flow: readonly Step[];
+}
+
+type Obj = JsonObject;
+const asObj = (j: unknown): Obj | undefined =>
+	j !== null && typeof j === "object" && !Array.isArray(j)
+		? (j as Obj)
+		: undefined;
+const asList = (j: unknown): readonly Obj[] =>
+	Array.isArray(j)
+		? (j.map(asObj).filter((o) => o !== undefined) as Obj[])
+		: [];
+const str = (j: unknown): string | undefined =>
+	typeof j === "string" ? j : undefined;
+/** The words of an InternationalString, a Label or a Content: the first language's. */
+const words = (j: unknown): string | undefined => {
+	const first = Array.isArray(j) ? j[0] : j;
+	const o = asObj(first);
+	const m = asObj(
+		asObj(asList(o?.String)[0])?.MultilingualStringValue ??
+			asObj(asList(o?.Content)[0])?.MultilingualStringValue ??
+			o?.MultilingualStringValue,
+	);
+	return str(m?.Value);
+};
+const urnOf = (j: unknown): string | undefined => str(asObj(j)?.URN);
+
+export function readInstrument(ddi: DdiDocument): {
+	readonly instrument: ReadInstrument;
+	readonly findings: readonly Finding[];
+} {
+	const findings: Finding[] = [];
+	const unread = (id: string, message: string) =>
+		findings.push({ code: "qsf-unread", severity: "error", path: id, message });
+
+	/** An item a reference names: `{ $type, value: [agency, id, version] }`. */
+	const deref = (r: unknown): { type: ItemType; item: Obj } | undefined => {
+		const o = asObj(r);
+		const type = str(o?.$type) as ItemType | undefined;
+		const v = o?.value;
+		if (type === undefined || !Array.isArray(v)) return undefined;
+		const item = ddi[type]?.[v.join(":")];
+		return item === undefined ? undefined : { type, item };
+	};
+
+	// What each parameter is, by URN: the definitions only.
+	const params = new Map<string, Source>();
+	// Into each variable's OutParameter: the asks that record it, and the question's output.
+	const recordedBy = new Map<string, { ask: string; output: string }[]>();
+	const questionOf = new Map<string, Question>();
+	const outputs = new Map<string, { code?: string }>();
+	const ticks = tickCodes(ddi);
+
+	const choices = (domain: Obj | undefined): readonly Choice[] =>
+		asList(asObj(deref(domain?.CodeListReference)?.item)?.Code).map((c) => ({
+			code: str(asObj(c.Value)?.StringValue) ?? "",
+			label: words(asObj(deref(c.CategoryReference)?.item)?.Label) ?? "",
+		}));
+	const domainOf = (d: Obj | undefined): Domain | undefined => {
+		const type = str(d?.$type);
+		if (type === "CodeDomain")
+			return {
+				kind: "choice",
+				many: Number(asObj(d?.ResponseCardinality)?.MaximumResponses ?? 1) > 1,
+				choices: choices(d),
+			};
+		if (type === "NumericDomain") {
+			const range = asList(d?.NumberRange)[0];
+			const bound = (b: unknown) => asObj(b)?.DecimalValue;
+			const min = bound(range?.Low);
+			const max = bound(range?.High);
+			return {
+				kind: "number",
+				...(typeof min === "number" && { min }),
+				...(typeof max === "number" && { max }),
+				decimals:
+					typeof d?.DecimalPositions === "number" ? d.DecimalPositions : 0,
+			};
+		}
+		if (type === "TextDomain")
+			return {
+				kind: "text",
+				...(typeof d?.MaxLength === "number" && { maxLength: d.MaxLength }),
+			};
+		return undefined;
+	};
+
+	for (const q of Object.values(ddi.QuestionItem ?? {})) {
+		const id = str(q.ID) ?? "";
+		for (const out of asList(q.OutParameter)) {
+			const included = asObj(
+				asObj(asObj(out.ValueRepresentation)?.CodeSubsetInformation)
+					?.IncludedCode,
+			);
+			const code = asList(included?.CodeReference)[0];
+			const value = code === undefined ? undefined : codeValueOf(ddi, code);
+			outputs.set(urnOf(out) ?? "", value === undefined ? {} : { code: value });
+		}
+		const domain = domainOf(asObj(q.ResponseDomain));
+		if (domain === undefined) {
+			unread(id, "This question has no response domain the export reads.");
+			continue;
+		}
+		questionOf.set(id, {
+			id,
+			name: words(q.QuestionItemName) ?? id,
+			domain,
+		});
+	}
+	for (const c of Object.values(ddi.QuestionConstruct ?? {}))
+		for (const b of asList(c.Binding)) {
+			const source = urnOf(b.SourceParameterReference);
+			const target = urnOf(b.TargetParameterReference);
+			if (source !== undefined && target !== undefined && outputs.has(source))
+				recordedBy.set(target, [
+					...(recordedBy.get(target) ?? []),
+					{ ask: str(c.ID) ?? "", output: source },
+				]);
+		}
+	for (const v of Object.values(ddi.Variable ?? {})) {
+		const out = asObj(v.OutParameter);
+		const urn = urnOf(out);
+		const variable = words(v.VariableName);
+		if (urn === undefined || variable === undefined) continue;
+		const question = deref(asList(v.QuestionReference)[0]);
+		if (question === undefined) {
+			params.set(urn, {
+				kind: "input",
+				variable,
+				...optional("domain", domainOf(asObj(out?.ValueRepresentation))),
+			});
+			continue;
+		}
+		const asks = recordedBy.get(urn) ?? [];
+		const q = questionOf.get(str(question.item.ID) ?? "");
+		if (q === undefined) continue;
+		const code = outputs.get(asks[0]?.output ?? "")?.code;
+		const ticked = ticks.get(
+			str(
+				asObj(asObj(v.VariableRepresentation)?.ValueRepresentation)?.$type,
+			) === "CodeDomain"
+				? ((deref(
+						asObj(asObj(v.VariableRepresentation)?.ValueRepresentation)
+							?.CodeListReference,
+					)?.item.URN as string | undefined) ?? "")
+				: "",
+		);
+		params.set(urn, {
+			kind: "answer",
+			variable,
+			asks: asks.map((a) => a.ask),
+			question: q,
+			...(code !== undefined &&
+				ticked !== undefined && { option: { code, ticked } }),
+		});
+	}
+	for (const c of Object.values(ddi.ComputationItem ?? {})) {
+		const assigned = asObj(c.AssignedVariableReference);
+		const urn = urnOf(assigned);
+		const variable = words(assigned?.ParameterName);
+		if (urn !== undefined && variable !== undefined && !params.has(urn))
+			params.set(urn, { kind: "compute", variable });
+	}
+	for (const l of Object.values(ddi.Loop ?? {})) {
+		const urn = urnOf(l.LoopVariableReference);
+		if (urn !== undefined)
+			params.set(urn, { kind: "row", loop: str(l.ID) ?? "" });
+	}
+
+	/** A command's text, parsed, and each of its names resolved through its bindings. */
+	const command = (code: unknown, at: string): Cond | undefined => {
+		const cmd = asList(asObj(code)?.Command)[0];
+		const text = str(cmd?.CommandContent);
+		if (cmd === undefined || text === undefined) {
+			unread(at, "A condition or value here has no VTL command.");
+			return undefined;
+		}
+		const parsed = parseCondition(text, DDI_FUNCTIONS);
+		// The elaborator prints a hole as `null`: one here wasn't written by it.
+		if (parsed.problems.length > 0 || holesOf(parsed.expr).length > 0) {
+			unread(at, `This VTL isn't read: \`${text}\`.`);
+			return undefined;
+		}
+		const sources = new Map<string, Source>();
+		for (const p of asList(cmd.InParameter)) {
+			const alias = str(p.Alias);
+			const binding = asList(cmd.Binding).find(
+				(b) => urnOf(b.TargetParameterReference) === urnOf(p),
+			);
+			const source = params.get(urnOf(binding?.SourceParameterReference) ?? "");
+			if (alias === undefined || source === undefined) {
+				unread(at, `\`${alias ?? "?"}\` is bound to nothing the export reads.`);
+				return undefined;
+			}
+			sources.set(alias, source);
+		}
+		return { expr: parsed.expr, sources };
+	};
+
+	/** Displayed text: words and piped values, `label` where a code's words are shown. */
+	const textOf = (
+		dynamic: unknown,
+		piped: (urn: string) => Part | undefined,
+		at: string,
+	): readonly Part[] =>
+		asList(asObj(asList(dynamic)[0])?.TextContent).flatMap((t): Part[] => {
+			const literal = words(asObj(t.Text));
+			if (literal !== undefined) return [{ kind: "text", text: literal }];
+			const urn = urnOf(t.SourceParameterReference);
+			const part = urn === undefined ? undefined : piped(urn);
+			if (part === undefined) {
+				unread(
+					at,
+					"A value in this text is bound to nothing the export reads.",
+				);
+				return [];
+			}
+			return [part];
+		});
+	const pipedValue = (urn: string): Part | undefined => {
+		const label = labels.get(urn);
+		if (label !== undefined)
+			return { kind: "value", source: label, label: true };
+		const source = params.get(urn);
+		return source === undefined ? undefined : { kind: "value", source };
+	};
+
+	// A coded answer's words, as the elaborator lowers `label(x)`: a reset to null, then one
+	// IfThenElse per code assigning its words, all to one text variable. Read as the label of x.
+	const labels = new Map<string, Source>();
+	const adapters = new Set<string>();
+	for (const s of Object.values(ddi.Sequence ?? {})) {
+		const parts = asList(s.ControlConstructReference).map(deref);
+		const [reset, ...choicesOf] = parts;
+		const assigned = urnOf(asObj(reset?.item.AssignedVariableReference));
+		const resetText = str(
+			asList(asObj(reset?.item.CommandCode)?.Command)[0]?.CommandContent,
+		);
+		if (
+			reset?.type !== "ComputationItem" ||
+			resetText !== "null" ||
+			assigned === undefined ||
+			choicesOf.length === 0 ||
+			choicesOf.some((c) => c?.type !== "IfThenElse")
+		)
+			continue;
+		const first = choicesOf[0]?.item;
+		const cond =
+			first === undefined
+				? undefined
+				: command(first.IfCondition, str(first.ID) ?? "");
+		const source =
+			cond === undefined ? undefined : [...cond.sources.values()][0];
+		if (source === undefined) continue;
+		labels.set(assigned, source);
+		adapters.add(str(s.ID) ?? "");
+	}
+
+	/** The steps a reference stands for: a plain Sequence's, in order, or one construct's. */
+	const sequenceOf = (r: unknown): Step[] => {
+		if (r === undefined) return [];
+		const found = deref(r);
+		if (found === undefined) {
+			unread("", "A construct is referenced but not in the document.");
+			return [];
+		}
+		return construct(found.type, found.item);
+	};
+
+	const ask = (c: Obj, checks: readonly Check[]): Step[] => {
+		const id = str(c.ID) ?? "";
+		const qi = deref(c.QuestionReference);
+		const question = questionOf.get(str(qi?.item.ID) ?? "");
+		if (qi === undefined || question === undefined) {
+			unread(id, "This ask's question isn't in the document.");
+			return [];
+		}
+		const fills = new Map<string, Part>();
+		const records: { variable: string; code?: string }[] = [];
+		for (const b of asList(c.Binding)) {
+			const source = urnOf(b.SourceParameterReference) ?? "";
+			const target = urnOf(b.TargetParameterReference) ?? "";
+			const recorded = params.get(target);
+			if (outputs.has(source) && recorded?.kind === "answer") {
+				const code = outputs.get(source)?.code;
+				records.push({
+					variable: recorded.variable,
+					...(code !== undefined && { code }),
+				});
+				continue;
+			}
+			const part = pipedValue(source);
+			if (part === undefined)
+				unread(id, "A fill is bound to nothing the export reads.");
+			else fills.set(target, part);
+		}
+		const order = str(asObj(c.ResponseSequence)?.ItemSequenceType);
+		const text = textOf(qi.item.QuestionText, (urn) => fills.get(urn), id);
+		return [
+			{
+				kind: "ask",
+				id,
+				question,
+				records,
+				text,
+				...(order === "Random" && { options: "random" as const }),
+				...(order === "Rotate" && { options: "rotate" as const }),
+				checks,
+			},
+		];
+	};
+
+	/** A check: `not nvl(E, true)` with its severity, the author's E read back. */
+	const check = (b: Obj): Check | undefined => {
+		const id = str(b.ID) ?? "";
+		const cond = command(b.IfCondition, id);
+		const e = cond?.expr;
+		const inner =
+			e?.kind === "unary" &&
+			e.op === "not" &&
+			e.operand.kind === "call" &&
+			e.operand.fn === "nvl" &&
+			e.operand.args[1]?.kind === "boolean" &&
+			e.operand.args[1].value === true
+				? e.operand.args[0]
+				: undefined;
+		if (cond === undefined || inner === undefined) {
+			unread(id, "This check's condition isn't written as a check is.");
+			return undefined;
+		}
+		const said = sequenceOf(b.ThenConstructReference).find(
+			(s) => s.kind === "say",
+		);
+		return {
+			id,
+			severity: str(asObj(b.TypeOfIfThenElse)?.StringValue) ?? "",
+			ensure: { expr: inner, sources: cond.sources },
+			...(said?.kind === "say" && { message: said.text }),
+		};
+	};
+
+	/** A branch: its condition, and the steps it leads to. */
+	const branch = (cond: Cond, r: unknown) => {
+		const then = sequenceOf(r);
+		return { cond, then };
+	};
+
+	const construct = (type: ItemType, c: Obj): Step[] => {
+		const id = str(c.ID) ?? "";
+		switch (type) {
+			case "QuestionConstruct":
+				return ask(c, []);
+			case "StatementItem":
+				return [
+					{ kind: "say", id, text: textOf(c.DisplayText, pipedValue, id) },
+				];
+			case "ComputationItem": {
+				const value = command(c.CommandCode, id);
+				const variable = words(
+					asObj(c.AssignedVariableReference)?.ParameterName,
+				);
+				return value === undefined || variable === undefined
+					? []
+					: [{ kind: "compute", id, variable, value }];
+			}
+			case "Sequence": {
+				if (adapters.has(id)) return [];
+				const flow = gather(asList(c.ControlConstructReference));
+				const name = words(c.ConstructName);
+				const order = str(asObj(c.ConstructSequence)?.ItemSequenceType);
+				if (name === undefined && order === undefined) return flow;
+				return [
+					{
+						kind: "section",
+						id,
+						...(name !== undefined && { title: name }),
+						...(order === "Random" && { order: "random" as const }),
+						...(order === "Rotate" && { order: "rotate" as const }),
+						flow,
+					},
+				];
+			}
+			case "IfThenElse": {
+				const kind = str(asObj(c.TypeOfIfThenElse)?.StringValue);
+				if (kind === STOP) {
+					const cond = command(c.IfCondition, id);
+					if (cond === undefined) return [];
+					return [
+						{
+							kind: "stop",
+							id,
+							cond,
+							say: sequenceOf(c.ThenConstructReference),
+						},
+						...sequenceOf(c.ElseConstructReference),
+					];
+				}
+				if (kind !== undefined) {
+					unread(id, "A check isn't after the question it checks.");
+					return [];
+				}
+				const first = command(c.IfCondition, id);
+				if (first === undefined) return [];
+				const branches = [branch(first, c.ThenConstructReference)];
+				for (const [i, e] of asList(c.ElseIf).entries()) {
+					const cond = command(e.IfCondition, `${id}.elif-${i + 1}`);
+					if (cond !== undefined)
+						branches.push(branch(cond, e.ThenConstructReference));
+				}
+				return [
+					{
+						kind: "if",
+						id,
+						branches,
+						...(c.ElseConstructReference !== undefined && {
+							else: sequenceOf(c.ElseConstructReference),
+						}),
+					},
+				];
+			}
+			case "Loop":
+				return loop(c);
+			case "RepeatUntil":
+				return repeat(c);
+			default:
+				unread(id, `A ${type} isn't a step of an instrument's flow.`);
+				return [];
+		}
+	};
+
+	/** A run of constructs: each ask followed by its typed IfThenElses takes them as checks. */
+	const gather = (refs: readonly Obj[]): Step[] => {
+		const out: Step[] = [];
+		const found = refs.map(deref);
+		for (let i = 0; i < found.length; i++) {
+			const f = found[i];
+			if (f === undefined) {
+				unread("", "A construct is referenced but not in the document.");
+				continue;
+			}
+			if (f.type !== "QuestionConstruct") {
+				out.push(...construct(f.type, f.item));
+				continue;
+			}
+			const checks: Check[] = [];
+			while (true) {
+				const next = found[i + 1];
+				const kind = str(asObj(next?.item.TypeOfIfThenElse)?.StringValue);
+				if (next?.type !== "IfThenElse" || kind === undefined || kind === STOP)
+					break;
+				const ch = check(next.item);
+				if (ch !== undefined) checks.push(ch);
+				i++;
+			}
+			out.push(...ask(f.item, checks));
+		}
+		return out;
+	};
+
+	/** A count roster or an `each`: `v <= C`, or `v <= C and v <= N` with its max. */
+	const loop = (l: Obj): Step[] => {
+		const id = str(l.ID) ?? "";
+		const cond = command(l.LoopWhile, id);
+		const row = urnOf(l.LoopVariableReference);
+		const isRow = (x: Expr | undefined) =>
+			x?.kind === "name" &&
+			cond?.sources.get(x.name)?.kind === "row" &&
+			params.get(row ?? "") === cond?.sources.get(x.name);
+		const atMost = (x: Expr | undefined) =>
+			x?.kind === "binary" && x.op === "<=" && isRow(x.left)
+				? x.right
+				: undefined;
+		const e = cond?.expr;
+		const limited =
+			e?.kind === "binary" && e.op === "and"
+				? { count: atMost(e.left), max: atMost(e.right) }
+				: { count: atMost(e) };
+		const max =
+			"max" in limited && limited.max?.kind === "number"
+				? limited.max.value
+				: undefined;
+		if (
+			cond === undefined ||
+			limited.count === undefined ||
+			("max" in limited && max === undefined)
+		) {
+			unread(id, "This loop's condition isn't written as a roster's is.");
+			return [];
+		}
+		return [
+			{
+				kind: "loop",
+				id,
+				count: { expr: limited.count, sources: cond.sources },
+				...(max !== undefined && { max }),
+				flow: sequenceOf(l.ControlConstructReference),
+			},
+		];
+	};
+
+	/**
+	 * A roster by `more`: `nvl(v, 0) >= 1 and not nvl(M, false) or nvl(v, 0) >= N`, its body
+	 * a Sequence starting with the row counter; or a blocking check's `nvl(E, true)` around an ask.
+	 */
+	const repeat = (r: Obj): Step[] => {
+		const id = str(r.ID) ?? "";
+		const cond = command(r.UntilCondition, id);
+		const body = deref(r.UntilConstructReference);
+		const parts = asList(body?.item.ControlConstructReference);
+		const e = cond?.expr;
+		// A blocking check: ask again until it holds. The ask and its checks are the body.
+		if (e?.kind === "call" && e.fn === "nvl") return gather(parts);
+		const counted = (x: Expr | undefined, op: string) =>
+			x?.kind === "binary" &&
+			x.op === op &&
+			x.left.kind === "call" &&
+			x.left.fn === "nvl" &&
+			x.left.args[0]?.kind === "name" &&
+			cond?.sources.get(x.left.args[0].name)?.kind === "compute"
+				? x.right
+				: undefined;
+		const started = e?.kind === "binary" && e.op === "or" ? e.left : undefined;
+		const limit =
+			e?.kind === "binary" && e.op === "or"
+				? counted(e.right, ">=")
+				: undefined;
+		const more =
+			started?.kind === "binary" &&
+			started.op === "and" &&
+			counted(started.left, ">=")?.kind === "number" &&
+			started.right.kind === "unary" &&
+			started.right.op === "not" &&
+			started.right.operand.kind === "call" &&
+			started.right.operand.fn === "nvl"
+				? started.right.operand.args[0]
+				: undefined;
+		if (cond === undefined || more === undefined || limit?.kind !== "number") {
+			unread(id, "This repeat's condition isn't written as a roster's is.");
+			return [];
+		}
+		const [counter, ...rest] = parts;
+		const counterItem = deref(counter);
+		const row = urnOf(asObj(counterItem?.item.AssignedVariableReference));
+		if (counterItem?.type !== "ComputationItem" || row === undefined) {
+			unread(id, "This roster's rows don't start by counting themselves.");
+			return [];
+		}
+		// Inside its rows, the counter is the row number, as a loop's variable is.
+		params.set(row, { kind: "row", loop: id });
+		return [
+			{
+				kind: "repeat",
+				id,
+				more: { expr: more, sources: cond.sources },
+				max: limit.value,
+				flow: gather(rest),
+			},
+		];
+	};
+
+	const instrument = Object.values(ddi.Instrument ?? {})[0];
+	if (instrument === undefined) {
+		unread("", "The document has no Instrument.");
+		return { instrument: { inputs: [], flow: [] }, findings };
+	}
+	const name = words(instrument.InstrumentName);
+	const title = words(instrument.Label);
+	const flow = sequenceOf(instrument.ControlConstructReference);
+	const inputs = [...params.values()].filter(
+		(s): s is Extract<Source, { kind: "input" }> =>
+			s.kind === "input" && !labels.has(s.variable),
+	);
+	return {
+		instrument: {
+			...(name !== undefined && { name }),
+			...(title !== undefined && { title }),
+			inputs,
+			flow,
+		},
+		findings,
+	};
+}
+
+/** `{ key: value }` when there is a value, for spreading; `{}` otherwise. */
+const optional = <K extends string, V>(key: K, value: V | undefined) =>
+	(value === undefined ? {} : { [key]: value }) as Partial<Record<K, V>>;
+
+/** A code's value, from a reference to it by identity (a Code isn't an item of its own). */
+function codeValueOf(ddi: DdiDocument, code: Obj): string | undefined {
+	for (const list of Object.values(ddi.CodeList ?? {}))
+		for (const c of asList(list.Code))
+			if (c.URN === code.URN) return str(asObj(c.Value)?.StringValue);
+	return undefined;
+}
+
+/** For each select-all list (by URN), the value that is a tick, as its categories say. */
+function tickCodes(ddi: DdiDocument): ReadonlyMap<string, string> {
+	const out = new Map<string, string>();
+	for (const list of Object.values(ddi.CodeList ?? {}))
+		for (const c of asList(list.Code)) {
+			const v = asObj(c.CategoryReference)?.value;
+			const category = Array.isArray(v)
+				? ddi.Category?.[v.join(":")]
+				: undefined;
+			if (str(asObj(category?.Generation)?.Qualification) === TICKED) {
+				const value = str(asObj(c.Value)?.StringValue);
+				if (value !== undefined) out.set(str(list.URN) ?? "", value);
+			}
+		}
+	return out;
+}
