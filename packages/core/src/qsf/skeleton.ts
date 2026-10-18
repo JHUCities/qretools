@@ -12,14 +12,15 @@ export type Qsf =
 	| { readonly [key: string]: Qsf };
 export type QsfObject = { readonly [key: string]: Qsf };
 
-/** The survey's flow: blocks of questions (one to a page), branches, fields set, the end. */
+/** The survey's flow: blocks of pages of questions, branches, fields set, the end. */
 export type Node =
 	| {
 			readonly kind: "block";
 			/** Its own ID, when something else names it (a loop's block, in a condition on a round). */
 			readonly id?: string;
 			readonly description?: string;
-			readonly questions: readonly QsfObject[];
+			/** Its pages, each the questions shown together. */
+			readonly pages: readonly (readonly QsfObject[])[];
 			/** Block options: a loop's. */
 			readonly options?: QsfObject;
 	  }
@@ -140,11 +141,11 @@ export function toQsf(
 	const flow = [...inputs, ...serialise(nodes)];
 	// A survey with no questions still has its Default block.
 	if (all.length === 0) {
-		all.push({ kind: "block", questions: [] });
+		all.push({ kind: "block", pages: [] });
 		ids.push(blockId(1));
 		flow.push({ Type: "Block", ID: blockId(1), FlowID: flowId() });
 	}
-	const questions = all.flatMap((b) => b.questions);
+	const questions = all.flatMap((b) => b.pages.flat());
 	return {
 		SurveyEntry: {
 			SurveyID: SURVEY_ID,
@@ -175,9 +176,12 @@ export function toQsf(
 						(i === 0 ? "Default Question Block" : `Block ${i + 1}`),
 					ID: ids[i] ?? "",
 					...(b.options && { Options: b.options }),
-					BlockElements: b.questions.flatMap((q, j) => [
+					BlockElements: b.pages.flatMap((page, j) => [
 						...(j === 0 ? [] : [{ Type: "Page Break" }]),
-						{ Type: "Question", QuestionID: q.QuestionID ?? "" },
+						...page.map((q) => ({
+							Type: "Question",
+							QuestionID: q.QuestionID ?? "",
+						})),
 					]),
 				})),
 				{

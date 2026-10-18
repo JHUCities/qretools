@@ -147,14 +147,14 @@ export function writeQsf(
 	/** The flow as Qualtrics' flow: a run of asks and statements is one block. */
 	const layout = (flow: readonly Step[], description?: string): Node[] => {
 		const nodes: Node[] = [];
-		let current: QsfObject[] = [];
+		let current: QsfObject[][] = [];
 		let title = description;
 		const flush = () => {
 			if (current.length > 0)
 				nodes.push({
 					kind: "block",
 					...(title !== undefined && { description: title }),
-					questions: current,
+					pages: current,
 				});
 			current = [];
 			title = undefined;
@@ -163,10 +163,10 @@ export function writeQsf(
 			switch (s.kind) {
 				case "ask":
 					if (s.checks.length > 0) without(s.id, "its checks");
-					current.push(askQuestion(s));
+					current.push([askQuestion(s)]);
 					break;
 				case "say":
-					current.push(statement(s));
+					current.push([statement(s)]);
 					break;
 				case "section":
 					flush();
@@ -258,7 +258,7 @@ export function writeQsf(
 			note("qsf-inexpressible", "error", at, c.message);
 			return undefined;
 		};
-		const shown = (q: QsfObject, guard: Form, at: string): QsfObject[] => {
+		const shown = (q: QsfObject, guard: Form, at: string): QsfObject[][] => {
 			if (guard === "too-large") {
 				note(
 					"qsf-too-large",
@@ -277,19 +277,21 @@ export function writeQsf(
 				);
 				return [];
 			}
-			if (guard.some((g) => g.length === 0)) return [q];
+			if (guard.some((g) => g.length === 0)) return [[q]];
 			return [
-				{
-					...q,
-					DisplayLogic: {
-						...(logicOf(ctx, guard) as QsfObject),
-						inPage: false,
+				[
+					{
+						...q,
+						DisplayLogic: {
+							...(logicOf(ctx, guard) as QsfObject),
+							inPage: false,
+						},
 					},
-				},
+				],
 			];
 		};
-		const flat = (steps: readonly Step[], guard: Form): QsfObject[] =>
-			steps.flatMap((x): QsfObject[] => {
+		const flat = (steps: readonly Step[], guard: Form): QsfObject[][] =>
+			steps.flatMap((x): QsfObject[][] => {
 				switch (x.kind) {
 					case "ask":
 						if (x.checks.length > 0) without(x.id, "its checks");
@@ -301,7 +303,7 @@ export function writeQsf(
 					case "if": {
 						const arms = x.branches.map((b) => forms(b.cond, x.id));
 						let none: Form = ALWAYS;
-						const out: QsfObject[] = [];
+						const out: QsfObject[][] = [];
 						for (const [i, b] of x.branches.entries()) {
 							const f = arms[i];
 							if (f === undefined) return [];
@@ -316,8 +318,8 @@ export function writeQsf(
 				}
 			});
 		const max = s.max ?? 0;
-		const questions = flat(s.flow, ALWAYS);
-		if (questions.length === 0) {
+		const pages = flat(s.flow, ALWAYS);
+		if (pages.length === 0) {
 			// An each row reading this roster would name a block that isn't there.
 			note(
 				"qsf-inexpressible",
@@ -333,7 +335,7 @@ export function writeQsf(
 				kind: "block",
 				id: numbering.loopBlocks.get(s.id) ?? "",
 				description: `rows of ${printCondition(s.count.expr)}`,
-				questions,
+				pages,
 				options: {
 					BlockLocking: "false",
 					RandomizeQuestions: "false",
