@@ -31,7 +31,7 @@ import {
 } from "../findings.ts";
 import { importsOf, instrumentOf } from "../instrument/instrument.ts";
 import { ROOT } from "../kinds.ts";
-import { placeFindings, qsfOf, qsfRefusal, qsfTime } from "../qsf/qsf.ts";
+import { placeFindings, qsfOf, qsfRefusalReason, qsfTime } from "../qsf/qsf.ts";
 import { exportRefusal, type Refusal } from "../refusal.ts";
 import { agencyWritten } from "../surface/bankfile.ts";
 import {
@@ -509,7 +509,7 @@ async function instrument(
 
 /**
  * The instrument as a Qualtrics survey, made from its DDI: every finding said at its step,
- * and nothing written while any is an error (`qsfRefusal`).
+ * and nothing written while any is an error.
  */
 async function exportQsf(
 	file: string,
@@ -518,21 +518,17 @@ async function exportQsf(
 	args: ReturnType<typeof parse>,
 	io: Io,
 ): Promise<number> {
-	const { qsf, findings } = qsfOf(result.ddi, {
+	const made = qsfOf(result.ddi, {
 		name: result.draft.name ?? basename(file, extname(file)),
 		created: qsfTime(new Date()),
 	});
-	const placed = placeFindings(findings, result.places);
-	for (const f of placed)
+	for (const f of placeFindings(made.findings, result.places))
 		io.err(`${findingLine(file, source, result.ranges, f)}\n`);
-	const refusal = qsfRefusal(placed);
-	if (qsf === undefined || refusal !== undefined) {
-		io.err(
-			`Not exported: ${refusal?.errors ?? 1} thing${refusal?.errors === 1 ? "" : "s"} in this instrument can't be run in Qualtrics as its DDI says.\n`,
-		);
+	if (made.kind === "refused") {
+		io.err(`Not exported: ${qsfRefusalReason(made.errors)}\n`);
 		return PROBLEMS;
 	}
-	const text = `${JSON.stringify(qsf, null, 2)}\n`;
+	const text = `${JSON.stringify(made.qsf, null, 2)}\n`;
 	if (args.values.output === undefined) io.out(text);
 	else await io.writeFile(args.values.output, text);
 	return OK;
