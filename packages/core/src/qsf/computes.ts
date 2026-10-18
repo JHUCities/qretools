@@ -81,7 +81,7 @@ export const computedAt = (
 				(n) => ctx.placeOf(n.step.id) > at,
 			)
 		)
-			return refuse(`reads \`${s.variable}\`, computed again after it`);
+			return refuse(`reads \`${s.variable}\`, computed after it`);
 	}
 	return { kind: "inline", value: c.step.value };
 };
