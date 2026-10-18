@@ -1182,7 +1182,8 @@ function readRosterMax(
 					"`max` is a whole number of rows, 1 or more.",
 				),
 			);
-			return undefined;
+			// Said; the count still limits the rows, so the loop stays bounded.
+			return counted?.max;
 		}
 		if (counted !== undefined && written < counted.max)
 			ctx.say(
@@ -1190,7 +1191,7 @@ function readRosterMax(
 					"max-below-count",
 					"warning",
 					at,
-					`\`${counted.from}\` allows up to ${counted.max}, but this roster has at most ${written} rows: rows after ${written} aren't asked.`,
+					`${counted.literal ? `The count is ${counted.max}` : `\`${counted.from}\` allows up to ${counted.max}`}, but this roster has at most ${written} rows: rows after ${written} aren't asked.`,
 				),
 			);
 		return written;
@@ -1217,13 +1218,15 @@ function readRosterMax(
 function countedMax(
 	count: Cond | undefined,
 	ctx: Context,
-): { readonly max: number; readonly from: string } | undefined {
+):
+	| { readonly max: number; readonly from: string; readonly literal: boolean }
+	| undefined {
 	const e = count?.expr;
 	const whole = (n: number | undefined) =>
 		n !== undefined && Number.isInteger(n) && n >= 1 ? n : undefined;
 	if (e?.kind === "number") {
 		const max = whole(e.value);
-		return max === undefined ? undefined : { max, from: e.text };
+		return max === undefined ? undefined : { max, from: e.text, literal: true };
 	}
 	if (e?.kind !== "name") return undefined;
 	const named = resolve(e.name, ctx);
@@ -1232,7 +1235,7 @@ function countedMax(
 			? named.question?.evaluation.draft.domain
 			: undefined;
 	const max = whole(domain?.kind === "number" ? domain.max : undefined);
-	return max === undefined ? undefined : { max, from: e.name };
+	return max === undefined ? undefined : { max, from: e.name, literal: false };
 }
 
 /** Over an earlier roster's rows: the roster must be one this instrument has. */

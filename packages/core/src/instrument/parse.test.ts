@@ -238,6 +238,12 @@ flow:
 		const lower = roster("count: bas.size", "\n    max: 4");
 		expect(maxOf(lower)).toBe(4);
 		expect(said(lower)).toEqual(["warning max-below-count flow.1.max"]);
+		const fewer = roster("count: 3", "\n    max: 2");
+		expect(fewer.findings.map((f) => f.message)).toEqual([
+			"The count is 3, but this roster has at most 2 rows: rows after 2 aren't asked.",
+		]);
+		// A count's own limit stands when `max` is wrong.
+		expect(maxOf(roster("count: bas.size", "\n    max: 0"))).toBe(20);
 		// Not a whole number from 1: said once, with no hole on top.
 		for (const bad of ["0", "-1", "2.5", "x"])
 			expect(said(roster("more: bas.size = 1", `\n    max: ${bad}`))).toEqual([
