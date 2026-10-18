@@ -263,6 +263,7 @@ export function elaborateInstrument(
 		const {
 			Label,
 			QuestionReference,
+			SourceParameterReference,
 			ConceptReference,
 			VariableRepresentation,
 		} = theirs.body;
@@ -275,6 +276,8 @@ export function elaborateInstrument(
 					VariableName: [intl(name)],
 					Label,
 					QuestionReference,
+					// What of the question it holds: the question's own, as the bank says.
+					SourceParameterReference,
 					// Whom this instrument asks it of; else whom the bank says.
 					UniverseReference:
 						universe === undefined
@@ -359,24 +362,27 @@ export function elaborateInstrument(
 		);
 		return { variable, construct };
 	};
+	/**
+	 * Record what an ask answers, each Variable once (exclusive branches may ask a question
+	 * twice), and say for every ask which of the bank's variables it fills under which name.
+	 * An `as` renames a question with one variable (the parser refuses it on others).
+	 */
 	const record = (
 		q: QuestionRef,
 		as: string | undefined,
 		universe: Item | undefined,
-	) => {
-		if (as !== undefined) {
-			const own = definedVariables(q.evaluation.draft)[0];
-			if (own !== undefined && !recordedAnswers.has(as)) {
-				recordedAnswers.add(as);
-				answerVariable(q, own.name, as, universe);
+	): readonly { readonly bank: string; readonly name: string }[] => {
+		const defined = definedVariables(q.evaluation.draft);
+		const answers =
+			as === undefined
+				? defined.map((d) => ({ bank: d.name, name: d.name }))
+				: defined.slice(0, 1).map((d) => ({ bank: d.name, name: as }));
+		for (const a of answers)
+			if (!recordedAnswers.has(a.name)) {
+				recordedAnswers.add(a.name);
+				answerVariable(q, a.bank, a.name, universe);
 			}
-			return;
-		}
-		for (const d of definedVariables(q.evaluation.draft))
-			if (!recordedAnswers.has(d.name)) {
-				recordedAnswers.add(d.name);
-				answerVariable(q, d.name, d.name, universe);
-			}
+		return answers;
 	};
 
 	// The checks' severities: a code list of the instrument's own, which each check's
@@ -679,7 +685,7 @@ export function elaborateInstrument(
 		bring(q);
 		const at = local("ask", node.as ?? q.name);
 		const universe = universeOf(node.universe ?? draft.universe);
-		record(q, node.as, universe);
+		const answers = record(q, node.as, universe);
 		const parameters = (question.body.InParameter ??
 			[]) as readonly JsonObject[];
 		const adapters: Item[] = [];
@@ -733,6 +739,25 @@ export function elaborateInstrument(
 				},
 			];
 		});
+		// What this ask records: the question's output (as the bank's variable says which)
+		// into the instrument's variable. A fill binds into the question; an answer, out of it.
+		const answerBindings = answers.flatMap((a) => {
+			const theirs = itemsOf(q).find(
+				(it) =>
+					it.type === "Variable" && it.identity.ID === `variable-${a.bank}`,
+			);
+			const output = theirs?.body.SourceParameterReference as
+				| JsonObject
+				| undefined;
+			return output === undefined || !recordedAnswers.has(a.name)
+				? []
+				: [
+						{
+							SourceParameterReference: { ...output },
+							TargetParameterReference: { ...outOf(a.name) },
+						},
+					];
+		});
 		const asked = emit(
 			item(
 				"QuestionConstruct",
@@ -749,7 +774,7 @@ export function elaborateInstrument(
 										node.options === "random" ? "Random" : "Rotate",
 								},
 					EstimatedSecondsResponseTime: node.seconds,
-					Binding: bindings,
+					Binding: [...bindings, ...answerBindings],
 				}),
 			),
 		);

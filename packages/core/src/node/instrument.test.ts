@@ -133,16 +133,23 @@ describe("the households instrument, whole", async () => {
 	it("is valid, says only what its types declare, and resolves every reference", () => {
 		expect(validator.ok && validator.value(instrument.ddi)).toEqual([]);
 		expect(instrument.collisions).toEqual([]);
-		const construct = allowed("ControlConstruct");
-		const extra = new Set(["ConstructName", "Binding"]);
+		// A construct also has ControlConstruct's properties, as DDI 4.0 says.
+		const constructs = new Set([
+			"QuestionConstruct",
+			"StatementItem",
+			"ComputationItem",
+			"IfThenElse",
+			"Sequence",
+			"Loop",
+			"RepeatUntil",
+		]);
 		const items = new Set<string>();
 		const identities = new Set<string>();
 		for (const [type, byKey] of Object.entries(instrument.ddi)) {
 			const ok = new Set([
 				...allowed(type),
 				...allowed("Versionable"),
-				...construct,
-				...extra,
+				...(constructs.has(type) ? allowed("ControlConstruct") : []),
 			]);
 			for (const [key, it] of Object.entries(byKey ?? {})) {
 				items.add(`${type} ${key}`);

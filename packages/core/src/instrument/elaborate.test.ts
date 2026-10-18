@@ -102,6 +102,17 @@ const build = () => {
 	return { findings, e, ...instrumentDocument(e) };
 };
 
+/** The constructs of a flow: DDI's ControlConstruct substitution group, as we emit it. */
+const CONSTRUCTS = [
+	"QuestionConstruct",
+	"StatementItem",
+	"ComputationItem",
+	"IfThenElse",
+	"Sequence",
+	"Loop",
+	"RepeatUntil",
+];
+
 /** Every object in a document, however deep. */
 function* objects(x: unknown): Generator<JsonObject> {
 	if (Array.isArray(x)) for (const v of x) yield* objects(v);
@@ -162,16 +173,13 @@ describe("an instrument as DDI", () => {
 
 	it("uses only properties its types declare (the schema doesn't check most)", () => {
 		const { document } = build();
-		const construct = allowed("ControlConstruct");
-		// Declared by DDI on a ControlConstruct in 4.0's model, though the JSON schema's
-		// types don't carry them over: a construct's name, and a question's fill bindings.
-		const extra = new Set(["ConstructName", "Binding"]);
+		// A construct also has ControlConstruct's properties (its name, its bindings): DDI
+		// 4.0 says so, though the JSON schema's construct types don't inherit them.
 		for (const [type, items] of Object.entries(document)) {
 			const ok = new Set([
 				...allowed(type),
 				...allowed("Versionable"),
-				...construct,
-				...extra,
+				...(CONSTRUCTS.includes(type) ? allowed("ControlConstruct") : []),
 			]);
 			for (const it of Object.values(items ?? {}))
 				for (const key of Object.keys(it))
@@ -232,6 +240,103 @@ describe("an instrument as DDI", () => {
 			expect(c).not.toContain("?");
 			expect(c).not.toMatch(/\bbas\./);
 		}
+	});
+
+	it("is valid with the inheritance DDI describes, so a construct's bindings are checked too", () => {
+		const { document } = build();
+		const inherited = JSON.parse(JSON.stringify(schema)) as typeof schema;
+		for (const type of CONSTRUCTS) {
+			const def = inherited.$defs[type];
+			if (def !== undefined)
+				def.allOf = [
+					...(def.allOf ?? []),
+					{ $ref: "#/$defs/ControlConstruct" },
+				];
+		}
+		const strict = makeValidator(inherited);
+		expect(strict.ok && strict.value(document)).toEqual([]);
+	});
+
+	it("links each answer to the asks that record it and, for an option, its code", () => {
+		const { document } = build();
+		// Definitions only: a reference carries the same identity as what it names.
+		const byId = new Map<string, JsonObject>();
+		for (const o of objects(document))
+			if (
+				typeof o.ID === "string" &&
+				typeof o.URN === "string" &&
+				("ParameterName" in o ||
+					"CategoryReference" in o ||
+					"QuestionItemName" in o)
+			)
+				byId.set(o.ID, o);
+		const idOf = (r: unknown) => (r as JsonObject | undefined)?.ID as string;
+		const constructs = Object.values(document.QuestionConstruct ?? {});
+		const read = Object.values(document.Variable ?? {}).flatMap((v) => {
+			if (v.QuestionReference === undefined) return [];
+			const name = [...objects(v.VariableName)].find(
+				(o) => "Value" in o,
+			)?.Value;
+			const out = idOf(v.OutParameter);
+			// Only what the fields say: the asks binding into this variable's output…
+			const asks = constructs.flatMap((c) =>
+				((c.Binding ?? []) as JsonObject[])
+					.filter((b) => idOf(b.TargetParameterReference) === out)
+					.map((b) => ({ c, source: idOf(b.SourceParameterReference) })),
+			);
+			for (const { c, source } of asks) {
+				// …each from the output of the question it asks, the one the variable says.
+				const question = (c.QuestionReference as JsonObject).value as string[];
+				const outputs = (
+					(byId.get(question[1] ?? "")?.OutParameter ?? []) as JsonObject[]
+				).map(idOf);
+				expect(outputs).toContain(source);
+				expect(source).toBe(idOf(v.SourceParameterReference));
+			}
+			// …and an option's output names its code.
+			const code = [...objects(byId.get(idOf(v.SourceParameterReference)))]
+				.flatMap((o) => (o.CodeReference ?? []) as JsonObject[])
+				.map((r) => byId.get(idOf(r)));
+			const value = (code[0]?.Value as JsonObject | undefined)?.StringValue;
+			return [
+				[
+					name,
+					asks.map(({ c }) => String(c.ID).split(".").at(-1)),
+					...(value === undefined ? [] : [value]),
+				],
+			];
+		});
+		expect(read).toEqual([
+			["consent", ["ask-consent"]],
+			["tenure", ["ask-tenure"]],
+			["rent", ["ask-rent"]],
+			["util", ["ask-util"]],
+			["modes_b", ["ask-modes"], "b"],
+			["modes_w", ["ask-modes"], "w"],
+			["why", ["ask-why"]],
+			["why_end", ["ask-why_end"]],
+		]);
+		// Exclusive branches may ask one question: one variable, recorded by both asks.
+		const branches = instrumentDocument(
+			elaborateInstrument(
+				parseInstrument(
+					'name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.consent\n  - if: bas.consent = "1"\n    then:\n      - ask: bas.why\n    else:\n      - ask: bas.why\n',
+					{ bas: BAS },
+				),
+				{ agency: "org.example" },
+			),
+		).document;
+		const why = Object.values(branches.Variable ?? {}).filter((v) =>
+			String(v.ID).endsWith("var-why"),
+		);
+		expect(why).toHaveLength(1);
+		const out = (why[0]?.OutParameter as JsonObject | undefined)?.ID;
+		const into = Object.values(branches.QuestionConstruct ?? {}).filter((c) =>
+			((c.Binding ?? []) as JsonObject[]).some(
+				(b) => (b.TargetParameterReference as JsonObject).ID === out,
+			),
+		);
+		expect(into).toHaveLength(2);
 	});
 
 	it("records each answer once, in a Variable of its own, never the bank's", () => {
@@ -297,11 +402,16 @@ flow:
 		const echo = Object.values(document.QuestionConstruct ?? {}).find((item) =>
 			String(item.ID).endsWith("ask-echo"),
 		);
+		// The fill binds into the question; its answer, out of it into the instrument's variable.
 		expect(echo?.Binding).toMatchObject([
 			{
 				SourceParameterReference: {
 					ID: "instrument-labels.out-display_label_1",
 				},
+			},
+			{
+				SourceParameterReference: { ID: "echo.out-echo" },
+				TargetParameterReference: { ID: "instrument-labels.out-echo" },
 			},
 		]);
 
@@ -367,11 +477,16 @@ flow:
 		const echo = Object.values(document.QuestionConstruct ?? {}).find((item) =>
 			String(item.ID).endsWith("ask-echo"),
 		);
+		// The fill binds into the question; its answer, out of it into the instrument's variable.
 		expect(echo?.Binding).toMatchObject([
 			{
 				SourceParameterReference: {
 					ID: "instrument-rows.out-display_label_2",
 				},
+			},
+			{
+				SourceParameterReference: { ID: "echo.out-echo" },
+				TargetParameterReference: { ID: "instrument-rows.out-echo" },
 			},
 		]);
 		// The lookup starts by forgetting the last answer's label (a roster's next row).
