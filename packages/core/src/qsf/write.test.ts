@@ -368,4 +368,32 @@ describe("writing a survey as QSF", () => {
 			]
 		`);
 	});
+
+	it("shuffles a question's options, and says rotation is shuffled too", () => {
+		const ask = (id: string, options: "random" | "rotate"): Step => ({
+			kind: "ask",
+			id,
+			question: modes,
+			records: [
+				{ variable: `${id}_b`, code: "b" },
+				{ variable: `${id}_w`, code: "w" },
+			],
+			text: [{ kind: "text", text: "How?" }],
+			options,
+			checks: [],
+		});
+		const { sq, findings } = payloads({
+			inputs: [],
+			flow: [ask("a", "random"), ask("b", "rotate")],
+		});
+		expect(sq.map((q) => q.Randomization)).toEqual([
+			{ Type: "All", Advanced: null, TotalRandSubset: "" },
+			{ Type: "All", Advanced: null, TotalRandSubset: "" },
+		]);
+		expect(
+			findings
+				.filter((f) => f.code !== "qsf-note")
+				.map((f) => `${f.severity} ${f.path}`),
+		).toEqual(["warning b"]);
+	});
 });
