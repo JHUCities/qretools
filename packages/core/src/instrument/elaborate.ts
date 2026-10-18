@@ -44,6 +44,7 @@ import type {
 	Cond,
 	InstrumentDraft,
 	Node,
+	Placeholder,
 	QuestionRef,
 	UniverseRef,
 	ValueDomain,
@@ -178,12 +179,16 @@ export function elaborateInstrument(
 		return vtl(wrap === undefined ? text : wrap(text), readsOf(cond), at);
 	};
 
-	/** Text with `{{name}}` placeholders, each bound to its variable's OutParameter. */
-	const display = (text: string): JsonObject => {
+	/**
+	 * Text with `{{name}}` placeholders, each bound to its variable's OutParameter. The
+	 * names are the parser's (`reads`, `index` already the innermost roster's row): both
+	 * come from `placeholderSpans(text)`, so the i-th span is the i-th read.
+	 */
+	const display = (text: string, reads: readonly Placeholder[]): JsonObject => {
 		const parts: ({ text: string } | { parameter: Identity })[] = [];
 		let at = 0;
-		for (const p of placeholderSpans(text)) {
-			const v = exported(p.name);
+		for (const [i, p] of placeholderSpans(text).entries()) {
+			const v = exported(reads[i]?.name ?? p.name);
 			if (v === undefined) continue;
 			if (p.range[0] > at) parts.push({ text: text.slice(at, p.range[0]) });
 			parts.push({ parameter: outOf(v) });
@@ -435,7 +440,8 @@ export function elaborateInstrument(
 		rest: readonly Node[],
 	): Item => {
 		const at = local("stop");
-		const said = node.say === undefined ? [] : [statement(node.say)];
+		const said =
+			node.say === undefined ? [] : [statement(node.say, node.sayReads)];
 		const then = emit(
 			item("Sequence", id(`${at}-then`), {
 				ControlConstructReference: said.map((s) => ref(s)),
@@ -455,9 +461,11 @@ export function elaborateInstrument(
 		);
 	};
 
-	const statement = (text: string): Item =>
+	const statement = (text: string, reads: readonly Placeholder[]): Item =>
 		emit(
-			item("StatementItem", id(local("say")), { DisplayText: [display(text)] }),
+			item("StatementItem", id(local("say")), {
+				DisplayText: [display(text, reads)],
+			}),
 		);
 
 	const construct = (node: Node): readonly Item[] => {
@@ -465,7 +473,9 @@ export function elaborateInstrument(
 			case "ask":
 				return ask(node);
 			case "say":
-				return node.text === undefined ? [] : [statement(node.text)];
+				return node.text === undefined
+					? []
+					: [statement(node.text, node.reads)];
 			case "section":
 				return [
 					sequence(node.flow, local("section"), {
@@ -735,7 +745,9 @@ export function elaborateInstrument(
 			if (check.ensure === undefined) return [];
 			const c = `${at}-check-${i + 1}`;
 			const message =
-				check.message === undefined ? [] : [statement(check.message)];
+				check.message === undefined
+					? []
+					: [statement(check.message, check.messageReads)];
 			return [
 				emit(
 					item(
