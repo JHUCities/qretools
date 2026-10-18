@@ -95,6 +95,8 @@ export interface Ctx {
 	readonly note: Note;
 	readonly qidOf: (id: string) => string;
 	readonly placeOf: (id: string) => number;
+	/** An ask the survey has no single question for: in a roster, or a roster's row never written. */
+	readonly outside: (ask: string) => boolean;
 	/** Something left out because it isn't exported yet. */
 	readonly notYet: (path: string, what: string) => void;
 }
@@ -104,6 +106,7 @@ export const context = (numbering: Numbering, note: Note): Ctx => ({
 	note,
 	qidOf: (id) => numbering.qids.get(id) ?? "",
 	placeOf: (id) => numbering.order.get(id) ?? -1,
+	outside: (ask) => numbering.looped.has(ask) || !numbering.qids.has(ask),
 	notYet: (path, what) =>
 		note(
 			"qsf-inexpressible",

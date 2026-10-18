@@ -71,32 +71,10 @@ describe("reading the households instrument's DDI back", () => {
 				.filter((e) => e.Element === "SQ")
 				.map((e) => [e.PrimaryAttribute, e.Payload as Record<string, string>]),
 		);
-		expect(
-			blocks.map(
-				(b) =>
-					`${b.Description}: ${(b.BlockElements ?? [])
-						.flatMap((e) => {
-							const q = e.QuestionID && questions.get(e.QuestionID);
-							return q
-								? [
-										`${q.QuestionID} ${q.QuestionType}/${q.Selector} ${q.DataExportTag}`,
-									]
-								: [];
-						})
-						.join(", ")}`,
-			),
-		).toMatchInlineSnapshot(`
-			[
-			  "Default Question Block: QID1 DB/TB QID1, QID2 MC/SAVR consent",
-			  "Block 2: QID3 DB/TB QID3",
-			  "Block 3: QID4 TE/SL size",
-			  "Housing: QID8 MC/SAVR tenure",
-			  "Block 5: QID9 TE/SL rent, QID10 MC/SAVR utilities",
-			  "Block 6: QID14 TE/SL comments",
-			  "Trash / Unused Questions: ",
-			]
-		`);
-		expect(flowOutline(qsf)).toMatchInlineSnapshot(`
+		// Rosters are written out row by row: households' 20 people and 4 vehicles.
+		expect(blocks.length).toBe(51);
+		const lines = flowOutline(qsf);
+		expect(lines.slice(0, 11)).toMatchInlineSnapshot(`
 			[
 			  "EmbeddedData  county=(url)",
 			  "Block BL_qretools000001",
@@ -104,10 +82,28 @@ describe("reading the households instrument's DDI back", () => {
 			  "  Standard BL_qretools000002",
 			  "  EndSurvey",
 			  "Standard BL_qretools000003",
-			  "Standard BL_qretools000004",
-			  "Branch if renter: q://QID8/SelectableChoice/2 Selected",
+			  "Branch if size >= 1: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 1",
+			  "  Standard BL_qretools000004",
+			  "Branch if size >= 2: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 2",
 			  "  Standard BL_qretools000005",
-			  "Standard BL_qretools000006",
+			  "Branch if size >= 3: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 3",
+			]
+		`);
+		const renter = lines.findIndex((l) => l.includes("if renter"));
+		expect(lines.slice(renter, renter + 12)).toMatchInlineSnapshot(`
+			[
+			  "Branch if renter: q://QID65/SelectableChoice/2 Selected",
+			  "  Standard BL_qretools000025",
+			  "Standard BL_qretools000026",
+			  "Branch if more_vehicles = "1": q://QID69/SelectableChoice/1 Selected",
+			  "  Standard BL_qretools000027",
+			  "  Branch if more_vehicles = "1": q://QID71/SelectableChoice/1 Selected",
+			  "    Standard BL_qretools000028",
+			  "    Branch if more_vehicles = "1": q://QID73/SelectableChoice/1 Selected",
+			  "      Standard BL_qretools000029",
+			  "Branch if size >= 1: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 1",
+			  "  Branch if works = "1": q://QID7/SelectableChoice/1 Selected",
+			  "    Standard BL_qretools000030",
 			]
 		`);
 		expect(questions.get("QID1")?.QuestionText).toMatchInlineSnapshot(
@@ -118,10 +114,7 @@ describe("reading the households instrument's DDI back", () => {
 		).toMatchInlineSnapshot(`
 			[
 			  "info : The bank's missing-value codes aren't offered to respondents in Qualtrics.",
-			  "error instrument-households.roster-members: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "error instrument-households.ask-rent: This is written to Qualtrics without its checks: not exported yet.",
-			  "error instrument-households.roster-vehicles: A roster isn't exported to Qualtrics yet: it's left out.",
-			  "error instrument-households.each-members: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
 			]
 		`);

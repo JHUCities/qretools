@@ -98,6 +98,7 @@ const BAS = bankOf({
 	"questions/a/pets.yaml": q("pets", 'select: many\nresponses:\n  "d": Dog\n'),
 	"questions/a/size.yaml": q("size", "number: { max: 9 }\n"),
 	"questions/a/nick.yaml": q("nick", "open: {}\n"),
+	"questions/a/more.yaml": q("more", 'responses:\n  "1": Yes\n  "2": No\n'),
 	"questions/a/util.yaml":
 		'name: util\ntext: "You pay {{rent}}. Utilities included?"\nintent: i\nopen: {}\nfills:\n  rent: number\n',
 	"questions/a/echo.yaml":
@@ -165,13 +166,16 @@ flow:
     as: why_end
 `;
 
-/** The demonstration instrument: every construct of the language, once. */
-export const demoDdi = (): DdiDocument =>
+/** An instrument's DDI, its source using the test bank as `bas`. */
+export const ddiOf = (source: string): DdiDocument =>
 	instrumentDocument(
-		elaborateInstrument(parseInstrument(SOURCE, { bas: BAS }), {
+		elaborateInstrument(parseInstrument(source, { bas: BAS }), {
 			agency: "org.example",
 		}),
 	).document;
+
+/** The demonstration instrument: every construct of the language, once. */
+export const demoDdi = (): DdiDocument => ddiOf(SOURCE);
 
 type FlowNode = {
 	readonly Type: string;

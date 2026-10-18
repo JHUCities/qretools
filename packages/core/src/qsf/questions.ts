@@ -49,8 +49,13 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 					);
 					return undefined;
 				}
-				if (source.asks.some((a) => ctx.numbering.looped.has(a))) {
-					ctx.notYet(at, `\`${source.variable}\`, read from a roster's rows,`);
+				if (source.asks.some(ctx.outside)) {
+					ctx.note(
+						"qsf-inexpressible",
+						"error",
+						at,
+						`\`${source.variable}\` is recorded in a roster's rows: outside them there's no one row to show.`,
+					);
 					return undefined;
 				}
 				const what =
