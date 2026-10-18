@@ -1285,6 +1285,8 @@ function readAsk(
 	const question =
 		text === undefined ? undefined : resolveQuestion(text, at, ctx);
 	const asName = readText(item.get("as", true), `${path}.as`, false, ctx.say);
+	// Whether `as` names what this ask records: refused (said below), it's left off the node.
+	let accepted = asName !== undefined && NAME_PATTERN.test(asName);
 	if (asName !== undefined && question === undefined) {
 		// Declared all the same, so what reads it says its question, not "nothing".
 		if (NAME_PATTERN.test(asName))
@@ -1295,7 +1297,8 @@ function readAsk(
 			);
 	} else if (asName !== undefined && question !== undefined) {
 		const domain = question.evaluation.draft.domain;
-		if (domain?.kind === "responses" && domain.select === "many")
+		if (domain?.kind === "responses" && domain.select === "many") {
+			accepted = false;
 			ctx.say(
 				problem(
 					"not-yet",
@@ -1305,7 +1308,7 @@ function readAsk(
 					"How its option variables are renamed is still to be decided.",
 				),
 			);
-		else if (!NAME_PATTERN.test(asName))
+		} else if (!NAME_PATTERN.test(asName))
 			ctx.say(
 				problem(
 					"wrong-type",
@@ -1368,7 +1371,7 @@ function readAsk(
 		kind: "ask",
 		path,
 		...(question !== undefined && { question }),
-		...(asName !== undefined && { as: asName }),
+		...(asName !== undefined && accepted && { as: asName }),
 		...(universe !== undefined && { universe }),
 		...(options !== undefined && { options }),
 		...(seconds !== undefined && { seconds }),

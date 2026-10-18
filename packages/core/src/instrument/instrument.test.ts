@@ -40,6 +40,15 @@ describe("two workspaces under one agency", () => {
 				"uses.a",
 				"`a` and `b` both publish as `org.a` but don't agree on how a select-all-that-apply option is stored.",
 			],
+			// `as` on a select-all question is refused, so both asks record its options.
+			[
+				"flow.1.ask",
+				"The variable `news_1` would be recorded by `a.news` and by `b.news`.",
+			],
+			[
+				"flow.1.ask",
+				"The variable `news_2` would be recorded by `a.news` and by `b.news`.",
+			],
 		]);
 		// The refusal itself is unchanged: every identity is still a collision.
 		expect(
