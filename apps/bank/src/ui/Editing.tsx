@@ -34,7 +34,7 @@ import {
 	othersOf,
 	placeFindings,
 	qsfOf,
-	qsfRefusal,
+	qsfRefusalReason,
 	qsfTime,
 	questionItems,
 	type Range,
@@ -178,7 +178,11 @@ function useActions(id: Id) {
 	const { dispatch } = useApp();
 	return {
 		dispatch,
-		onTarget: (target: Target) => dispatch({ kind: "locationClicked", target }),
+		// Stable, as `onFix`: the memoised DDI pane holds it.
+		onTarget: useCallback(
+			(target: Target) => dispatch({ kind: "locationClicked", target }),
+			[dispatch],
+		),
 		// Stable, so the editor's diagnostics are rebuilt only when the findings change.
 		onFix: useCallback(
 			(fix: Fix) => dispatch({ kind: "fixApplied", id, fix }),
@@ -401,6 +405,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const flush = () => {
 		flushFindings();
 		flushOutline();
+		flushQsf();
 	};
 	const diagnostics = useMemo(
 		() => toDiagnostics(findings, ranges, onFix),
@@ -434,20 +439,19 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	);
 	// The Qualtrics survey, made from the DDI only while the DDI itself may be exported.
 	// Its date is when it was made from this DDI: Qualtrics sets its own on import.
-	const qsf = useMemo(() => {
-		if (refusal !== undefined) return undefined;
-		const made = qsfOf(ddi, { name: e.name, created: qsfTime(new Date()) });
-		const findings = placeFindings(made.findings, instrument.places);
-		const errors = qsfRefusal(findings)?.errors;
-		return {
-			survey: errors === undefined ? made.qsf : undefined,
-			findings,
-			reason:
-				errors === undefined
-					? undefined
-					: `${errors === 1 ? "1 thing" : `${errors} things`} in this instrument can't be run in Qualtrics as the DDI says; see Qualtrics below.`,
-		};
-	}, [ddi, refusal, e.name, instrument.places]);
+	const qsf = useMemo(
+		() =>
+			refusal === undefined
+				? qsfOf(ddi, { name: e.name, created: qsfTime(new Date()) })
+				: undefined,
+		[ddi, refusal, e.name],
+	);
+	const qsfPlaced = useMemo(
+		() => placeFindings(qsf?.findings ?? [], instrument.places),
+		[qsf, instrument.places],
+	);
+	// Settled as the Findings pane is, so the list doesn't jump while the author types.
+	const [qsfListed, flushQsf] = useSettled(qsfPlaced, SETTLE_MS, e.id);
 	const reasonId = useId();
 	const qsfReasonId = useId();
 	const notice = useMemo(
@@ -457,24 +461,29 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 					id={reasonId}
 					reason={refusal && refusalReason(refusal)}
 				/>
-				<DownloadReason id={qsfReasonId} reason={qsf?.reason} />
+				<DownloadReason
+					id={qsfReasonId}
+					reason={
+						qsf?.kind === "refused"
+							? `${qsfRefusalReason(qsf.errors)} See Qualtrics below.`
+							: undefined
+					}
+				/>
 				<WorkspaceNotice findings={own} />
-				{qsf !== undefined && qsf.findings.length > 0 && (
-					<section
-						className="qsf-findings"
-						aria-labelledby={`${qsfReasonId}-h`}
-					>
-						<h4 id={`${qsfReasonId}-h`}>Qualtrics</h4>
+				{qsfListed.length > 0 && (
+					// Not a region: a landmark inside the previews' would be heard twice.
+					<div className="qsf-findings" onPointerEnter={flushQsf}>
+						<h4>Qualtrics</h4>
 						<Findings
-							findings={qsf.findings}
+							findings={qsfListed}
 							label="Qualtrics"
 							onTarget={onTarget}
 						/>
-					</section>
+					</div>
 				)}
 			</>
 		),
-		[reasonId, qsfReasonId, refusal, qsf, own, onTarget],
+		[reasonId, qsfReasonId, refusal, qsf, qsfListed, flushQsf, own, onTarget],
 	);
 	const action = useMemo(
 		() => (
@@ -489,8 +498,8 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 				<Download
 					label="Download QSF"
 					filename={`${e.name}.qsf`}
-					json={qsf?.survey}
-					allowed={qsf?.survey !== undefined}
+					json={qsf?.kind === "made" ? qsf.qsf : undefined}
+					allowed={qsf?.kind === "made"}
 					// While the DDI is held back, so is the survey made from it, for that reason.
 					reason={qsf === undefined ? reasonId : qsfReasonId}
 				/>

@@ -489,11 +489,14 @@ describe("a workspace's instruments", () => {
 			document.getElementById(qsf.getAttribute("aria-describedby") ?? "")
 				?.textContent,
 		).toMatch(/^1 thing in this instrument can't be run in Qualtrics/);
-		expect(
-			within(screen.getByRole("list", { name: "Qualtrics" })).getAllByRole(
-				"listitem",
-			).length,
-		).toBeGreaterThan(0);
+		// The list settles as the Findings pane does, once typing pauses.
+		await vi.waitFor(() =>
+			expect(
+				within(screen.getByRole("list", { name: "Qualtrics" })).getAllByRole(
+					"listitem",
+				).length,
+			).toBeGreaterThan(0),
+		);
 		expect(screen.getByRole("link", { name: "Download DDI" })).toBeTruthy();
 	}, 15_000);
 

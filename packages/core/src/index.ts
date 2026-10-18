@@ -103,10 +103,10 @@ export {
 	placeFindings,
 	type Qsf,
 	type QsfObject,
+	type QsfResult,
 	qsfOf,
-	qsfRefusal,
+	qsfRefusalReason,
 	qsfTime,
-	withCreated,
 } from "./qsf/qsf.ts";
 export {
 	type Exportable,
