@@ -28,7 +28,7 @@ import { context, number } from "./number.ts";
 import { questionsOf } from "./questions.ts";
 import type { Cond, ReadInstrument, Step } from "./read.ts";
 import { type Node, type QsfObject, toQsf } from "./skeleton.ts";
-import { baseId, unroll } from "./unroll.ts";
+import { baseId, countedBy, unroll } from "./unroll.ts";
 
 export function writeQsf(
 	read: ReadInstrument,
@@ -250,16 +250,13 @@ export function writeQsf(
 	 * arm's, the else none of them; exact, as unroll.ts checked no arm asks what they read.
 	 */
 	const looped = (s: Extract<Step, { kind: "loop" }>): Node[] => {
-		const counted =
-			s.count.expr.kind === "name"
-				? s.count.sources.get(s.count.expr.name)
-				: undefined;
+		const counted = countedBy(s);
 		const qid =
 			counted?.kind === "answer" ? ctx.qidOf(counted.asks[0] ?? "") : "";
-		const forms = (cond: Cond) => {
+		const forms = (cond: Cond, at: string) => {
 			const c = compileCondition(cond);
 			if (c.kind === "ok") return c.forms;
-			note("qsf-inexpressible", "error", s.id, c.message);
+			note("qsf-inexpressible", "error", at, c.message);
 			return undefined;
 		};
 		const shown = (q: QsfObject, guard: Form, at: string): QsfObject[] => {
@@ -272,7 +269,15 @@ export function writeQsf(
 				);
 				return [];
 			}
-			if (guard.length === 0) return [];
+			if (guard.length === 0) {
+				note(
+					"qsf-note",
+					"info",
+					at,
+					"This is under a condition that never holds, so it isn't in the survey.",
+				);
+				return [];
+			}
 			if (guard.some((g) => g.length === 0)) return [q];
 			return [
 				{
@@ -296,7 +301,7 @@ export function writeQsf(
 					case "section":
 						return flat(x.flow, guard);
 					case "if": {
-						const arms = x.branches.map((b) => forms(b.cond));
+						const arms = x.branches.map((b) => forms(b.cond, x.id));
 						let none: Form = ALWAYS;
 						const out: QsfObject[] = [];
 						for (const [i, b] of x.branches.entries()) {
@@ -314,7 +319,16 @@ export function writeQsf(
 			});
 		const max = s.max ?? 0;
 		const questions = flat(s.flow, ALWAYS);
-		if (questions.length === 0) return [];
+		if (questions.length === 0) {
+			// An each row reading this roster would name a block that isn't there.
+			note(
+				"qsf-inexpressible",
+				"error",
+				s.id,
+				"Nothing in this roster can be shown, so Qualtrics has no loop to write.",
+			);
+			return [];
+		}
 		const locator = `q://${qid}/LoopAndMerge/MergeOnNumericResponse`;
 		return [
 			{

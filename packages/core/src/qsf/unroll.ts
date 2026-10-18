@@ -85,48 +85,42 @@ const allOf = (conds: readonly Cond[]): Cond | undefined =>
 		};
 	}, undefined);
 
-/** The asks in a flow, at any depth. */
+/** Every step in a flow, depth first; into rosters' rows unless told not to. */
+const stepsIn = (steps: readonly Step[], intoRosters = true): Step[] =>
+	steps.flatMap((s): Step[] => {
+		const inner = (flow: readonly Step[]) => stepsIn(flow, intoRosters);
+		switch (s.kind) {
+			case "if":
+				return [
+					s,
+					...s.branches.flatMap((b) => inner(b.then)),
+					...inner(s.else ?? []),
+				];
+			case "stop":
+				return [s, ...inner(s.say)];
+			case "section":
+				return [s, ...inner(s.flow)];
+			case "loop":
+			case "repeat":
+				return [s, ...(intoRosters ? inner(s.flow) : [])];
+			default:
+				return [s];
+		}
+	});
 const asksIn = (steps: readonly Step[]): string[] =>
-	steps.flatMap((s): string[] => {
-		switch (s.kind) {
-			case "ask":
-				return [s.id];
-			case "if":
-				return [
-					...s.branches.flatMap((b) => asksIn(b.then)),
-					...asksIn(s.else ?? []),
-				];
-			case "stop":
-				return asksIn(s.say);
-			case "section":
-			case "loop":
-			case "repeat":
-				return asksIn(s.flow);
-			default:
-				return [];
-		}
-	});
-/** The variables a flow's asks record, at any depth. */
+	stepsIn(steps).flatMap((s) => (s.kind === "ask" ? [s.id] : []));
 const recordsIn = (steps: readonly Step[]): string[] =>
-	steps.flatMap((s): string[] => {
-		switch (s.kind) {
-			case "ask":
-				return s.records.map((r) => r.variable);
-			case "if":
-				return [
-					...s.branches.flatMap((b) => recordsIn(b.then)),
-					...recordsIn(s.else ?? []),
-				];
-			case "stop":
-				return recordsIn(s.say);
-			case "section":
-			case "loop":
-			case "repeat":
-				return recordsIn(s.flow);
-			default:
-				return [];
-		}
-	});
+	stepsIn(steps).flatMap((s) =>
+		s.kind === "ask" ? s.records.map((r) => r.variable) : [],
+	);
+
+/** What counts a roster's rows: the name its count reads, when it reads just one. */
+export const countedBy = (
+	s: Extract<Step, { kind: "loop" }>,
+): Source | undefined =>
+	s.count.expr.kind === "name"
+		? s.count.sources.get(s.count.expr.name)
+		: undefined;
 
 export function unroll(instrument: ReadInstrument): {
 	readonly instrument: ReadInstrument;
@@ -144,56 +138,40 @@ export function unroll(instrument: ReadInstrument): {
 	// What every roster records: its asks, and the values it computes.
 	const rosterAsks = new Set<string>();
 	const rosterComputes = new Set<string>();
-	const collect = (steps: readonly Step[], inRoster: boolean): void => {
-		for (const s of steps) {
-			if (s.kind === "ask" && inRoster) rosterAsks.add(s.id);
-			if (s.kind === "compute" && inRoster) rosterComputes.add(s.variable);
-			if (s.kind === "if") {
-				for (const b of s.branches) collect(b.then, inRoster);
-				collect(s.else ?? [], inRoster);
+	for (const r of stepsIn(instrument.flow))
+		if (r.kind === "loop" || r.kind === "repeat")
+			for (const s of stepsIn(r.flow)) {
+				if (s.kind === "ask") rosterAsks.add(s.id);
+				if (s.kind === "compute") rosterComputes.add(s.variable);
 			}
-			if (s.kind === "stop") collect(s.say, inRoster);
-			if (s.kind === "section") collect(s.flow, inRoster);
-			if (s.kind === "loop" || s.kind === "repeat") collect(s.flow, true);
-		}
-	};
-	collect(instrument.flow, false);
 
 	// The count rosters Qualtrics loops, with their maximum; their asks are read by round.
 	const looped = new Map<string, number>();
 	const loopedAsks = new Set<string>();
 	const findLoops = (steps: readonly Step[]): void => {
-		for (const s of steps) {
-			if (s.kind === "loop") {
-				const max = loopable(s);
-				if (max !== undefined) {
-					looped.set(s.id, max);
-					for (const a of asksIn(s.flow)) loopedAsks.add(a);
-				}
-			}
-			if (s.kind === "if") {
-				for (const b of s.branches) findLoops(b.then);
-				findLoops(s.else ?? []);
-			}
-			if (s.kind === "stop") findLoops(s.say);
-			if (s.kind === "section") findLoops(s.flow);
+		// A roster inside a roster is written out (and refused), never looped.
+		for (const s of stepsIn(steps, false)) {
+			const max = s.kind === "loop" ? loopable(s) : undefined;
+			if (s.kind !== "loop" || max === undefined) continue;
+			looped.set(s.id, max);
+			for (const a of asksIn(s.flow)) loopedAsks.add(a);
 		}
 	};
 	/**
-	 * A count roster's maximum when Qualtrics can loop it exactly: counted by one number question
-	 * asked outside any roster; only asks, statements, sections and ifs inside; conditions on its
-	 * own answers, answers outside rosters and inputs; texts piping only its row number; and an
-	 * if with elif or else asking nothing its conditions read (display logic is evaluated again
-	 * on each page). Undefined otherwise: it's written out row by row.
+	 * A count roster's maximum when Qualtrics can loop it exactly: counted by one whole-number
+	 * question asked outside any roster; only asks, statements, sections and ifs inside;
+	 * conditions on its own answers, answers outside rosters and inputs; texts piping only its
+	 * row number; and no if asking what its conditions read (display logic is evaluated again on
+	 * each page, so an answer given inside an arm would change it). Undefined otherwise: it's
+	 * written out row by row.
 	 */
 	const loopable = (s: Extract<Step, { kind: "loop" }>): number | undefined => {
-		const counted =
-			s.count.expr.kind === "name"
-				? s.count.sources.get(s.count.expr.name)
-				: undefined;
+		const counted = countedBy(s);
 		if (
 			counted?.kind !== "answer" ||
 			counted.question.domain.kind !== "number" ||
+			// How Qualtrics loops a count of 2.5 is unmeasured.
+			counted.question.domain.decimals !== 0 ||
 			counted.asks.length !== 1 ||
 			counted.asks.some((a) => rosterAsks.has(a))
 		)
@@ -232,11 +210,9 @@ export function unroll(instrument: ReadInstrument): {
 								),
 							),
 						);
-						const asked = recordsIn([x]);
-						const arms = x.branches.length + (x.else === undefined ? 0 : 1);
 						return (
 							conds.every(readable) &&
-							(arms < 2 || !asked.some((v) => read.has(v))) &&
+							!recordsIn([x]).some((v) => read.has(v)) &&
 							x.branches.every((b) => simple(b.then)) &&
 							simple(x.else ?? [])
 						);
@@ -351,10 +327,7 @@ export function unroll(instrument: ReadInstrument): {
 
 	/** A count roster's or `each`'s rows, each under its condition to exist. */
 	const loop = (s: Extract<Step, { kind: "loop" }>): Step[] => {
-		const counted =
-			s.count.expr.kind === "name"
-				? s.count.sources.get(s.count.expr.name)
-				: undefined;
+		const counted = countedBy(s);
 		// An `each` over a roster by `more`: row k exists when round k was entered.
 		if (counted?.kind === "row" && rounds.has(counted.loop)) {
 			const entered = rounds.get(counted.loop) ?? [];
@@ -413,19 +386,20 @@ export function unroll(instrument: ReadInstrument): {
 			condAt(s.more, i + 1),
 		);
 		rounds.set(s.id, mores);
-		const round = (k: number): Step[] => [
+		// Round k, then round k+1 if round k's `more` holds, for as many as `mores` allows.
+		const round = (k: number, [more, ...rest]: readonly Cond[]): Step[] => [
 			...stepsAt(s.flow, k),
-			...(k < s.max
-				? [
+			...(more === undefined
+				? []
+				: [
 						{
 							kind: "if",
 							id: rowId(s.id, k + 1),
-							branches: [arm(mores[k - 1] ?? s.more, round(k + 1))],
+							branches: [arm(more, round(k + 1, rest))],
 						} satisfies Step,
-					]
-				: []),
+					]),
 		];
-		return round(1);
+		return round(1, mores);
 	};
 
 	const walk = (steps: readonly Step[]): Step[] =>
