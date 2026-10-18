@@ -39,7 +39,12 @@ export type Operator =
 
 /** What a test reads: one ask's answer (by its DDI ID), or an embedded field by name. */
 export type Subject =
-	| { readonly kind: "ask"; readonly ask: string }
+	| {
+			readonly kind: "ask";
+			readonly ask: string;
+			/** One round of a Qualtrics loop, read from outside it; absent: as asked, or the current round. */
+			readonly row?: number;
+	  }
 	| { readonly kind: "field"; readonly name: string };
 
 /** One Qualtrics test: a choice selected or not, or a value compared. */
@@ -220,9 +225,12 @@ const nowhere = (s: Subject, codes: readonly string[]): Forms => {
  */
 const overAsks = (
 	asks: readonly string[],
+	row: number | undefined,
 	one: (s: Subject) => Forms,
 ): Forms => {
-	const each = asks.map((ask) => one({ kind: "ask", ask }));
+	const each = asks.map((ask) =>
+		one({ kind: "ask", ask, ...(row !== undefined && { row }) }),
+	);
 	return {
 		t: ors(each.map((x) => x.t)),
 		f: ors(each.map((x) => x.f)),
@@ -400,7 +408,14 @@ export function compileCondition(
 						? blank(subject.subject)
 						: allBlank(
 								subject.asks.map((ask) =>
-									blank({ kind: "ask", ask }, subject.codes),
+									blank(
+										{
+											kind: "ask",
+											ask,
+											...(subject.row !== undefined && { row: subject.row }),
+										},
+										subject.codes,
+									),
 								),
 							);
 				}
@@ -457,7 +472,7 @@ export function compileCondition(
 			// A choice: one of its codes, or a select-all option's tick.
 			const option = subject.option;
 			const codes = subject.codes;
-			const forms = overAsks(subject.asks, (s) => {
+			const forms = overAsks(subject.asks, subject.row, (s) => {
 				if (option === undefined)
 					return codes.includes(written)
 						? chosen(
@@ -479,7 +494,9 @@ export function compileCondition(
 			});
 			return operator === "EqualTo" ? forms : negate(forms);
 		}
-		return overAsks(subject.asks, (s) => compared(s, operator, written));
+		return overAsks(subject.asks, subject.row, (s) =>
+			compared(s, operator, written),
+		);
 	};
 
 	const forms = go(cond.expr, cond.sources);
@@ -500,6 +517,7 @@ type Subjects =
 			readonly kind: "asks";
 			readonly domain: Domain;
 			readonly asks: readonly string[];
+			readonly row?: number;
 			/** A choice question's codes (an option's question's, for a select-all option). */
 			readonly codes?: readonly string[];
 			readonly option?: Extract<Source, { kind: "answer" }>["option"];
@@ -524,6 +542,7 @@ function subjectOf(e: Expr, sources: Cond["sources"]): Subjects | undefined {
 		kind: "asks",
 		domain,
 		asks: s.asks,
+		...(s.row !== undefined && { row: s.row }),
 		...(domain.kind === "choice" && {
 			codes: domain.choices.map((c) => c.code),
 		}),

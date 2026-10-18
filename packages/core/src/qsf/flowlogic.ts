@@ -26,14 +26,32 @@ const expression = (ctx: Ctx, a: Atom): QsfObject => {
 					: 0
 			}`
 		: `q://${qid}/ChoiceTextEntryValue`;
+	// A looped question is read at the current round (experiment 3) or at one round from
+	// outside its loop, its operand addressing that round's copy (experiment 7).
+	const loop = ctx.numbering.loopOf.get(a.subject.ask);
+	const row = a.subject.row;
+	const where =
+		loop === undefined
+			? { QuestionIsInLoop: "no" }
+			: {
+					QuestionIsInLoop: "yes",
+					LoopAndMergeLoops:
+						row === undefined
+							? "current"
+							: `${ctx.numbering.loopBlocks.get(loop) ?? ""},${row}`,
+					LoopTarget: "none",
+				};
 	return {
 		LogicType: "Question",
 		QuestionID: qid,
-		QuestionIsInLoop: "no",
+		...where,
 		ChoiceLocator: locator,
 		Operator: a.op,
 		QuestionIDFromLocator: qid,
-		LeftOperand: locator,
+		LeftOperand:
+			row === undefined
+				? locator
+				: locator.replace(`q://${qid}/`, `q://${row}_${qid}/`),
 		...(chosen ? {} : right),
 		Type: "Expression",
 		Description: "",

@@ -71,8 +71,9 @@ describe("reading the households instrument's DDI back", () => {
 				.filter((e) => e.Element === "SQ")
 				.map((e) => [e.PrimaryAttribute, e.Payload as Record<string, string>]),
 		);
-		// Rosters are written out row by row: households' 20 people and 4 vehicles.
-		expect(blocks.length).toBe(51);
+		// The members roster is one Qualtrics loop; the vehicles roster and the each over members
+		// are written out row by row (4 rounds, 20 rows).
+		expect(blocks.length).toBe(32);
 		const lines = flowOutline(qsf);
 		expect(lines.slice(0, 11)).toMatchInlineSnapshot(`
 			[
@@ -82,28 +83,28 @@ describe("reading the households instrument's DDI back", () => {
 			  "  Standard BL_qretools000002",
 			  "  EndSurvey",
 			  "Standard BL_qretools000003",
-			  "Branch if size >= 1: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 1",
-			  "  Standard BL_qretools000004",
-			  "Branch if size >= 2: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 2",
-			  "  Standard BL_qretools000005",
-			  "Branch if size >= 3: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 3",
+			  "Standard BL_qretoolsLoop001",
+			  "Standard BL_qretools000005",
+			  "Branch if renter: q://QID8/SelectableChoice/2 Selected",
+			  "  Standard BL_qretools000006",
+			  "Standard BL_qretools000007",
 			]
 		`);
 		const renter = lines.findIndex((l) => l.includes("if renter"));
 		expect(lines.slice(renter, renter + 12)).toMatchInlineSnapshot(`
 			[
-			  "Branch if renter: q://QID65/SelectableChoice/2 Selected",
-			  "  Standard BL_qretools000025",
-			  "Standard BL_qretools000026",
-			  "Branch if more_vehicles = "1": q://QID69/SelectableChoice/1 Selected",
-			  "  Standard BL_qretools000027",
-			  "  Branch if more_vehicles = "1": q://QID71/SelectableChoice/1 Selected",
-			  "    Standard BL_qretools000028",
-			  "    Branch if more_vehicles = "1": q://QID73/SelectableChoice/1 Selected",
-			  "      Standard BL_qretools000029",
+			  "Branch if renter: q://QID8/SelectableChoice/2 Selected",
+			  "  Standard BL_qretools000006",
+			  "Standard BL_qretools000007",
+			  "Branch if more_vehicles = "1": q://QID12/SelectableChoice/1 Selected",
+			  "  Standard BL_qretools000008",
+			  "  Branch if more_vehicles = "1": q://QID14/SelectableChoice/1 Selected",
+			  "    Standard BL_qretools000009",
+			  "    Branch if more_vehicles = "1": q://QID16/SelectableChoice/1 Selected",
+			  "      Standard BL_qretools000010",
 			  "Branch if size >= 1: q://QID4/ChoiceTextEntryValue GreaterThanOrEqual 1",
-			  "  Branch if works = "1": q://QID7/SelectableChoice/1 Selected",
-			  "    Standard BL_qretools000030",
+			  "  Branch if works = "1": q://1_QID7/SelectableChoice/1 Selected",
+			  "    Standard BL_qretools000011",
 			]
 		`);
 		expect(questions.get("QID1")?.QuestionText).toMatchInlineSnapshot(

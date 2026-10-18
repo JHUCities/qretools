@@ -16,7 +16,14 @@ import {
 	logical,
 } from "./computes.ts";
 import { logicOf } from "./flowlogic.ts";
-import { and, compileCondition, type Dnf, NEVER } from "./logic.ts";
+import {
+	ALWAYS,
+	and,
+	compileCondition,
+	type Dnf,
+	type Form,
+	NEVER,
+} from "./logic.ts";
 import { context, number } from "./number.ts";
 import { questionsOf } from "./questions.ts";
 import type { Cond, ReadInstrument, Step } from "./read.ts";
@@ -69,8 +76,9 @@ export function writeQsf(
 
 	/** The condition's "is true" list, or undefined with a finding where it can't be written. */
 	const whenTrue = (cond: Cond, at: string): Dnf | undefined => {
+		// An answer read at one round of a loop is placed; any other looped answer isn't.
 		const asked = [...cond.sources.values()].flatMap((s) =>
-			s.kind === "answer" ? s.asks : [],
+			s.kind === "answer" && s.row === undefined ? s.asks : [],
 		);
 		if (asked.some(ctx.outside)) {
 			note(
@@ -221,6 +229,9 @@ export function writeQsf(
 					break;
 				}
 				case "loop":
+					flush();
+					nodes.push(...looped(s));
+					break;
 				case "repeat":
 					notYet(s.id, "A roster");
 					break;
@@ -230,6 +241,106 @@ export function writeQsf(
 		}
 		flush();
 		return nodes;
+	};
+
+	/**
+	 * A count roster Qualtrics loops (unroll.ts chose it): one Loop & Merge block on its count
+	 * question (experiment 3). Its ifs can't be survey-flow branches, so each question carries
+	 * its arms as display logic on the current round: arm i is its condition and no earlier
+	 * arm's, the else none of them; exact, as unroll.ts checked no arm asks what they read.
+	 */
+	const looped = (s: Extract<Step, { kind: "loop" }>): Node[] => {
+		const counted =
+			s.count.expr.kind === "name"
+				? s.count.sources.get(s.count.expr.name)
+				: undefined;
+		const qid =
+			counted?.kind === "answer" ? ctx.qidOf(counted.asks[0] ?? "") : "";
+		const forms = (cond: Cond) => {
+			const c = compileCondition(cond);
+			if (c.kind === "ok") return c.forms;
+			note("qsf-inexpressible", "error", s.id, c.message);
+			return undefined;
+		};
+		const shown = (q: QsfObject, guard: Form, at: string): QsfObject[] => {
+			if (guard === "too-large") {
+				note(
+					"qsf-too-large",
+					"error",
+					at,
+					"The conditions this is shown under take more tests than Qualtrics logic should hold.",
+				);
+				return [];
+			}
+			if (guard.length === 0) return [];
+			if (guard.some((g) => g.length === 0)) return [q];
+			return [
+				{
+					...q,
+					DisplayLogic: {
+						...(logicOf(ctx, guard) as QsfObject),
+						inPage: false,
+					},
+				},
+			];
+		};
+		const flat = (steps: readonly Step[], guard: Form): QsfObject[] =>
+			steps.flatMap((x): QsfObject[] => {
+				switch (x.kind) {
+					case "ask":
+						if (x.checks.length > 0) without(x.id, "its checks");
+						if (x.options !== undefined) without(x.id, "its options' order");
+						return shown(askQuestion(x), guard, x.id);
+					case "say":
+						return shown(statement(x), guard, x.id);
+					case "section":
+						return flat(x.flow, guard);
+					case "if": {
+						const arms = x.branches.map((b) => forms(b.cond));
+						let none: Form = ALWAYS;
+						const out: QsfObject[] = [];
+						for (const [i, b] of x.branches.entries()) {
+							const f = arms[i];
+							if (f === undefined) return [];
+							out.push(...flat(b.then, and(guard, and(none, f.t))));
+							none = and(none, f.n);
+						}
+						out.push(...flat(x.else ?? [], and(guard, none)));
+						return out;
+					}
+					default:
+						return [];
+				}
+			});
+		const max = s.max ?? 0;
+		const questions = flat(s.flow, ALWAYS);
+		if (questions.length === 0) return [];
+		const locator = `q://${qid}/LoopAndMerge/MergeOnNumericResponse`;
+		return [
+			{
+				kind: "block",
+				id: numbering.loopBlocks.get(s.id) ?? "",
+				description: `rows of ${printCondition(s.count.expr)}`,
+				questions,
+				options: {
+					BlockLocking: "false",
+					RandomizeQuestions: "false",
+					Looping: "Question",
+					LoopingOptions: {
+						Locator: `${locator}?v=${max}`,
+						QID: qid,
+						ChoiceGroupLocator: locator,
+						Static: Object.fromEntries(
+							Array.from({ length: max }, (_, i) => [
+								String(i + 1),
+								{ "2": "" },
+							]),
+						),
+						Randomization: "None",
+					},
+				},
+			},
+		];
 	};
 
 	/**

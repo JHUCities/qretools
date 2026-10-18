@@ -36,9 +36,9 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 					return undefined;
 				}
 				return `\${e://Field/${source.variable}}`;
+			// Only a roster Qualtrics loops still has a row number: the loop's own.
 			case "row":
-				ctx.notYet(at, "A row number outside a roster");
-				return undefined;
+				return `\${lm://CurrentLoopNumber}`;
 			case "answer": {
 				if (source.option !== undefined) {
 					ctx.note(
@@ -49,7 +49,8 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 					);
 					return undefined;
 				}
-				if (source.asks.some(ctx.outside)) {
+				const row = source.row === undefined ? "" : `${source.row}_`;
+				if (source.row === undefined && source.asks.some(ctx.outside)) {
 					ctx.note(
 						"qsf-inexpressible",
 						"error",
@@ -67,7 +68,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 				// Exclusive asks: only the one shown has an answer (experiment 6b), so joining
 				// their pipes shows it.
 				return source.asks
-					.map((a) => `\${q://${ctx.qidOf(a)}/${what}}`)
+					.map((a) => `\${q://${row}${ctx.qidOf(a)}/${what}}`)
 					.join("");
 			}
 			default:

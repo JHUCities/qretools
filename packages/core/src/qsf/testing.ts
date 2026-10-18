@@ -13,7 +13,7 @@ import type { Qsf } from "./skeleton.ts";
 /** A read flow as lines of text, to compare whole. */
 export const source = (s: Source): string =>
 	s.kind === "answer"
-		? `${s.variable}${s.option === undefined ? "" : `#${s.option.code}/${s.option.ticked}`}${s.asks.length > 1 ? `x${s.asks.length}` : ""}`
+		? `${s.variable}${s.row === undefined ? "" : `@${s.row}`}${s.option === undefined ? "" : `#${s.option.code}/${s.option.ticked}`}${s.asks.length > 1 ? `x${s.asks.length}` : ""}`
 		: s.kind === "row"
 			? `row(${s.loop.split(".").at(-1)})`
 			: `${s.kind}:${s.variable}`;
