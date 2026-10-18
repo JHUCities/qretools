@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { bankOf, instrumentOf } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { readInstrument } from "../qsf/read.ts";
-import { outline } from "../qsf/testing.ts";
+import { flowOutline, outline } from "../qsf/testing.ts";
 import { writeQsf } from "../qsf/write.ts";
 import { readWorkspace } from "./index.ts";
 
@@ -87,10 +87,24 @@ describe("reading the households instrument's DDI back", () => {
 			),
 		).toMatchInlineSnapshot(`
 			[
-			  "Default Question Block: QID1 DB/TB QID1, QID2 MC/SAVR consent, QID4 TE/SL size",
+			  "Default Question Block: QID1 DB/TB QID1, QID2 MC/SAVR consent",
+			  "Block 2: QID3 DB/TB QID3",
+			  "Block 3: QID4 TE/SL size",
 			  "Housing: QID8 MC/SAVR tenure",
-			  "Block 3: QID14 TE/SL comments",
+			  "Block 5: QID14 TE/SL comments",
 			  "Trash / Unused Questions: ",
+			]
+		`);
+		expect(flowOutline(qsf)).toMatchInlineSnapshot(`
+			[
+			  "EmbeddedData  county=(url)",
+			  "Block BL_qretools000001",
+			  "Branch stop if consent = "2": q://QID2/SelectableChoice/2 Selected",
+			  "  Standard BL_qretools000002",
+			  "  EndSurvey",
+			  "Standard BL_qretools000003",
+			  "Standard BL_qretools000004",
+			  "Standard BL_qretools000005",
 			]
 		`);
 		expect(questions.get("QID1")?.QuestionText).toMatchInlineSnapshot(
@@ -100,10 +114,9 @@ describe("reading the households instrument's DDI back", () => {
 			findings.map((f) => `${f.severity} ${f.path}: ${f.message}`),
 		).toMatchInlineSnapshot(`
 			[
-			  "error instrument-households.stop-1: A stop isn't exported to Qualtrics yet: it's left out.",
 			  "error instrument-households.roster-members: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "error instrument-households.compute-renter: A computed value isn't exported to Qualtrics yet: it's left out.",
-			  "error instrument-households.if-1: A branch isn't exported to Qualtrics yet: it's left out.",
+			  "error instrument-households.if-1: \`renter\` is a computed value Qualtrics can't hold as true or false here.",
 			  "error instrument-households.roster-vehicles: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "error instrument-households.each-members: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",

@@ -1,6 +1,14 @@
 /** A read flow as lines of text, for tests to compare whole. */
 import { printCondition } from "../cond/print.ts";
+import type { DdiDocument } from "../ddi/document.ts";
+import { bankOf } from "../evaluate.ts";
+import {
+	elaborateInstrument,
+	instrumentDocument,
+} from "../instrument/elaborate.ts";
+import { parseInstrument } from "../instrument/parse.ts";
 import type { Cond, Part, Source, Step } from "./read.ts";
+import type { Qsf } from "./write.ts";
 
 /** A read flow as lines of text, to compare whole. */
 export const source = (s: Source): string =>
@@ -65,3 +73,147 @@ export const outline = (steps: readonly Step[], ind = ""): string[] =>
 				return s satisfies never;
 		}
 	});
+
+const q = (name: string, rest: string) =>
+	`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
+const BAS = bankOf({
+	"workspace.yaml": "agency: org.bank\n",
+	"missing.yaml": 'labels:\n  "-8": Refused\n',
+	"scales/yesno01.yaml": 'labels:\n  "0": No\n  "1": Yes\n',
+	"universes/renters.yaml": "text: Renters\n",
+	"questions/a/consent.yaml": q(
+		"consent",
+		'responses:\n  "1": Yes\n  "2": No\n',
+	),
+	"questions/a/tenure.yaml": q(
+		"tenure",
+		'responses:\n  "1": Own\n  "2": Rent\n',
+	),
+	"questions/a/rent.yaml": q("rent", "number: {}\nuniverse: renters\n"),
+	"questions/a/why.yaml": q("why", "open: {}\n"),
+	"questions/a/modes.yaml": q(
+		"modes",
+		'select: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
+	),
+	"questions/a/pets.yaml": q("pets", 'select: many\nresponses:\n  "d": Dog\n'),
+	"questions/a/size.yaml": q("size", "number: { max: 9 }\n"),
+	"questions/a/nick.yaml": q("nick", "open: {}\n"),
+	"questions/a/util.yaml":
+		'name: util\ntext: "You pay {{rent}}. Utilities included?"\nintent: i\nopen: {}\nfills:\n  rent: number\n',
+	"questions/a/echo.yaml":
+		'name: echo\ntext: "You selected {{neighborhood}}."\nintent: i\nopen: {}\nfills:\n  neighborhood: text\n',
+});
+
+const SOURCE = `name: demo
+title: A demonstration
+description: Every construct of the language, once.
+uses:
+  bas: here
+inputs:
+  jurisdiction:
+    responses:
+      "1": City
+      "2": County
+  wave:
+    number: {}
+flow:
+  - say: Thank you for taking part, in {{jurisdiction}}.
+  - ask: bas.consent
+  - stop: bas.consent = "2"
+    say: Thank you for your time.
+  - section: Housing
+    order: random
+    flow:
+      - ask: bas.tenure
+      - ask: bas.echo
+        fill:
+          neighborhood: label(bas.tenure)
+      - compute: renter
+        value: bas.tenure = "2"
+      - if: renter
+        then:
+          - ask: bas.rent
+            universe: bas.renters
+            seconds: 20
+            checks:
+              - ensure: bas.rent >= 0
+                severity: blocking
+                message: The rent can't be negative.
+              - ensure: bas.rent < 10000
+                severity: warning
+                message: "{{bas.rent}} is a lot. Is that right?"
+          - ask: bas.util
+            universe: bas.renters
+            fill:
+              rent: bas.rent
+        else:
+          if: bas.tenure = "1"
+          then:
+            - ask: bas.modes
+            - ask: bas.pets
+          else:
+            - say: Neither, then.
+            - ask: bas.pets
+  - ask: bas.size
+  - roster: people
+    count: bas.size
+    flow:
+      - ask: bas.nick
+  - ask: bas.why
+    options: rotate
+  - ask: bas.why
+    as: why_end
+`;
+
+/** The demonstration instrument: every construct of the language, once. */
+export const demoDdi = (): DdiDocument =>
+	instrumentDocument(
+		elaborateInstrument(parseInstrument(SOURCE, { bas: BAS }), {
+			agency: "org.example",
+		}),
+	).document;
+
+type FlowNode = {
+	readonly Type: string;
+	readonly ID?: string;
+	readonly Description?: string;
+	readonly Flow?: readonly FlowNode[];
+	readonly BranchLogic?: {
+		readonly "0": Readonly<Record<string, unknown>>;
+	};
+	readonly EmbeddedData?: readonly { Field: string; Value?: string }[];
+};
+type Expression = {
+	readonly Operator: string;
+	readonly LeftOperand: string;
+	readonly RightOperand?: string;
+	readonly Conjuction?: string;
+};
+/** A written survey's flow as lines: each element, its branch logic as written, its fields set. */
+export const flowOutline = (qsf: Qsf): string[] => {
+	const elements = (
+		qsf as { SurveyElements: { Element: string; Payload: unknown }[] }
+	).SurveyElements;
+	const flow = elements.find((e) => e.Element === "FL")?.Payload as {
+		Flow: FlowNode[];
+	};
+	const tree = (ns: readonly FlowNode[], ind: string): string[] =>
+		ns.flatMap((n) => {
+			const logic = n.BranchLogic
+				? `: ${Object.values(n.BranchLogic["0"])
+						.filter((x): x is Expression => typeof x === "object")
+						.map((x) =>
+							`${x.Conjuction ?? ""} ${x.LeftOperand} ${x.Operator} ${x.RightOperand ?? ""}`.trim(),
+						)
+						.join(" ")}`
+				: "";
+			const set = n.EmbeddedData
+				? ` ${n.EmbeddedData.map((f) => `${f.Field}=${f.Value ?? "(url)"}`).join(",")}`
+				: "";
+			return [
+				`${ind}${n.Type} ${n.ID ?? n.Description ?? ""}${logic}${set}`.trimEnd(),
+				...tree(n.Flow ?? [], `${ind}  `),
+			];
+		});
+	return tree(flow.Flow, "");
+};

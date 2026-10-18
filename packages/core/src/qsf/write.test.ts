@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Question, ReadInstrument } from "./read.ts";
+import { parseCondition } from "../cond/parse.ts";
+import type { Cond, Question, ReadInstrument, Source, Step } from "./read.ts";
+import { flowOutline } from "./testing.ts";
 import { escapeText, writeQsf } from "./write.ts";
 
 const modes: Question = {
@@ -84,5 +86,94 @@ describe("writing a survey as QSF", () => {
 			"Deleted",
 		])
 			expect(entry).toHaveProperty(key);
+	});
+
+	it("writes an if with elif and else as flagged branches, a stop as an ending", () => {
+		const tenure: Question = {
+			id: "q-tenure",
+			name: "tenure",
+			domain: {
+				kind: "choice",
+				many: false,
+				choices: [
+					{ code: "1", label: "Own" },
+					{ code: "2", label: "Rent" },
+					{ code: "3", label: "Other" },
+				],
+			},
+		};
+		const sources = new Map<string, Source>([
+			[
+				"tenure",
+				{
+					kind: "answer",
+					variable: "tenure",
+					asks: ["ask-tenure"],
+					question: tenure,
+				},
+			],
+		]);
+		const cond = (text: string): Cond => ({
+			expr: parseCondition(text).expr,
+			sources,
+		});
+		const arm = (c: string, ...then: Step[]) => ({ cond: cond(c), then });
+		const say = (id: string): Step => ({
+			kind: "say",
+			id,
+			text: [{ kind: "text", text: id }],
+		});
+		const { qsf, findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "ask",
+						id: "ask-tenure",
+						question: tenure,
+						records: [{ variable: "tenure" }],
+						text: [{ kind: "text", text: "Own or rent?" }],
+						checks: [],
+					},
+					{
+						kind: "stop",
+						id: "stop",
+						cond: cond('tenure = "3"'),
+						say: [say("bye")],
+					},
+					{
+						kind: "if",
+						id: "if",
+						branches: [
+							arm('tenure = "1"', say("owners")),
+							arm('tenure = "2"', say("renters")),
+						],
+						else: [say("neither")],
+					},
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(flowOutline(qsf)).toMatchInlineSnapshot(`
+			[
+			  "Block BL_qretools000001",
+			  "Branch stop if tenure = "3": q://QID1/SelectableChoice/3 Selected",
+			  "  Standard BL_qretools000002",
+			  "  EndSurvey",
+			  "Branch if tenure = "1": q://QID1/SelectableChoice/1 Selected",
+			  "  EmbeddedData  qretools_branch_1=1",
+			  "  Standard BL_qretools000003",
+			  "Branch elif tenure = "2": qretools_branch_1 Empty And q://QID1/SelectableChoice/2 Selected",
+			  "  EmbeddedData  qretools_branch_1=1",
+			  "  Standard BL_qretools000004",
+			  "Branch else: qretools_branch_1 Empty",
+			  "  Standard BL_qretools000005",
+			]
+		`);
+		expect(findings.map((f) => `${f.code} ${f.path}`)).toMatchInlineSnapshot(`
+			[
+			  "qsf-note if",
+			]
+		`);
 	});
 });
