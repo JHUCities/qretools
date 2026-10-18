@@ -39,7 +39,7 @@ describe("reading the households instrument's DDI back", () => {
 			  "    ask rent number rent: How much is your rent each month, in dollars?",
 			  "      check warning rent < 10000 {rent=rent}: <rent> dollars is a lot. Is that right?",
 			  "    ask utilities choice utilities: You said you pay <rent> a month. Does that include utilities?",
-			  "repeat more more_vehicles = "1" {vehicles_index=compute:vehicles_index, more_vehicles=more_vehicles} max 4",
+			  "repeat more more_vehicles = "1" {vehicles_index=row(roster-vehicles), more_vehicles=more_vehicles} max 4",
 			  "  ask vehicle choice vehicle: What kind of vehicle is it?",
 			  "  ask more_vehicles choice more_vehicles: Does your household have another vehicle?",
 			  "loop count size {members_index=row(each-members), size=size} max 20",

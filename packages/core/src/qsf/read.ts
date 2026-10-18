@@ -222,7 +222,8 @@ export function readInstrument(ddi: DdiDocument): {
 		if (type === "CodeDomain")
 			return {
 				kind: "choice",
-				many: Number(asObj(d?.ResponseCardinality)?.MaximumResponses ?? 1) > 1,
+				// A question's own outputs say whether it is select-all (below); an input never is.
+				many: false,
 				choices: choices(d),
 			};
 		if (type === "NumericDomain") {
@@ -248,12 +249,15 @@ export function readInstrument(ddi: DdiDocument): {
 
 	for (const q of Object.values(ddi.QuestionItem ?? {})) {
 		const id = str(q.ID) ?? "";
+		let many = false;
 		for (const out of asList(q.OutParameter)) {
 			const included = asObj(
 				asObj(asObj(out.ValueRepresentation)?.CodeSubsetInformation)
 					?.IncludedCode,
 			);
 			const code = asList(included?.CodeReference)[0];
+			// One output per option, each a subset of the codes: select all that apply.
+			if (code !== undefined) many = true;
 			const value = code === undefined ? undefined : codeValueOf(ddi, code);
 			outputs.set(urnOf(out) ?? "", value === undefined ? {} : { code: value });
 		}
@@ -265,7 +269,7 @@ export function readInstrument(ddi: DdiDocument): {
 		questionOf.set(id, {
 			id,
 			name: words(q.QuestionItemName) ?? id,
-			domain,
+			domain: domain.kind === "choice" ? { ...domain, many } : domain,
 		});
 	}
 	for (const c of Object.values(ddi.QuestionConstruct ?? {}))
@@ -326,6 +330,17 @@ export function readInstrument(ddi: DdiDocument): {
 		const urn = urnOf(l.LoopVariableReference);
 		if (urn !== undefined)
 			params.set(urn, { kind: "row", loop: str(l.ID) ?? "" });
+	}
+	// A roster by `more` counts its rows in the first step of its body: that is its row.
+	for (const r of Object.values(ddi.RepeatUntil ?? {})) {
+		const first = deref(
+			asList(
+				deref(r.UntilConstructReference)?.item.ControlConstructReference,
+			)[0],
+		);
+		const urn = urnOf(asObj(first?.item.AssignedVariableReference));
+		if (first?.type === "ComputationItem" && urn !== undefined)
+			params.set(urn, { kind: "row", loop: str(r.ID) ?? "" });
 	}
 
 	/** A command's text, parsed, and each of its names resolved through its bindings. */
@@ -418,11 +433,11 @@ export function readInstrument(ddi: DdiDocument): {
 	}
 
 	/** The steps a reference stands for: a plain Sequence's, in order, or one construct's. */
-	const sequenceOf = (r: unknown): Step[] => {
+	const sequenceOf = (r: unknown, at: string): Step[] => {
 		if (r === undefined) return [];
 		const found = deref(r);
 		if (found === undefined) {
-			unread("", "A construct is referenced but not in the document.");
+			unread(at, "A construct this refers to isn't in the document.");
 			return [];
 		}
 		return construct(found.type, found.item);
@@ -436,6 +451,7 @@ export function readInstrument(ddi: DdiDocument): {
 			unread(id, "This ask's question isn't in the document.");
 			return [];
 		}
+		askPaths.set(id, [...path]);
 		const fills = new Map<string, Part>();
 		const records: { variable: string; code?: string }[] = [];
 		for (const b of asList(c.Binding)) {
@@ -489,7 +505,7 @@ export function readInstrument(ddi: DdiDocument): {
 			unread(id, "This check's condition isn't written as a check is.");
 			return undefined;
 		}
-		const said = sequenceOf(b.ThenConstructReference).find(
+		const said = sequenceOf(b.ThenConstructReference, id).find(
 			(s) => s.kind === "say",
 		);
 		return {
@@ -500,9 +516,19 @@ export function readInstrument(ddi: DdiDocument): {
 		};
 	};
 
+	// Where each ask sits: the arm of every IfThenElse around it, outermost first.
+	const path: { readonly at: string; readonly arm: number }[] = [];
+	const askPaths = new Map<string, readonly (typeof path)[number][]>();
+	const inArm = <T>(at: string, arm: number, f: () => T): T => {
+		path.push({ at, arm });
+		const result = f();
+		path.pop();
+		return result;
+	};
+
 	/** A branch: its condition, and the steps it leads to. */
-	const branch = (cond: Cond, r: unknown) => {
-		const then = sequenceOf(r);
+	const branch = (cond: Cond, r: unknown, at: string, arm: number) => {
+		const then = inArm(at, arm, () => sequenceOf(r, at));
 		return { cond, then };
 	};
 
@@ -526,7 +552,7 @@ export function readInstrument(ddi: DdiDocument): {
 			}
 			case "Sequence": {
 				if (adapters.has(id)) return [];
-				const flow = gather(asList(c.ControlConstructReference));
+				const flow = gather(asList(c.ControlConstructReference), id);
 				const name = words(c.ConstructName);
 				const order = str(asObj(c.ConstructSequence)?.ItemSequenceType);
 				if (name === undefined && order === undefined) return flow;
@@ -551,9 +577,9 @@ export function readInstrument(ddi: DdiDocument): {
 							kind: "stop",
 							id,
 							cond,
-							say: sequenceOf(c.ThenConstructReference),
+							say: inArm(id, 0, () => sequenceOf(c.ThenConstructReference, id)),
 						},
-						...sequenceOf(c.ElseConstructReference),
+						...inArm(id, 1, () => sequenceOf(c.ElseConstructReference, id)),
 					];
 				}
 				if (kind !== undefined) {
@@ -562,11 +588,11 @@ export function readInstrument(ddi: DdiDocument): {
 				}
 				const first = command(c.IfCondition, id);
 				if (first === undefined) return [];
-				const branches = [branch(first, c.ThenConstructReference)];
+				const branches = [branch(first, c.ThenConstructReference, id, 0)];
 				for (const [i, e] of asList(c.ElseIf).entries()) {
 					const cond = command(e.IfCondition, `${id}.elif-${i + 1}`);
 					if (cond !== undefined)
-						branches.push(branch(cond, e.ThenConstructReference));
+						branches.push(branch(cond, e.ThenConstructReference, id, i + 1));
 				}
 				return [
 					{
@@ -574,7 +600,9 @@ export function readInstrument(ddi: DdiDocument): {
 						id,
 						branches,
 						...(c.ElseConstructReference !== undefined && {
-							else: sequenceOf(c.ElseConstructReference),
+							else: inArm(id, -1, () =>
+								sequenceOf(c.ElseConstructReference, id),
+							),
 						}),
 					},
 				];
@@ -590,13 +618,13 @@ export function readInstrument(ddi: DdiDocument): {
 	};
 
 	/** A run of constructs: each ask followed by its typed IfThenElses takes them as checks. */
-	const gather = (refs: readonly Obj[]): Step[] => {
+	const gather = (refs: readonly Obj[], at: string): Step[] => {
 		const out: Step[] = [];
 		const found = refs.map(deref);
 		for (let i = 0; i < found.length; i++) {
 			const f = found[i];
 			if (f === undefined) {
-				unread("", "A construct is referenced but not in the document.");
+				unread(at, "A construct this refers to isn't in the document.");
 				continue;
 			}
 			if (f.type !== "QuestionConstruct") {
@@ -654,7 +682,7 @@ export function readInstrument(ddi: DdiDocument): {
 				id,
 				count: { expr: limited.count, sources: cond.sources },
 				...(max !== undefined && { max }),
-				flow: sequenceOf(l.ControlConstructReference),
+				flow: sequenceOf(l.ControlConstructReference, id),
 			},
 		];
 	};
@@ -670,14 +698,22 @@ export function readInstrument(ddi: DdiDocument): {
 		const parts = asList(body?.item.ControlConstructReference);
 		const e = cond?.expr;
 		// A blocking check: ask again until it holds. The ask and its checks are the body.
-		if (e?.kind === "call" && e.fn === "nvl") return gather(parts);
+		if (
+			e?.kind === "call" &&
+			e.fn === "nvl" &&
+			e.args[1]?.kind === "boolean" &&
+			e.args[1].value
+		)
+			return gather(parts, id);
+		const isCounter = (s: Source | undefined) =>
+			s?.kind === "row" && s.loop === id;
 		const counted = (x: Expr | undefined, op: string) =>
 			x?.kind === "binary" &&
 			x.op === op &&
 			x.left.kind === "call" &&
 			x.left.fn === "nvl" &&
 			x.left.args[0]?.kind === "name" &&
-			cond?.sources.get(x.left.args[0].name)?.kind === "compute"
+			isCounter(cond?.sources.get(x.left.args[0].name))
 				? x.right
 				: undefined;
 		const started = e?.kind === "binary" && e.op === "or" ? e.left : undefined;
@@ -706,15 +742,13 @@ export function readInstrument(ddi: DdiDocument): {
 			unread(id, "This roster's rows don't start by counting themselves.");
 			return [];
 		}
-		// Inside its rows, the counter is the row number, as a loop's variable is.
-		params.set(row, { kind: "row", loop: id });
 		return [
 			{
 				kind: "repeat",
 				id,
 				more: { expr: more, sources: cond.sources },
 				max: limit.value,
-				flow: gather(rest),
+				flow: gather(rest, id),
 			},
 		];
 	};
@@ -726,11 +760,43 @@ export function readInstrument(ddi: DdiDocument): {
 	}
 	const name = words(instrument.InstrumentName);
 	const title = words(instrument.Label);
-	const flow = sequenceOf(instrument.ControlConstructReference);
-	const inputs = [...params.values()].filter(
-		(s): s is Extract<Source, { kind: "input" }> =>
-			s.kind === "input" && !labels.has(s.variable),
+	const flow = sequenceOf(
+		instrument.ControlConstructReference,
+		str(instrument.ID) ?? "",
 	);
+	// One Qualtrics question stands for a variable recorded by several asks only when no
+	// respondent meets two of them: each pair must sit in different arms of one condition.
+	const exclusive = (
+		a: readonly { at: string; arm: number }[],
+		b: typeof a,
+	) => {
+		for (let i = 0; i < Math.min(a.length, b.length); i++) {
+			if (a[i]?.at !== b[i]?.at) return false;
+			if (a[i]?.arm !== b[i]?.arm) return true;
+		}
+		return false;
+	};
+	for (const s of params.values()) {
+		if (s.kind !== "answer") continue;
+		const placed = s.asks.flatMap((ask) => {
+			const p = askPaths.get(ask);
+			return p === undefined ? [] : [{ ask, path: p }];
+		});
+		const clash = placed.find((b, j) =>
+			placed.slice(0, j).some((a) => !exclusive(a.path, b.path)),
+		);
+		if (clash !== undefined)
+			findings.push({
+				code: "qsf-inexpressible",
+				severity: "error",
+				path: clash.ask,
+				message: `\`${s.variable}\` is recorded by asks a respondent can meet both of.`,
+			});
+	}
+	const inputs = [...params]
+		.filter(([urn]) => !labels.has(urn))
+		.map(([, s]) => s)
+		.filter((s): s is Extract<Source, { kind: "input" }> => s.kind === "input");
 	return {
 		instrument: {
 			...(name !== undefined && { name }),
