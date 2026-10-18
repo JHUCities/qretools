@@ -200,13 +200,7 @@ export function writeQsf(
 			(domain.min !== undefined || domain.max !== undefined)
 				? formOf(numberRange(s, domain.min, domain.max), s.id, "p", s.id)
 				: ALWAYS;
-		if (domain.kind === "number")
-			note(
-				"qsf-inexpressible",
-				"warning",
-				s.id,
-				"With its checks, Qualtrics no longer refuses an answer that isn't a number here.",
-			);
+		if (range === undefined) return q;
 		const passes = [...lists, range].reduce<Form>(
 			(all, d) => and(all, d ?? NEVER),
 			ALWAYS,
@@ -223,12 +217,18 @@ export function writeQsf(
 			return q;
 		}
 		// A check that fails on an empty answer only works if Qualtrics checks empty answers.
+		// NotSelected holds on a skipped single choice (experiment 2); a select-all's is unmeasured.
+		const trueWhenEmpty = [
+			"Empty",
+			"NotEqualTo",
+			...(domain.kind === "choice" && !domain.many ? ["NotSelected"] : []),
+		];
 		const empty = passes.some((g) =>
 			g.every(
 				(a) =>
 					a.subject.kind === "ask" &&
 					a.subject.ask === s.id &&
-					["Empty", "NotSelected", "NotEqualTo"].includes(a.op),
+					trueWhenEmpty.includes(a.op),
 			),
 		);
 		if (!empty)
@@ -247,6 +247,13 @@ export function writeQsf(
 					"Qualtrics shows its own message when this check fails: a custom validation's message comes from a library.",
 				);
 		if (passes.some((g) => g.length === 0)) return q;
+		if (domain.kind === "number")
+			note(
+				"qsf-inexpressible",
+				"warning",
+				s.id,
+				"With its checks, Qualtrics no longer refuses an answer here that isn't a number, or has more decimals than allowed.",
+			);
 		return {
 			...q,
 			Validation: {
@@ -297,6 +304,23 @@ export function writeQsf(
 					"error",
 					c.id,
 					"This warning shows the answer it checks, which Qualtrics shows empty on the answer's own page.",
+				);
+				return [];
+			}
+			// A computed number set from this question on isn't set yet on its page.
+			const stale = (x: Source) =>
+				x.kind === "compute" &&
+				(numbering.computes.get(x.variable) ?? []).some(
+					(n) => placeOf(n.step.id) >= placeOf(s.id),
+				);
+			if (
+				c.message?.some((p) => p.kind === "value" && stale(p.source)) === true
+			) {
+				note(
+					"qsf-inexpressible",
+					"error",
+					c.id,
+					"This warning shows a value computed after its question, which isn't set yet on its page.",
 				);
 				return [];
 			}
@@ -596,18 +620,28 @@ export function writeQsf(
 	 */
 	const section = (s: Extract<Step, { kind: "section" }>): Node[] => {
 		if (s.order === undefined) return layout(s.flow, s.title);
-		const each = s.flow.map((step) => layout([step]));
-		const blocks = each.flatMap((nodes) =>
+		/** Whether a step lays out as exactly one block (a looped roster in a randomizer is unmeasured). */
+		const oneBlock = (step: Step): boolean =>
+			step.kind === "ask" ||
+			step.kind === "say" ||
+			(step.kind === "section" &&
+				step.order === undefined &&
+				step.flow.length > 0 &&
+				step.flow.every(oneBlock));
+		const each = s.flow.every(oneBlock)
+			? s.flow.map((step) => layout([step]))
+			: undefined;
+		const blocks = (each ?? []).flatMap((nodes) =>
 			nodes.length === 1 && nodes[0]?.kind === "block" ? [nodes[0]] : [],
 		);
-		if (blocks.length !== s.flow.length) {
+		if (each === undefined || blocks.length !== s.flow.length) {
 			note(
 				"qsf-inexpressible",
 				"error",
 				s.id,
 				"Qualtrics shuffles blocks: this section holds more than questions and statements, so it's written in its order.",
 			);
-			return each.flat();
+			return each?.flat() ?? layout(s.flow, s.title);
 		}
 		if (s.order === "rotate")
 			note(
@@ -616,7 +650,19 @@ export function writeQsf(
 				s.id,
 				"Qualtrics can't rotate a section: it's shuffled instead.",
 			);
-		return blocks.length === 0 ? [] : [{ kind: "randomizer", blocks }];
+		return blocks.length === 0
+			? []
+			: [
+					{
+						kind: "randomizer",
+						blocks: blocks.map((b, k) => ({
+							...b,
+							...(s.title !== undefined && {
+								description: `${s.title} (${k + 1} of ${blocks.length})`,
+							}),
+						})),
+					},
+				];
 	};
 
 	/**
