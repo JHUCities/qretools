@@ -140,8 +140,11 @@ export function Findings({
 	onTarget,
 	related,
 	onFix,
+	label = "Findings",
 }: {
 	findings: readonly Finding[];
+	/** The list's name, heard by screen readers. */
+	label?: string;
 	onTarget?: OnTarget;
 	/** The other file a bank-level finding names, opened by an ordinary link. */
 	related?: (f: Finding) => Related | undefined;
@@ -157,7 +160,7 @@ export function Findings({
 		// ActionList item (one button) cannot hold. `role="list"`: Safari's VoiceOver
 		// drops list semantics from a list without bullets.
 		// biome-ignore lint/a11y/noRedundantRoles: VoiceOver, above
-		<ul className="findings" role="list" aria-label="Findings">
+		<ul className="findings" role="list" aria-label={label}>
 			{findings.map((f, i) => {
 				const { Icon, className } = SEVERITY[f.severity];
 				const other = related?.(f);

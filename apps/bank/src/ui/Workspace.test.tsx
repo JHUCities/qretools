@@ -431,6 +431,11 @@ describe("a workspace's instruments", () => {
 		expect(reason?.textContent).toBe(
 			"There's no DDI agency to publish it under yet.",
 		);
+		// The survey is made from the DDI: held back for the same reason.
+		const qsf = screen.getByRole("button", { name: "Download QSF" });
+		expect(qsf.getAttribute("aria-describedby")).toBe(
+			download.getAttribute("aria-describedby"),
+		);
 	});
 
 	it("offer the DDI as a file once it may be exported, a new one as it changes", async () => {
@@ -464,6 +469,32 @@ describe("a workspace's instruments", () => {
 			screen.getByRole("link", { name: "Download DDI" }).getAttribute("href"),
 		).not.toBe(first);
 		expect(revoked).toContain(first);
+		expect(
+			screen
+				.getByRole("link", { name: "Download QSF" })
+				.getAttribute("download"),
+		).toBe("wave1.qsf");
+		// A warning showing the answer it checks: Qualtrics would show it empty.
+		await act(async () =>
+			app.dispatch({
+				kind: "edited",
+				text: (e?.source ?? "").replace(
+					"  - ask: a.alpha\n",
+					'  - ask: a.alpha\n    checks:\n      - ensure: a.alpha = "1"\n        severity: warning\n        message: "{{a.alpha}}?"\n',
+				),
+			}),
+		);
+		const qsf = screen.getByRole("button", { name: "Download QSF" });
+		expect(
+			document.getElementById(qsf.getAttribute("aria-describedby") ?? "")
+				?.textContent,
+		).toMatch(/^1 thing in this instrument can't be run in Qualtrics/);
+		expect(
+			within(screen.getByRole("list", { name: "Qualtrics" })).getAllByRole(
+				"listitem",
+			).length,
+		).toBeGreaterThan(0);
+		expect(screen.getByRole("link", { name: "Download DDI" })).toBeTruthy();
 	}, 15_000);
 
 	it("mark a name of this workspace's bank apart from one of another repository's", async () => {
