@@ -4,6 +4,7 @@ import { bankOf, instrumentOf } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { readInstrument } from "../qsf/read.ts";
 import { outline } from "../qsf/testing.ts";
+import { writeQsf } from "../qsf/write.ts";
 import { readWorkspace } from "./index.ts";
 
 const households = async () => {
@@ -46,6 +47,63 @@ describe("reading the households instrument's DDI back", () => {
 			  "  if works = "1" {works=works}",
 			  "    say Person <row(each-members)> works.",
 			  "ask comments text comments: Is there anything else you'd like to tell us?",
+			]
+		`);
+	});
+
+	it("writes the households survey: blocks, questions and pipes, and what isn't written yet", async () => {
+		const { instrument } = readInstrument(await households());
+		const { qsf, findings } = writeQsf(instrument, { name: "households" });
+		const elements = qsf.SurveyElements as {
+			Element: string;
+			PrimaryAttribute: string;
+			Payload: unknown;
+		}[];
+		const blocks = elements.find((e) => e.Element === "BL")?.Payload as {
+			Description: string;
+			BlockElements?: { QuestionID?: string }[];
+		}[];
+		const questions = new Map(
+			elements
+				.filter((e) => e.Element === "SQ")
+				.map((e) => [e.PrimaryAttribute, e.Payload as Record<string, string>]),
+		);
+		expect(
+			blocks.map(
+				(b) =>
+					`${b.Description}: ${(b.BlockElements ?? [])
+						.flatMap((e) => {
+							const q = e.QuestionID && questions.get(e.QuestionID);
+							return q
+								? [
+										`${q.QuestionID} ${q.QuestionType}/${q.Selector} ${q.DataExportTag}`,
+									]
+								: [];
+						})
+						.join(", ")}`,
+			),
+		).toMatchInlineSnapshot(`
+			[
+			  "Default Question Block: QID1 DB/TB QID1, QID2 MC/SAVR consent, QID4 TE/SL size",
+			  "Housing: QID8 MC/SAVR tenure",
+			  "Block 3: QID14 TE/SL comments",
+			  "Trash / Unused Questions: ",
+			]
+		`);
+		expect(questions.get("QID1")?.QuestionText).toMatchInlineSnapshot(
+			`"Thank you for taking part in this survey of \${e://Field/county}."`,
+		);
+		expect(
+			findings.map((f) => `${f.severity} ${f.path}: ${f.message}`),
+		).toMatchInlineSnapshot(`
+			[
+			  "error instrument-households.stop-1: A stop isn't exported to Qualtrics yet: it's left out.",
+			  "error instrument-households.roster-members: A roster isn't exported to Qualtrics yet: it's left out.",
+			  "error instrument-households.compute-renter: A computed value isn't exported to Qualtrics yet: it's left out.",
+			  "error instrument-households.if-1: A branch isn't exported to Qualtrics yet: it's left out.",
+			  "error instrument-households.roster-vehicles: A roster isn't exported to Qualtrics yet: it's left out.",
+			  "error instrument-households.each-members: A roster isn't exported to Qualtrics yet: it's left out.",
+			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
 			]
 		`);
 	});
