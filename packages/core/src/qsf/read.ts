@@ -54,6 +54,8 @@ export type Source =
 			/** The asks that record it, by DDI ID: more than one in exclusive branches. */
 			readonly asks: readonly string[];
 			readonly question: Question;
+			/** Read at one round of a roster Qualtrics loops (an `each`'s row), not the current one. */
+			readonly row?: number;
 			/** For a select-all option: its code, and which values of the variable are a tick and none. */
 			readonly option?: {
 				readonly code: string;

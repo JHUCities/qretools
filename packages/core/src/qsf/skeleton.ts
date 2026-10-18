@@ -16,8 +16,12 @@ export type QsfObject = { readonly [key: string]: Qsf };
 export type Node =
 	| {
 			readonly kind: "block";
+			/** Its own ID, when something else names it (a loop's block, in a condition on a round). */
+			readonly id?: string;
 			readonly description?: string;
 			readonly questions: readonly QsfObject[];
+			/** Block options: a loop's. */
+			readonly options?: QsfObject;
 	  }
 	| {
 			readonly kind: "branch";
@@ -66,6 +70,7 @@ export function toQsf(
 	{ name, created }: { readonly name: string; readonly created: string },
 ): QsfObject {
 	const all: Extract<Node, { kind: "block" }>[] = [];
+	const ids: string[] = [];
 	let flowIds = 1;
 	const flowId = () => `FL_${++flowIds}`;
 	const serialise = (ns: readonly Node[]): QsfObject[] =>
@@ -74,7 +79,8 @@ export function toQsf(
 				case "block": {
 					all.push(n);
 					// The first block is Qualtrics' Default block.
-					const id = blockId(all.length);
+					const id = n.id ?? blockId(all.length);
+					ids.push(id);
 					return all.length === 1
 						? { Type: "Block", ID: id, FlowID: flowId() }
 						: { Type: "Standard", ID: id, FlowID: flowId(), Autofill: [] };
@@ -135,9 +141,9 @@ export function toQsf(
 	// A survey with no questions still has its Default block.
 	if (all.length === 0) {
 		all.push({ kind: "block", questions: [] });
+		ids.push(blockId(1));
 		flow.push({ Type: "Block", ID: blockId(1), FlowID: flowId() });
 	}
-	const ids = all.map((_, i) => blockId(i + 1));
 	const questions = all.flatMap((b) => b.questions);
 	return {
 		SurveyEntry: {
@@ -168,6 +174,7 @@ export function toQsf(
 						b.description ??
 						(i === 0 ? "Default Question Block" : `Block ${i + 1}`),
 					ID: ids[i] ?? "",
+					...(b.options && { Options: b.options }),
 					BlockElements: b.questions.flatMap((q, j) => [
 						...(j === 0 ? [] : [{ Type: "Page Break" }]),
 						{ Type: "Question", QuestionID: q.QuestionID ?? "" },

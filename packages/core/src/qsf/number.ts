@@ -10,6 +10,9 @@ export interface Numbering {
 	readonly qids: ReadonlyMap<string, string>;
 	readonly questions: ReadonlyMap<string, Question>;
 	readonly looped: ReadonlySet<string>;
+	/** The looped roster each looped ask is in, by DDI ID, and each loop's block ID. */
+	readonly loopOf: ReadonlyMap<string, string>;
+	readonly loopBlocks: ReadonlyMap<string, string>;
 	readonly names: ReadonlySet<string>;
 	/** Every step's place in the flow, depth first. */
 	readonly order: ReadonlyMap<string, number>;
@@ -28,6 +31,9 @@ export function number(instrument: ReadInstrument): Numbering {
 	const qids = new Map<string, string>();
 	const questions = new Map<string, Question>();
 	const looped = new Set<string>();
+	const loopOf = new Map<string, string>();
+	const loopBlocks = new Map<string, string>();
+	let loop: string | undefined;
 	const names = new Set(instrument.inputs.map((i) => i.variable));
 	const order = new Map<string, number>();
 	const computes = new Map<
@@ -46,6 +52,7 @@ export function number(instrument: ReadInstrument): Numbering {
 				case "say":
 					qids.set(s.id, `QID${qids.size + 1}`);
 					if (inLoop) looped.add(s.id);
+					if (s.kind === "ask" && loop !== undefined) loopOf.set(s.id, loop);
 					if (s.kind === "ask") {
 						questions.set(s.id, s.question);
 						for (const r of s.records) names.add(r.variable);
@@ -66,9 +73,17 @@ export function number(instrument: ReadInstrument): Numbering {
 					go(s.say, inLoop, false);
 					break;
 				case "loop":
-				case "repeat":
+				case "repeat": {
+					const outer = loop;
+					loop = s.id;
+					loopBlocks.set(
+						s.id,
+						`BL_qretoolsLoop${String(loopBlocks.size + 1).padStart(3, "0")}`,
+					);
 					go(s.flow, true, false);
+					loop = outer;
 					break;
+				}
 				case "section":
 					go(s.flow, inLoop, every);
 					break;
@@ -78,7 +93,16 @@ export function number(instrument: ReadInstrument): Numbering {
 		}
 	};
 	go(instrument.flow, false);
-	return { qids, questions, looped, names, order, computes };
+	return {
+		qids,
+		questions,
+		looped,
+		loopOf,
+		loopBlocks,
+		names,
+		order,
+		computes,
+	};
 }
 
 /** How a part of the writer reports: a finding at a DDI ID. */

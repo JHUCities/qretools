@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readInstrument } from "./read.ts";
 import { ddiOf, outline } from "./testing.ts";
 import { unroll } from "./unroll.ts";
+import { writeQsf } from "./write.ts";
 
 const ROSTERS = `name: rows
 uses:
@@ -14,6 +15,11 @@ flow:
     flow:
       - say: Person {{index}}.
       - ask: bas.nick
+      - if: bas.nick = "Al"
+        then:
+          - say: Hello Al.
+        else:
+          - say: Not Al.
   - each: people
     flow:
       - say: About {{bas.nick}}, person {{index}}.
@@ -37,16 +43,17 @@ describe("writing rosters out row by row", () => {
 		expect(outline(instrument.flow)).toMatchInlineSnapshot(`
 			[
 			  "ask size number size: size?",
+			  "loop count size {people_index=row(roster-people), size=size} max 2",
+			  "  say Person <row(roster-people)>.",
+			  "  ask nick text nick: nick?",
+			  "  if nick = "Al" {nick=nick}",
+			  "    say Hello Al.",
+			  "  else",
+			  "    say Not Al.",
 			  "if size >= 1 {size=size}",
-			  "  say Person 1.",
-			  "  ask nick text 1_nick: nick?",
+			  "  say About <nick@1>, person 1.",
 			  "if size >= 2 {size=size}",
-			  "  say Person 2.",
-			  "  ask nick text 2_nick: nick?",
-			  "if size >= 1 {size=size}",
-			  "  say About <1_nick>, person 1.",
-			  "if size >= 2 {size=size}",
-			  "  say About <2_nick>, person 2.",
+			  "  say About <nick@2>, person 2.",
 			  "ask why text 1_why: why?",
 			  "ask more choice 1_more: more?",
 			  "if more = "1" {more=1_more}",
@@ -62,5 +69,55 @@ describe("writing rosters out row by row", () => {
 			  "  say Car 3.",
 			]
 		`);
+	});
+
+	it("writes a count roster Qualtrics can loop as Loop & Merge, its conditions on the current round", () => {
+		const { qsf, findings } = writeQsf(
+			readInstrument(ddiOf(ROSTERS)).instrument,
+			{
+				name: "rows",
+				created: "2026-10-18 00:00:00",
+			},
+		);
+		expect(findings.filter((f) => f.severity === "error")).toEqual([]);
+		const elements = qsf.SurveyElements as {
+			Element: string;
+			Payload: unknown;
+		}[];
+		const blocks = elements.find((e) => e.Element === "BL")?.Payload as {
+			ID: string;
+			Options?: { Looping: string; LoopingOptions: { Locator: string } };
+		}[];
+		expect(
+			blocks.flatMap((b) =>
+				b.Options
+					? [`${b.ID} ${b.Options.Looping} ${b.Options.LoopingOptions.Locator}`]
+					: [],
+			),
+		).toEqual([
+			"BL_qretoolsLoop001 Question q://QID1/LoopAndMerge/MergeOnNumericResponse?v=2",
+		]);
+		const text = (start: string) =>
+			(elements.find(
+				(e) =>
+					e.Element === "SQ" &&
+					String(
+						(e.Payload as { QuestionText: string }).QuestionText,
+					).startsWith(start),
+			)?.Payload as Record<string, unknown>) ?? {};
+		const hello = text("Hello Al") as {
+			DisplayLogic: { "0": { "0": Record<string, string> } };
+		};
+		expect(hello.DisplayLogic["0"]["0"]).toMatchObject({
+			QuestionIsInLoop: "yes",
+			LoopAndMergeLoops: "current",
+			Operator: "EqualTo",
+		});
+		expect(text("Person").QuestionText).toBe(
+			`Person \${lm://CurrentLoopNumber}.`,
+		);
+		expect(text("About").QuestionText).toBe(
+			`About \${q://1_QID3/ChoiceTextEntryValue}, person 1.`,
+		);
 	});
 });

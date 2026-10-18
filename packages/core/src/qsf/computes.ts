@@ -68,7 +68,7 @@ export const computedAt = (
 	for (const name of reads) {
 		const s = c.step.value.sources.get(name);
 		if (s === undefined) continue;
-		if (s.kind === "answer" && s.asks.some(ctx.outside))
+		if (s.kind === "answer" && s.row === undefined && s.asks.some(ctx.outside))
 			return refuse("reads a roster's rows");
 		if (s.kind === "answer" && s.asks.some((a) => ctx.placeOf(a) > at))
 			return refuse("reads an answer asked after it");
@@ -105,9 +105,9 @@ export const arithmetic = (
 					s?.kind === "answer" &&
 					s.question.domain.kind === "number" &&
 					s.asks.length === 1 &&
-					!s.asks.some(ctx.outside)
+					(s.row !== undefined || !s.asks.some(ctx.outside))
 				)
-					return `\${q://${ctx.qidOf(s.asks[0] ?? "")}/ChoiceTextEntryValue}`;
+					return `\${q://${s.row === undefined ? "" : `${s.row}_`}${ctx.qidOf(s.asks[0] ?? "")}/ChoiceTextEntryValue}`;
 				return undefined;
 			}
 			case "unary": {
