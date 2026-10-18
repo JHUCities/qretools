@@ -100,6 +100,7 @@ export {
 } from "./instrument/refs.ts";
 export { lint } from "./lint.ts";
 export {
+	placeFindings,
 	type Qsf,
 	type QsfObject,
 	qsfOf,

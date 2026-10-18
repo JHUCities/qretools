@@ -65,6 +65,11 @@ export interface ElaboratedInstrument {
 	readonly own: readonly Item[];
 	/** Each asked question's items from its bank (its default Variables left out), by bank path. */
 	readonly banks: readonly (readonly [string, readonly Item[]])[];
+	/**
+	 * Where each item came from in the instrument: a DDI ID's step's path, its own items and
+	 * each bank question's (the first ask of it), so what's said of an item can be shown there.
+	 */
+	readonly places: Readonly<Record<string, string>>;
 }
 
 /** VTL's name in DDI's `ProgramLanguage`. */
@@ -87,8 +92,23 @@ export function elaborateInstrument(
 		own.push(it);
 		return it;
 	};
-	const id = (local: string): Identity =>
-		identity(agency, `${base}.${local}`, version);
+	// The path of the step being elaborated: every ID minted meanwhile came from it.
+	const places: Record<string, string> = {};
+	let here: string | undefined;
+	const within = <T>(path: string, go: () => T): T => {
+		const outer = here;
+		here = path;
+		try {
+			return go();
+		} finally {
+			here = outer;
+		}
+	};
+	const id = (local: string): Identity => {
+		const made = identity(agency, `${base}.${local}`, version);
+		if (here !== undefined) places[made.ID] ??= here;
+		return made;
+	};
 	const counters = new Map<string, number>();
 	/** A local name unique in this instrument: `if-1`, `if-2`; a name gets `-2` only when repeated. */
 	const local = (kind: string, name?: string): string => {
@@ -438,7 +458,7 @@ export function elaborateInstrument(
 		for (let i = 0; i < nodes.length; i++) {
 			const node = nodes[i] as Node;
 			if (node.kind === "stop") {
-				refs.push(ref(stop(node, nodes.slice(i + 1))));
+				refs.push(ref(within(node.path, () => stop(node, nodes.slice(i + 1)))));
 				break;
 			}
 			for (const c of construct(node)) refs.push(ref(c));
@@ -480,7 +500,9 @@ export function elaborateInstrument(
 			}),
 		);
 
-	const construct = (node: Node): readonly Item[] => {
+	const construct = (node: Node): readonly Item[] =>
+		within(node.path, () => constructed(node));
+	const constructed = (node: Node): readonly Item[] => {
 		switch (node.kind) {
 			case "ask":
 				return ask(node);
@@ -517,12 +539,14 @@ export function elaborateInstrument(
 									rest.length === 0
 										? undefined
 										: rest.map((b, i) =>
-												obj({
-													IfCondition: command(b.cond, `${at}-elif-${i + 1}`),
-													ThenConstructReference: ref(
-														sequence(b.then, `${at}-elif-${i + 1}-then`),
-													),
-												}),
+												within(b.path, () =>
+													obj({
+														IfCondition: command(b.cond, `${at}-elif-${i + 1}`),
+														ThenConstructReference: ref(
+															sequence(b.then, `${at}-elif-${i + 1}-then`),
+														),
+													}),
+												),
 											),
 								ElseConstructReference:
 									node.else === undefined
@@ -687,6 +711,9 @@ export function elaborateInstrument(
 		if (q === undefined) return [];
 		const question = questionItem(q);
 		if (question === undefined) return [];
+		// A bank question is shown at the first ask of it.
+		const questionId = question.body.ID;
+		if (typeof questionId === "string") places[questionId] ??= node.path;
 		bring(q);
 		const at = local("ask", node.as ?? q.name);
 		const universe = universeOf(node.universe ?? draft.universe);
@@ -783,37 +810,39 @@ export function elaborateInstrument(
 		if (node.checks.length === 0) return [...adapters, asked];
 		// Each check: say its message when what it ensures isn't true. A blocking one asks
 		// again until it is (an unanswered question doesn't block: `nvl(..., true)`).
-		const shown = node.checks.flatMap((check, i) => {
-			if (check.ensure === undefined) return [];
-			const c = `${at}-check-${i + 1}`;
-			const message =
-				check.message === undefined
-					? []
-					: [statement(check.message, check.messageReads)];
-			return [
-				emit(
-					item(
-						"IfThenElse",
-						id(c),
-						obj({
-							TypeOfIfThenElse: severity(check.severity),
-							IfCondition: command(
-								check.ensure,
-								c,
-								(t) => `not nvl(${t}, true)`,
-							),
-							ThenConstructReference: ref(
-								emit(
-									item("Sequence", id(`${c}-then`), {
-										ControlConstructReference: message.map((m) => ref(m)),
-									}),
+		const shown = node.checks.flatMap((check, i) =>
+			within(check.path, () => {
+				if (check.ensure === undefined) return [];
+				const c = `${at}-check-${i + 1}`;
+				const message =
+					check.message === undefined
+						? []
+						: [statement(check.message, check.messageReads)];
+				return [
+					emit(
+						item(
+							"IfThenElse",
+							id(c),
+							obj({
+								TypeOfIfThenElse: severity(check.severity),
+								IfCondition: command(
+									check.ensure,
+									c,
+									(t) => `not nvl(${t}, true)`,
 								),
-							),
-						}),
+								ThenConstructReference: ref(
+									emit(
+										item("Sequence", id(`${c}-then`), {
+											ControlConstructReference: message.map((m) => ref(m)),
+										}),
+									),
+								),
+							}),
+						),
 					),
-				),
-			];
-		});
+				];
+			}),
+		);
 		const blocking = node.checks.filter(
 			(c) => c.severity === "blocking" && c.ensure !== undefined,
 		);
@@ -897,7 +926,7 @@ export function elaborateInstrument(
 			}),
 		),
 	);
-	return { own, banks: [...banks] };
+	return { own, banks: [...banks], places };
 }
 
 /** An input's type as a value representation; codes become a list of the instrument's own. */

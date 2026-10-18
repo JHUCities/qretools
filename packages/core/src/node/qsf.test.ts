@@ -1,12 +1,21 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { bankOf, instrumentOf } from "@qretools/core";
+import { bankOf, instrumentOf, placeFindings, qsfOf } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { readInstrument } from "../qsf/read.ts";
 import { flowOutline, outline } from "../qsf/testing.ts";
 import { writeQsf } from "../qsf/write.ts";
 import { readWorkspace } from "./index.ts";
 
+const householdsInstrument = async () => {
+	const root = fileURLToPath(
+		new URL("../../fixtures/households", import.meta.url),
+	);
+	return instrumentOf(
+		await readFile(`${root}/instruments/households.yaml`, "utf8"),
+		{ banks: { hh: bankOf(await readWorkspace(root)) }, agency: "org.example" },
+	);
+};
 const households = async () => {
 	const root = fileURLToPath(
 		new URL("../../fixtures/households", import.meta.url),
@@ -117,6 +126,44 @@ describe("reading the households instrument's DDI back", () => {
 			  "info : The bank's missing-value codes aren't offered to respondents in Qualtrics.",
 			  "error instrument-households.ask-rent-check-1: This warning shows the answer it checks, which Qualtrics shows empty on the answer's own page.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
+			]
+		`);
+	});
+
+	it("places every construct of the DDI at a step of the instrument", async () => {
+		const instrument = await householdsInstrument();
+		const constructs = [
+			"QuestionConstruct",
+			"StatementItem",
+			"IfThenElse",
+			"Sequence",
+			"Loop",
+			"RepeatUntil",
+			"ComputationItem",
+		] as const;
+		const ids = constructs.flatMap((t) =>
+			Object.values(instrument.ddi[t] ?? {}).map((i) => String(i.ID)),
+		);
+		const unplaced = ids.filter((id) => instrument.places[id] === undefined);
+		// The instrument's own top Sequence is the whole document.
+		expect(unplaced).toEqual(["instrument-households.flow"]);
+		const nowhere = Object.values(instrument.places).filter(
+			(p) => instrument.ranges[p] === undefined,
+		);
+		expect(nowhere).toEqual([]);
+		const { findings } = qsfOf(instrument.ddi, {
+			name: "households",
+			created: "2026-10-18 00:00:00",
+		});
+		expect(
+			placeFindings(findings, instrument.places).map(
+				(f) => `${f.path}: ${f.code}`,
+			),
+		).toMatchInlineSnapshot(`
+			[
+			  ": qsf-note",
+			  "flow.5.flow.2.then.0.checks.0: qsf-inexpressible",
+			  "flow.8: qsf-note",
 			]
 		`);
 	});

@@ -46,6 +46,8 @@ export interface Instrument {
 	readonly findings: readonly Finding[];
 	readonly ranges: Readonly<Record<string, Range>>;
 	readonly ddi: DdiDocument;
+	/** Where each DDI item came from: its DDI ID's path in the instrument (`placeFindings`). */
+	readonly places: Readonly<Record<string, string>>;
 	/** Identities two different items would share: an export must refuse while any exist. */
 	readonly collisions: readonly Collision<string>[];
 	/** Where it names its banks' files, for go to definition (`instrumentRefs`). */
@@ -60,12 +62,11 @@ export function instrumentOf(
 ): Instrument {
 	const parsed = parseInstrument(source, context.banks, context.unresolved);
 	const checked = inspectInstrument(parsed);
-	const { document, collisions } = instrumentDocument(
-		elaborateInstrument(parsed, {
-			agency: context.agency ?? UNDECLARED_AGENCY,
-			...(context.version !== undefined && { version: context.version }),
-		}),
-	);
+	const elaborated = elaborateInstrument(parsed, {
+		agency: context.agency ?? UNDECLARED_AGENCY,
+		...(context.version !== undefined && { version: context.version }),
+	});
+	const { document, collisions } = instrumentDocument(elaborated);
 	const agency: Finding[] =
 		context.agency !== undefined && !AGENCY_PATTERN.test(context.agency)
 			? [
@@ -122,6 +123,7 @@ export function instrumentOf(
 		),
 		ranges: parsed.ranges,
 		ddi: document,
+		places: elaborated.places,
 		collisions,
 		refs: instrumentRefs(parsed, source),
 		livelits: instrumentLivelits(source, parsed, checked.fills),

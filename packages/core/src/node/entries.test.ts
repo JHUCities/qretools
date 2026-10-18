@@ -84,6 +84,7 @@ describe("the entry points", () => {
 			    "parseSettingsFile",
 			    "parseSurface",
 			    "piecesOf",
+			    "placeFindings",
 			    "placeholders",
 			    "plainText",
 			    "qsfOf",
