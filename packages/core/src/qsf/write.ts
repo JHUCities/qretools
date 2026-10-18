@@ -80,7 +80,11 @@ export const escapeText = (text: string): string =>
 
 export function writeQsf(
 	instrument: ReadInstrument,
-	options: { readonly name: string },
+	options: {
+		readonly name: string;
+		/** When the survey is made, `YYYY-MM-DD hh:mm:ss`: Qualtrics requires one (the core has no clock). */
+		readonly created: string;
+	},
 ): { readonly qsf: QsfObject; readonly findings: readonly Finding[] } {
 	const findings: Finding[] = [];
 	const note = (
@@ -318,13 +322,19 @@ export function writeQsf(
 
 	const blocks = layout(instrument.flow);
 	return {
-		qsf: toQsf(blocks, instrument, options.name),
+		qsf: toQsf(blocks, instrument, options),
 		findings,
 	};
 }
 
-/** IDs of our own, in Qualtrics' shape: Qualtrics replaces the survey's on import. */
+/**
+ * IDs of our own, in the shapes Qualtrics' import requires (experiment 5a). It replaces the
+ * survey's, the owner's, the brand and the response set's with the importer's own.
+ */
 const SURVEY_ID = "SV_qretoolsExport0";
+const USER_ID = "UR_qretoolsExport";
+const RESPONSE_SET = "RS_qretoolsExport0";
+const NEVER = "0000-00-00 00:00:00";
 const blockId = (n: number) => `BL_qretools${String(n).padStart(6, "0")}`;
 
 const element = (
@@ -346,7 +356,7 @@ const element = (
 function toQsf(
 	blocks: readonly Block[],
 	instrument: ReadInstrument,
-	name: string,
+	{ name, created }: { readonly name: string; readonly created: string },
 ): QsfObject {
 	// The first block is Qualtrics' Default block; a survey with no questions still has one.
 	const all = blocks.length > 0 ? blocks : [{ questions: [] }];
@@ -378,8 +388,20 @@ function toQsf(
 			SurveyID: SURVEY_ID,
 			SurveyName: name,
 			SurveyDescription: null,
+			SurveyOwnerID: USER_ID,
+			SurveyBrandID: "qretools",
+			DivisionID: null,
 			SurveyLanguage: "EN",
+			SurveyActiveResponseSet: RESPONSE_SET,
 			SurveyStatus: "Inactive",
+			SurveyStartDate: NEVER,
+			SurveyExpirationDate: NEVER,
+			SurveyCreationDate: created,
+			CreatorID: USER_ID,
+			LastModified: created,
+			LastAccessed: NEVER,
+			LastActivated: NEVER,
+			Deleted: null,
 		},
 		SurveyElements: [
 			element("BL", "Survey Blocks", null, null, [
@@ -411,6 +433,20 @@ function toQsf(
 				ProjectCategory: "CORE",
 				SchemaVersion: "1.1.0",
 			}),
+			element("RS", RESPONSE_SET, "Default Response Set", null, null),
+			element("SCO", "Scoring", null, null, {
+				ScoringCategories: [],
+				ScoringCategoryGroups: [],
+				ScoringSummaryCategory: null,
+				ScoringSummaryAfterQuestions: 0,
+				ScoringSummaryAfterSurvey: 0,
+				DefaultScoringCategory: null,
+				AutoScoringCategory: null,
+			}),
+			element("STAT", "Survey Statistics", null, null, {
+				MobileCompatible: true,
+				ID: "Survey Statistics",
+			}),
 			element(
 				"QC",
 				"Survey Question Count",
@@ -434,6 +470,11 @@ function toQsf(
 				ValidationMessage: "",
 				PreviousButton: "",
 				NextButton: "",
+				// Qualtrics' simple dynamic theme, under the importer's own brand (not yet seen to stop
+				// the "static theme" notice: experiment 5b).
+				SkinType: "component",
+				Skin: { brandingId: null, templateId: "*simple", overrides: null },
+				NewScoring: 1,
 			}),
 			...questions.map((q) =>
 				element(
