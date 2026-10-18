@@ -6,6 +6,7 @@
  * shape written is one the owner's exports showed (context: experiments 1–6b). Anything
  * the export can't write yet, or can't write exactly, is a finding at its DDI ID.
  */
+import { type Expr, namesOf } from "../cond/ast.ts";
 import { printCondition } from "../cond/print.ts";
 import type { Finding } from "../findings.ts";
 import { type Atom, and, compileCondition, type Dnf, NEVER } from "./logic.ts";
@@ -35,6 +36,16 @@ interface Numbering {
 	readonly questions: ReadonlyMap<string, Question>;
 	readonly looped: ReadonlySet<string>;
 	readonly names: ReadonlySet<string>;
+	/** Every step's place in the flow, depth first. */
+	readonly order: ReadonlyMap<string, number>;
+	/** Each computed variable's computes, and whether each is on every path through the survey. */
+	readonly computes: ReadonlyMap<
+		string,
+		readonly {
+			readonly step: Extract<Step, { kind: "compute" }>;
+			readonly everyPath: boolean;
+		}[]
+	>;
 }
 
 /** QIDs in flow order, depth first, over every flow a step holds. */
@@ -43,8 +54,18 @@ function number(instrument: ReadInstrument): Numbering {
 	const questions = new Map<string, Question>();
 	const looped = new Set<string>();
 	const names = new Set(instrument.inputs.map((i) => i.variable));
-	const go = (steps: readonly Step[], inLoop: boolean): void => {
+	const order = new Map<string, number>();
+	const computes = new Map<
+		string,
+		{ step: Extract<Step, { kind: "compute" }>; everyPath: boolean }[]
+	>();
+	const go = (
+		steps: readonly Step[],
+		inLoop: boolean,
+		every = !inLoop,
+	): void => {
 		for (const s of steps) {
+			order.set(s.id, order.size);
 			switch (s.kind) {
 				case "ask":
 				case "say":
@@ -57,20 +78,24 @@ function number(instrument: ReadInstrument): Numbering {
 					break;
 				case "compute":
 					names.add(s.variable);
+					computes.set(s.variable, [
+						...(computes.get(s.variable) ?? []),
+						{ step: s, everyPath: every },
+					]);
 					break;
 				case "if":
-					for (const b of s.branches) go(b.then, inLoop);
-					go(s.else ?? [], inLoop);
+					for (const b of s.branches) go(b.then, inLoop, false);
+					go(s.else ?? [], inLoop, false);
 					break;
 				case "stop":
-					go(s.say, inLoop);
+					go(s.say, inLoop, false);
 					break;
 				case "loop":
 				case "repeat":
-					go(s.flow, true);
+					go(s.flow, true, false);
 					break;
 				case "section":
-					go(s.flow, inLoop);
+					go(s.flow, inLoop, every);
 					break;
 				default:
 					s satisfies never;
@@ -78,7 +103,7 @@ function number(instrument: ReadInstrument): Numbering {
 		}
 	};
 	go(instrument.flow, false);
-	return { qids, questions, looped, names };
+	return { qids, questions, looped, names, order, computes };
 }
 
 /** The survey's flow: blocks of questions (one to a page), branches, fields set, the end. */
@@ -137,6 +162,143 @@ export function writeQsf(
 	const numbering = number(instrument);
 	const { qids, looped } = numbering;
 	const qidOf = (id: string) => qids.get(id) ?? "";
+	const placeOf = (id: string) => numbering.order.get(id) ?? -1;
+
+	/** Whether an expression is true or false, rather than a number. */
+	const logical = (e: Expr, seen: ReadonlySet<string> = new Set()): boolean => {
+		switch (e.kind) {
+			case "boolean":
+			case "member":
+				return true;
+			case "unary":
+				return e.op === "not";
+			case "binary":
+				return !["+", "-", "*", "/"].includes(e.op);
+			case "call":
+				return e.fn === "isnull" || e.fn === "between";
+			case "name":
+				return (
+					!seen.has(e.name) && isLogical(e.name, new Set([...seen, e.name]))
+				);
+			default:
+				return false;
+		}
+	};
+	const isLogical = (variable: string, seen?: ReadonlySet<string>): boolean =>
+		(numbering.computes.get(variable) ?? []).some((c) =>
+			logical(c.step.value.expr, seen),
+		);
+
+	// Why the last computed name couldn't be inlined, for the condition that read it.
+	let notInlined: string | undefined;
+	/**
+	 * A true-or-false computed value, inlined where a condition reads it: exact only when it is
+	 * computed once, on every path, before the read, from answers asked before it.
+	 */
+	const inlined = (variable: string, useAt: string): Cond | undefined => {
+		const cs = numbering.computes.get(variable) ?? [];
+		const [c] = cs;
+		const why =
+			c === undefined
+				? undefined
+				: cs.length > 1
+					? "is computed more than once"
+					: !c.everyPath
+						? "is computed only on some paths through the survey"
+						: placeOf(c.step.id) > placeOf(useAt)
+							? "is read before it's computed"
+							: [...c.step.value.sources.values()].some(
+										(s) =>
+											s.kind === "answer" &&
+											s.asks.some((a) => placeOf(a) > placeOf(c.step.id)),
+									)
+								? "reads an answer asked after it"
+								: undefined;
+		if (c === undefined || why !== undefined) {
+			notInlined = `\`${variable}\` ${why ?? "isn't computed"}, so Qualtrics can't test it here.`;
+			return undefined;
+		}
+		return c.step.value;
+	};
+
+	/** An arithmetic value in Qualtrics' `$e{}`, or undefined with a finding. */
+	const arithmetic = (e: Expr, value: Cond, at: string): string | undefined => {
+		const go = (x: Expr): string | undefined => {
+			switch (x.kind) {
+				case "number":
+					return x.text;
+				case "name": {
+					const s = value.sources.get(x.name);
+					if (s?.kind === "input" || s?.kind === "compute")
+						return `\${e://Field/${s.variable}}`;
+					if (
+						s?.kind === "answer" &&
+						s.question.domain.kind === "number" &&
+						s.asks.length === 1 &&
+						!s.asks.some((a) => looped.has(a))
+					)
+						return `\${q://${qidOf(s.asks[0] ?? "")}/ChoiceTextEntryValue}`;
+					return undefined;
+				}
+				case "unary": {
+					const v = go(x.operand);
+					return v === undefined ? undefined : x.op === "-" ? `-(${v})` : v;
+				}
+				case "binary": {
+					if (!["+", "-", "*", "/"].includes(x.op)) return undefined;
+					const l = go(x.left);
+					const r = go(x.right);
+					return l === undefined || r === undefined
+						? undefined
+						: `(${l} ${x.op} ${r})`;
+				}
+				default:
+					return undefined;
+			}
+		};
+		const written = go(e);
+		if (written === undefined)
+			note(
+				"qsf-inexpressible",
+				"error",
+				at,
+				"Qualtrics computes with numbers typed in one question, inputs and computed values: this reads something else.",
+			);
+		return written;
+	};
+	const divides = (e: Expr): boolean =>
+		e.kind === "binary"
+			? e.op === "/" || divides(e.left) || divides(e.right)
+			: e.kind === "unary" && divides(e.operand);
+	/** Every name the value reads, answered: else `$e{}` writes "{Invalid Expression}" (experiment 4). */
+	const answeredAll = (value: Cond): Cond => {
+		const names = [...new Set(namesOf(value.expr).map((n) => n.name))];
+		const range = value.expr.range;
+		const answered = (name: string): Expr => ({
+			kind: "unary",
+			op: "not",
+			operand: {
+				kind: "call",
+				fn: "isnull",
+				args: [{ kind: "name", name, range }],
+				range,
+			},
+			range,
+		});
+		const expr = names
+			.map(answered)
+			.reduce<Expr | undefined>(
+				(all, x) =>
+					all === undefined
+						? x
+						: { kind: "binary", op: "and", left: all, right: x, range },
+				undefined,
+			);
+		return {
+			expr: expr ?? { kind: "boolean", value: true, range },
+			sources: value.sources,
+		};
+	};
 
 	/** A value piped into text, or undefined (with a finding) where Qualtrics can't show it. */
 	const pipe = (
@@ -146,7 +308,17 @@ export function writeQsf(
 	): string | undefined => {
 		switch (source.kind) {
 			case "input":
+				return `\${e://Field/${source.variable}}`;
 			case "compute":
+				if (isLogical(source.variable)) {
+					note(
+						"qsf-inexpressible",
+						"error",
+						at,
+						`\`${source.variable}\` is true or false: Qualtrics can only test it, not show it.`,
+					);
+					return undefined;
+				}
 				return `\${e://Field/${source.variable}}`;
 			case "row":
 				notYet(at, "A row number outside a roster");
@@ -366,9 +538,10 @@ export function writeQsf(
 			notYet(at, "A condition on a roster's rows");
 			return undefined;
 		}
-		const compiled = compileCondition(cond);
+		const compiled = compileCondition(cond, (v) => inlined(v, at));
 		if (compiled.kind === "problem") {
-			note("qsf-inexpressible", "error", at, compiled.message);
+			note("qsf-inexpressible", "error", at, notInlined ?? compiled.message);
+			notInlined = undefined;
 			return undefined;
 		}
 		if (compiled.forms.t === "too-large") {
@@ -449,9 +622,41 @@ export function writeQsf(
 					if (s.order !== undefined) notYet(s.id, "A section's order");
 					nodes.push(...layout(s.flow, s.title));
 					break;
-				case "compute":
-					notYet(s.id, "A computed value");
+				case "compute": {
+					// True or false: inlined where it's read, never stored.
+					if (logical(s.value.expr)) break;
+					flush();
+					const value = arithmetic(s.value.expr, s.value, s.id);
+					const guard = whenTrue(answeredAll(s.value), s.id);
+					if (value === undefined || guard === undefined) break;
+					if (divides(s.value.expr))
+						note(
+							"qsf-note",
+							"info",
+							s.id,
+							"Qualtrics' arithmetic decides what dividing by zero gives.",
+						);
+					// Computed again: cleared first, so a skipped guard can't leave the old value.
+					if ((numbering.computes.get(s.variable) ?? []).length > 1)
+						nodes.push({
+							kind: "set",
+							fields: [{ name: s.variable, value: "" }],
+						});
+					nodes.push(
+						...behind(
+							guard,
+							`compute ${s.variable}`,
+							[
+								{
+									kind: "set",
+									fields: [{ name: s.variable, value: `$e{ ${value} }` }],
+								},
+							],
+							s.id,
+						),
+					);
 					break;
+				}
 				case "if": {
 					flush();
 					nodes.push(...branches(s));

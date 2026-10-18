@@ -91,7 +91,8 @@ describe("reading the households instrument's DDI back", () => {
 			  "Block 2: QID3 DB/TB QID3",
 			  "Block 3: QID4 TE/SL size",
 			  "Housing: QID8 MC/SAVR tenure",
-			  "Block 5: QID14 TE/SL comments",
+			  "Block 5: QID9 TE/SL rent, QID10 MC/SAVR utilities",
+			  "Block 6: QID14 TE/SL comments",
 			  "Trash / Unused Questions: ",
 			]
 		`);
@@ -104,7 +105,9 @@ describe("reading the households instrument's DDI back", () => {
 			  "  EndSurvey",
 			  "Standard BL_qretools000003",
 			  "Standard BL_qretools000004",
-			  "Standard BL_qretools000005",
+			  "Branch if renter: q://QID8/SelectableChoice/2 Selected",
+			  "  Standard BL_qretools000005",
+			  "Standard BL_qretools000006",
 			]
 		`);
 		expect(questions.get("QID1")?.QuestionText).toMatchInlineSnapshot(
@@ -115,8 +118,7 @@ describe("reading the households instrument's DDI back", () => {
 		).toMatchInlineSnapshot(`
 			[
 			  "error instrument-households.roster-members: A roster isn't exported to Qualtrics yet: it's left out.",
-			  "error instrument-households.compute-renter: A computed value isn't exported to Qualtrics yet: it's left out.",
-			  "error instrument-households.if-1: \`renter\` is a computed value Qualtrics can't hold as true or false here.",
+			  "error instrument-households.ask-rent: A check isn't exported to Qualtrics yet: it's left out.",
 			  "error instrument-households.roster-vehicles: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "error instrument-households.each-members: A roster isn't exported to Qualtrics yet: it's left out.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
