@@ -53,3 +53,20 @@ export const withCreated = (qsf: QsfObject, created: string): QsfObject => ({
 		LastModified: created,
 	},
 });
+
+/**
+ * Findings said of DDI items, as said of the instrument: each item's path where it came
+ * from. One with no place keeps its message, and its DDI ID as detail.
+ */
+export const placeFindings = (
+	findings: readonly Finding[],
+	places: Readonly<Record<string, string>>,
+): Finding[] =>
+	findings.map((f) => {
+		const place = places[f.path];
+		return place !== undefined
+			? { ...f, path: place }
+			: f.path === ""
+				? f
+				: { ...f, path: "", detail: `DDI item ${f.path}` };
+	});
