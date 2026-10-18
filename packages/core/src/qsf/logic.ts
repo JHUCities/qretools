@@ -12,6 +12,10 @@
  * account, 2026-10-18): Selected, EqualTo, GreaterThan(OrEqual), LessThan(OrEqual) and
  * NotEmpty are false; NotSelected, NotEqualTo and Empty are true. Anything Qualtrics can't
  * say exactly is a finding, never an approximation.
+ *
+ * Assumed, not yet measured (experiment 6): a typed number is compared as a number, not as
+ * text; an embedded field never set, or set to an empty answer, is tested as a question not
+ * answered is; an ask not shown has no answer, even after Back. Ordering text is refused.
  */
 import type { BinaryOp, Expr } from "../cond/ast.ts";
 import type { Cond, Domain, Source } from "./read.ts";
@@ -44,11 +48,14 @@ export interface Atom {
 /** An Or of And-groups: `[]` is never true, `[[]]` always. */
 export type Dnf = readonly (readonly Atom[])[];
 
+/** A form, or `too-large` when it would take more than MAX_TESTS tests. */
+export type Form = Dnf | "too-large";
+
 export interface Forms {
-	readonly t: Dnf;
-	readonly f: Dnf;
-	readonly n: Dnf;
-	readonly p: Dnf;
+	readonly t: Form;
+	readonly f: Form;
+	readonly n: Form;
+	readonly p: Form;
 }
 
 export const NEVER: Dnf = [];
@@ -56,6 +63,8 @@ export const ALWAYS: Dnf = [[]];
 
 /** More tests than this in one condition is more than an author should read in Qualtrics. */
 export const MAX_TESTS = 200;
+/** Groups multiplied out before simplifying: bounds the work, as `n` of k `or`s has 2^k. */
+const MAX_PRODUCT = 4 * MAX_TESTS;
 
 const size = (d: Dnf) => d.reduce((n, g) => n + g.length, 0);
 const keyOf = (a: Atom) => JSON.stringify([a.subject, a.op, a.value]);
@@ -84,19 +93,27 @@ const absorbed = (d: Dnf): Dnf => {
 			),
 	);
 };
-const or = (a: Dnf, b: Dnf): Dnf => absorbed([...a, ...b]);
-const and = (a: Dnf, b: Dnf): Dnf =>
-	absorbed(
-		a
-			.flatMap((x) =>
-				b.map((y) => [
-					...new Map([...x, ...y].map((t) => [keyOf(t), t])).values(),
-				]),
-			)
-			.filter((g) => !contradicts(g)),
-	);
-const ors = (ds: readonly Dnf[]): Dnf => ds.reduce(or, NEVER);
-const ands = (ds: readonly Dnf[]): Dnf => ds.reduce(and, ALWAYS);
+const capped = (d: Dnf): Form => (size(d) > MAX_TESTS ? "too-large" : d);
+const or = (a: Form, b: Form): Form =>
+	a === "too-large" || b === "too-large"
+		? "too-large"
+		: capped(absorbed([...a, ...b]));
+const and = (a: Form, b: Form): Form =>
+	a === "too-large" || b === "too-large" || a.length * b.length > MAX_PRODUCT
+		? "too-large"
+		: capped(
+				absorbed(
+					a
+						.flatMap((x) =>
+							b.map((y) => [
+								...new Map([...x, ...y].map((t) => [keyOf(t), t])).values(),
+							]),
+						)
+						.filter((g) => !contradicts(g)),
+				),
+			);
+const ors = (ds: readonly Form[]): Form => ds.reduce(or, NEVER);
+const ands = (ds: readonly Form[]): Form => ds.reduce(and, ALWAYS);
 const atom = (subject: Subject, op: Operator, value?: string): Dnf => [
 	[{ subject, op, ...(value !== undefined && { value }) }],
 ];
@@ -139,7 +156,7 @@ const FALSE_WHEN_SKIPPED: ReadonlySet<Operator> = new Set([
 	"NotEmpty",
 ]);
 /** `op` true only of an answer: as Qualtrics has it, or with NotEmpty when it's true of none. */
-const answered = (s: Subject, op: Operator, value?: string): Dnf =>
+const answered = (s: Subject, op: Operator, value?: string): Form =>
 	FALSE_WHEN_SKIPPED.has(op)
 		? atom(s, op, value)
 		: and(atom(s, op, value), atom(s, "NotEmpty"));
@@ -209,6 +226,12 @@ const overAsks = (
 	};
 };
 
+/** `isnull` of a condition: neither true nor false. */
+const unknown = (x: Forms): Forms => {
+	const t = and(x.n, x.p);
+	const f = or(x.t, x.f);
+	return { t, f, n: f, p: t };
+};
 /** `isnull` of a variable several asks record: null only when every one is blank. */
 const allBlank = (each: readonly Forms[]): Forms => {
 	const t = ands(each.map((x) => x.t));
@@ -234,9 +257,45 @@ const FLIPPED: Partial<Record<BinaryOp, BinaryOp>> = {
 	"<=": ">=",
 };
 
-/** A literal's text as Qualtrics compares it; undefined for anything else. */
-const literal = (e: Expr): string | undefined =>
-	e.kind === "string" ? e.value : e.kind === "number" ? e.text : undefined;
+/** A literal's text as Qualtrics compares it, and whether it's a number; undefined for anything else. */
+const literal = (
+	e: Expr,
+): { readonly text: string; readonly number: boolean } | undefined =>
+	e.kind === "string"
+		? { text: e.value, number: false }
+		: e.kind === "number"
+			? { text: e.text, number: true }
+			: undefined;
+
+/**
+ * Why a written value can't be compared with a value of this domain this way, or undefined.
+ * The DDI is read, not trusted: a code is text, a number a number, and ordering text is
+ * unmeasured in Qualtrics. With no domain (a computed value), only numbers are ordered.
+ */
+const mismatch = (
+	domain: Domain | undefined,
+	op: Operator,
+	number: boolean,
+): string | undefined => {
+	const ordering = op !== "EqualTo" && op !== "NotEqualTo";
+	if (domain?.kind === "choice")
+		return number
+			? "A code is compared with a code in quotes."
+			: ordering
+				? "A coded answer is compared by `=` and `<>` only."
+				: undefined;
+	if (domain?.kind === "number")
+		return number ? undefined : "A number is compared with a number.";
+	if (domain?.kind === "text" && number)
+		return "Text is compared with text in quotes.";
+	return ordering && !number
+		? "Qualtrics' ordering of text isn't something the export relies on."
+		: undefined;
+};
+
+export type Compiled =
+	| { readonly kind: "ok"; readonly forms: Forms }
+	| { readonly kind: "problem"; readonly message: string };
 
 /**
  * A condition's four forms, or why Qualtrics can't say it. `computed` gives a computed
@@ -246,11 +305,27 @@ const literal = (e: Expr): string | undefined =>
 export function compileCondition(
 	cond: Cond,
 	computed: (variable: string) => Cond | undefined = () => undefined,
-): { readonly forms?: Forms; readonly problem?: string } {
+): Compiled {
+	// The first problem met is the one reported; the walk goes on with a placeholder.
 	let problem: string | undefined;
 	const fail = (why: string): Forms => {
 		problem ??= why;
 		return constant(null);
+	};
+	// The computed names being inlined, so one that reads itself is refused, not looped on.
+	const inlining = new Set<string>();
+	const inline = (variable: string): Forms => {
+		const inner = computed(variable);
+		if (inner === undefined)
+			return fail(
+				`\`${variable}\` is a computed value Qualtrics can't hold as true or false here.`,
+			);
+		if (inlining.has(variable))
+			return fail(`\`${variable}\` is computed from itself.`);
+		inlining.add(variable);
+		const forms = go(inner.expr, inner.sources);
+		inlining.delete(variable);
+		return forms;
 	};
 
 	const go = (e: Expr, sources: Cond["sources"]): Forms => {
@@ -261,14 +336,7 @@ export function compileCondition(
 				return constant(null);
 			case "name": {
 				const s = sources.get(e.name);
-				if (s?.kind === "compute") {
-					const inner = computed(s.variable);
-					return inner === undefined
-						? fail(
-								`\`${s.variable}\` is a computed value Qualtrics can't hold as true or false here.`,
-							)
-						: go(inner.expr, inner.sources);
-				}
+				if (s?.kind === "compute") return inline(s.variable);
 				return fail(
 					`\`${e.name}\` alone isn't a condition Qualtrics can test.`,
 				);
@@ -292,24 +360,21 @@ export function compileCondition(
 				return comparison(e.op, e.left, e.right, sources);
 			}
 			case "member": {
-				const value = e.set.map(literal);
-				if (value.some((v) => v === undefined))
+				if (e.set.length === 0) return fail("A set to test holds values.");
+				if (e.set.some((v) => literal(v) === undefined))
 					return fail("A set Qualtrics can test holds written values only.");
-				const any = (value as string[])
-					.map((v) =>
-						comparison(
-							"=",
-							e.operand,
-							{ kind: "string", value: v, range: e.range },
-							sources,
-						),
-					)
-					.reduce(either, constant(false));
+				const any = e.set
+					.map((v) => comparison("=", e.operand, v, sources))
+					.reduce(either);
 				return e.negated ? negate(any) : any;
 			}
 			case "call": {
 				const [x, lo, hi] = e.args;
 				if (e.fn === "isnull" && x !== undefined) {
+					// A computed condition is inlined, so it has no field to be empty.
+					const s = x.kind === "name" ? sources.get(x.name) : undefined;
+					if (s?.kind === "compute" && computed(s.variable) !== undefined)
+						return unknown(inline(s.variable));
 					const subject = subjectOf(x, sources);
 					if (subject === undefined)
 						return fail("`isnull` here tests something Qualtrics can't.");
@@ -346,25 +411,22 @@ export function compileCondition(
 		sources: Cond["sources"],
 	): Forms => {
 		const flipped = literal(left) !== undefined && literal(right) === undefined;
-		const [name, written, how] = flipped
+		const [name, value, how] = flipped
 			? [right, literal(left), FLIPPED[op]]
 			: [left, literal(right), op];
 		const operator = how === undefined ? undefined : COMPARISON[how];
 		const subject = subjectOf(name, sources);
-		if (
-			written === undefined ||
-			operator === undefined ||
-			subject === undefined
-		)
+		if (value === undefined || operator === undefined || subject === undefined)
 			return fail(
 				"Qualtrics compares an answer with a written value, nothing else.",
 			);
+		const wrong = mismatch(subject.domain, operator, value.number);
+		if (wrong !== undefined) return fail(wrong);
+		const written = value.text;
 		if (subject.kind === "field")
 			return compared(subject.subject, operator, written);
 		if (subject.codes !== undefined) {
 			// A choice: one of its codes, or a select-all option's tick.
-			if (operator !== "EqualTo" && operator !== "NotEqualTo")
-				return fail("A coded answer is compared by `=` and `<>` only.");
 			const option = subject.option;
 			const codes = subject.codes;
 			const forms = overAsks(subject.asks, (s) => {
@@ -393,16 +455,20 @@ export function compileCondition(
 	};
 
 	const forms = go(cond.expr, cond.sources);
-	if (problem !== undefined) return { problem };
-	if ([forms.t, forms.f, forms.n, forms.p].some((d) => size(d) > MAX_TESTS))
-		return { problem: "too-large" };
-	return { forms };
+	return problem === undefined
+		? { kind: "ok", forms }
+		: { kind: "problem", message: problem };
 }
 
 type Subjects =
-	| { readonly kind: "field"; readonly subject: Subject }
+	| {
+			readonly kind: "field";
+			readonly subject: Subject;
+			readonly domain?: Domain;
+	  }
 	| {
 			readonly kind: "asks";
+			readonly domain: Domain;
 			readonly asks: readonly string[];
 			/** A choice question's codes (an option's question's, for a select-all option). */
 			readonly codes?: readonly string[];
@@ -415,10 +481,15 @@ function subjectOf(e: Expr, sources: Cond["sources"]): Subjects | undefined {
 	const s: Source | undefined = sources.get(e.name);
 	if (s === undefined || s.kind === "row") return undefined;
 	if (s.kind === "input" || s.kind === "compute")
-		return { kind: "field", subject: { kind: "field", name: s.variable } };
+		return {
+			kind: "field",
+			subject: { kind: "field", name: s.variable },
+			...(s.kind === "input" && s.domain !== undefined && { domain: s.domain }),
+		};
 	const domain: Domain = s.question.domain;
 	return {
 		kind: "asks",
+		domain,
 		asks: s.asks,
 		...(domain.kind === "choice" && {
 			codes: domain.choices.map((c) => c.code),

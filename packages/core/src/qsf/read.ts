@@ -455,6 +455,14 @@ export function readInstrument(ddi: DdiDocument): {
 			unread(id, "This ask's question isn't in the document.");
 			return [];
 		}
+		// One ask in two places would record its variable twice, unchecked.
+		if (askPaths.has(id))
+			findings.push({
+				code: "qsf-inexpressible",
+				severity: "error",
+				path: id,
+				message: "This ask is in the flow more than once.",
+			});
 		askPaths.set(id, [...path]);
 		const fills = new Map<string, Part>();
 		const records: { variable: string; code?: string }[] = [];
