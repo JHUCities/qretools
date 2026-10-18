@@ -154,6 +154,35 @@ export function elaborateItems(
 			}),
 		};
 	});
+	// What the question outputs: one parameter per variable it defines, each variable's
+	// source. A select-all option's parameter names its code, a subset of the list.
+	const codes = (domain?.items.find((it) => it.type === "CodeList")?.body
+		.Code ?? []) as readonly JsonObject[];
+	const outputs = new Map(
+		(domain === undefined ? [] : definedVariables(draft)).map((d) => {
+			const id = identity(ctx.agency, named(`out-${d.name}`), ctx.own.number);
+			const code =
+				d.option !== undefined && draft.domain?.kind === "responses"
+					? codes[draft.domain.codes.indexOf(d.option)]
+					: undefined;
+			const parameter = obj({
+				...id,
+				ParameterName: [intl(d.name)],
+				ValueRepresentation:
+					code === undefined
+						? domain?.value
+						: {
+								...domain?.value,
+								CodeSubsetInformation: {
+									IncludedCode: {
+										CodeReference: [codeIdentity(code)],
+									},
+								},
+							},
+			});
+			return [d.name, { id, parameter }] as const;
+		}),
+	);
 	const question = versioned(
 		ctx,
 		"QuestionItem",
@@ -165,6 +194,10 @@ export function elaborateItems(
 			Description: maybe(draft.note, structured),
 			QuestionText: maybe(draft.text, (t) => [questionText(t, fills)]),
 			InParameter: fills.length > 0 ? fills.map((f) => f.parameter) : undefined,
+			OutParameter:
+				outputs.size > 0
+					? [...outputs.values()].map((o) => o.parameter)
+					: undefined,
 			QuestionIntent: maybe(draft.intent, structured),
 			ResponseDomain: domain?.responseDomain,
 			ConceptReference: maybe(concept, (c) => [ref(c)]),
@@ -192,6 +225,7 @@ export function elaborateItems(
 	const variables = specs.variables.map((v) =>
 		variableItem(v, ctx, {
 			question,
+			source: outputs.get(v.name)?.id,
 			universe,
 			concept,
 			missing: missingItems?.representation,
@@ -519,6 +553,8 @@ function variableItem(
 	ctx: Ctx,
 	refs: {
 		readonly question: Item;
+		/** The question's OutParameter this variable holds. */
+		readonly source: Identity | undefined;
 		readonly universe: Item | undefined;
 		readonly concept: Item | undefined;
 		readonly missing: Item | undefined;
@@ -533,6 +569,7 @@ function variableItem(
 			VariableName: [intl(v.name)],
 			Label: maybe(v.label, (l) => [structured(l)]),
 			QuestionReference: [ref(refs.question)],
+			SourceParameterReference: maybe(refs.source, (p) => ({ ...p })),
 			UniverseReference: maybe(refs.universe, (u) => [ref(u)]),
 			ConceptReference: maybe(refs.concept, (c) => [ref(c)]),
 			VariableRepresentation: obj({
@@ -552,6 +589,13 @@ function numberRange(
 		maybe(n, (v) => ({ DecimalValue: v, IsInclusive: true }));
 	return [obj({ Low: bound(min), High: bound(max) })];
 }
+
+/** A Code's identity alone, to refer to it: not its value or category. */
+const codeIdentity = ({
+	Value: _value,
+	CategoryReference: _category,
+	...identity
+}: JsonObject): JsonObject => identity;
 
 /** Apply `f` when there is something to apply it to; otherwise nothing, which `obj` drops. */
 const maybe = <A, B>(a: A | undefined, f: (a: A) => B): B | undefined =>
