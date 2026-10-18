@@ -8,7 +8,7 @@ import {
 } from "../instrument/elaborate.ts";
 import { parseInstrument } from "../instrument/parse.ts";
 import type { Cond, Part, Source, Step } from "./read.ts";
-import type { Qsf } from "./write.ts";
+import type { Qsf } from "./skeleton.ts";
 
 /** A read flow as lines of text, to compare whole. */
 export const source = (s: Source): string =>

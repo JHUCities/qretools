@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseCondition } from "../cond/parse.ts";
+import { escapeText } from "./questions.ts";
 import type {
 	Cond,
 	Part,
@@ -9,7 +10,7 @@ import type {
 	Step,
 } from "./read.ts";
 import { flowOutline } from "./testing.ts";
-import { escapeText, writeQsf } from "./write.ts";
+import { writeQsf } from "./write.ts";
 
 const modes: Question = {
 	id: "q-modes",
