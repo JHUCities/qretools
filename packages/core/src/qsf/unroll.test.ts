@@ -120,4 +120,35 @@ describe("writing rosters out row by row", () => {
 			`About \${q://1_QID3/ChoiceTextEntryValue}, person 1.`,
 		);
 	});
+
+	it("writes out a roster whose if asks what its condition reads: display logic would change mid-arm", () => {
+		const source = `name: asks
+uses:
+  bas: here
+flow:
+  - ask: bas.size
+  - roster: people
+    count: bas.size
+    max: 2
+    flow:
+      - if: isnull(bas.why)
+        then:
+          - ask: bas.why
+          - say: Asked.
+`;
+		const { instrument } = unroll(readInstrument(ddiOf(source)).instrument);
+		expect(outline(instrument.flow)).toMatchInlineSnapshot(`
+			[
+			  "ask size number size: size?",
+			  "if size >= 1 {size=size}",
+			  "  if isnull(why) {why=1_why}",
+			  "    ask why text 1_why: why?",
+			  "    say Asked.",
+			  "if size >= 2 {size=size}",
+			  "  if isnull(why) {why=2_why}",
+			  "    ask why text 2_why: why?",
+			  "    say Asked.",
+			]
+		`);
+	});
 });
