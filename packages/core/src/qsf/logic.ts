@@ -13,9 +13,13 @@
  * NotEmpty are false; NotSelected, NotEqualTo and Empty are true. Anything Qualtrics can't
  * say exactly is a finding, never an approximation.
  *
- * Assumed, not yet measured (experiment 6): a typed number is compared as a number, not as
- * text; an embedded field never set, or set to an empty answer, is tested as a question not
- * answered is; an ask not shown has no answer, even after Back. Ordering text is refused.
+ * Measured in experiment 6: a typed number is compared as a number; text is compared
+ * exactly (case and spaces); an embedded field never set, or set to an empty answer, is
+ * tested as a question not answered is. An embedded field is ordered as a number but
+ * EqualTo compares its text ("05" isn't 5), so a number is tested for equality by >= and <=.
+ * Assumed: an ask not shown has no answer, even after Back. Ordering text is refused.
+ * The writer's part: `$e{}` over an empty answer writes "{Invalid Expression}" (experiment 4),
+ * so a computed field is set only where its operands are answered, else left unset.
  */
 import type { BinaryOp, Expr } from "../cond/ast.ts";
 import type { Cond, Domain, Source } from "./read.ts";
@@ -270,7 +274,7 @@ const literal = (
 /**
  * Why a written value can't be compared with a value of this domain this way, or undefined.
  * The DDI is read, not trusted: a code is text, a number a number, and ordering text is
- * unmeasured in Qualtrics. With no domain (a computed value), only numbers are ordered.
+ * unmeasured in Qualtrics. An input with no domain is text.
  */
 const mismatch = (
 	domain: Domain | undefined,
@@ -288,6 +292,8 @@ const mismatch = (
 		return number ? undefined : "A number is compared with a number.";
 	if (domain?.kind === "text" && number)
 		return "Text is compared with text in quotes.";
+	if (domain === undefined && number)
+		return "An input with no type is compared as text, in quotes.";
 	return ordering && !number
 		? "Qualtrics' ordering of text isn't something the export relies on."
 		: undefined;
@@ -423,8 +429,18 @@ export function compileCondition(
 		const wrong = mismatch(subject.domain, operator, value.number);
 		if (wrong !== undefined) return fail(wrong);
 		const written = value.text;
-		if (subject.kind === "field")
-			return compared(subject.subject, operator, written);
+		if (subject.kind === "field") {
+			if (
+				!value.number ||
+				(operator !== "EqualTo" && operator !== "NotEqualTo")
+			)
+				return compared(subject.subject, operator, written);
+			const equal = both(
+				compared(subject.subject, "GreaterThanOrEqual", written),
+				compared(subject.subject, "LessThanOrEqual", written),
+			);
+			return operator === "EqualTo" ? equal : negate(equal);
+		}
 		if (subject.codes !== undefined) {
 			// A choice: one of its codes, or a select-all option's tick.
 			const option = subject.option;
@@ -460,6 +476,8 @@ export function compileCondition(
 		: { kind: "problem", message: problem };
 }
 
+const COMPUTED: Domain = { kind: "number", decimals: 0 };
+
 type Subjects =
 	| {
 			readonly kind: "field";
@@ -484,7 +502,10 @@ function subjectOf(e: Expr, sources: Cond["sources"]): Subjects | undefined {
 		return {
 			kind: "field",
 			subject: { kind: "field", name: s.variable },
-			...(s.kind === "input" && s.domain !== undefined && { domain: s.domain }),
+			// A computed value is a number: `$e{}` writes nothing else (a condition is inlined).
+			...(s.kind === "compute"
+				? { domain: COMPUTED }
+				: s.domain !== undefined && { domain: s.domain }),
 		};
 	const domain: Domain = s.question.domain;
 	return {

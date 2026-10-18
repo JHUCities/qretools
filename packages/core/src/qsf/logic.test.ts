@@ -49,6 +49,7 @@ const SOURCES = new Map<string, Source>([
 	["n", answer("n", ["C"], NUMBER)],
 	["m", answer("m", ["D1", "D2"], NUMBER)],
 	["i", { kind: "input", variable: "i" }],
+	["k", { kind: "input", variable: "k", domain: NUMBER }],
 	["r", { kind: "compute", variable: "r" }],
 ]);
 const cond = (text: string): Cond => {
@@ -61,23 +62,29 @@ const cond = (text: string): Cond => {
 type Shown = Readonly<Record<string, readonly string[] | number | undefined>>;
 type Fields = Readonly<Record<string, string | undefined>>;
 
-/** A Qualtrics test as measured: on a skipped question only NotSelected, NotEqualTo and Empty hold. */
+/**
+ * A Qualtrics test as measured (experiments 2, 4 and 6): on a skipped question or an empty
+ * field only NotSelected, NotEqualTo and Empty hold; a typed number compares as a number;
+ * an embedded field orders as a number but EqualTo compares its text.
+ */
 const test = (a: Atom, shown: Shown, fields: Fields): boolean => {
 	const x =
 		a.subject.kind === "ask" ? shown[a.subject.ask] : fields[a.subject.name];
 	const v = a.value ?? "";
 	const num = typeof x === "number";
 	const cmp = (op: (l: number | string, r: number | string) => boolean) =>
-		(typeof x === "string" || num) && op(x, num ? Number(v) : v);
+		(typeof x === "string" || num) &&
+		(num || a.subject.kind === "field" ? op(Number(x), Number(v)) : op(x, v));
+	const same = () => (num ? x === Number(v) : typeof x === "string" && x === v);
 	switch (a.op) {
 		case "Selected":
 			return Array.isArray(x) && x.includes(v);
 		case "NotSelected":
 			return !(Array.isArray(x) && x.includes(v));
 		case "EqualTo":
-			return cmp((l, r) => l === r);
+			return same();
 		case "NotEqualTo":
-			return !cmp((l, r) => l === r);
+			return !same();
 		case "GreaterThan":
 			return cmp((l, r) => l > r);
 		case "GreaterThanOrEqual":
@@ -118,27 +125,50 @@ const worlds = (): {
 			for (const n of ns)
 				for (const m of [undefined, ...ms])
 					for (const i of [undefined, "1", "2"])
-						out.push({
-							shown: { A: c, B: o, C: n, ...(m && { [m[0]]: m[1] }) },
-							fields: { i },
-							values: {
-								c: c?.[0] ?? null,
-								o: o === undefined ? null : o.includes("x") ? "1" : "0",
-								n: n ?? null,
-								m: m?.[1] ?? null,
-								i: i ?? null,
-							},
-						});
+						for (const k of [undefined, "05", "6"])
+							out.push({
+								shown: { A: c, B: o, C: n, ...(m && { [m[0]]: m[1] }) },
+								fields: { i, k },
+								values: {
+									c: c?.[0] ?? null,
+									o: o === undefined ? null : o.includes("x") ? "1" : "0",
+									n: n ?? null,
+									m: m?.[1] ?? null,
+									i: i ?? null,
+									k: k === undefined ? null : Number(k),
+								},
+							});
 	return out;
 };
 const WORLDS = worlds();
+/** What each name reads in a world: its asks, or its field. */
+const READS: Readonly<Record<string, readonly string[]>> = {
+	c: ["A"],
+	o: ["B"],
+	n: ["C"],
+	m: ["D1", "D2"],
+	i: ["i"],
+	k: ["k"],
+};
 
 /** Where a form's lists disagree with the condition's own value, or undefined; a form too large to write isn't checked. */
 const agrees = (text: string, forms: Forms) => {
 	const expr = cond(text).expr;
 	const at = (d: Form, shown: Shown, fields: Fields) =>
 		d === "too-large" ? undefined : holds(d, shown, fields);
+	// Only the answers to the names it reads tell worlds apart: one world for each.
+	const used = [...SOURCES.keys()].filter((n) =>
+		new RegExp(`\\b${n}\\b`).test(text),
+	);
+	const seen = new Set<string>();
 	for (const w of WORLDS) {
+		const key = JSON.stringify(
+			used.flatMap((n) =>
+				(READS[n] ?? []).map((r) => w.shown[r] ?? w.fields[r] ?? null),
+			),
+		);
+		if (seen.has(key)) continue;
+		seen.add(key);
 		const v = evaluateCondition(expr, (name) => w.values[name] ?? null);
 		const want = {
 			t: v === true,
@@ -188,6 +218,10 @@ const ATOMS = [
 	'i = "1"',
 	'i <> "1"',
 	"isnull(i)",
+	"k = 5",
+	"k <> 5",
+	"k > 5",
+	"isnull(k)",
 	"true",
 ];
 
@@ -260,6 +294,17 @@ describe("conditions as Qualtrics logic", () => {
 		expect(compiled("c = 1")).toMatch(/code in quotes/);
 		expect(compiled('n = "5"')).toMatch(/with a number/);
 		expect(compiled('i > "1"')).toMatch(/ordering of text/);
+		expect(compiled("i = 1")).toMatch(/no type/);
+		expect(compiled('r = "5"')).toMatch(/with a number/);
+		expect((compiled("r >= 5") as Forms).t).toEqual([
+			[
+				{
+					subject: { kind: "field", name: "r" },
+					op: "GreaterThanOrEqual",
+					value: "5",
+				},
+			],
+		]);
 	});
 
 	it("keeps a wide condition's true list, and gives up on its else list quickly", () => {
