@@ -21,25 +21,35 @@ import { context, number } from "./number.ts";
 import { questionsOf } from "./questions.ts";
 import type { Cond, ReadInstrument, Step } from "./read.ts";
 import { type Node, type QsfObject, toQsf } from "./skeleton.ts";
+import { baseId, unroll } from "./unroll.ts";
 
 export function writeQsf(
-	instrument: ReadInstrument,
+	read: ReadInstrument,
 	options: {
 		readonly name: string;
 		/** When the survey is made, `YYYY-MM-DD hh:mm:ss`: Qualtrics requires one (the core has no clock). */
 		readonly created: string;
 	},
 ): { readonly qsf: QsfObject; readonly findings: readonly Finding[] } {
-	const findings: Finding[] = [];
+	const unrolled = unroll(read);
+	const instrument = unrolled.instrument;
+	const findings: Finding[] = [...unrolled.findings];
+	// A row's copy reports at the author's step, once for all its rows.
+	const said = new Set<string>();
 	const note = (
 		code: Finding["code"],
 		severity: Finding["severity"],
-		path: string,
+		at: string,
 		message: string,
-	) => findings.push({ code, severity, path, message });
+	) => {
+		const path = baseId(at);
+		const key = `${code} ${path} ${message}`;
+		if (said.has(key)) return;
+		said.add(key);
+		findings.push({ code, severity, path, message });
+	};
 	const numbering = number(instrument);
 	const ctx = context(numbering, note);
-	const { looped } = numbering;
 	const { notYet, placeOf } = ctx;
 	const { askQuestion, statement } = questionsOf(ctx, instrument);
 	const without = (path: string, what: string) =>
@@ -62,8 +72,13 @@ export function writeQsf(
 		const asked = [...cond.sources.values()].flatMap((s) =>
 			s.kind === "answer" ? s.asks : [],
 		);
-		if (asked.some((a) => looped.has(a))) {
-			notYet(at, "A condition on a roster's rows");
+		if (asked.some(ctx.outside)) {
+			note(
+				"qsf-inexpressible",
+				"error",
+				at,
+				"This reads a roster's answers outside its rows: there's no one row to test.",
+			);
 			return undefined;
 		}
 		const compiled = compileCondition(cond, (v) =>
