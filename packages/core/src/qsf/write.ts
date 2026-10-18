@@ -6,6 +6,7 @@
  * shape written is one the owner's exports showed (context: experiments 1–6b). Anything
  * the export can't write yet, or can't write exactly, is a finding at its DDI ID.
  */
+import type { Expr } from "../cond/ast.ts";
 import { printCondition } from "../cond/print.ts";
 import type { Finding } from "../findings.ts";
 import {
@@ -31,6 +32,53 @@ import { questionsOf } from "./questions.ts";
 import type { Cond, ReadInstrument, Source, Step } from "./read.ts";
 import { type Node, type QsfObject, toQsf } from "./skeleton.ts";
 import { baseId, countedBy, unroll } from "./unroll.ts";
+
+/** `isnull(x) or (x >= min and x <= max)` for an ask's own answer: the range its number check held. */
+const numberRange = (
+	s: Extract<Step, { kind: "ask" }>,
+	min: number | undefined,
+	max: number | undefined,
+): Cond => {
+	const range = [0, 0] as const;
+	const x: Expr = { kind: "name", name: "x", range };
+	const bound = (op: ">=" | "<=", v: number): Expr => ({
+		kind: "binary",
+		op,
+		left: x,
+		right: { kind: "number", value: v, text: String(v), range },
+		range,
+	});
+	const bounds = [
+		...(min === undefined ? [] : [bound(">=", min)]),
+		...(max === undefined ? [] : [bound("<=", max)]),
+	].reduce((all, b) => ({
+		kind: "binary",
+		op: "and",
+		left: all,
+		right: b,
+		range,
+	}));
+	return {
+		expr: {
+			kind: "binary",
+			op: "or",
+			left: { kind: "call", fn: "isnull", args: [x], range },
+			right: bounds,
+			range,
+		},
+		sources: new Map<string, Source>([
+			[
+				"x",
+				{
+					kind: "answer",
+					variable: s.records[0]?.variable ?? s.id,
+					asks: [s.id],
+					question: s.question,
+				},
+			],
+		]),
+	};
+};
 
 export function writeQsf(
 	read: ReadInstrument,
@@ -133,6 +181,100 @@ export function writeQsf(
 	const whenTrue = (cond: Cond, at: string) => formOf(cond, at, "t");
 
 	/**
+	 * A question with its blocking checks as custom validation (experiment 4, J): it passes
+	 * while every check's "is not false" list holds, as the DDI's check fails only on false.
+	 * Custom validation replaces a number's own, so its range is folded in; Qualtrics then
+	 * no longer refuses letters there.
+	 */
+	const validated = (
+		s: Extract<Step, { kind: "ask" }>,
+		q: QsfObject,
+	): QsfObject => {
+		const blocking = s.checks.filter((c) => c.severity === "blocking");
+		if (blocking.length === 0) return q;
+		const domain = s.question.domain;
+		const lists = blocking.map((c) => formOf(c.ensure, c.id, "p", s.id));
+		if (lists.some((d) => d === undefined)) return q;
+		const range =
+			domain.kind === "number" &&
+			(domain.min !== undefined || domain.max !== undefined)
+				? formOf(numberRange(s, domain.min, domain.max), s.id, "p", s.id)
+				: ALWAYS;
+		if (domain.kind === "number")
+			note(
+				"qsf-inexpressible",
+				"warning",
+				s.id,
+				"With its checks, Qualtrics no longer refuses an answer that isn't a number here.",
+			);
+		const passes = [...lists, range].reduce<Form>(
+			(all, d) => and(all, d ?? NEVER),
+			ALWAYS,
+		);
+		if (passes === "too-large" || passes.length === 0) {
+			note(
+				passes === "too-large" ? "qsf-too-large" : "qsf-inexpressible",
+				"error",
+				s.id,
+				passes === "too-large"
+					? "This question's checks take more tests than Qualtrics logic should hold."
+					: "This question's checks can never pass.",
+			);
+			return q;
+		}
+		// A check that fails on an empty answer only works if Qualtrics checks empty answers.
+		const empty = passes.some((g) =>
+			g.every(
+				(a) =>
+					a.subject.kind === "ask" &&
+					a.subject.ask === s.id &&
+					["Empty", "NotSelected", "NotEqualTo"].includes(a.op),
+			),
+		);
+		if (!empty)
+			note(
+				"qsf-inexpressible",
+				"warning",
+				s.id,
+				"Qualtrics may not check an unanswered question, so this check may let an empty answer through (experiment 8).",
+			);
+		for (const c of blocking)
+			if (c.message !== undefined)
+				note(
+					"qsf-note",
+					"info",
+					c.id,
+					"Qualtrics shows its own message when this check fails: a custom validation's message comes from a library.",
+				);
+		if (passes.some((g) => g.length === 0)) return q;
+		return {
+			...q,
+			Validation: {
+				Settings: {
+					ForceResponse: "OFF",
+					ForceResponseType: "ON",
+					Type: "CustomValidation",
+					MinChars: "1",
+					ContentType: null,
+					ValidDateType: "DateWithFormat",
+					ValidPhoneType: "ValidUSPhone",
+					ValidZipType: "ValidUSZip",
+					ValidNumber: { Min: "", Max: "", NumDecimals: "" },
+					CustomValidation: {
+						Logic: logicOf(ctx, passes),
+						Message: {
+							messageID: null,
+							subMessageID: "VE_VALIDATION_FAILED",
+							libraryID: null,
+							description: "Validation Failed",
+						},
+					},
+				},
+			},
+		};
+	};
+
+	/**
 	 * A question's warning checks: each a statement on its page, shown live while the check
 	 * fails (its "is false" list as in-page display logic, experiment 4), in its own words.
 	 * `guarded`: the question is shown under a condition of a looped roster, which the
@@ -143,10 +285,7 @@ export function writeQsf(
 		guarded = false,
 	): QsfObject[] =>
 		s.checks.flatMap((c): QsfObject[] => {
-			if (c.severity === "blocking") {
-				without(s.id, "its blocking checks");
-				return [];
-			}
+			if (c.severity === "blocking") return [];
 			if (c.severity === "info")
 				note("qsf-note", "info", c.id, "An info check is shown as a warning.");
 			const own = (x: Source) => x.kind === "answer" && x.asks.includes(s.id);
@@ -248,7 +387,7 @@ export function writeQsf(
 		for (const s of flow) {
 			switch (s.kind) {
 				case "ask":
-					current.push([askQuestion(s), ...warnings(s)]);
+					current.push([validated(s, askQuestion(s)), ...warnings(s)]);
 					break;
 				case "say":
 					current.push([statement(s)]);
@@ -381,13 +520,15 @@ export function writeQsf(
 					case "ask":
 						// Its warnings share its page, shown whatever the question's own condition is
 						// (a hidden question has no answer to warn about, experiment 6b).
-						return shown(askQuestion(x), guard, x.id).map((page) => [
-							...page,
-							...warnings(
-								x,
-								guard !== "too-large" && !guard.some((g) => g.length === 0),
-							),
-						]);
+						return shown(validated(x, askQuestion(x)), guard, x.id).map(
+							(page) => [
+								...page,
+								...warnings(
+									x,
+									guard !== "too-large" && !guard.some((g) => g.length === 0),
+								),
+							],
+						);
 					case "say":
 						return shown(statement(x), guard, x.id);
 					case "section":
