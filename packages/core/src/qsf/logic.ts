@@ -103,7 +103,7 @@ const or = (a: Form, b: Form): Form =>
 	a === "too-large" || b === "too-large"
 		? "too-large"
 		: capped(absorbed([...a, ...b]));
-const and = (a: Form, b: Form): Form =>
+export const and = (a: Form, b: Form): Form =>
 	a === "too-large" || b === "too-large" || a.length * b.length > MAX_PRODUCT
 		? "too-large"
 		: capped(

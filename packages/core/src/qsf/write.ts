@@ -6,8 +6,17 @@
  * shape written is one the owner's exports showed (context: experiments 1–6b). Anything
  * the export can't write yet, or can't write exactly, is a finding at its DDI ID.
  */
+import { printCondition } from "../cond/print.ts";
 import type { Finding } from "../findings.ts";
-import type { Part, Question, ReadInstrument, Source, Step } from "./read.ts";
+import { type Atom, and, compileCondition, type Dnf, NEVER } from "./logic.ts";
+import type {
+	Cond,
+	Part,
+	Question,
+	ReadInstrument,
+	Source,
+	Step,
+} from "./read.ts";
 import { SETTINGS } from "./settings.ts";
 
 /** QSF's JSON: unlike the DDI's, it has nulls. */
@@ -20,16 +29,20 @@ export type Qsf =
 	| { readonly [key: string]: Qsf };
 type QsfObject = { readonly [key: string]: Qsf };
 
-/** Each ask and statement's QID, by DDI ID, and the asks inside a roster's rows. */
+/** Each ask and statement's QID and each ask's question, by DDI ID; the asks inside a roster's rows; every name the data has. */
 interface Numbering {
 	readonly qids: ReadonlyMap<string, string>;
+	readonly questions: ReadonlyMap<string, Question>;
 	readonly looped: ReadonlySet<string>;
+	readonly names: ReadonlySet<string>;
 }
 
 /** QIDs in flow order, depth first, over every flow a step holds. */
-function number(flow: readonly Step[]): Numbering {
+function number(instrument: ReadInstrument): Numbering {
 	const qids = new Map<string, string>();
+	const questions = new Map<string, Question>();
 	const looped = new Set<string>();
+	const names = new Set(instrument.inputs.map((i) => i.variable));
 	const go = (steps: readonly Step[], inLoop: boolean): void => {
 		for (const s of steps) {
 			switch (s.kind) {
@@ -37,8 +50,13 @@ function number(flow: readonly Step[]): Numbering {
 				case "say":
 					qids.set(s.id, `QID${qids.size + 1}`);
 					if (inLoop) looped.add(s.id);
+					if (s.kind === "ask") {
+						questions.set(s.id, s.question);
+						for (const r of s.records) names.add(r.variable);
+					}
 					break;
 				case "compute":
+					names.add(s.variable);
 					break;
 				case "if":
 					for (const b of s.branches) go(b.then, inLoop);
@@ -59,15 +77,31 @@ function number(flow: readonly Step[]): Numbering {
 			}
 		}
 	};
-	go(flow, false);
-	return { qids, looped };
+	go(instrument.flow, false);
+	return { qids, questions, looped, names };
 }
 
-/** A block of the survey: its questions in order, one to a page. */
-interface Block {
-	readonly description?: string;
-	readonly questions: readonly QsfObject[];
-}
+/** The survey's flow: blocks of questions (one to a page), branches, fields set, the end. */
+type Node =
+	| {
+			readonly kind: "block";
+			readonly description?: string;
+			readonly questions: readonly QsfObject[];
+	  }
+	| {
+			readonly kind: "branch";
+			readonly description: string;
+			readonly logic: Qsf;
+			readonly flow: readonly Node[];
+	  }
+	| {
+			readonly kind: "set";
+			readonly fields: readonly {
+				readonly name: string;
+				readonly value: string;
+			}[];
+	  }
+	| { readonly kind: "end" };
 
 /** Text as Qualtrics shows it: HTML, where `${` starts a pipe. */
 export const escapeText = (text: string): string =>
@@ -100,7 +134,8 @@ export function writeQsf(
 			path,
 			`${what} isn't exported to Qualtrics yet: it's left out.`,
 		);
-	const { qids, looped } = number(instrument.flow);
+	const numbering = number(instrument);
+	const { qids, looped } = numbering;
 	const qidOf = (id: string) => qids.get(id) ?? "";
 
 	/** A value piped into text, or undefined (with a finding) where Qualtrics can't show it. */
@@ -270,14 +305,129 @@ export function writeQsf(
 		};
 	};
 
-	/** The flow as blocks: a run of asks and statements is one block; a section opens its own. */
-	const layout = (flow: readonly Step[], description?: string): Block[] => {
-		const blocks: Block[] = [];
+	/** One Qualtrics test, as the owner's exports write it. */
+	const expression = (a: Atom): QsfObject => {
+		const right = a.value === undefined ? {} : { RightOperand: a.value };
+		if (a.subject.kind === "field")
+			return {
+				LogicType: "EmbeddedField",
+				LeftOperand: a.subject.name,
+				Operator: a.op,
+				...right,
+				Type: "Expression",
+				Description: "",
+			};
+		const qid = qidOf(a.subject.ask);
+		const domain = numbering.questions.get(a.subject.ask)?.domain;
+		const chosen = a.op === "Selected" || a.op === "NotSelected";
+		// A choice is tested by its place in the question, its code being only the recode.
+		const locator = chosen
+			? `q://${qid}/SelectableChoice/${
+					domain?.kind === "choice"
+						? domain.choices.findIndex((c) => c.code === a.value) + 1
+						: 0
+				}`
+			: `q://${qid}/ChoiceTextEntryValue`;
+		return {
+			LogicType: "Question",
+			QuestionID: qid,
+			QuestionIsInLoop: "no",
+			ChoiceLocator: locator,
+			Operator: a.op,
+			QuestionIDFromLocator: qid,
+			LeftOperand: locator,
+			...(chosen ? {} : right),
+			Type: "Expression",
+			Description: "",
+		};
+	};
+	/** An Or of And-groups as Qualtrics' flat list: And binds first (experiment 2). */
+	const logicOf = (d: Dnf): Qsf => {
+		const list = d.flatMap((group, g) =>
+			group.map((a, k) => ({
+				...expression(a),
+				...((g > 0 || k > 0) && { Conjuction: k === 0 ? "Or" : "And" }),
+			})),
+		);
+		return {
+			"0": {
+				...Object.fromEntries(list.map((x, k) => [String(k), x])),
+				Type: "If",
+			},
+			Type: "BooleanExpression",
+		};
+	};
+	/** The condition's "is true" list, or undefined with a finding where it can't be written. */
+	const whenTrue = (cond: Cond, at: string): Dnf | undefined => {
+		const asked = [...cond.sources.values()].flatMap((s) =>
+			s.kind === "answer" ? s.asks : [],
+		);
+		if (asked.some((a) => looped.has(a))) {
+			notYet(at, "A condition on a roster's rows");
+			return undefined;
+		}
+		const compiled = compileCondition(cond);
+		if (compiled.kind === "problem") {
+			note("qsf-inexpressible", "error", at, compiled.message);
+			return undefined;
+		}
+		if (compiled.forms.t === "too-large") {
+			note(
+				"qsf-too-large",
+				"error",
+				at,
+				"This condition takes more tests than Qualtrics logic should hold.",
+			);
+			return undefined;
+		}
+		return compiled.forms.t;
+	};
+	/** Steps behind a condition: as they are when it always holds, nothing when never. */
+	const behind = (
+		d: Dnf,
+		description: string,
+		flow: readonly Node[],
+		at: string,
+	): Node[] => {
+		if (d.length === 0) {
+			note(
+				"qsf-note",
+				"info",
+				at,
+				"This condition never holds, so what it leads to isn't in the survey.",
+			);
+			return [];
+		}
+		if (d.some((g) => g.length === 0)) return [...flow];
+		return flow.length === 0
+			? []
+			: [{ kind: "branch", description, logic: logicOf(d), flow }];
+	};
+
+	// Each if with more than one way through marks the way it took, so later arms test one field.
+	let flags = 0;
+	const flagFor = (at: string): string => {
+		let name = "";
+		do name = `qretools_branch_${++flags}`;
+		while (numbering.names.has(name));
+		note(
+			"qsf-note",
+			"info",
+			at,
+			`Qualtrics records which way this branch went in the field \`${name}\`.`,
+		);
+		return name;
+	};
+
+	/** The flow as Qualtrics' flow: a run of asks and statements is one block. */
+	const layout = (flow: readonly Step[], description?: string): Node[] => {
+		const nodes: Node[] = [];
 		let current: QsfObject[] = [];
 		let title = description;
 		const flush = () => {
 			if (current.length > 0)
-				blocks.push({
+				nodes.push({
+					kind: "block",
 					...(title !== undefined && { description: title }),
 					questions: current,
 				});
@@ -297,17 +447,30 @@ export function writeQsf(
 				case "section":
 					flush();
 					if (s.order !== undefined) notYet(s.id, "A section's order");
-					blocks.push(...layout(s.flow, s.title));
+					nodes.push(...layout(s.flow, s.title));
 					break;
 				case "compute":
 					notYet(s.id, "A computed value");
 					break;
-				case "if":
-					notYet(s.id, "A branch");
+				case "if": {
+					flush();
+					nodes.push(...branches(s));
 					break;
-				case "stop":
-					notYet(s.id, "A stop");
+				}
+				case "stop": {
+					flush();
+					const d = whenTrue(s.cond, s.id);
+					if (d !== undefined)
+						nodes.push(
+							...behind(
+								d,
+								`stop if ${printCondition(s.cond.expr)}`,
+								[...layout(s.say), { kind: "end" }],
+								s.id,
+							),
+						);
 					break;
+				}
 				case "loop":
 				case "repeat":
 					notYet(s.id, "A roster");
@@ -317,12 +480,63 @@ export function writeQsf(
 			}
 		}
 		flush();
-		return blocks;
+		return nodes;
 	};
 
-	const blocks = layout(instrument.flow);
+	/**
+	 * An if as survey-flow branches. One arm: a branch on its condition. More: each arm sets a
+	 * flag first, and every later arm (and the else) also requires the flag empty, so exactly
+	 * the first arm whose condition holds runs, whatever the arms themselves change.
+	 */
+	const branches = (s: Extract<Step, { kind: "if" }>): Node[] => {
+		const conds = s.branches.map((b) => whenTrue(b.cond, s.id));
+		if (conds.some((d) => d === undefined)) return [];
+		const arms = s.branches.map((b, i) => ({
+			d: conds[i],
+			label: printCondition(b.cond.expr),
+			flow: layout(b.then),
+		}));
+		const elseFlow = layout(s.else ?? []);
+		if (arms.length === 1 && s.else === undefined) {
+			const [arm] = arms;
+			return arm?.d === undefined
+				? []
+				: behind(arm.d, `if ${arm.label}`, arm.flow, s.id);
+		}
+		const flag = flagFor(s.id);
+		const unset: Dnf = [
+			[{ subject: { kind: "field", name: flag }, op: "Empty" }],
+		];
+		const taken: Node = { kind: "set", fields: [{ name: flag, value: "1" }] };
+		const nodes: Node[] = [];
+		for (const [i, arm] of arms.entries()) {
+			const d = i === 0 ? arm.d : and(unset, arm.d ?? NEVER);
+			if (d === "too-large" || d === undefined) {
+				note(
+					"qsf-too-large",
+					"error",
+					s.id,
+					"This condition takes more tests than Qualtrics logic should hold.",
+				);
+				return [];
+			}
+			nodes.push(
+				...behind(
+					d,
+					`${i === 0 ? "if" : "elif"} ${arm.label}`,
+					[taken, ...arm.flow],
+					s.id,
+				),
+			);
+		}
+		if (s.else !== undefined)
+			nodes.push(...behind(unset, "else", elseFlow, s.id));
+		return nodes;
+	};
+
+	const nodes = layout(instrument.flow);
 	return {
-		qsf: toQsf(blocks, instrument, options),
+		qsf: toQsf(nodes, instrument, options),
 		findings,
 	};
 }
@@ -334,7 +548,7 @@ export function writeQsf(
 const SURVEY_ID = "SV_qretoolsExport0";
 const USER_ID = "UR_qretoolsExport";
 const RESPONSE_SET = "RS_qretoolsExport0";
-const NEVER = "0000-00-00 00:00:00";
+const NO_DATE = "0000-00-00 00:00:00";
 const blockId = (n: number) => `BL_qretools${String(n).padStart(6, "0")}`;
 
 const element = (
@@ -352,36 +566,85 @@ const element = (
 	Payload: payload,
 });
 
-/** Blocks and inputs as a QSF document, on a skeleton with nothing from any account. */
+/** The flow as a QSF document, on a skeleton with nothing from any account. */
 function toQsf(
-	blocks: readonly Block[],
+	nodes: readonly Node[],
 	instrument: ReadInstrument,
 	{ name, created }: { readonly name: string; readonly created: string },
 ): QsfObject {
-	// The first block is Qualtrics' Default block; a survey with no questions still has one.
-	const all = blocks.length > 0 ? blocks : [{ questions: [] }];
-	const ids = all.map((_, i) => blockId(i + 1));
-	const flow: QsfObject[] = [];
-	const flowId = () => `FL_${flow.length + 2}`;
-	if (instrument.inputs.length > 0)
-		flow.push({
-			Type: "EmbeddedData",
-			FlowID: flowId(),
-			EmbeddedData: instrument.inputs.map((i) => ({
-				Description: i.variable,
-				Type: "Recipient",
-				Field: i.variable,
-				VariableType: "String",
-				DataVisibility: [],
-				AnalyzeText: false,
-			})),
+	const all: Extract<Node, { kind: "block" }>[] = [];
+	let flowIds = 1;
+	const flowId = () => `FL_${++flowIds}`;
+	const serialise = (ns: readonly Node[]): QsfObject[] =>
+		ns.map((n): QsfObject => {
+			switch (n.kind) {
+				case "block": {
+					all.push(n);
+					// The first block is Qualtrics' Default block.
+					const id = blockId(all.length);
+					return all.length === 1
+						? { Type: "Block", ID: id, FlowID: flowId() }
+						: { Type: "Standard", ID: id, FlowID: flowId(), Autofill: [] };
+				}
+				case "branch": {
+					const id = flowId();
+					return {
+						Type: "Branch",
+						FlowID: id,
+						Description: n.description,
+						BranchLogic: n.logic,
+						Flow: serialise(n.flow),
+					};
+				}
+				case "set":
+					return {
+						Type: "EmbeddedData",
+						FlowID: flowId(),
+						EmbeddedData: n.fields.map((f) => ({
+							Description: f.name,
+							Type: "Custom",
+							Field: f.name,
+							VariableType: "String",
+							DataVisibility: [],
+							AnalyzeText: false,
+							Value: f.value,
+						})),
+					};
+				case "end":
+					return {
+						Type: "EndSurvey",
+						FlowID: flowId(),
+						EndingType: "Advanced",
+						Options: { Advanced: "true", ResponseFlag: "Screened" },
+					};
+				default:
+					return n satisfies never;
+			}
 		});
-	for (const [i, id] of ids.entries())
-		flow.push(
-			i === 0
-				? { Type: "Block", ID: id, FlowID: flowId() }
-				: { Type: "Standard", ID: id, FlowID: flowId(), Autofill: [] },
-		);
+	const inputs: QsfObject[] =
+		instrument.inputs.length === 0
+			? []
+			: [
+					{
+						Type: "EmbeddedData",
+						FlowID: flowId(),
+						EmbeddedData: instrument.inputs.map((i) => ({
+							Description: i.variable,
+							Type: "Recipient",
+							Field: i.variable,
+							VariableType: "String",
+							DataVisibility: [],
+							AnalyzeText: false,
+						})),
+					},
+				];
+	const flow = [...inputs, ...serialise(nodes)];
+	// A survey with no questions still has its Default block.
+	if (all.length === 0) {
+		all.push({ kind: "block", questions: [] });
+		flow.push({ Type: "Block", ID: blockId(1), FlowID: flowId() });
+	}
+	const ids = all.map((_, i) => blockId(i + 1));
 	const questions = all.flatMap((b) => b.questions);
 	return {
 		SurveyEntry: {
@@ -394,13 +657,13 @@ function toQsf(
 			SurveyLanguage: "EN",
 			SurveyActiveResponseSet: RESPONSE_SET,
 			SurveyStatus: "Inactive",
-			SurveyStartDate: NEVER,
-			SurveyExpirationDate: NEVER,
+			SurveyStartDate: NO_DATE,
+			SurveyExpirationDate: NO_DATE,
 			SurveyCreationDate: created,
 			CreatorID: USER_ID,
 			LastModified: created,
-			LastAccessed: NEVER,
-			LastActivated: NEVER,
+			LastAccessed: NO_DATE,
+			LastActivated: NO_DATE,
 			Deleted: null,
 		},
 		SurveyElements: [
@@ -427,7 +690,7 @@ function toQsf(
 				Type: "Root",
 				FlowID: "FL_1",
 				Flow: flow,
-				Properties: { Count: flow.length + 1 },
+				Properties: { Count: flowIds },
 			}),
 			element("PROJ", "CORE", null, "1.1.0", {
 				ProjectCategory: "CORE",
