@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { parseCondition } from "../cond/parse.ts";
-import type { Cond, Question, ReadInstrument, Source, Step } from "./read.ts";
+import type {
+	Cond,
+	Part,
+	Question,
+	ReadInstrument,
+	Source,
+	Step,
+} from "./read.ts";
 import { flowOutline } from "./testing.ts";
 import { escapeText, writeQsf } from "./write.ts";
 
@@ -173,6 +180,91 @@ describe("writing a survey as QSF", () => {
 		expect(findings.map((f) => `${f.code} ${f.path}`)).toMatchInlineSnapshot(`
 			[
 			  "qsf-note if",
+			]
+		`);
+	});
+
+	it("computes a number with $e{} once its operands are answered, and inlines a true-or-false one only where exact", () => {
+		const size: Question = {
+			id: "q-size",
+			name: "size",
+			domain: { kind: "number", decimals: 0 },
+		};
+		const sources = new Map<string, Source>([
+			[
+				"size",
+				{
+					kind: "answer",
+					variable: "size",
+					asks: ["ask-size"],
+					question: size,
+				},
+			],
+			["big", { kind: "compute", variable: "big" }],
+			["late", { kind: "compute", variable: "late" }],
+			["half", { kind: "compute", variable: "half" }],
+		]);
+		const cond = (text: string): Cond => ({
+			expr: parseCondition(text).expr,
+			sources,
+		});
+		const compute = (id: string, variable: string, value: string): Step => ({
+			kind: "compute",
+			id,
+			variable,
+			value: cond(value),
+		});
+		const arm = (c: string, ...then: Step[]) => ({ cond: cond(c), then });
+		const say = (id: string, ...text: Part[]): Step => ({
+			kind: "say",
+			id,
+			text,
+		});
+		const { qsf, findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "ask",
+						id: "ask-size",
+						question: size,
+						records: [{ variable: "size" }],
+						text: [{ kind: "text", text: "How many?" }],
+						checks: [],
+					},
+					compute("c-half", "half", "size / 2"),
+					say("s-half", {
+						kind: "value",
+						source: { kind: "compute", variable: "half" },
+					}),
+					compute("c-big", "big", "size > 4"),
+					{ kind: "stop", id: "stop-big", cond: cond("big"), say: [] },
+					{
+						kind: "if",
+						id: "if",
+						branches: [arm("big", compute("c-late", "late", "size > 9"))],
+					},
+					{ kind: "stop", id: "stop-late", cond: cond("late"), say: [] },
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(flowOutline(qsf)).toMatchInlineSnapshot(`
+			[
+			  "Block BL_qretools000001",
+			  "Branch compute half: q://QID1/ChoiceTextEntryValue NotEmpty",
+			  "  EmbeddedData  half=$e{ (\${q://QID1/ChoiceTextEntryValue} / 2) }",
+			  "Standard BL_qretools000002",
+			  "Branch stop if big: q://QID1/ChoiceTextEntryValue GreaterThan 4",
+			  "  EndSurvey",
+			]
+		`);
+		expect(
+			findings.map((f) => `${f.path}: ${f.message}`),
+		).toMatchInlineSnapshot(`
+			[
+			  "c-half: Qualtrics' arithmetic decides what dividing by zero gives.",
+			  "stop-late: \`late\` is computed only on some paths through the survey, so Qualtrics can't test it here.",
 			]
 		`);
 	});
