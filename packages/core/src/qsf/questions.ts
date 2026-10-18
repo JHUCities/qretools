@@ -129,6 +129,20 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 		const text = textOf(s.text, s.id);
 		const q: Question = s.question;
 		const domain = q.domain;
+		if (s.options !== undefined && domain.kind !== "choice")
+			ctx.note(
+				"qsf-note",
+				"info",
+				s.id,
+				"Only a question with options has an order to shuffle: this one's is ignored.",
+			);
+		if (s.options === "rotate" && domain.kind === "choice")
+			ctx.note(
+				"qsf-inexpressible",
+				"warning",
+				s.id,
+				"Qualtrics can't rotate options: they're shuffled instead.",
+			);
 		if (domain.kind === "choice") {
 			const keys = domain.choices.map((_, i) => String(i + 1));
 			const exportTag = domain.many
@@ -156,6 +170,10 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 				RecodeValues: Object.fromEntries(
 					domain.choices.map((c, i) => [keys[i] ?? "", c.code]),
 				),
+				// Shuffled for each respondent, as experiment 4 (E) wrote it; rotation is shuffled too.
+				...(s.options !== undefined && {
+					Randomization: { Type: "All", Advanced: null, TotalRandSubset: "" },
+				}),
 				...(domain.many && {
 					VariableNaming: Object.fromEntries(
 						domain.choices.map((c, i) => [

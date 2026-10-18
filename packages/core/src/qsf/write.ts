@@ -163,7 +163,6 @@ export function writeQsf(
 			switch (s.kind) {
 				case "ask":
 					if (s.checks.length > 0) without(s.id, "its checks");
-					if (s.options !== undefined) without(s.id, "its options' order");
 					current.push(askQuestion(s));
 					break;
 				case "say":
@@ -294,7 +293,6 @@ export function writeQsf(
 				switch (x.kind) {
 					case "ask":
 						if (x.checks.length > 0) without(x.id, "its checks");
-						if (x.options !== undefined) without(x.id, "its options' order");
 						return shown(askQuestion(x), guard, x.id);
 					case "say":
 						return shown(statement(x), guard, x.id);
