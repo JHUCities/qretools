@@ -448,6 +448,10 @@ flow:
     flow:
       - say: Person {{index}}.
       - ask: bas.why
+        checks:
+          - ensure: bas.rent >= 0
+            severity: warning
+            message: Person {{index}}, check the rent.
   - roster: jobs
     more: bas.consent = "1"
     flow:
@@ -480,6 +484,21 @@ flow:
 				'not nvl(consent = "1", false)',
 			]),
 		);
+		// `{{index}}` in what is said is the row of the loop it's said in, never the words.
+		const said = Object.values(document.StatementItem ?? {}).map((st) =>
+			[...objects(st)]
+				.flatMap((o) => {
+					const p = o.SourceParameterReference as JsonObject | undefined;
+					const t = o.MultilingualStringValue as JsonObject | undefined;
+					return p !== undefined ? [`<${p.ID}>`] : t ? [t.Value] : [];
+				})
+				.join(""),
+		);
+		expect(said).toEqual([
+			"Person <instrument-households.out-members_index>.",
+			"Person <instrument-households.out-members_index>, check the rent.",
+			"Again, person <instrument-households.each-members-out-members_index>: <instrument-households.out-why>",
+		]);
 		expect(Object.keys(document.Loop ?? {})).toHaveLength(2);
 		expect(Object.keys(document.RepeatUntil ?? {})).toHaveLength(1);
 		// Every parameter bound is defined, in the loop or count it comes from.
