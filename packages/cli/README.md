@@ -6,6 +6,7 @@ For a workspace checked out on disk, in CI or at a terminal:
 qretools check path/to/workspace            # findings, one per line; exit 1 on anything to fill in or fix
 qretools check path/to/workspace --strict   # warnings fail too
 qretools export path/to/workspace -o questions.json   # its questions' DDI, validated
+qretools build path/to/workspace             # its last commit's DDI, versioned from git history, in path/to/workspace/dist/ddi.json
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -32,6 +33,13 @@ directory instead, to work offline. Any other local address is refused.
 `qretools instrument export <file> --qsf` writes the instrument as a Qualtrics survey
 (QSF) made from its DDI, to import under Projects → Create project → Survey. Everything
 Qualtrics can't run as the DDI says is reported at its line, and an error writes nothing.
+
+`build` is `export` with real versions. Each item's DDI version counts the changes, along
+the first-parent history of HEAD, to its file and to every shared file it names (so a
+question moves when its scale does); its date is that commit's, its git blob a UserID.
+It builds the last commit, not the working tree (uncommitted changes are left out, and
+said to be), needs the whole history (a shallow clone is refused: `fetch-depth: 0` in
+CI), and writes `<outdir>/ddi.json`, `-o` naming the folder (default `<dir>/dist`).
 
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses

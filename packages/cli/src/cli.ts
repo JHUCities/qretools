@@ -1,6 +1,7 @@
 /**
  * The `qretools` command: `check` a workspace directory's findings (its questions',
- * shared files' and instruments'), as compilers report them, or `export` its questions' DDI. `main` takes its
+ * shared files' and instruments'), as compilers report them, `export` its questions' DDI,
+ * or `build` it: the DDI of its last commit, each item at the version its history gives. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
@@ -37,11 +38,13 @@ import {
 	type Severity,
 	scopeOf,
 	status,
+	versionsOf,
 	WORKSPACE,
 	workspaceOf,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
+import type { HistoryRead } from "./history.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
 export interface Io {
@@ -50,6 +53,8 @@ export interface Io {
 	readonly writeFile: (path: string, text: string) => Promise<void>;
 	/** A workspace in another repository, read at its tag (the command uses git: `readTagged`). */
 	readonly readRemote: (address: RemoteAddress) => Promise<RemoteBank>;
+	/** The workspace in a directory at its last commit, with its history (the command uses git: `readHistory`). */
+	readonly readHistory: (dir: string) => Promise<HistoryRead>;
 }
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
@@ -57,6 +62,7 @@ type RemoteAddress = Extract<Address, { kind: "remote" }>;
 const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
+  qretools build [dir] [-o outdir]  Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -99,7 +105,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		(args.values.help ? io.out : io.err)(`${USAGE}\n`);
 		return args.values.help ? OK : USAGE_ERROR;
 	}
-	if (command !== "check" && command !== "export") {
+	if (command !== "check" && command !== "export" && command !== "build") {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
@@ -120,6 +126,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	}
 	if (command === "check")
 		return checkWorkspace(dir, args.values.strict === true, io);
+	if (command === "build")
+		return build(dir, args.values.output ?? join(dir, "dist"), io);
 	let files: Readonly<Record<string, string>>;
 	try {
 		files = await readWorkspace(dir);
@@ -319,6 +327,34 @@ async function exportBank(
 	if (output === undefined) io.out(text);
 	else await io.writeFile(output, text);
 	return OK;
+}
+
+/**
+ * `qretools build [dir]`: the workspace as committed at HEAD, each file at the version its
+ * first-parent history gives (`versionsOf`), exported as `export` does to `out/ddi.json`.
+ * Uncommitted changes are left out, and said to be.
+ */
+async function build(dir: string, out: string, io: Io): Promise<number> {
+	const read = await io.readHistory(dir);
+	if (read.kind === "unavailable") {
+		io.err(`Can't build ${dir}: ${read.reason}\n`);
+		return USAGE_ERROR;
+	}
+	if (read.uncommitted)
+		io.err(
+			`${dir} has uncommitted changes: they aren't built, as they have no version yet.\n`,
+		);
+	const bank = bankOf(
+		Object.fromEntries(
+			Object.entries(read.files).filter(([p]) => instrumentAt(p) === undefined),
+		),
+		versionsOf(read.history),
+	);
+	if (readIn(bank) === 0) {
+		io.err(nothingIn(dir));
+		return USAGE_ERROR;
+	}
+	return exportBank(bank, join(out, "ddi.json"), io);
 }
 
 /**
