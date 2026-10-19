@@ -49,7 +49,7 @@ flow:
         checks:
           - ensure: example.library_visits < 25
             severity: info
-            message: "{{example.library_visits}} days is most of the month. Is that right?"
+            message: That's most of the month. Is that right?
       - if: form = "1"
         then:
           - ask: example.parks_spending
