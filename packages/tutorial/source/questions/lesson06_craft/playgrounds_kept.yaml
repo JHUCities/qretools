@@ -1,0 +1,10 @@
+# Lesson 6, part 2: the other half of the split question.
+#
+# To do:
+#   1. After  text:  write: Are the playgrounds in this neighborhood's parks well kept?
+name: playgrounds_kept
+title: Park playgrounds well kept
+text:  #EX
+text: Are the playgrounds in this neighborhood's parks well kept?  #SOL
+intent: Measures whether residents find the parks' playgrounds well maintained, one facility at a time.
+responses: yes_no

@@ -1,0 +1,17 @@
+# ── Lesson 17 of 33: a field one folder requires ───────────────────────────────
+#
+# What this shows: a folder of questions can require more than the rest, here a
+# universe for every question in this folder.
+#
+# To do:
+#   1. In Settings → workspace.yaml, remove the # before the three lines under
+#      "Lesson 17".
+#   2. Come back: universe is now to fill in here. Add:  universe: all_respondents
+#
+# Done when: park_volunteer has a green tick. Save it and workspace.yaml.
+name: park_volunteer
+title: Volunteering in parks
+text: Would you volunteer a few hours a year to help look after a park here?
+intent: Gauges residents' willingness to help maintain local parks, for planning volunteer days.
+universe: all_respondents  #SOL
+responses: yes_no

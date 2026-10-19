@@ -1,0 +1,10 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"lib": ["ES2023"],
+		// Node runs the publish script as written, stripping types.
+		"erasableSyntaxOnly": true,
+		"types": ["vite/client", "node"]
+	},
+	"include": ["src", "scripts"]
+}

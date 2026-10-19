@@ -1,0 +1,21 @@
+# ── Lesson 24 of 33: if, then ──────────────────────────────────────────────────
+#
+# What this shows: if asks some questions only when a condition holds.
+#
+# To do:
+#   1. After  if:  write  bank.park_visited = "1"  (Yes).
+#   2. The note on park_safety says only visitors reach it, but nothing says so.
+#      Add a line under  - ask: bank.park_safety , lined up with "ask":
+#        universe: bank.park_visitors
+#
+# Done when: this instrument has a green tick.
+name: lesson24_branch
+uses:
+  bank: ../
+flow:
+  - ask: bank.park_visited
+  - if:  #EX
+  - if: bank.park_visited = "1"  #SOL
+    then:
+      - ask: bank.park_safety
+        universe: bank.park_visitors  #SOL

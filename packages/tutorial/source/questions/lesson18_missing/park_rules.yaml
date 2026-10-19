@@ -1,0 +1,21 @@
+# Lesson 18, part 2 (part 1 is in Settings → missing.yaml).
+#
+# What this shows: codes are the bank's own. This question uses "-9" for an
+# answer, but "-9" is the bank's missing value "Don't know": the data couldn't
+# tell the two apart. The warning says so.
+#
+# To do:
+#   1. Change the code "-9" below to "4".
+#
+# Done when: park_rules has a green tick. Its Codebook preview lists the missing
+# values on its last line. Save it and missing.yaml.
+name: park_rules
+title: Knowing the park rules
+text: How well do you know the rules for using the parks here?
+intent: Measures awareness of park rules, to see whether better signs are needed.
+responses:
+  "1": Very well
+  "2": Somewhat
+  "3": Not at all
+  "-9": I didn't know there were rules  #EX
+  "4": I didn't know there were rules  #SOL

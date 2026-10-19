@@ -1,0 +1,18 @@
+# ── Lesson 21 of 33: your own question ─────────────────────────────────────────
+#
+# What this shows: writing a question from scratch, filing it, and deleting one.
+#
+# To do:
+#   1. Press New → Blank question. Write your own question about parks: a name,
+#      a title (lesson 16 made titles required), the text, the intent and a way
+#      to answer. Fill in every dashed circle.
+#   2. Press Save, and choose the folder lesson21_your_own.
+#   3. Come back to this file and delete it: press Delete at the top, and confirm.
+#   4. Try Move… on your question: it files it in another folder.
+#
+# Done when: your question has a green tick and is saved.
+name: scratch_delete_me
+title: A question to delete
+text: Is this question here to be deleted?
+intent: Exists only so the tutorial can show how to delete a question from the bank.
+responses: yes_no

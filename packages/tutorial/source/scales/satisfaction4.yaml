@@ -1,0 +1,6 @@
+# A shared scale, used by name (responses: satisfaction4).
+labels:
+  "1": Very satisfied
+  "2": Fairly satisfied
+  "3": Not very satisfied
+  "4": Not at all satisfied

@@ -1,0 +1,10 @@
+# Given complete: the instrument lessons ask it (lesson 30).
+name: visit_minutes
+title: Length of a park visit
+text: How long did this visit last?
+intent: Records how long one park visit lasted, to estimate the time residents spend in parks.
+universe: park_visitors
+number:
+  min: 1
+  max: 600
+  unit: minutes

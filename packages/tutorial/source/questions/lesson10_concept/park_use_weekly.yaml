@@ -1,0 +1,21 @@
+# ── Lesson 10 of 33: a shared concept ──────────────────────────────────────────
+#
+# What this shows: a concept is what a question measures, the idea behind it.
+# Questions that measure the same thing name the same shared concept, so they can
+# be found together. Here the concept is written as words, so there's a warning.
+#
+# To do:
+#   1. In the Findings list, apply "Make it a shared concept use_of_local_parks".
+#      Confirm the name, and the label it suggests.
+#   2. Its file opens with  label:  set. A  definition:  is optional; write one if
+#      you like, such as: How often, and for what, residents go to the parks near
+#      their home.
+#
+# Done when: park_use_weekly has a green tick.
+name: park_use_weekly
+title: Uses a park weekly
+text: In a typical week, do you spend time in a park in this neighborhood?
+intent: Estimates the share of residents who use local parks every week, a measure of regular use.
+concept: Use of local parks  #EX
+concept: use_of_local_parks  #SOL
+responses: yes_no

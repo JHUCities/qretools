@@ -1,0 +1,23 @@
+# ── Lesson 26 of 33: a computed value ──────────────────────────────────────────
+#
+# What this shows: compute names a value worked out from answers, so later steps
+# can use it. Conditions combine with and, or and not.
+#
+# To do:
+#   1. After  value:  write
+#      bank.park_visit_days >= 8 and bank.park_nearby = "1"
+#
+# Done when: this instrument has a green tick.
+name: lesson26_compute
+universe: bank.all_respondents
+uses:
+  bank: ../
+flow:
+  - ask: bank.park_nearby
+  - ask: bank.park_visit_days
+  - compute: frequent_nearby
+    value:  #EX
+    value: bank.park_visit_days >= 8 and bank.park_nearby = "1"  #SOL
+  - if: frequent_nearby
+    then:
+      - say: You use the park near you often.

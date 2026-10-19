@@ -1,0 +1,20 @@
+# ── Lesson 2 of 33: the question text ──────────────────────────────────────────
+#
+# What this shows: text is what the respondent reads, word for word. A question
+# can also carry optional fields: a title, the source it came from, and a note.
+#
+# To do:
+#   1. After  text:  write the question, such as:
+#      Do you feel safe in this neighborhood's parks during the day?
+#
+# Done when: park_safety has a green tick in the tree.
+name: park_safety
+title: Feeling safe in parks
+text:  #EX
+text: Do you feel safe in this neighborhood's parks during the day?  #SOL
+intent: Measures whether residents feel safe in local parks in daylight, to compare with how often they visit.
+responses: yes_no
+# Optional: where the wording came from.
+source: Written for the QREtools tutorial
+# Optional: anything else a reader of the codebook should know.
+note: Asked of everyone, visitors or not.

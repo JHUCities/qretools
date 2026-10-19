@@ -1,0 +1,15 @@
+# ── Lesson 19 of 33: how select all that apply is stored ───────────────────────
+#
+# What this shows: a "select all that apply" question records one value per
+# option: whether it was ticked. These are the two values each option's variable
+# holds. Lesson 14's travel_modes question is stored this way.
+#
+# To do:
+#   1. After not_chosen, write  { "0": No }  (the value an unticked option holds).
+#   2. Open Questions → lesson14_select_all → travel_modes, and look at its
+#      Codebook preview: one variable per option, each 1 Yes or 0 No.
+#
+# Done when: the circle beside select_all.yaml (under Settings) is a green tick.
+chosen: { "1": Yes }
+not_chosen:  #EX
+not_chosen: { "0": No }  #SOL

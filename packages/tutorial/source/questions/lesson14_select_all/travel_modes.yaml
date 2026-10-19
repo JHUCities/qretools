@@ -1,0 +1,39 @@
+# ── Lesson 14 of 33: select all that apply ─────────────────────────────────────
+#
+# What this shows: select: many lets the respondent tick every option that
+# applies. Each option here is written in full: a label (what the respondent
+# reads) and a short title, which labels the option's own variable in the data
+# (one variable per option; lesson 19).
+#
+# The warning asks for a "None of these" option: without it, someone to whom
+# nothing applies looks the same as someone who skipped the question.
+#
+# To do:
+#   1. Add a fifth option at the end, lined up with the others:
+#        "5":
+#          label: None of these
+#          title: None
+#
+# Done when: travel_modes has a green tick.
+name: travel_modes
+title: Ways of getting to the park
+text: How do you usually get to a park here?
+intent: Describes how residents reach local parks, to plan paths, cycle racks and bus stops.
+instruction: select_all
+select: many
+responses:
+  "1":
+    label: On foot
+    title: Walk
+  "2":
+    label: By bicycle
+    title: Bicycle
+  "3":
+    label: By bus
+    title: Bus
+  "4":
+    label: By car
+    title: Car
+  "5":  #SOL
+    label: None of these  #SOL
+    title: None  #SOL

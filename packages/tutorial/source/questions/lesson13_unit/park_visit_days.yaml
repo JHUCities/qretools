@@ -1,0 +1,19 @@
+# ── Lesson 13 of 33: a unit ────────────────────────────────────────────────────
+#
+# What this shows: a number can have a unit. Units are shared: look under Shared →
+# Units. QREtools spots a near miss: there is no unit "day", but there is "days".
+#
+# To do:
+#   1. Apply the fix "Use days" (the Findings list, the tooltip, or Cmd-.).
+#
+# Done when: park_visit_days has a green tick. visit_minutes, beside it, is given
+# complete.
+name: park_visit_days
+title: Days visiting a park
+text: In the past 30 days, on how many days did you visit a park?
+intent: Estimates how many days a month residents use parks, a finer measure than whether they go.
+number:
+  min: 0
+  max: 30
+  unit: day  #EX
+  unit: days  #SOL

@@ -1,0 +1,32 @@
+# ── Lesson 31 of 33: checks ────────────────────────────────────────────────────
+#
+# What this shows: a check tests an answer as it's given. Its severity says what
+# happens when it fails:
+#   info      a remark, the respondent can go on;
+#   warning   asks the respondent to look again, but they can go on;
+#   blocking  they can't go on until it holds.
+# isnull(x) is true when x has no answer; between(x, a, b) when a ≤ x ≤ b.
+#
+# To do:
+#   1. After the empty  ensure:  write  bank.household_size < 10
+#
+# Done when: this instrument has a green tick.
+name: lesson31_checks
+uses:
+  bank: ../
+flow:
+  - ask: bank.household_size
+    checks:
+      - ensure:  #EX
+      - ensure: bank.household_size < 10  #SOL
+        severity: warning
+        message: That's a large household. Is that right?
+  - ask: bank.park_visit_days
+    checks:
+      - name: plausible_days
+        ensure: between(bank.park_visit_days, 0, 30)
+        severity: blocking
+        message: Please give a number of days from 0 to 30.
+      - ensure: not isnull(bank.park_visit_days)
+        severity: info
+        message: An answer helps us plan, but you can skip it.

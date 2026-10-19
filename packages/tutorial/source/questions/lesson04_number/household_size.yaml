@@ -1,0 +1,17 @@
+# ── Lesson 4 of 33: a number question ──────────────────────────────────────────
+#
+# What this shows: every question says how it's answered: options (responses),
+# a number, or free text (open). This one is a number.
+#
+# To do:
+#   1. On a new line at the end, add:
+#      number: { min: 1, max: 20 }
+#      min and max are the smallest and largest answers allowed.
+#
+# Done when: household_size has a green tick. member_age, beside it, is given
+# complete: look at it for decimals and a unit.
+name: household_size
+title: People in the household
+text: How many people live in your household, including you?
+intent: Counts household members, so later questions can be asked about each of them in turn.
+number: { min: 1, max: 20 }  #SOL

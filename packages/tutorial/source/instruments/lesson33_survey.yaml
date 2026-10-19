@@ -1,0 +1,45 @@
+# ── Lesson 33 of 33: the whole survey ──────────────────────────────────────────
+#
+# The last lesson: a whole survey, put together from what you've learned.
+#
+# To do:
+#   1. Fill in the two dashed circles: the stop's condition, and the question
+#      asked in the branch (park_safety).
+#   2. Look at the DDI pane on the right: Download DDI writes the survey in DDI,
+#      the standard for documenting surveys. Download QSF writes it for Qualtrics
+#      (Projects → Create project → Survey → Import a QSF file).
+#   3. In Settings → workspace.yaml, read about agency: in your own workspace, replace
+#      org.example with your organization's code. Every DDI identifier starts
+#      with it.
+#
+# Done when: this instrument has a green tick. That's the tutorial: well done!
+# Your work is on your branch; to put it in the bank, open a pull request with
+# the pull-request icon beside your branch name ("Propose changes").
+name: lesson33_survey
+title: Neighborhood parks
+description: How residents use, judge and would improve the parks in their neighborhood.
+universe: bank.all_respondents
+uses:
+  bank: ../
+flow:
+  - say: Thank you for taking part in this survey about the parks in your neighborhood.
+  - ask: bank.consent
+  - stop:  #EX
+  - stop: bank.consent = "2"  #SOL
+    say: Thank you for your time.
+  - ask: bank.park_nearby
+  - ask: bank.park_visited
+  - if: bank.park_visited = "1"
+    then:
+      - ask:  #EX
+      - ask: bank.park_safety  #SOL
+        universe: bank.park_visitors
+      - ask: bank.park_visit_days
+        universe: bank.park_visitors
+  - ask: bank.park_satisfaction
+  - ask: bank.park_comments
+    fill:
+      rating: label(bank.park_satisfaction)
+  - ask: bank.travel_modes
+  - ask: bank.household_size
+  - say: Thank you. That's the end of the survey.

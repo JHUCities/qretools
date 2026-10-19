@@ -1,0 +1,7 @@
+# Lesson 15, given complete: its answer fills the text of park_comments.
+name: park_satisfaction
+title: Satisfaction with the parks
+text: Overall, how satisfied are you with the parks in this neighborhood?
+intent: Estimates overall satisfaction with local parks, the survey's main measure of how they serve residents.
+responses: satisfaction4
+instruction: select_one

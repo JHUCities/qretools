@@ -1,0 +1,23 @@
+# ── Lesson 1 of 33: a complete question ────────────────────────────────────────
+#
+# Welcome! This file is a finished question, to show you its parts. Nothing to
+# do here: read it, then open the next file, park_visited, in the tree.
+#
+# Lines starting with # are comments like this one. QREtools ignores them, so
+# they're safe to keep, add or delete.
+#
+# The circle beside each file in the tree says how it stands: a green tick is
+# complete, a dashed circle has something to fill in. Files further down with
+# dashed circles are later lessons; you'll get to them.
+
+# Its name: how data and other files refer to it. Lowercase letters, digits and
+# underscores, starting with a letter.
+name: consent
+# A short label, for codebooks and lists.
+title: Consent to the interview
+# The question exactly as the respondent reads it.
+text: Do you agree to take part in this survey?
+# Why the question is asked: what you want to learn from it.
+intent: Records whether the respondent agrees to be interviewed, before anything else is asked.
+# How it's answered: here, by picking from the shared Yes/No scale (lesson 7).
+responses: yes_no

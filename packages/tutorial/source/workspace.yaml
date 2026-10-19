@@ -1,0 +1,21 @@
+# This workspace's settings. Lessons 16, 17 and 33 come back here.
+
+# The DDI agency everything here is published under: the registered code of the
+# organization that maintains the questions. Lesson 33 explains it; leave it for now.
+agency: org.example
+
+# Lesson 16: fields every question must have, beyond name, text and intent.
+# Remove the # at the start of the next two lines (Cmd-/ toggles a comment).
+#required:  #EX
+#  - title  #EX
+required:  #SOL
+  - title  #SOL
+
+# Lesson 17: fields one folder's questions must also have. Remove the # at the
+# start of the next three lines.
+#required_in:  #EX
+#  questions/lesson17_required_in:  #EX
+#    - universe  #EX
+required_in:  #SOL
+  questions/lesson17_required_in:  #SOL
+    - universe  #SOL

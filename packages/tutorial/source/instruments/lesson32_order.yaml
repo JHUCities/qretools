@@ -1,0 +1,31 @@
+# ── Lesson 32 of 33: order, timing and inputs ──────────────────────────────────
+#
+# What this shows:
+#   - inputs are values given before the interview, such as which wave of the
+#     survey this is; they're used like answers.
+#   - a section groups steps; order: random shows them in a random order.
+#   - on an ask, options: random shuffles its options; seconds says how long it
+#     should take, for planning.
+#
+# To do:
+#   1. After  order:  write  random  (or choose it with the button after it).
+#
+# Done when: this instrument has a green tick.
+name: lesson32_order
+uses:
+  bank: ../
+inputs:
+  wave:
+    number: { min: 1, max: 4 }
+    description: Which wave of the survey this is, from the sample file.
+flow:
+  - section: About the parks
+    order:  #EX
+    order: random  #SOL
+    flow:
+      - ask: bank.park_cleanliness
+      - ask: bank.park_together
+      - ask: bank.park_main_use
+        options: random
+        seconds: 15
+  - say: This is wave {{wave}} of the survey. Thank you for taking part again.

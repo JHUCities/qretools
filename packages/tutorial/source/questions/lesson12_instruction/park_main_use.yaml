@@ -1,0 +1,20 @@
+# ── Lesson 12 of 33: an instruction ────────────────────────────────────────────
+#
+# What this shows: an instruction tells the respondent how to answer. Instructions
+# are shared too: look under Shared → Instructions.
+#
+# To do:
+#   1. After  instruction:  write  select_one .
+#
+# Done when: park_main_use has a green tick.
+name: park_main_use
+title: Main use of the park
+text: What do you mostly do when you visit a park here?
+intent: Describes what residents mainly use local parks for, to match facilities to their uses.
+responses:
+  "1": Walk or run
+  "2": Play a sport
+  "3": Relax or read
+  "4": Bring children to play
+instruction:  #EX
+instruction: select_one  #SOL

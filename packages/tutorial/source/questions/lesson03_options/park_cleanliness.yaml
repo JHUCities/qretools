@@ -1,0 +1,21 @@
+# ── Lesson 3 of 33: response options ───────────────────────────────────────────
+#
+# What this shows: a question's own options. Each has a code (stored in the data)
+# and a label (what the respondent reads). Write codes in quotes, "1", so they
+# stay text exactly as you wrote them.
+#
+# To do:
+#   1. Option "2" has no label: write  Fairly clean  after its colon.
+#   2. Add a third option on a new line, indented two spaces like the others:
+#        "3": Not clean
+#
+# Done when: park_cleanliness has a green tick.
+name: park_cleanliness
+title: Park cleanliness
+text: How clean are the parks in this neighborhood?
+intent: Measures how residents judge the upkeep of local parks, a likely reason to visit or stay away.
+responses:
+  "1": Very clean
+  "2":  #EX
+  "2": Fairly clean  #SOL
+  "3": Not clean  #SOL

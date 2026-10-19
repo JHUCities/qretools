@@ -1,0 +1,27 @@
+# ── Lesson 25 of 33: else, and else if ─────────────────────────────────────────
+#
+# What this shows: else says what happens otherwise. An else can hold another if,
+# to test one thing after another. in {…} tests for any of several codes.
+# Notice that else holds one if with no dash before it: an else holds either a
+# list of steps (with dashes) or one if.
+#
+# To do:
+#   1. After the second  if:  write  bank.park_visit_frequency in {"3", "4"}
+#      (every month, or less often).
+#
+# Done when: this instrument has a green tick.
+name: lesson25_else_if
+uses:
+  bank: ../
+flow:
+  - ask: bank.park_visit_frequency
+  - if: bank.park_visit_frequency in {"1", "2"}
+    then:
+      - say: Thank you. You're one of the parks' regular visitors.
+    else:
+      if:  #EX
+      if: bank.park_visit_frequency in {"3", "4"}  #SOL
+      then:
+        - say: Thank you. You visit now and then.
+      else:
+        - say: Thank you. We'd like to know what keeps you away.

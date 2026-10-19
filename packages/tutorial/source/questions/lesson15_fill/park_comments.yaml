@@ -1,0 +1,20 @@
+# ── Lesson 15 of 33: a fill ────────────────────────────────────────────────────
+#
+# What this shows: a fill puts words from an earlier answer into the text, in
+# double braces: {{rating}}. The question says what kind of words each fill
+# takes; the instrument says where they come from (lesson 27).
+#
+# To do:
+#   1. rating is underlined: it isn't declared yet. At the end, add:
+#      fills:
+#        rating: text
+#
+# Done when: park_comments has a green tick. Its respondent preview shows where
+# the fill goes.
+name: park_comments
+title: Comments on the parks
+text: 'You said you were "{{rating}}" with the parks. What makes you feel that way?'
+intent: Collects the reasons behind each resident's satisfaction rating, in their own words.
+open: { max_length: 500 }
+fills:  #SOL
+  rating: text  #SOL

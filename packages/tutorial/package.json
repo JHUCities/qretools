@@ -1,0 +1,23 @@
+{
+	"name": "@qretools/tutorial",
+	"version": "2.0.0-alpha.0",
+	"private": true,
+	"type": "module",
+	"description": "The QREtools tutorial's source: lessons with gaps, and their solutions, published to JHUCities/qretools-tutorial",
+	"scripts": {
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit",
+		"check": "tsc --noEmit && vitest run",
+		"publish:tree": "node scripts/publish.ts"
+	},
+	"dependencies": {
+		"@qretools/core": "workspace:*",
+		"@qretools/qsf": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.4",
+		"typescript": "^7.0.2",
+		"vite": "^8.3.0",
+		"vitest": "^5.0.1"
+	}
+}

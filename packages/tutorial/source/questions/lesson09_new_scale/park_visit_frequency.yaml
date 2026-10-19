@@ -1,0 +1,24 @@
+# ── Lesson 9 of 33: a new shared scale ─────────────────────────────────────────
+#
+# What this shows: naming a scale that doesn't exist yet. QREtools offers to make
+# it.
+#
+# To do:
+#   1. frequency5 is underlined: no shared scale has that name. In the Findings
+#      list, click "New shared scale frequency5"; a dialog opens: press Create.
+#   2. Its file opens with options "1" and "2" waiting for labels. Label them,
+#      then add "3" to "5" below them, indented the same:
+#        "1": Every day
+#        "2": Every week
+#        "3": Every month
+#        "4": Less often
+#        "5": Never
+#   3. Come back here (the browser's Back button).
+#
+# Done when: park_visit_frequency, and frequency5 under Shared → Scales, have
+# green ticks. Save both.
+name: park_visit_frequency
+title: How often parks are visited
+text: How often do you visit a park in this neighborhood?
+intent: Estimates how often residents use local parks, from daily users to those who never go.
+responses: frequency5

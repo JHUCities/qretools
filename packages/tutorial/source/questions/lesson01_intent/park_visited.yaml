@@ -1,0 +1,26 @@
+# ── Lesson 1 of 33: the intent ─────────────────────────────────────────────────
+#
+# What this shows: every question says why it's asked, its intent. It's for the
+# people who analyze the data and those who reuse the question.
+#
+# To do:
+#   1. After  intent:  below, write a full sentence saying what you want to learn,
+#      such as: Estimates how many residents used a park in this neighborhood
+#      in the past month.
+#
+# While intent is empty it shows a dashed circle: something to fill in. Look in
+# the Findings list on the right; it says the same.
+#
+# Done when: the dashed circle beside park_visited in the tree is a green tick.
+# Then look at the previews on the right: the question as the respondent sees it,
+# and its codebook entry.
+#
+# Then press Save at the top. Save saves the file that's open, to your own branch
+# on GitHub, so it's safe if you close the tab; nothing reaches the shared bank
+# until a pull request is merged. Save each file once its tick is green.
+name: park_visited
+title: Visited a park recently
+text: In the past month, have you visited a park in this neighborhood?
+intent:  #EX
+intent: Estimates how many residents used a park in this neighborhood in the past month.  #SOL
+responses: yes_no

@@ -1,0 +1,16 @@
+# ── Lesson 11 of 33: the universe ──────────────────────────────────────────────
+#
+# What this shows: a question's universe says whom it's for. Like scales, a
+# universe can be shared and named. Look under Shared → Universes.
+#
+# To do:
+#   1. After  universe:  write  all_respondents  (or choose it with Cmd-I).
+#
+# Done when: park_nearby has a green tick.
+name: park_nearby
+title: A park within walking distance
+text: Is there a park within a ten-minute walk of your home?
+intent: Measures access to parks, to see whether distance explains how often residents visit.
+universe:  #EX
+universe: all_respondents  #SOL
+responses: yes_no

@@ -1,0 +1,4 @@
+# A shared scale: two options, used by name (responses: yes_no). Lesson 7 explains.
+labels:
+  "1": Yes
+  "2": No

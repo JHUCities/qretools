@@ -1,0 +1,22 @@
+# Lesson 19 is in Settings → select_all.yaml. This question is given complete: once
+# you've done lesson 19, look at its Codebook and DDI previews to see one stored
+# value per option.
+name: park_features
+title: Park features used
+text: Which of these park features have you used this year?
+intent: Describes which park facilities residents use, to decide where to spend on upkeep.
+instruction: select_all
+select: many
+responses:
+  "1":
+    label: Benches
+    title: Benches
+  "2":
+    label: Sports courts
+    title: Courts
+  "3":
+    label: Paths for walking or cycling
+    title: Paths
+  "4":
+    label: None of these
+    title: None

@@ -1,0 +1,19 @@
+# ── Lesson 28 of 33: asking a question twice ───────────────────────────────────
+#
+# What this shows: a question asked twice would record its answer twice under one
+# name. That's a red error, and it's expected here. as gives the second answer a
+# name of its own.
+#
+# To do:
+#   1. Under the second  - ask: bank.park_satisfaction , lined up with "ask", add:
+#        as: park_satisfaction_after
+#
+# Done when: this instrument has a green tick.
+name: lesson28_ask_twice
+uses:
+  bank: ../
+flow:
+  - ask: bank.park_satisfaction
+  - say: Some parks here have new benches and lights this year.
+  - ask: bank.park_satisfaction
+    as: park_satisfaction_after  #SOL
