@@ -7,6 +7,12 @@
 # urn:ddi:org.example:...
 # Write your organization's code here: letters, digits and hyphens, in parts
 # joined by dots, such as edu.example.dept.
+# The code is assigned by the DDI Alliance (RFC 9517). To register one: create an
+# account at https://registry.ddialliance.org, then Manage, then Request New
+# Agency, with an administrative and a technical contact; approval comes by
+# email. Its first part is a country code or another top-level domain, as in
+# us.example or edu.example. Once it's approved, add sub-agencies for teams or
+# projects (edu.example.dept) under Manage, with no further approval.
 agency:
 
 # Fields every question in this workspace must have, beyond name, text and
