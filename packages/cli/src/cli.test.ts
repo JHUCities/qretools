@@ -258,6 +258,8 @@ describe("qretools build", () => {
 		const r = await run("build", plain);
 		expect(r).toMatchObject({ code: 2, written: {} });
 		expect(r.err).toMatch(/isn't in a git repository/);
+		const none = await run("build", join(plain, "nowhere"));
+		expect(none.err).toMatch(/isn't a directory/);
 
 		const ws = await repo();
 		const shallow = await mkdtemp(join(tmpdir(), "qretools-shallow-"));
