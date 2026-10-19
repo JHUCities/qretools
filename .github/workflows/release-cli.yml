@@ -1,4 +1,4 @@
-# Publishes @qretools/cli to npm when a tag `cli-v<version>` is pushed, the version being
+# Publishes the CLI to npm as `qretools` when a tag `cli-v<version>` is pushed, the version being
 # packages/cli/package.json's. npm trusts this workflow (trusted publishing, OIDC), so
 # no token is stored, and the package carries provenance linking it to this commit.
 # A prerelease (2.0.0-alpha.1) is published under the dist-tag `next`, not `latest`.

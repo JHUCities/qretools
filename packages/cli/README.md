@@ -4,8 +4,8 @@ For a workspace checked out on disk, in CI or at a terminal. Install it from npm
 or later), or run it without installing:
 
 ```sh
-npm install -g @qretools/cli       # then `qretools …`
-npx @qretools/cli check .          # or one run; pin a version in CI: npx @qretools/cli@2.0.0-alpha.1
+npm install -g qretools       # then `qretools …`
+npx qretools check .          # or one run; pin a version in CI: npx qretools@2.0.0-alpha.1
 ```
 
 

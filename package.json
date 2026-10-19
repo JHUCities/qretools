@@ -1,5 +1,5 @@
 {
-	"name": "qretools",
+	"name": "qretools-monorepo",
 	"private": true,
 	"type": "module",
 	"description": "Next-generation survey question authoring to DDI-Lifecycle 4.0",
