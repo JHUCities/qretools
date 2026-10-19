@@ -393,6 +393,23 @@ interface Context {
 	}[];
 }
 
+/**
+ * A key written with nothing after it (`order:`): opened by the author, so a hole,
+ * never a wrong type and never ignored, whether the field is required or not.
+ */
+const emptyValue = (node: unknown): boolean =>
+	isScalar(node) && (node.value === null || node.value === "");
+
+/** The hole for an opened key, named by the last part of its path. */
+const emptyHole = (path: string, hint: string): Finding =>
+	problem(
+		"hole",
+		"hole",
+		path,
+		`\`${path.split(".").at(-1)}\` is empty.`,
+		hint,
+	);
+
 function problem(
 	code: Finding["code"],
 	severity: Finding["severity"],
@@ -480,6 +497,15 @@ function readUses(
 	say: (f: Finding) => void,
 ): readonly Use[] {
 	if (node === undefined) return [];
+	if (emptyValue(node)) {
+		say(
+			emptyHole(
+				"uses",
+				"Name each bank it asks, `alias: address`: `bank: ../` for this workspace.",
+			),
+		);
+		return [];
+	}
 	if (!isMap(node)) {
 		say(
 			problem(
@@ -550,6 +576,15 @@ function readInputs(
 	say: (f: Finding) => void,
 ): readonly Input[] {
 	if (node === undefined) return [];
+	if (emptyValue(node)) {
+		say(
+			emptyHole(
+				"inputs",
+				"Name each value given before the interview, with its type, or remove the line.",
+			),
+		);
+		return [];
+	}
 	if (!isMap(node)) {
 		say(
 			problem(
@@ -684,6 +719,15 @@ function readDomain(
 				return undefined;
 			}
 			return { kind: "responses", codes: found.codes, scale: node.value };
+		}
+		if (emptyValue(node)) {
+			say(
+				emptyHole(
+					path,
+					'Write its codes, `"1": Yes` on lines of their own, or name a bank\'s scale.',
+				),
+			);
+			return undefined;
 		}
 		const read = readCodeMap(doc, node, path, false);
 		for (const f of read.findings) say(f);
@@ -1167,6 +1211,15 @@ function readRosterMax(
 	const at = `${path}.max`;
 	const counted =
 		end?.kind === "count" ? countedMax(end.value, ctx) : undefined;
+	if (emptyValue(node) && counted !== undefined) {
+		ctx.say(
+			emptyHole(
+				at,
+				"Give the most rows it can have, or remove the line to take it from what it counts.",
+			),
+		);
+		return counted.max;
+	}
 	const written = isScalar(node) ? node.value : node;
 	if (written !== undefined && written !== null && written !== "") {
 		if (
@@ -1294,6 +1347,15 @@ function readOrder(
 	ctx: Context,
 ): Order | undefined {
 	if (node === undefined) return undefined;
+	if (emptyValue(node)) {
+		ctx.say(
+			emptyHole(
+				path,
+				"Write `random` or `rotate`, or remove the line to keep the order as written.",
+			),
+		);
+		return undefined;
+	}
 	const v = isScalar(node) ? node.value : undefined;
 	if (typeof v === "string" && (ORDERS as readonly string[]).includes(v))
 		return v as Order;
@@ -1439,7 +1501,14 @@ function readAsk(
 		isScalar(secondsNode) && typeof secondsNode.value === "number"
 			? secondsNode.value
 			: undefined;
-	if (secondsNode !== undefined && seconds === undefined)
+	if (emptyValue(secondsNode))
+		ctx.say(
+			emptyHole(
+				`${path}.seconds`,
+				"Write how many seconds the question is expected to take, or remove the line.",
+			),
+		);
+	else if (secondsNode !== undefined && seconds === undefined)
 		ctx.say(
 			problem(
 				"wrong-type",
@@ -1850,6 +1919,15 @@ function readFills(
 			);
 		return [];
 	}
+	if (emptyValue(node)) {
+		ctx.say(
+			emptyHole(
+				path,
+				"Name each fill and what fills it, such as `rating: label(bank.satisfaction)`.",
+			),
+		);
+		return [];
+	}
 	if (!isMap(node)) {
 		ctx.say(
 			problem(
@@ -1926,6 +2004,15 @@ function readChecks(
 	ctx: Context,
 ): readonly Check[] {
 	if (node === undefined) return [];
+	if (emptyValue(node)) {
+		ctx.say(
+			emptyHole(
+				path,
+				"Write a check on the next line: `- ensure: ...`, or remove the line.",
+			),
+		);
+		return [];
+	}
 	if (!isSeq(node)) {
 		ctx.say(
 			problem(
