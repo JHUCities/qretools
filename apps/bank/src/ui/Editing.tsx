@@ -447,11 +447,16 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 		[qsf, instrument.places],
 	);
 	// What Qualtrics can't run is underlined where it's written too (owner, 2026-10-18),
-	// beside the instrument's own findings; its notes stay in the list.
+	// beside the instrument's own findings; its notes, and what has no place in the
+	// source (drawn at the end it would sit where a missing field's hole does), stay in
+	// the list. Shown only while the DDI may be exported, as the survey is made from it.
 	const diagnostics = useMemo(
 		() =>
 			toDiagnostics(
-				[...findings, ...qsfPlaced.filter((f) => f.severity !== "info")],
+				[
+					...findings,
+					...qsfPlaced.filter((f) => f.severity !== "info" && f.path !== ""),
+				],
 				ranges,
 				onFix,
 			),
