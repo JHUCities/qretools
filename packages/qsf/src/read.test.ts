@@ -1,5 +1,5 @@
+import type { DdiDocument, JsonObject } from "@qretools/core";
 import { describe, expect, it } from "vitest";
-import type { DdiDocument, JsonObject } from "../ddi/document.ts";
 import { readInstrument } from "./read.ts";
 import { demoDdi, outline } from "./testing.ts";
 

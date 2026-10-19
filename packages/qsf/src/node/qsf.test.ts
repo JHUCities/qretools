@@ -1,15 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { bankOf, instrumentOf, placeFindings, qsfOf } from "@qretools/core";
+import { bankOf, instrumentOf, placeFindings } from "@qretools/core";
+import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
-import { readInstrument } from "../qsf/read.ts";
-import { flowOutline, outline } from "../qsf/testing.ts";
-import { writeQsf } from "../qsf/write.ts";
-import { readWorkspace } from "./index.ts";
+import { qsfOf } from "../qsf.ts";
+import { readInstrument } from "../read.ts";
+import { flowOutline, outline } from "../testing.ts";
+import { writeQsf } from "../write.ts";
 
 const householdsInstrument = async () => {
 	const root = fileURLToPath(
-		new URL("../../fixtures/households", import.meta.url),
+		new URL("../../../core/fixtures/households", import.meta.url),
 	);
 	return instrumentOf(
 		await readFile(`${root}/instruments/households.yaml`, "utf8"),
@@ -18,7 +19,7 @@ const householdsInstrument = async () => {
 };
 const households = async () => {
 	const root = fileURLToPath(
-		new URL("../../fixtures/households", import.meta.url),
+		new URL("../../../core/fixtures/households", import.meta.url),
 	);
 	return instrumentOf(
 		await readFile(`${root}/instruments/households.yaml`, "utf8"),
@@ -172,7 +173,7 @@ describe("the households survey against its golden file", () => {
 	// re-export differed only in Qualtrics' own IDs, dates, theme and preview link.
 	it("writes the survey Qualtrics was shown to run", async () => {
 		const golden = fileURLToPath(
-			new URL("../../fixtures/qsf/households.qsf", import.meta.url),
+			new URL("../../fixtures/households.qsf", import.meta.url),
 		);
 		const { qsf } = writeQsf(readInstrument(await households()).instrument, {
 			name: "households",

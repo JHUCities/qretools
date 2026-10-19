@@ -33,9 +33,6 @@ import {
 	type Mark,
 	othersOf,
 	placeFindings,
-	qsfOf,
-	qsfRefusalReason,
-	qsfTime,
 	questionItems,
 	type Range,
 	type RootKind,
@@ -64,6 +61,7 @@ import {
 	workspaceFileJsonSchema,
 } from "@qretools/core/editor";
 import { PICK_KEY, toDiagnostics } from "@qretools/editor";
+import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
 import { bankText, formatLink } from "@qretools/shell";
 import {
 	Ddi,
@@ -472,7 +470,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 				<WorkspaceNotice findings={own} />
 				{qsfListed.length > 0 && (
 					// Not a region: a landmark inside the previews' would be heard twice.
-					<div className="qsf-findings" onPointerEnter={flushQsf}>
+					<div className="export-findings" onPointerEnter={flushQsf}>
 						<h4>Qualtrics</h4>
 						<Findings
 							findings={qsfListed}

@@ -1,5 +1,5 @@
+import { parseCondition } from "@qretools/core";
 import { describe, expect, it } from "vitest";
-import { parseCondition } from "../cond/parse.ts";
 import { escapeText } from "./questions.ts";
 import type {
 	Cond,

@@ -2,7 +2,6 @@
  * `@qretools/core/node`: a workspace read from a directory, for programs and CI. The
  * only part of the library that does I/O; everything it returns is a plain value for the
  * pure entry (`workspaceOf(await readWorkspace(dir))`).
- * `main` is the `qretools` command.
  */
 import { glob, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -32,5 +31,3 @@ export async function readWorkspace(
 	}
 	return files;
 }
-
-export { type Io, main } from "./cli.ts";

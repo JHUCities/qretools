@@ -1,5 +1,5 @@
 /** Computed values in Qualtrics: numbers set with `$e{}`, true-or-false ones inlined where exact. */
-import { type Expr, namesOf } from "../cond/ast.ts";
+import { type Expr, namesOf } from "@qretools/core";
 import type { Computed } from "./logic.ts";
 import type { Ctx } from "./number.ts";
 import type { Cond } from "./read.ts";

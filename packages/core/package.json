@@ -12,9 +12,6 @@
 		"./starter/*": "./starter/*",
 		"./templates/*": "./templates/*"
 	},
-	"bin": {
-		"qretools": "./bin/qretools.ts"
-	},
 	"scripts": {
 		"test": "vitest run",
 		"test:watch": "vitest",

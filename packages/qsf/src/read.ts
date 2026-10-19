@@ -8,12 +8,18 @@
  * tick, through the Generation of the select-all list's categories. Anything else is a
  * finding at the DDI item's ID, never a guess from an identifier.
  */
-import { DDI_FUNCTIONS, type Expr, holesOf } from "../cond/ast.ts";
-import { parseCondition } from "../cond/parse.ts";
-import type { DdiDocument, ItemType, JsonObject } from "../ddi/document.ts";
-import { NOT_TICKED, TICKED } from "../ddi/elaborate.ts";
-import type { Finding } from "../findings.ts";
-import { STOP } from "../instrument/draft.ts";
+
+import type { DdiDocument, ItemType, JsonObject } from "@qretools/core";
+import {
+	DDI_FUNCTIONS,
+	type Expr,
+	holesOf,
+	NOT_TICKED,
+	parseCondition,
+	STOP,
+	TICKED,
+} from "@qretools/core";
+import type { Finding } from "./findings.ts";
 
 /** A code of a question or an input: its value as written, and its words. */
 export interface Choice {

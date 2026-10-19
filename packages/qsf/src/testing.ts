@@ -1,12 +1,10 @@
 /** A read flow as lines of text, for tests to compare whole. */
-import { printCondition } from "../cond/print.ts";
-import type { DdiDocument } from "../ddi/document.ts";
-import { bankOf } from "../evaluate.ts";
 import {
-	elaborateInstrument,
-	instrumentDocument,
-} from "../instrument/elaborate.ts";
-import { parseInstrument } from "../instrument/parse.ts";
+	bankOf,
+	type DdiDocument,
+	instrumentOf,
+	printCondition,
+} from "@qretools/core";
 import type { Cond, Part, Source, Step } from "./read.ts";
 import type { Qsf } from "./skeleton.ts";
 
@@ -168,11 +166,7 @@ flow:
 
 /** An instrument's DDI, its source using the test bank as `bas`. */
 export const ddiOf = (source: string): DdiDocument =>
-	instrumentDocument(
-		elaborateInstrument(parseInstrument(source, { bas: BAS }), {
-			agency: "org.example",
-		}),
-	).document;
+	instrumentOf(source, { banks: { bas: BAS }, agency: "org.example" }).ddi;
 
 /** The demonstration instrument: every construct of the language, once. */
 export const demoDdi = (): DdiDocument => ddiOf(SOURCE);

@@ -6,9 +6,8 @@
  * shape written is one the owner's exports showed (context: experiments 1–6b). Anything
  * the export can't write yet, or can't write exactly, is a finding at its DDI ID.
  */
-import type { Expr } from "../cond/ast.ts";
-import { printCondition } from "../cond/print.ts";
-import type { Finding } from "../findings.ts";
+import type { Expr } from "@qretools/core";
+import { printCondition } from "@qretools/core";
 import {
 	answeredAll,
 	arithmetic,
@@ -16,6 +15,7 @@ import {
 	divides,
 	logical,
 } from "./computes.ts";
+import type { Finding } from "./findings.ts";
 import { logicOf } from "./flowlogic.ts";
 import {
 	ALWAYS,

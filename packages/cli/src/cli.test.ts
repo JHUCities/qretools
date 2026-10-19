@@ -11,14 +11,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { bankOf, questionItems } from "@qretools/core";
+import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
-import { bankOf, questionItems } from "../evaluate.ts";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
-import { readWorkspace } from "./index.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
-const SAMPLE = here("../../fixtures/bank");
+const SAMPLE = here("../../core/fixtures/bank");
 
 /** `main` with its output kept, as a shell would show it. */
 async function run(...argv: string[]) {
@@ -49,7 +49,7 @@ async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
 describe("a bank in another repository", () => {
 	it("is read once, at its tag, and the instrument checked against it", async () => {
 		const asked: string[] = [];
-		const hh = await readWorkspace(here("../../fixtures/households"));
+		const hh = await readWorkspace(here("../../core/fixtures/households"));
 		const r = await runWith(
 			async (a) => {
 				asked.push(a.key);
@@ -57,7 +57,7 @@ describe("a bank in another repository", () => {
 			},
 			"instrument",
 			"check",
-			here("../../fixtures/households/instruments/remote.yaml"),
+			here("../../core/fixtures/households/instruments/remote.yaml"),
 			"--agency",
 			"org.example",
 		);
@@ -104,7 +104,7 @@ describe("qretools check", () => {
 
 	it("checks a workspace: its questions, shared files and instruments", async () => {
 		const ws = await mkdtemp(join(tmpdir(), "qretools-ws-"));
-		await cp(here("../../fixtures/households"), ws, { recursive: true });
+		await cp(here("../../core/fixtures/households"), ws, { recursive: true });
 		await writeFile(join(ws, "stray.yaml"), "x: 1\n");
 		await writeFile(join(ws, "a-stray.yaml"), "x: 1\n");
 		// Settings anywhere but the root are read as nothing.
@@ -227,7 +227,7 @@ describe("qretools export", () => {
 describe("the command under real Node", () => {
 	it("runs from source with no build or loader", async () => {
 		const exec = promisify(execFile);
-		const bin = here("../../bin/qretools.ts");
+		const bin = here("../bin/qretools.ts");
 		const { stdout, stderr } = await exec(process.execPath, [
 			bin,
 			"check",
@@ -241,13 +241,15 @@ describe("the command under real Node", () => {
 
 	it("imports the core's own modules by their .ts names, which Node can find", async () => {
 		const stale: string[] = [];
-		for await (const file of glob("**/*.ts", { cwd: here("..") }))
-			if (
-				/from\s+"\.{1,2}\/[^"]*\.js"/.test(
-					await readFile(here(`../${file}`), "utf8"),
+		// The command runs the packages it uses from their source too.
+		for (const root of ["../../core/src", "../../qsf/src", "."])
+			for await (const file of glob("**/*.ts", { cwd: here(root) }))
+				if (
+					/from\s+"\.{1,2}\/[^"]*\.js"/.test(
+						await readFile(here(`${root}/${file}`), "utf8"),
+					)
 				)
-			)
-				stale.push(file);
+					stale.push(`${root}/${file}`);
 		expect(stale).toEqual([]);
 	});
 });

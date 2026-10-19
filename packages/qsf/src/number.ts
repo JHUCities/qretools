@@ -2,7 +2,7 @@
  * The writer's first pass: every ask and statement's QID in flow order (rosters included, so
  * later steps never renumber), and what the later passes ask about the flow.
  */
-import type { Finding } from "../findings.ts";
+import type { Finding } from "./findings.ts";
 import type { Question, ReadInstrument, Step } from "./read.ts";
 
 /** Each ask and statement's QID and each ask's question, by DDI ID; the asks inside a roster's rows; every name the data has. */

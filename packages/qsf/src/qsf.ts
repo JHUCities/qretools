@@ -5,8 +5,8 @@
  * any error refuses the survey: a survey asking something other than the
  * DDI says would be fielded silently.
  */
-import type { DdiDocument } from "../ddi/document.ts";
-import type { Finding } from "../findings.ts";
+import type { DdiDocument } from "@qretools/core";
+import type { Finding } from "./findings.ts";
 import { readInstrument } from "./read.ts";
 import type { QsfObject } from "./skeleton.ts";
 import { writeQsf } from "./write.ts";
@@ -55,20 +55,3 @@ export const qsfRefusalReason = (errors: number): string =>
 /** A time as Qualtrics' survey header has it, `YYYY-MM-DD hh:mm:ss`, in UTC. */
 export const qsfTime = (at: Date): string =>
 	at.toISOString().slice(0, 19).replace("T", " ");
-
-/**
- * Findings said of DDI items, as said of the instrument: each item's path where it came
- * from. One with no place keeps its message, and its DDI ID as detail.
- */
-export const placeFindings = (
-	findings: readonly Finding[],
-	places: Readonly<Record<string, string>>,
-): Finding[] =>
-	findings.map((f) => {
-		const place = places[f.path];
-		return place !== undefined
-			? { ...f, path: place }
-			: f.path === ""
-				? f
-				: { ...f, path: "", detail: `DDI item ${f.path}` };
-	});

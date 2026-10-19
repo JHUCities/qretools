@@ -7,41 +7,41 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Address, addressOf, HERE, notHere } from "../address.ts";
 import {
-	collisions,
-	type DdiDocument,
-	documentOf,
-	type Item,
-} from "../ddi/document.ts";
-import { makeValidator } from "../ddi/validate.ts";
-import {
+	type Address,
+	addressOf,
+	agencyWritten,
 	type Bank,
 	type BankScope,
 	bankOf,
-	questionItems,
-	scopeOf,
-} from "../evaluate.ts";
-import {
+	collisions,
+	type DdiDocument,
+	documentOf,
+	exportRefusal,
 	type Finding,
-	locate,
-	type Range,
-	type Severity,
-	status,
-} from "../findings.ts";
-import { importsOf, instrumentOf } from "../instrument/instrument.ts";
-import { ROOT } from "../kinds.ts";
-import { placeFindings, qsfOf, qsfRefusalReason, qsfTime } from "../qsf/qsf.ts";
-import { exportRefusal, type Refusal } from "../refusal.ts";
-import { agencyWritten } from "../surface/bankfile.ts";
-import {
+	HERE,
+	type Item,
+	importsOf,
 	instrumentAt,
+	instrumentOf,
+	makeValidator,
+	notHere,
+	placeFindings,
+	questionItems,
+	type Range,
+	type Refusal,
 	type RemoteBank,
+	ROOT,
 	remotesOf,
+	type Severity,
+	scopeOf,
+	status,
 	WORKSPACE,
 	workspaceOf,
-} from "../workspace.ts";
-import { readWorkspace } from "./index.ts";
+} from "@qretools/core";
+import { locate } from "@qretools/core/editor";
+import { readWorkspace } from "@qretools/core/node";
+import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
 export interface Io {
@@ -181,7 +181,7 @@ export function findingLine(
 	path: string,
 	source: string,
 	ranges: Readonly<Record<string, Range>>,
-	f: Finding,
+	f: Finding<string>,
 ): string {
 	const { line, col } = lineCol(source, locate(f, ranges)[0]);
 	const what = f.severity === "hole" ? "to fill in" : f.code;
@@ -360,7 +360,7 @@ function refused(r: Refusal, io: Io): number {
 async function validate(document: DdiDocument): Promise<readonly Finding[]> {
 	const schema = JSON.parse(
 		await readFile(
-			new URL("../../ddi/ddi-lifecycle-4.0-beta4.schema.json", import.meta.url),
+			new URL(import.meta.resolve("@qretools/core/schema.json")),
 			"utf8",
 		),
 	);

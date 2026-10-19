@@ -19,6 +19,7 @@
 		"@primer/react": "^38.40.0",
 		"@qretools/core": "workspace:*",
 		"@qretools/editor": "workspace:*",
+		"@qretools/qsf": "workspace:*",
 		"@qretools/shell": "workspace:*",
 		"react": "^19.3.0",
 		"react-dom": "^19.3.0",

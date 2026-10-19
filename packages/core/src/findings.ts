@@ -95,29 +95,17 @@ export type InstrumentCode =
 	/** A roster's `max` below what it counts allows: later rows aren't asked. */
 	| "max-below-count";
 
-/** Reported by the Qualtrics export (`qsf/`), at a DDI item's ID. */
-export type QsfCode =
-	/** DDI the export can't read: not as an instrument's elaboration writes it. */
-	| "qsf-unread"
-	/** Something Qualtrics can't do as the DDI says it: left out, or done another way. */
-	| "qsf-inexpressible"
-	/** A condition too large to write as Qualtrics logic. */
-	| "qsf-too-large"
-	/** How the export wrote something, for the author to know: nothing the DDI says is lost. */
-	| "qsf-note";
-
-export type FindingCode =
-	| ParseCode
-	| LintCode
-	| InstrumentCode
-	| QsfCode
-	| "ddi-invalid";
+export type FindingCode = ParseCode | LintCode | InstrumentCode | "ddi-invalid";
 
 /** Character offsets into the source text, `[from, to)`. */
 export type Range = readonly [from: number, to: number];
 
-export interface Finding {
-	readonly code: FindingCode;
+/**
+ * A finding about a document, under a code from the vocabulary of whoever reports it:
+ * the core's own by default; another package (an export) brings its own codes.
+ */
+export interface Finding<Code extends string = FindingCode> {
+	readonly code: Code;
 	readonly severity: Severity;
 	/** Dotted path into the document, e.g. `responses.3`; `""` is the whole document. */
 	readonly path: string;
@@ -201,11 +189,13 @@ export type Fix =
 			readonly question: string;
 	  };
 
-export const holes = (findings: readonly Finding[]): readonly Finding[] =>
-	findings.filter((f) => f.severity === "hole");
+export const holes = <F extends Finding<string>>(
+	findings: readonly F[],
+): readonly F[] => findings.filter((f) => f.severity === "hole");
 
-export const errors = (findings: readonly Finding[]): readonly Finding[] =>
-	findings.filter((f) => f.severity === "error");
+export const errors = <F extends Finding<string>>(
+	findings: readonly F[],
+): readonly F[] => findings.filter((f) => f.severity === "error");
 
 /**
  * Where a finding lives in the source. Its own range wins; then the range of its
@@ -257,10 +247,10 @@ export function pathAt(
  * others come and go. Holes for fields not yet written live at the end, where they
  * will be typed. Stable: findings at one place keep the order they were reported in.
  */
-export function inDocumentOrder(
-	findings: readonly Finding[],
+export function inDocumentOrder<F extends Finding<string>>(
+	findings: readonly F[],
 	ranges: Readonly<Record<string, Range>>,
-): readonly Finding[] {
+): readonly F[] {
 	return findings
 		.map((f) => ({ f, from: locate(f, ranges)[0] }))
 		.sort((a, b) => a.from - b.from)
@@ -287,7 +277,7 @@ export type Status =
 			readonly errors: number;
 	  };
 
-export function status(findings: readonly Finding[]): Status {
+export function status(findings: readonly Finding<string>[]): Status {
 	const holeCount = holes(findings).length;
 	const errorCount = errors(findings).length;
 	if (holeCount > 0 || errorCount > 0)
@@ -302,3 +292,21 @@ export function status(findings: readonly Finding[]): Status {
 					: "info",
 			};
 }
+
+/**
+ * Findings said of DDI items (by ID), as said of the document they were elaborated from:
+ * each item's path there (`Instrument.places`). One with no place keeps its message, at
+ * the whole document, with its DDI ID as detail. For a program reading the DDI back.
+ */
+export const placeFindings = <F extends Finding<string>>(
+	findings: readonly F[],
+	places: Readonly<Record<string, string>>,
+): F[] =>
+	findings.map((f) => {
+		const place = places[f.path];
+		return place !== undefined
+			? { ...f, path: place }
+			: f.path === ""
+				? f
+				: { ...f, path: "", detail: `DDI item ${f.path}` };
+	});
