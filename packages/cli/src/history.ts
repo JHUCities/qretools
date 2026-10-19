@@ -5,6 +5,7 @@
  * the content they are stamped on.
  */
 import { execFile, spawn } from "node:child_process";
+import { stat } from "node:fs/promises";
 import { promisify } from "node:util";
 import { type History, readsInWorkspace, type Snapshot } from "@qretools/core";
 
@@ -87,6 +88,13 @@ async function blobsAt(
 
 /** The workspace in `dir`, at HEAD, with its history; or why it can't be read. */
 export async function readHistory(dir: string): Promise<HistoryRead> {
+	if (
+		!(await stat(dir).then(
+			(s) => s.isDirectory(),
+			() => false,
+		))
+	)
+		return { kind: "unavailable", reason: `${dir} isn't a directory.` };
 	let top: string;
 	let prefix: string;
 	try {
