@@ -481,3 +481,34 @@ describe("a field written with nothing after it", () => {
 		]);
 	});
 });
+
+describe("a key written with no value", () => {
+	it("is a hole at that key, never a wrong type or nothing, at every depth", () => {
+		const head = "name: e\nuses:\n  bas: JHUCities/bas-question-bank@2026.1\n";
+		const cases: readonly (readonly [string, string])[] = [
+			["name: e\nuses:\nflow:\n  - say: Hi.\n", "uses"],
+			[`${head}inputs:\nflow:\n  - say: Hi.\n`, "inputs"],
+			[
+				`${head}inputs:\n  w:\n    responses:\nflow:\n  - say: Hi.\n`,
+				"inputs.w.responses",
+			],
+			[
+				`${head}flow:\n  - section: S\n    order:\n    flow:\n      - say: Hi.\n`,
+				"flow.0.order",
+			],
+			[`${head}flow:\n  - ask: bas.sat\n    options:\n`, "flow.0.options"],
+			[`${head}flow:\n  - ask: bas.sat\n    seconds:\n`, "flow.0.seconds"],
+			[`${head}flow:\n  - ask: bas.util\n    fill:\n`, "flow.0.fill"],
+			[`${head}flow:\n  - ask: bas.sat\n    checks:\n`, "flow.0.checks"],
+			[
+				`${head}flow:\n  - ask: bas.size\n  - roster: r\n    count: bas.size\n    max:\n    flow:\n      - ask: bas.why\n`,
+				"flow.1.max",
+			],
+		];
+		for (const [source, path] of cases)
+			expect([path, read(source).findings.map(brief)]).toEqual([
+				path,
+				[`hole hole ${path}`],
+			]);
+	});
+});
