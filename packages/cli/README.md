@@ -1,6 +1,13 @@
 # The `qretools` command
 
-For a workspace checked out on disk, in CI or at a terminal:
+For a workspace checked out on disk, in CI or at a terminal. Install it from npm (Node 22
+or later), or run it without installing:
+
+```sh
+npm install -g @qretools/cli       # then `qretools …`
+npx @qretools/cli check .          # or one run; pin a version in CI: npx @qretools/cli@2.0.0-alpha.1
+```
+
 
 ```sh
 qretools check path/to/workspace            # findings, one per line; exit 1 on anything to fill in or fix
@@ -46,8 +53,18 @@ CI annotate it. `export` writes every question's DDI items in one document, and 
 when it would be wrong: no declared agency, two items under one identity, or a document
 the official schema rejects. In this repository, `pnpm qretools check <dir>` runs it.
 
-It runs from source under Node 26, which strips TypeScript's types; no build. A copy
-installed under `node_modules` would need one, since Node won't strip types there.
+In this repository it runs from source under Node 26, which strips TypeScript's types; no
+build. The published package is a bundle (`pnpm --dir packages/cli bundle`, rolldown):
+`dist/qretools.js` with the core, the Qualtrics export and their dependencies inside, as
+Node won't strip types under `node_modules`, and the DDI schema in a chunk of its own,
+loaded only to export. It depends on nothing.
+
+**Releasing.** Set `version` in `packages/cli/package.json`, merge, then push a tag
+`cli-v<version>` (`git tag cli-v2.0.0-alpha.1 && git push origin cli-v2.0.0-alpha.1`).
+`.github/workflows/release-cli.yml` checks the repository, checks the tag names that
+version, packs, installs the tarball and runs it, then publishes with provenance through
+npm's trusted publishing (no token). A prerelease goes to the dist-tag `next`, a release
+to `latest`. A published version can't be replaced: fix forward with the next one.
 
 It is the one package that knows both the core (`@qretools/core`) and the Qualtrics
 export (`@qretools/qsf`): the core knows nothing of any export target.

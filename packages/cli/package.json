@@ -1,23 +1,39 @@
 {
 	"name": "@qretools/cli",
 	"version": "2.0.0-alpha.0",
-	"private": true,
 	"type": "module",
 	"description": "The qretools command: check and export a workspace and its instruments, for CI and the terminal",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/JHUCities/qretools.git",
+		"directory": "packages/cli"
+	},
+	"homepage": "https://qretools.com",
 	"bin": {
-		"qretools": "./bin/qretools.ts"
+		"qretools": "./dist/qretools.js"
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": ">=22"
 	},
 	"scripts": {
 		"test": "vitest run",
 		"typecheck": "tsc --noEmit",
-		"check": "tsc --noEmit && vitest run"
+		"check": "tsc --noEmit && vitest run",
+		"bundle": "rolldown -c && cp ../../LICENSE LICENSE",
+		"prepack": "pnpm run bundle"
 	},
-	"dependencies": {
-		"@qretools/core": "workspace:*",
-		"@qretools/qsf": "workspace:*"
+	"publishConfig": {
+		"access": "public"
 	},
 	"devDependencies": {
+		"@qretools/core": "workspace:*",
+		"@qretools/qsf": "workspace:*",
 		"@types/node": "^26.6.4",
+		"rolldown": "1.2.9",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.0",
 		"vitest": "^5.0.1"

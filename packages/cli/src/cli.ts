@@ -394,12 +394,10 @@ function refused(r: Refusal, io: Io): number {
 
 /** The official DDI schema's problems with a document, the schema read beside this module. */
 async function validate(document: DdiDocument): Promise<readonly Finding[]> {
-	const schema = JSON.parse(
-		await readFile(
-			new URL(import.meta.resolve("@qretools/core/schema.json")),
-			"utf8",
-		),
-	);
+	// Imported, not read from disk, so a bundle of the command carries it.
+	const { default: schema } = await import("@qretools/core/schema.json", {
+		with: { type: "json" },
+	});
 	const validator = makeValidator(schema);
 	return validator.ok ? validator.value(document) : [validator.error];
 }
