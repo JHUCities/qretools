@@ -594,6 +594,8 @@ const primerTheme = EditorView.theme({
 		paddingInlineStart: "calc(var(--cm-line-start) + var(--cm-hang))",
 		textIndent: "calc(-1 * var(--cm-hang))",
 	},
+	// text-indent is inherited: a widget drawn inline-block mustn't take the pull-back.
+	".cm-line.cm-hang > *": { textIndent: "0" },
 	"&": {
 		// The hole's circle, its place and size named once: a livelit's button (livelits.ts)
 		// sits past it.
