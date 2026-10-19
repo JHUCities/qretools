@@ -47,7 +47,7 @@ describe("reading the households instrument's DDI back", () => {
 			  "  compute renter = tenure = "2" {tenure=tenure}",
 			  "  if renter {renter=compute:renter}",
 			  "    ask rent number rent: How much is your rent each month, in dollars?",
-			  "      check warning rent < 10000 {rent=rent}: <rent> dollars is a lot. Is that right?",
+			  "      check warning rent < 10000 {rent=rent}: That's a lot for a month's rent.",
 			  "    ask utilities choice utilities: You said you pay <rent> a month. Does that include utilities?",
 			  "repeat more more_vehicles = "1" {vehicles_index=row(roster-vehicles), more_vehicles=more_vehicles} max 4",
 			  "  ask vehicle choice vehicle: What kind of vehicle is it?",
@@ -124,7 +124,6 @@ describe("reading the households instrument's DDI back", () => {
 		).toMatchInlineSnapshot(`
 			[
 			  "info : The bank's missing-value codes aren't offered to respondents in Qualtrics.",
-			  "error instrument-households.ask-rent-check-1: This warning shows the answer it checks, which Qualtrics shows blank on that answer's page. Leave the answer out of the message.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
 			]
 		`);
@@ -162,7 +161,6 @@ describe("reading the households instrument's DDI back", () => {
 		).toMatchInlineSnapshot(`
 			[
 			  ": qsf-note",
-			  "flow.5.flow.2.then.0.checks.0: qsf-inexpressible",
 			  "flow.8: qsf-note",
 			]
 		`);

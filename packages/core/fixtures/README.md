@@ -10,5 +10,6 @@ of the language, using its own workspace (`uses: hh: ../`), and one using a work
 another repository at a tag.
 
 `qsf/households.qsf`: the households instrument as a Qualtrics survey, the golden file. Qualtrics
-imported and ran it as written (2026-10-18); a test compares the export with it, so a change
+imported and ran it as written (2026-10-18), before its rent warning was reworded without a
+pipe; the reworded survey was not imported again (owner: assumed good, the shape test 2 measured); a test compares the export with it, so a change
 Qualtrics would see shows up as a diff. Change it only after importing the new survey.
