@@ -62,8 +62,9 @@ loaded only to export. It depends on nothing.
 **Releasing.** Set `version` in `packages/cli/package.json`, merge, then push a tag
 `cli-v<version>` (`git tag cli-v2.0.0-alpha.1 && git push origin cli-v2.0.0-alpha.1`).
 `.github/workflows/release-cli.yml` checks the repository, checks the tag names that
-version, packs, installs the tarball and runs it, then publishes with provenance through
-npm's trusted publishing (no token). Every version goes to the dist-tag `latest`, prereleases
+version, packs, installs the tarball and runs it, then stages it with provenance through
+npm's trusted publishing (no token). Staged isn't public: a maintainer approves it with
+2FA, `npm stage list qretools` then `npm stage approve <id>` (or on npmjs.com). Every version goes to the dist-tag `latest`, prereleases
 included, so `npx qretools` runs the newest (npm requires the tag named for a prerelease). A published version can't be replaced: fix forward with the next one.
 
 It is the one package that knows both the core (`@qretools/core`) and the Qualtrics
