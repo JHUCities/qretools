@@ -234,23 +234,28 @@ describe("qretools instrument", () => {
 	});
 
 	it("exports it as a Qualtrics survey with `--qsf`, refused while Qualtrics can't run it", async () => {
-		// The rent warning pipes the rent on its own page: Qualtrics would show it empty.
-		const refused = await run(
-			"instrument",
-			"export",
-			FILE,
-			"--qsf",
-			"-o",
-			"x.qsf",
-		);
-		expect(refused.code).toBe(1);
-		expect(refused.written).toEqual({});
-		expect(refused.err).toMatch(
-			/households\.yaml:33:17: error: This warning shows the answer it checks/,
-		);
 		const dir = await mkdtemp(join(tmpdir(), "qretools-"));
 		try {
 			await cp(here("../../fixtures/households"), dir, { recursive: true });
+			// A warning showing the rent on the rent's own page: Qualtrics shows it blank.
+			const pipes = join(dir, "instruments", "pipes.yaml");
+			await writeFile(
+				pipes,
+				'name: pipes\nuses:\n  hh: ../\nflow:\n  - ask: hh.rent\n    checks:\n      - ensure: hh.rent < 10000\n        severity: warning\n        message: "{{hh.rent}} is a lot."\n',
+			);
+			const refused = await run(
+				"instrument",
+				"export",
+				pipes,
+				"--qsf",
+				"-o",
+				"x.qsf",
+			);
+			expect(refused.code).toBe(1);
+			expect(refused.written).toEqual({});
+			expect(refused.err).toMatch(
+				/pipes\.yaml:7:9: error: This warning shows the answer it checks/,
+			);
 			const ok = join(dir, "instruments", "short.yaml");
 			await writeFile(
 				ok,
