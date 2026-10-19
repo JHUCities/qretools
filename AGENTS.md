@@ -1109,6 +1109,21 @@ open on github.io once it reloads. Not yet verified live: `base=[/]` in the buil
 the sign-in round trip at the new origin, and an old `jhucities.github.io/qretools/#repo=…`
 link landing on the same file.
 
+**Served at qretools.com (owner, 2026-10-19).** Supersedes the paragraph above where they
+differ: the bank app moved to the apex, so "the apex is left alone" and "one subdomain
+per tool" no longer hold, and where the composer is served is open. DNS at Squarespace:
+four A and four AAAA records at `@` to GitHub Pages' addresses, and `www` a CNAME to
+`jhucities.github.io` (Pages redirects it to the apex). The `bank` CNAME and a wildcard
+`*` were deleted (a wildcard points every name at Pages and invites subdomain takeover),
+so `bank.qretools.com` no longer resolves and links to it are dead. The Worker's
+allowlist gains `https://qretools.com` and keeps `bank` for a week (a tab opened there
+before the move still renews its token), then drops it; the App's callback becomes
+`https://qretools.com/`, and `bank`'s goes. No code changed: the build's base is still
+"/", and the redirect is `location.origin` plus the base. Lost at the move, as at the
+last: stored sign-in, settings and theme (per origin). Not yet verified live: HTTPS (the
+certificate was approved, not yet issued, on 2026-10-19), Enforce HTTPS, and the sign-in
+round trip at the new origin.
+
 **No folder is read into a question's name (owner, 2026-09-28).** The `<topic>_<name>`
 naming (`nhd_sat` → folder `nhd`) is BAS's convention, not qretools'. `folderOf` is
 gone: the Save dialog opens with no folder chosen ("Choose a folder"), `bankLocation`
