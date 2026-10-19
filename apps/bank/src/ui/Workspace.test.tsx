@@ -207,14 +207,19 @@ describe("a workspace's instruments", () => {
 		URL.revokeObjectURL = revokeObjectURL;
 	});
 
-	it("come first, then the questions, and hold only instruments", async () => {
+	it("come after the questions, and hold only instruments", async () => {
 		renderWorkspace();
 		await act(async () => {});
 		const nav = screen.getByRole("navigation", { name: "Question bank" });
 		const headings = within(nav)
 			.getAllByRole("heading", { level: 3 })
 			.map((h) => h.textContent);
-		expect(headings.slice(0, 2)).toEqual(["Instruments", "Questions"]);
+		// The bank first, then what instruments ask of it, then the workspace's settings.
+		expect(
+			headings.filter((h) =>
+				["Questions", "Shared", "Instruments", "Settings"].includes(h ?? ""),
+			),
+		).toEqual(["Questions", "Shared", "Instruments", "Settings"]);
 		const tree = within(nav).getByRole("tree", { name: "Instruments" });
 		const items = within(tree)
 			.getAllByRole("treeitem")

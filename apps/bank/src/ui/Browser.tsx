@@ -69,13 +69,11 @@ export function Browser({
 				<SkeletonText lines={3} size="bodyMedium" />
 			</Stack>
 		);
-	// What is asked comes first, then what it is asked from. A workspace of questions
-	// alone is a whole one (a bank): no section says it lacks instruments.
+	// The questions come first, then what instruments ask of them (owner, 2026-10-18: a
+	// bank is written before a survey). A workspace of questions alone is a whole one (a
+	// bank): no section says it lacks instruments.
 	return (
 		<Stack gap="normal">
-			{workspace.length > 0 && (
-				<Instruments leaves={workspace} open={open} dispatch={dispatch} />
-			)}
 			<BankTrees
 				folders={folders}
 				sections={sections}
@@ -83,6 +81,9 @@ export function Browser({
 				open={open}
 				dispatch={dispatch}
 			/>
+			{workspace.length > 0 && (
+				<Instruments leaves={workspace} open={open} dispatch={dispatch} />
+			)}
 			{settings.length > 0 && (
 				<Settings rows={settings} open={open} dispatch={dispatch} />
 			)}
