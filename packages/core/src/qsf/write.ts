@@ -192,8 +192,10 @@ export function writeQsf(
 	/**
 	 * A question with its blocking checks as custom validation (experiment 4, J): it passes
 	 * while every check's "is not false" list holds, as the DDI's check fails only on false.
-	 * Custom validation replaces a number's own, so its range is folded in; Qualtrics then
-	 * no longer refuses letters there.
+	 * Custom validation replaces a number's own, so its range is folded in; Qualtrics still
+	 * refuses letters there, but no longer extra decimals (test 2). It runs on an empty
+	 * answer too, as the "is not false" lists model a skipped one (measured on text; a
+	 * select-all assumed alike, test 2).
 	 */
 	const validated = (
 		s: Extract<Step, { kind: "ask" }>,
@@ -225,28 +227,6 @@ export function writeQsf(
 			);
 			return q;
 		}
-		// A check that fails on an empty answer only works if Qualtrics checks empty answers.
-		// NotSelected holds on a skipped single choice (experiment 2); a select-all's is unmeasured.
-		const trueWhenEmpty = [
-			"Empty",
-			"NotEqualTo",
-			...(domain.kind === "choice" && !domain.many ? ["NotSelected"] : []),
-		];
-		const empty = passes.some((g) =>
-			g.every(
-				(a) =>
-					a.subject.kind === "ask" &&
-					a.subject.ask === s.id &&
-					trueWhenEmpty.includes(a.op),
-			),
-		);
-		if (!empty)
-			note(
-				"qsf-inexpressible",
-				"warning",
-				s.id,
-				"Qualtrics may not check an unanswered question, so this check may let an empty answer through (experiment 8).",
-			);
 		for (const c of blocking)
 			if (c.message !== undefined)
 				note(
@@ -261,7 +241,7 @@ export function writeQsf(
 				"qsf-inexpressible",
 				"warning",
 				s.id,
-				"With its checks, Qualtrics no longer refuses an answer here that isn't a number, or has more decimals than allowed.",
+				`With its checks, Qualtrics no longer refuses an answer here with ${domain.decimals === 0 ? "decimals" : `more than ${domain.decimals} decimal places`}.`,
 			);
 		return {
 			...q,
@@ -312,7 +292,7 @@ export function writeQsf(
 					"qsf-inexpressible",
 					"error",
 					c.id,
-					"This warning shows the answer it checks, which Qualtrics shows empty on the answer's own page.",
+					"This warning shows the answer it checks, which Qualtrics shows blank on that answer's page. Leave the answer out of the message.",
 				);
 				return [];
 			}
@@ -343,13 +323,6 @@ export function writeQsf(
 				);
 				return [];
 			}
-			if (others || s.question.domain.kind === "choice")
-				note(
-					"qsf-note",
-					"info",
-					c.id,
-					"How Qualtrics' live warning reads this is unmeasured (experiment 8).",
-				);
 			const fails = formOf(c.ensure, c.id, "f", s.id);
 			if (fails === undefined || fails.length === 0) return [];
 			const statement = warning(c);

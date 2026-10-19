@@ -124,7 +124,7 @@ describe("reading the households instrument's DDI back", () => {
 		).toMatchInlineSnapshot(`
 			[
 			  "info : The bank's missing-value codes aren't offered to respondents in Qualtrics.",
-			  "error instrument-households.ask-rent-check-1: This warning shows the answer it checks, which Qualtrics shows empty on the answer's own page.",
+			  "error instrument-households.ask-rent-check-1: This warning shows the answer it checks, which Qualtrics shows blank on that answer's page. Leave the answer out of the message.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
 			]
 		`);

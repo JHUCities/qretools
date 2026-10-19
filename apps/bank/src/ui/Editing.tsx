@@ -407,10 +407,6 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 		flushOutline();
 		flushQsf();
 	};
-	const diagnostics = useMemo(
-		() => toDiagnostics(findings, ranges, onFix),
-		[findings, ranges, onFix],
-	);
 	const also = useMemo(
 		() =>
 			instrumentAlsoSaves(
@@ -449,6 +445,17 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const qsfPlaced = useMemo(
 		() => placeFindings(qsf?.findings ?? [], instrument.places),
 		[qsf, instrument.places],
+	);
+	// What Qualtrics can't run is underlined where it's written too (owner, 2026-10-18),
+	// beside the instrument's own findings; its notes stay in the list.
+	const diagnostics = useMemo(
+		() =>
+			toDiagnostics(
+				[...findings, ...qsfPlaced.filter((f) => f.severity !== "info")],
+				ranges,
+				onFix,
+			),
+		[findings, qsfPlaced, ranges, onFix],
 	);
 	// Settled as the Findings pane is, so the list doesn't jump while the author types.
 	const [qsfListed, flushQsf] = useSettled(qsfPlaced, SETTLE_MS, e.id);
