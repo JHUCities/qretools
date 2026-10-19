@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-/** The `qretools` command, wired to the process: see src/node/cli.ts. */
+/** The `qretools` command, wired to the process: see src/cli.ts. */
 import { writeFile } from "node:fs/promises";
-import { main } from "../src/node/cli.ts";
-import { readTagged } from "../src/node/remote.ts";
+import { main } from "../src/cli.ts";
+import { readTagged } from "../src/remote.ts";
 
 // A reader that stops early (`| head`) closes the pipe: that ends the output, not the command.
 process.stdout.on("error", (e: NodeJS.ErrnoException) => {

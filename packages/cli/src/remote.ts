@@ -11,9 +11,8 @@ import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import type { Address } from "../address.ts";
-import type { RemoteBank } from "../workspace.ts";
-import { readWorkspace } from "./index.ts";
+import type { Address, RemoteBank } from "@qretools/core";
+import { readWorkspace } from "@qretools/core/node";
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
 

@@ -22,7 +22,7 @@
  * The writer's part: `$e{}` over an empty answer writes "{Invalid Expression}" (experiment 4),
  * so a computed field is set only where its operands are answered, else left unset.
  */
-import type { BinaryOp, Expr } from "../cond/ast.ts";
+import type { BinaryOp, Expr } from "@qretools/core";
 import type { Cond, Domain, Source } from "./read.ts";
 
 export type Operator =

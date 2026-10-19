@@ -11,6 +11,7 @@ export {
 	type AddressKey,
 	addressOf,
 	HERE,
+	notHere,
 } from "./address.ts";
 export {
 	type BankLocation,
@@ -20,6 +21,18 @@ export {
 } from "./bank.ts";
 export { codeSpans, plainText, type Span } from "./codeSpans.ts";
 export { type Compacted, compact } from "./compact.ts";
+// The condition language, as instruments write it and the DDI's CommandCode holds it:
+// for a program that reads conditions back out of DDI (an export to a survey platform).
+export {
+	type BinaryOp,
+	DDI_FUNCTIONS,
+	type Expr,
+	holesOf,
+	namesOf,
+} from "./cond/ast.ts";
+export { evaluateCondition, type Value } from "./cond/eval.ts";
+export { parseCondition } from "./cond/parse.ts";
+export { printCondition } from "./cond/print.ts";
 export {
 	FOLDER_RULE_TEXT,
 	NAME_RULE_TEXT,
@@ -44,6 +57,8 @@ export { collisions, documentOf } from "./ddi/document.ts";
 export {
 	elaborate,
 	elaborateItems,
+	NOT_TICKED,
+	TICKED,
 	type Versioning,
 } from "./ddi/elaborate.ts";
 export { makeValidator, type Validator } from "./ddi/validate.ts";
@@ -73,17 +88,19 @@ export {
 	inDocumentOrder,
 	type LintCode,
 	type ParseCode,
+	placeFindings,
 	type Range,
 	type Severity,
 	type Status,
 	status,
 	type Target,
 } from "./findings.ts";
-export type {
-	Input as InstrumentInput,
-	InstrumentDraft,
-	Node as InstrumentNode,
-	Use as InstrumentUse,
+export {
+	type Input as InstrumentInput,
+	type InstrumentDraft,
+	type Node as InstrumentNode,
+	STOP,
+	type Use as InstrumentUse,
 } from "./instrument/draft.ts";
 export { exampleInstrument } from "./instrument/example.ts";
 export {
@@ -99,15 +116,6 @@ export {
 	instrumentRefs,
 } from "./instrument/refs.ts";
 export { lint } from "./lint.ts";
-export {
-	placeFindings,
-	type Qsf,
-	type QsfObject,
-	type QsfResult,
-	qsfOf,
-	qsfRefusalReason,
-	qsfTime,
-} from "./qsf/qsf.ts";
 export {
 	type Exportable,
 	exportRefusal,

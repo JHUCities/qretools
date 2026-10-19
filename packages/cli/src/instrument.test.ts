@@ -16,7 +16,7 @@ import { type Io, main } from "./cli.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
-const FILE = here("../../fixtures/households/instruments/households.yaml");
+const FILE = here("../../core/fixtures/households/instruments/households.yaml");
 
 type Schema = {
 	$defs: Record<
@@ -44,7 +44,7 @@ describe("the households instrument, whole", async () => {
 	const validator = makeValidator(schema);
 	const instrument = instrumentOf(await readFile(FILE, "utf8"), {
 		banks: {
-			hh: bankOf(await readWorkspace(here("../../fixtures/households"))),
+			hh: bankOf(await readWorkspace(here("../../core/fixtures/households"))),
 		},
 		agency: "org.example",
 	});
@@ -63,7 +63,7 @@ describe("the households instrument, whole", async () => {
 	it("brings each question's items as its bank exports them, versions and all", async () => {
 		const path = "questions/household/size.yaml";
 		const bank = bankOf(
-			await readWorkspace(here("../../fixtures/households")),
+			await readWorkspace(here("../../core/fixtures/households")),
 			{
 				[path]: { number: "4" },
 			},
@@ -87,7 +87,7 @@ describe("the households instrument, whole", async () => {
 
 	it("says once that its own workspace has no agency, and of another's where it is used", async () => {
 		const { "workspace.yaml": _, ...files } = await readWorkspace(
-			here("../../fixtures/households"),
+			here("../../core/fixtures/households"),
 		);
 		const source = await readFile(FILE, "utf8");
 		expect(source).toContain("hh: ../\n");
@@ -236,7 +236,9 @@ describe("qretools instrument", () => {
 	it("exports it as a Qualtrics survey with `--qsf`, refused while Qualtrics can't run it", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "qretools-"));
 		try {
-			await cp(here("../../fixtures/households"), dir, { recursive: true });
+			await cp(here("../../core/fixtures/households"), dir, {
+				recursive: true,
+			});
 			// A warning showing the rent on the rent's own page: Qualtrics shows it blank.
 			const pipes = join(dir, "instruments", "pipes.yaml");
 			await writeFile(
@@ -304,7 +306,7 @@ describe("qretools instrument", () => {
 		const r = await run(
 			"instrument",
 			"check",
-			here("../../fixtures/households/instruments/remote.yaml"),
+			here("../../core/fixtures/households/instruments/remote.yaml"),
 		);
 		// In another repository: read at its tag, and here it can't be.
 		expect(r.code).toBe(2);
@@ -315,11 +317,11 @@ describe("qretools instrument", () => {
 		const offline = await run(
 			"instrument",
 			"check",
-			here("../../fixtures/households/instruments/remote.yaml"),
+			here("../../core/fixtures/households/instruments/remote.yaml"),
 			"--agency",
 			"org.example",
 			"--bank",
-			`bas=${here("../../fixtures/households")}`,
+			`bas=${here("../../core/fixtures/households")}`,
 		);
 		expect(offline).toMatchObject({ code: 0, err: "0 findings.\n" });
 		// Its own workspace is never read from anywhere else.
@@ -328,7 +330,7 @@ describe("qretools instrument", () => {
 			"check",
 			FILE,
 			"--bank",
-			`hh=${here("../../fixtures/households")}`,
+			`hh=${here("../../core/fixtures/households")}`,
 		);
 		expect(own.code).toBe(2);
 		expect(own.err).toMatch(

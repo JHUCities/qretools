@@ -118,7 +118,7 @@ const SEVERITY = {
  * stays keeps its element (and its focus); only a new one enters.
  */
 export const findingKeys = (
-	findings: readonly Finding[],
+	findings: readonly Finding<string>[],
 ): readonly string[] => {
 	const seen = new Map<string, number>();
 	return findings.map((f) => {
@@ -135,19 +135,20 @@ export interface Related {
 	readonly label: string;
 }
 
-export function Findings({
+/** Any package's findings: the core's, or an export's under its own codes. */
+export function Findings<F extends Finding<string>>({
 	findings,
 	onTarget,
 	related,
 	onFix,
 	label = "Findings",
 }: {
-	findings: readonly Finding[];
+	findings: readonly F[];
 	/** The list's name, heard by screen readers. */
 	label?: string;
 	onTarget?: OnTarget;
 	/** The other file a bank-level finding names, opened by an ordinary link. */
-	related?: (f: Finding) => Related | undefined;
+	related?: (f: F) => Related | undefined;
 	/** Apply a finding's quick fix; absent where nothing can be edited. */
 	onFix?: (fix: Fix) => void;
 }) {

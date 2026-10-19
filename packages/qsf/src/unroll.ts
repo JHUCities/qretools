@@ -8,8 +8,8 @@
  * out roster is row k's copy, `<k>_<variable>` (as Qualtrics names a loop's columns), and
  * an answer recorded in a looped roster is read at its round k.
  */
-import type { Expr } from "../cond/ast.ts";
-import type { Finding } from "../findings.ts";
+import type { Expr } from "@qretools/core";
+import type { Finding } from "./findings.ts";
 import type { Cond, Part, ReadInstrument, Source, Step } from "./read.ts";
 
 /** A row's copy of a variable: the column Qualtrics' Loop & Merge would give it. */

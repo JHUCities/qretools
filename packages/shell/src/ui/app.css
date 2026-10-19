@@ -622,8 +622,8 @@ code,
 .download-reason {
 	margin: 0;
 }
-/* What Qualtrics can't run as the DDI says, under the downloads: a list of its own. */
-.qsf-findings h4 {
+/* What an export reports, under its download: a list of its own. */
+.export-findings h4 {
 	margin: 0 0 var(--base-size-4);
 	font: var(--text-title-shorthand-small);
 }

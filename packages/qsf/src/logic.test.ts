@@ -1,7 +1,10 @@
+import {
+	DDI_FUNCTIONS,
+	evaluateCondition,
+	parseCondition,
+	type Value,
+} from "@qretools/core";
 import { describe, expect, it } from "vitest";
-import { DDI_FUNCTIONS } from "../cond/ast.ts";
-import { evaluateCondition, type Value } from "../cond/eval.ts";
-import { parseCondition } from "../cond/parse.ts";
 import {
 	type Atom,
 	compileCondition,
