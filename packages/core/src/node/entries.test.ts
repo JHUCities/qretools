@@ -115,6 +115,7 @@ describe("the entry points", () => {
 			    "toFillIn",
 			    "unknownFolders",
 			    "usedBy",
+			    "versionsOf",
 			    "workspaceOf",
 			  ],
 			  "editor": [
