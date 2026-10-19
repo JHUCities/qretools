@@ -482,7 +482,7 @@ emit a Universe item and resolve the link in role 2.
   `label`/title field; the concept stands in. BAS publishes select-all items as one
   binary variable per option ("STEM: OPTION"); we emit one QuestionItem.
 - **The DDI agency is `us.jhu`** (decided 2026-09-23 as `edu.jhu.21cc`; changed 2026-10-19
-  to `us.jhu`, requested that day from the DDI Alliance registry, approval pending). It is an explicit input to
+  to `us.jhu`, registered with the DDI Alliance registry that day). It is an explicit input to
   `elaborate`, set in `src/app/model.ts`; the bank's surface files carry no URNs.
 
 ## Working rules
