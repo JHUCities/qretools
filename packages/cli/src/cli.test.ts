@@ -329,7 +329,9 @@ describe("the command under real Node", () => {
 			"--qsf",
 		]);
 		expect(JSON.parse(qsf.stdout).SurveyEntry.SurveyName).toBe("households");
-	});
+		// Three real Node processes, each loading the core from source: slower than the
+		// default 5s on a CI runner, where it timed out.
+	}, 30_000);
 
 	it("imports the core's own modules by their .ts names, which Node can find", async () => {
 		const stale: string[] = [];
