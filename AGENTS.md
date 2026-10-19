@@ -409,8 +409,9 @@ Qualtrics export and `yaml`, `zod`, `ajv` inside (Node won't strip types under
 than a file read by package path, so the bundle carries it. Node 22 or later (checked:
 `check` and `export` on 22, 24 and 26). Released by tag: `cli-v<version>` must match
 `packages/cli/package.json`; `release-cli.yml` checks, packs with pnpm (so `workspace:*`
-becomes versions), runs the installed tarball, and publishes with provenance through
-npm trusted publishing, every version under `latest` (prereleases too, while there is no
+becomes versions), runs the installed tarball, and stages it with provenance through
+npm trusted publishing (the trust allows `npm stage publish` only: a maintainer approves
+each release with 2FA, so CI alone can never publish), every version under `latest` (prereleases too, while there is no
 stable line: `npx qretools` runs the newest). The first publish is by hand, as npm
 configures a trusted publisher only for an existing package. Only the CLI is published, unscoped so `npx qretools check` works, and held by the npm
 organization `qretools`; `@qretools/core` and `@qretools/qsf` stay private, bundled in,
