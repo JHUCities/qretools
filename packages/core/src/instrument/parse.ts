@@ -580,7 +580,7 @@ function readInputs(
 		say(
 			emptyHole(
 				"inputs",
-				"Name each value given before the interview, with its type, or remove the line.",
+				"Name each value from outside, with its type, or remove the line.",
 			),
 		);
 		return [];
@@ -724,7 +724,7 @@ function readDomain(
 			say(
 				emptyHole(
 					path,
-					'Write its codes, `"1": Yes` on lines of their own, or name a bank\'s scale.',
+					'Write its codes, one per line (`"1": Yes`), or name a shared scale, such as `bank.agree4`.',
 				),
 			);
 			return undefined;
@@ -1923,7 +1923,9 @@ function readFills(
 		ctx.say(
 			emptyHole(
 				path,
-				"Name each fill and what fills it, such as `rating: label(bank.satisfaction)`.",
+				declared.length === 0
+					? "Name each fill and what fills it, such as `rating: label(bank.satisfaction)`."
+					: `Name what fills ${declared.map((f) => `\`${f.name}\``).join(", ")}: an earlier answer or an input, such as \`${declared[0]?.name}: bank.q\`.`,
 			),
 		);
 		return [];

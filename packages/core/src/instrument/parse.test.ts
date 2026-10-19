@@ -510,5 +510,12 @@ describe("a key written with no value", () => {
 				path,
 				[`hole hole ${path}`],
 			]);
+		// An empty fill names what the question declares.
+		const fill = read(
+			"name: e\nuses:\n  bas: JHUCities/bas-question-bank@2026.1\nflow:\n  - ask: bas.util\n    fill:\n",
+		).findings[0];
+		expect(fill?.hint).toBe(
+			"Name what fills `rent`: an earlier answer or an input, such as `rent: bank.q`.",
+		);
 	});
 });
