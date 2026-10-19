@@ -383,6 +383,23 @@ emit a Universe item and resolve the link in role 2.
   The Draft does not yet carry the opened-but-empty distinction (a preview shows the
   fallback, not a hole slot); that remains in FEATURES.md.
 
+**Item versions come from git history, at `qretools build` (owner, 2026-10-19).** A
+workspace's tag (`owner/repo@v1`) is what instruments read; each DDI item's version is
+what DDI readers cite, and only the tag is set by hand. `versionsOf` (core, `history.ts`,
+pure) counts how many times each file's content key changed along the first-parent
+history of HEAD: a shared file's key is its blob, a question's is its blob and those of
+every shared file it names, plus `missing.yaml` and `select_all.yaml` for every question
+(shortcut: over-counts questions without a variable or not select-all; safe, and exact
+needs each commit's env). VersionDate is the commit date of the change and the file's
+blob its UserID; VersionResponsibility is left out (no names in published DDI; git has
+authorship). `qretools build [dir] [-o outdir]` reads the history with git (refusing a
+shallow clone, whose history would undercount), builds HEAD's committed content, never
+the working tree, and writes `outdir/ddi.json` (default `dir/dist`), refused as `export`
+refuses. A local command like any build tool's; CI runs it on merge and deploys
+`dist/` to Pages (JHUCities/qretools-gss is the first). `export` stays unversioned.
+Not yet: instruments' items, versions of an unmerged branch marked IsPublished false,
+and resolving URNs (a DDI registry service for `us.jhu`).
+
 ## Principles from PL research (how features are judged)
 
 - **Total error localization.** Every draft, however broken, elaborates. Missing or

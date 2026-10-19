@@ -96,6 +96,7 @@ export {
 	status,
 	type Target,
 } from "./findings.ts";
+export { type History, type Snapshot, versionsOf } from "./history.ts";
 export {
 	type Input as InstrumentInput,
 	type InstrumentDraft,

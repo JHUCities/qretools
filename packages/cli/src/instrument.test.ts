@@ -195,6 +195,10 @@ describe("qretools instrument", () => {
 			writeFile: async (p, t) => {
 				written[p] = t;
 			},
+			readHistory: async () => ({
+				kind: "unavailable",
+				reason: "not in these tests",
+			}),
 			readRemote: async (a) => ({
 				kind: "unavailable",
 				reason: `\`${a.key}\` isn't reachable from these tests.`,

@@ -8,13 +8,14 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { bankOf, questionItems } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
+import { readHistory } from "./history.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
@@ -41,6 +42,7 @@ async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
 			written[path] = text;
 		},
 		readRemote,
+		readHistory,
 	};
 	const code = await main(argv, io);
 	return { code, out: out.join(""), err: err.join(""), written };
@@ -192,6 +194,85 @@ describe("qretools check", () => {
 		expect(r.out.split("\n")[0]).toMatch(
 			/bas-question-bank\/.*\.yaml:\d+:\d+: /,
 		);
+	});
+});
+
+describe("qretools build", () => {
+	const git = (cwd: string, ...args: string[]) =>
+		promisify(execFile)(
+			"git",
+			["-c", "user.name=t", "-c", "user.email=t@example.org", ...args],
+			{ cwd },
+		);
+	const QUESTION =
+		"name: q\ntext: Do you work?\nintent: Employment\nresponses: yes_no\n";
+	const SCALE = (no: string) => `labels:\n  "1": "Yes"\n  "2": ${no}\n`;
+
+	/** A repository whose workspace is in `sub/`, committed three times. */
+	async function repo(): Promise<string> {
+		const root = await mkdtemp(join(tmpdir(), "qretools-build-"));
+		const ws = join(root, "sub");
+		await mkdir(join(ws, "questions/work"), { recursive: true });
+		await mkdir(join(ws, "scales"));
+		await git(root, "init", "-q", "-b", "main");
+		await writeFile(join(ws, "workspace.yaml"), "agency: org.example\n");
+		await writeFile(join(ws, "questions/work/q.yaml"), QUESTION);
+		await writeFile(join(ws, "scales/yes_no.yaml"), SCALE('"No"'));
+		await git(root, "add", "-A");
+		await git(root, "commit", "-q", "-m", "first");
+		// Outside the workspace: no version moves.
+		await writeFile(join(root, "README.md"), "hi\n");
+		await git(root, "add", "-A");
+		await git(root, "commit", "-q", "-m", "readme");
+		await writeFile(join(ws, "scales/yes_no.yaml"), SCALE("Nope"));
+		await git(root, "commit", "-q", "-am", "scale");
+		return ws;
+	}
+
+	it("writes the last commit's DDI to dist/ddi.json, each item at its history's version", async () => {
+		const ws = await repo();
+		const r = await run("build", ws);
+		expect(r.code).toBe(0);
+		const ddi = r.written[join(ws, "dist", "ddi.json")] ?? "";
+		// The scale changed once, and the question with it, as it names the scale.
+		expect(ddi).toContain('"urn:ddi:org.example:q:2"');
+		expect(ddi).toContain("Nope");
+		expect(ddi).not.toContain('"urn:ddi:org.example:q:1"');
+		expect(ddi).toMatch(/"VersionDate"/);
+	});
+
+	it("builds the commit, not the working tree, and says so", async () => {
+		const ws = await repo();
+		await writeFile(join(ws, "scales/yes_no.yaml"), SCALE("Uncommitted"));
+		const r = await run("build", ws, "-o", join(ws, "out"));
+		expect(r.code).toBe(0);
+		expect(r.err).toMatch(/uncommitted changes: they aren't built/);
+		const ddi = r.written[join(ws, "out", "ddi.json")] ?? "";
+		expect(ddi).toContain("Nope");
+		expect(ddi).not.toContain("Uncommitted");
+	});
+
+	it("refuses outside git, and a shallow clone whose history is cut short", async () => {
+		const plain = await mkdtemp(join(tmpdir(), "qretools-nogit-"));
+		await writeFile(join(plain, "workspace.yaml"), "agency: org.example\n");
+		const r = await run("build", plain);
+		expect(r).toMatchObject({ code: 2, written: {} });
+		expect(r.err).toMatch(/isn't in a git repository/);
+
+		const ws = await repo();
+		const shallow = await mkdtemp(join(tmpdir(), "qretools-shallow-"));
+		await git(
+			shallow,
+			"clone",
+			"-q",
+			"--depth",
+			"1",
+			`file://${dirname(ws)}`,
+			"c",
+		);
+		const s = await run("build", join(shallow, "c", "sub"));
+		expect(s).toMatchObject({ code: 2, written: {} });
+		expect(s.err).toMatch(/shallow clone/);
 	});
 });
 
