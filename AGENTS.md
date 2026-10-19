@@ -481,7 +481,8 @@ emit a Universe item and resolve the link in role 2.
   titles are short curated labels ("WATER QUALITY CONCERN"), and the surface has no
   `label`/title field; the concept stands in. BAS publishes select-all items as one
   binary variable per option ("STEM: OPTION"); we emit one QuestionItem.
-- **The DDI agency is `edu.jhu.21cc`** (decided 2026-09-23). It is an explicit input to
+- **The DDI agency is `us.jhu`** (decided 2026-09-23 as `edu.jhu.21cc`; changed 2026-10-19
+  to `us.jhu`, requested that day from the DDI Alliance registry, approval pending). It is an explicit input to
   `elaborate`, set in `src/app/model.ts`; the bank's surface files carry no URNs.
 
 ## Working rules
@@ -1117,7 +1118,7 @@ bank file that becomes a draft again (gone on GitHub, changed here) asks for a f
 on its next save instead of refiling by prefix. "Topic" is "folder" throughout the UI.
 This supersedes the earlier lines about prefix-derived folders (step 5, and "Where a
 new question goes is chosen at save"). Other BAS assumptions still in the core (the
-option-variable lint and default, the agency `edu.jhu.21cc`, the binary scale name
+option-variable lint and default, the agency `us.jhu`, the binary scale name
 `yesno01`, BAS-shaped examples and the codebook's house style) are in FEATURES.md.
 
 **The editor colours roles and meaning (owner, 2026-09-29).** Step 1: colour marks roles,
