@@ -24,6 +24,7 @@ import {
 	importsOf,
 	instrumentAt,
 	instrumentOf,
+	locate,
 	makeValidator,
 	notHere,
 	placeFindings,
@@ -39,7 +40,6 @@ import {
 	WORKSPACE,
 	workspaceOf,
 } from "@qretools/core";
-import { locate } from "@qretools/core/editor";
 import { readWorkspace } from "@qretools/core/node";
 import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
 
