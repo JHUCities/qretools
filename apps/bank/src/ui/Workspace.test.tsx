@@ -2,7 +2,7 @@
 
 import { resolve } from "node:path";
 /**
- * A workspace, drawn: its instruments first, then its questions and shared files, and
+ * A workspace, drawn: its questions and shared files first, then its instruments, and
  * what New makes in it.
  */
 import { ThemeProvider } from "@primer/react/next";
