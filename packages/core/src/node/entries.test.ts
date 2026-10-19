@@ -81,6 +81,7 @@ describe("the entry points", () => {
 			    "kindAt",
 			    "labelOf",
 			    "lint",
+			    "locate",
 			    "makeValidator",
 			    "namesOf",
 			    "notHere",

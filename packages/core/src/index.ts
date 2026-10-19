@@ -87,6 +87,7 @@ export {
 	type Fix,
 	inDocumentOrder,
 	type LintCode,
+	locate,
 	type ParseCode,
 	placeFindings,
 	type Range,

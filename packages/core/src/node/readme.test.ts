@@ -102,10 +102,10 @@ responses:
 				.split("\n")
 				.map((l) => l.trim())
 				.filter((l) => l !== "");
-		// `ts` blocks are this file's code; `sh` blocks are commands (the CLI's own tests
-		// run them). Any other kind would be skipped silently, so there is none.
+		// `ts` blocks are this file's code. Any other kind would be skipped silently, so
+		// there is none.
 		expect(fences.length).toBeGreaterThan(0);
-		expect(fences.filter((f) => f[1] !== "ts" && f[1] !== "sh")).toEqual([]);
+		expect(fences.filter((f) => f[1] !== "ts")).toEqual([]);
 		const test = lines(await readFile(new URL(import.meta.url), "utf8")).join(
 			"\n",
 		);

@@ -187,7 +187,7 @@ describe("qretools check", () => {
 	});
 
 	it("names files as the user named the bank, so editors find them from here", async () => {
-		const r = await run("check", here("../../../../../bas-question-bank"));
+		const r = await run("check", here("../../../../bas-question-bank"));
 		if (r.err.startsWith("Can't read")) return; // the reference bank isn't checked out here
 		expect(r.out.split("\n")[0]).toMatch(
 			/bas-question-bank\/.*\.yaml:\d+:\d+: /,
@@ -237,6 +237,15 @@ describe("the command under real Node", () => {
 		expect(stderr).toMatch(/^26 files/);
 		const exported = await exec(process.execPath, [bin, "export", SAMPLE]);
 		expect(JSON.parse(exported.stdout).QuestionItem).toBeDefined();
+		// The export package too, reached through the workspace's link to its source.
+		const qsf = await exec(process.execPath, [
+			bin,
+			"instrument",
+			"export",
+			here("../../core/fixtures/households/instruments/households.yaml"),
+			"--qsf",
+		]);
+		expect(JSON.parse(qsf.stdout).SurveyEntry.SurveyName).toBe("households");
 	});
 
 	it("imports the core's own modules by their .ts names, which Node can find", async () => {
