@@ -52,6 +52,7 @@ import {
 	withoutInfo,
 } from "./complete.ts";
 import { codeLine } from "./diagnostics.ts";
+import { hangingIndent } from "./hang.ts";
 import { type LivelitHost, livelits, setLivelits } from "./livelits.ts";
 
 /** Marks a change we made ourselves, so it is not echoed back as an edit. */
@@ -138,6 +139,7 @@ export function createEditor(
 			if (current !== undefined) onFollow(current, offset);
 		}),
 		EditorView.lineWrapping,
+		hangingIndent,
 		primerTheme,
 		primerHighlight,
 		semantics,
@@ -586,6 +588,12 @@ const macCompletionKeys = Prec.highest(
  * wavy), as do errors and names (a wavy line, a text colour).
  */
 const primerTheme = EditorView.theme({
+	// Where every line's text starts, named once: a hanging line (hang.ts) starts past it.
+	".cm-line": { paddingInlineStart: "var(--cm-line-start)" },
+	".cm-line.cm-hang": {
+		paddingInlineStart: "calc(var(--cm-line-start) + var(--cm-hang))",
+		textIndent: "calc(-1 * var(--cm-hang))",
+	},
 	"&": {
 		// The hole's circle, its place and size named once: a livelit's button (livelits.ts)
 		// sits past it.
@@ -600,7 +608,10 @@ const primerTheme = EditorView.theme({
 		fontFamily: "var(--fontStack-monospace)",
 		lineHeight: "var(--text-codeBlock-lineHeight)",
 	},
-	".cm-content": { caretColor: "var(--codeMirror-cursor-fgColor)" },
+	".cm-content": {
+		caretColor: "var(--codeMirror-cursor-fgColor)",
+		"--cm-line-start": "var(--base-size-8)",
+	},
 	".cm-cursor, .cm-dropCursor": {
 		borderLeftColor: "var(--codeMirror-cursor-fgColor)",
 	},
