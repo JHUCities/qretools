@@ -400,6 +400,20 @@ refuses. A local command like any build tool's; CI runs it on merge and deploys
 Not yet: instruments' items, versions of an unmerged branch marked IsPublished false,
 and resolving URNs (a DDI registry service for `us.jhu`).
 
+**The CLI is published to npm as `@qretools/cli` (owner, 2026-10-19).** So a workspace's CI
+pins the command (`npx @qretools/cli@<version>`) instead of building with whatever is on
+`main`, and teams and agents run it without the monorepo. The repository is MIT
+licensed (`LICENSE`). The package is a rolldown bundle of the command with the core, the
+Qualtrics export and `yaml`, `zod`, `ajv` inside (Node won't strip types under
+`node_modules`), and no dependencies; the DDI schema is a JSON import, chunked, rather
+than a file read by package path, so the bundle carries it. Node 22 or later (checked:
+`check` and `export` on 22, 24 and 26). Released by tag: `cli-v<version>` must match
+`packages/cli/package.json`; `release-cli.yml` checks, packs with pnpm (so `workspace:*`
+becomes versions), runs the installed tarball, and publishes with provenance through
+npm trusted publishing, prereleases under `next`. The first publish is by hand, as npm
+configures a trusted publisher only for an existing package. Only the CLI is published:
+`@qretools/core` and `@qretools/qsf` stay private, bundled in.
+
 ## Principles from PL research (how features are judged)
 
 - **Total error localization.** Every draft, however broken, elaborates. Missing or

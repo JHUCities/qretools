@@ -1,0 +1,46 @@
+# Publishes @qretools/cli to npm when a tag `cli-v<version>` is pushed, the version being
+# packages/cli/package.json's. npm trusts this workflow (trusted publishing, OIDC), so
+# no token is stored, and the package carries provenance linking it to this commit.
+# A prerelease (2.0.0-alpha.1) is published under the dist-tag `next`, not `latest`.
+name: Release CLI
+
+on:
+  push:
+    tags: ["cli-v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Node and pnpm as mise.toml pins them.
+      - uses: jdx/mise-action@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - name: The tag names the package's version
+        run: |
+          version=$(node -p "require('./packages/cli/package.json').version")
+          test "$GITHUB_REF_NAME" = "cli-v$version" || {
+            echo "Tag $GITHUB_REF_NAME doesn't match packages/cli/package.json's version $version." >&2
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_ENV"
+      # `pnpm pack` bundles (prepack) and writes the workspace's own versions in place of workspace:*.
+      - run: pnpm --dir packages/cli pack --pack-destination "$RUNNER_TEMP/release"
+      - name: The packed command runs where it's installed
+        run: |
+          mkdir "$RUNNER_TEMP/try" && cd "$RUNNER_TEMP/try"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/release/*.tgz
+          npx qretools check "$GITHUB_WORKSPACE/packages/core/fixtures/bank"
+          npx qretools export "$GITHUB_WORKSPACE/packages/core/fixtures/bank" -o ddi.json
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@11
+      - run: |
+          tag=latest
+          case "$version" in *-*) tag=next ;; esac
+          npm publish "$RUNNER_TEMP"/release/*.tgz --provenance --access public --tag "$tag"
