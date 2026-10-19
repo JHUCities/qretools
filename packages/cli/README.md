@@ -1,8 +1,11 @@
 # The `qretools` command
 
+For agents writing a workspace with it: [AGENTS.md](AGENTS.md).
+
 For a workspace checked out on disk, in CI or at a terminal:
 
 ```sh
+qretools init path/to/workspace --agency edu.example.lab   # a new workspace's workspace.yaml, never over one
 qretools check path/to/workspace            # findings, one per line; exit 1 on anything to fill in or fix
 qretools check path/to/workspace --strict   # warnings fail too
 qretools export path/to/workspace -o questions.json   # its questions' DDI, validated

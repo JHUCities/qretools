@@ -195,6 +195,30 @@ describe("qretools check", () => {
 	});
 });
 
+describe("qretools init", () => {
+	it("writes the template's workspace.yaml with the agency given, which then checks", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-init-"));
+		const r = await run("init", dir, "--agency", "edu.example.lab");
+		expect(r.code).toBe(0);
+		const yaml = r.written[join(dir, "workspace.yaml")];
+		expect(yaml).toMatch(/^agency: edu\.example\.lab$/m);
+		await writeFile(join(dir, "workspace.yaml"), yaml ?? "");
+		expect(await run("check", dir)).toMatchObject({ code: 0 });
+	});
+
+	it("refuses an invalid agency, a stray option and an existing workspace.yaml, writing nothing", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-init-"));
+		for (const argv of [["--agency", "not an agency"], ["--strict"]]) {
+			const r = await run("init", dir, ...argv);
+			expect(r).toMatchObject({ code: 2, written: {} });
+		}
+		await writeFile(join(dir, "workspace.yaml"), "agency: org.example\n");
+		const r = await run("init", dir);
+		expect(r).toMatchObject({ code: 2, written: {} });
+		expect(r.err).toMatch(/already exists/);
+	});
+});
+
 describe("qretools export", () => {
 	it("finds nothing to export where the only questions are in folders of their own", async () => {
 		const ws = await mkdtemp(join(tmpdir(), "qretools-ws-"));

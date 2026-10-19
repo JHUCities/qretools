@@ -1,5 +1,5 @@
 /**
- * The `qretools` command: `check` a workspace directory's findings (its questions',
+ * The `qretools` command: `init` a workspace, `check` a workspace directory's findings (its questions',
  * shared files' and instruments'), as compilers report them, or `export` its questions' DDI. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
@@ -9,6 +9,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
 	type Address,
+	AGENCY_PATTERN,
 	addressOf,
 	agencyWritten,
 	type Bank,
@@ -55,6 +56,7 @@ export interface Io {
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
 
 const USAGE = `Usage:
+  qretools init [dir] [--agency <agency>]   Start a workspace: write its workspace.yaml
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
@@ -98,6 +100,14 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	if (args.values.help || command === undefined || extra.length > 0) {
 		(args.values.help ? io.out : io.err)(`${USAGE}\n`);
 		return args.values.help ? OK : USAGE_ERROR;
+	}
+	if (command === "init") {
+		const other = Object.keys(args.values).find((k) => k !== "agency");
+		if (other) {
+			io.err(`\`--${other}\` isn't an option of \`init\`.\n${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return init(dir, args.values.agency, io);
 	}
 	if (command !== "check" && command !== "export") {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
@@ -156,6 +166,45 @@ function parse(argv: readonly string[]) {
 			help: { type: "boolean", short: "h" },
 		},
 	});
+}
+
+/**
+ * `qretools init [dir]`: a new workspace's settings, the template the app starts one
+ * with, its agency filled in when given. Never over an existing workspace.yaml.
+ */
+async function init(
+	dir: string,
+	agency: string | undefined,
+	io: Io,
+): Promise<number> {
+	if (agency !== undefined && !AGENCY_PATTERN.test(agency)) {
+		io.err(
+			`\`${agency}\` isn't a DDI agency: letters, digits and hyphens, in parts joined by dots, such as edu.example.dept.\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const path = join(dir, "workspace.yaml");
+	const existing = await readFile(path, "utf8").catch(() => undefined);
+	if (existing !== undefined) {
+		io.err(`${path} already exists: nothing written.\n`);
+		return USAGE_ERROR;
+	}
+	const template = await readFile(
+		new URL(
+			import.meta.resolve("@qretools/core/templates/settings/workspace.yaml"),
+		),
+		"utf8",
+	);
+	await io.writeFile(
+		path,
+		agency === undefined
+			? template
+			: template.replace(/^agency:$/m, `agency: ${agency}`),
+	);
+	io.err(
+		`Wrote ${path}.${agency === undefined ? " Fill in its agency: before exporting." : ""} Add questions under questions/<folder>/, then run qretools check ${dir}.\n`,
+	);
+	return OK;
 }
 
 /** As compilers write it, so editors and CI annotate it: `error`, `warning`, `note`. */
