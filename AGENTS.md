@@ -410,7 +410,8 @@ than a file read by package path, so the bundle carries it. Node 22 or later (ch
 `check` and `export` on 22, 24 and 26). Released by tag: `cli-v<version>` must match
 `packages/cli/package.json`; `release-cli.yml` checks, packs with pnpm (so `workspace:*`
 becomes versions), runs the installed tarball, and publishes with provenance through
-npm trusted publishing, prereleases under `next`. The first publish is by hand, as npm
+npm trusted publishing, every version under `latest` (prereleases too, while there is no
+stable line: `npx qretools` runs the newest). The first publish is by hand, as npm
 configures a trusted publisher only for an existing package. Only the CLI is published, unscoped so `npx qretools check` works, and held by the npm
 organization `qretools`; `@qretools/core` and `@qretools/qsf` stay private, bundled in,
 until a library is wanted (its scope is that organization). The monorepo's root package

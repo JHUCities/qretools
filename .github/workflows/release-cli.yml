@@ -1,7 +1,9 @@
 # Publishes the CLI to npm as `qretools` when a tag `cli-v<version>` is pushed, the version being
 # packages/cli/package.json's. npm trusts this workflow (trusted publishing, OIDC), so
 # no token is stored, and the package carries provenance linking it to this commit.
-# A prerelease (2.0.0-alpha.1) is published under the dist-tag `next`, not `latest`.
+# Every version goes to the dist-tag `latest`, prereleases included, so `npx qretools` runs
+# the newest: there is no stable line yet for an alpha to stay off. (npm requires the tag
+# to be named for a prerelease.)
 name: Release CLI
 
 on:
@@ -40,7 +42,4 @@ jobs:
           npx qretools export "$GITHUB_WORKSPACE/packages/core/fixtures/bank" -o ddi.json
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install -g npm@11
-      - run: |
-          tag=latest
-          case "$version" in *-*) tag=next ;; esac
-          npm publish "$RUNNER_TEMP"/release/*.tgz --provenance --access public --tag "$tag"
+      - run: npm publish "$RUNNER_TEMP"/release/*.tgz --provenance --access public --tag latest

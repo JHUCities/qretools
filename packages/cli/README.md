@@ -63,8 +63,8 @@ loaded only to export. It depends on nothing.
 `cli-v<version>` (`git tag cli-v2.0.0-alpha.1 && git push origin cli-v2.0.0-alpha.1`).
 `.github/workflows/release-cli.yml` checks the repository, checks the tag names that
 version, packs, installs the tarball and runs it, then publishes with provenance through
-npm's trusted publishing (no token). A prerelease goes to the dist-tag `next`, a release
-to `latest`. A published version can't be replaced: fix forward with the next one.
+npm's trusted publishing (no token). Every version goes to the dist-tag `latest`, prereleases
+included, so `npx qretools` runs the newest (npm requires the tag named for a prerelease). A published version can't be replaced: fix forward with the next one.
 
 It is the one package that knows both the core (`@qretools/core`) and the Qualtrics
 export (`@qretools/qsf`): the core knows nothing of any export target.
