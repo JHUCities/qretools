@@ -15,5 +15,7 @@ describe("where a wrapped line continues", () => {
 		expect(hangOf("    and its wording goes on")).toBe(4);
 		expect(hangOf('  "1": Strongly agree')).toBe(2);
 		expect(hangOf("")).toBe(0);
+		// Accepted: a wrapped sentence with a colon reads as a key; it only changes the look.
+		expect(hangOf("  Note: the rest of a long value")).toBe(8);
 	});
 });

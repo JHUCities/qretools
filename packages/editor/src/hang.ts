@@ -29,10 +29,13 @@ export function hangOf(line: string): number {
 }
 
 function decorate(view: EditorView): DecorationSet {
-	// Never more than half the line's width, so a deep key still leaves room to read.
-	const most = Math.floor(
-		view.contentDOM.clientWidth / view.defaultCharacterWidth / 2,
-	);
+	// Never more than half the line's width, so a deep key still leaves room to read;
+	// no cap while the editor isn't laid out yet (width 0), until its geometry changes.
+	const width = view.contentDOM.clientWidth;
+	const most =
+		width === 0
+			? Number.POSITIVE_INFINITY
+			: Math.floor(width / view.defaultCharacterWidth / 2);
 	const builder = new RangeSetBuilder<Decoration>();
 	for (const { from, to } of view.visibleRanges)
 		for (let pos = from; pos <= to; ) {
@@ -44,6 +47,8 @@ function decorate(view: EditorView): DecorationSet {
 					line.from,
 					Decoration.line({
 						class: "cm-hang",
+						// An inline style: a strict style-src would drop it (the hang would just
+						// not show); classes per width would be the way then.
 						attributes: { style: `--cm-hang: ${hang}ch` },
 					}),
 				);
