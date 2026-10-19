@@ -32,7 +32,7 @@ flow:
             checks:
               - ensure: hh.rent < 10000
                 severity: warning
-                message: "{{hh.rent}} dollars is a lot. Is that right?"
+                message: That's a lot for a month's rent.
           - ask: hh.utilities
             fill:
               rent: hh.rent

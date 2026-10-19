@@ -191,6 +191,10 @@
               "QuestionID": "QID9"
             },
             {
+              "Type": "Question",
+              "QuestionID": "QID10"
+            },
+            {
               "Type": "Page Break"
             },
             {
@@ -1948,7 +1952,7 @@
       "SurveyID": "SV_qretoolsExport0",
       "Element": "QC",
       "PrimaryAttribute": "Survey Question Count",
-      "SecondaryAttribute": "39",
+      "SecondaryAttribute": "40",
       "TertiaryAttribute": null,
       "Payload": null
     },
@@ -2326,6 +2330,55 @@
               "NumDecimals": "0"
             }
           }
+        }
+      }
+    },
+    {
+      "SurveyID": "SV_qretoolsExport0",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID10",
+      "SecondaryAttribute": "That's a lot for a month's rent.",
+      "TertiaryAttribute": null,
+      "Payload": {
+        "QuestionText": "That's a lot for a month's rent.",
+        "DataExportTag": "QID10",
+        "DataVisibility": {
+          "Private": false,
+          "Hidden": false
+        },
+        "Configuration": {
+          "QuestionDescriptionOption": "UseText"
+        },
+        "QuestionDescription": "That's a lot for a month's rent.",
+        "Language": [],
+        "NextAnswerId": 1,
+        "QuestionID": "QID10",
+        "QuestionType": "DB",
+        "Selector": "TB",
+        "ChoiceOrder": [],
+        "Validation": {
+          "Settings": {
+            "Type": "None"
+          }
+        },
+        "InPageDisplayLogic": {
+          "0": {
+            "0": {
+              "LogicType": "Question",
+              "QuestionID": "QID9",
+              "QuestionIsInLoop": "no",
+              "ChoiceLocator": "q://QID9/ChoiceTextEntryValue",
+              "Operator": "GreaterThanOrEqual",
+              "QuestionIDFromLocator": "QID9",
+              "LeftOperand": "q://QID9/ChoiceTextEntryValue",
+              "RightOperand": "10000",
+              "Type": "Expression",
+              "Description": ""
+            },
+            "Type": "If"
+          },
+          "Type": "BooleanExpression",
+          "inPage": true
         }
       }
     },
