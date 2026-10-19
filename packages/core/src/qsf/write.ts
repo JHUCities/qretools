@@ -241,7 +241,7 @@ export function writeQsf(
 				"qsf-inexpressible",
 				"warning",
 				s.id,
-				`With its checks, Qualtrics no longer refuses an answer here with ${domain.decimals === 0 ? "decimals" : `more than ${domain.decimals} decimal places`}.`,
+				`With its checks, Qualtrics no longer refuses an answer here with ${domain.decimals === 0 ? "decimals" : `more than ${domain.decimals} decimal place${domain.decimals === 1 ? "" : "s"}`}.`,
 			);
 		return {
 			...q,
