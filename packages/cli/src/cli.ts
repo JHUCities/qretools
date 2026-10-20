@@ -34,6 +34,7 @@ import {
 	type Refusal,
 	type RemoteBank,
 	ROOT,
+	remoteScope,
 	remotesOf,
 	type Severity,
 	scopeOf,
@@ -493,7 +494,7 @@ async function instrument(
 				io.err(`Can't read \`${use.alias}\`: ${read.reason}\n`);
 				return USAGE_ERROR;
 			}
-			banks[use.alias] = scopeOf(read.files);
+			banks[use.alias] = remoteScope(address.key, read);
 			continue;
 		}
 		const dir = offline ?? join(dirname(file), HERE);

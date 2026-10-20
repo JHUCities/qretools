@@ -225,6 +225,12 @@ function remoteRead(result: Result<TaggedBank, Failure>): RemoteBank {
 				files: Object.fromEntries(
 					result.value.files.map((f) => [f.path, f.text]),
 				),
+				at: {
+					commit: result.value.commit,
+					blobs: Object.fromEntries(
+						result.value.files.map((f) => [f.path, f.sha]),
+					),
+				},
 			}
 		: { kind: "unavailable", reason: result.value.reason };
 }

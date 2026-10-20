@@ -63,6 +63,7 @@ export {
 } from "./ddi/elaborate.ts";
 export { makeValidator, type Validator } from "./ddi/validate.ts";
 export {
+	type GitOrigin,
 	UNVERSIONED,
 	type Version,
 	type Versions,
@@ -227,6 +228,7 @@ export {
 	type RemoteBank,
 	type Resolution,
 	readsInWorkspace,
+	remoteScope,
 	remotesOf,
 	resolveUses,
 	skippedFolder,

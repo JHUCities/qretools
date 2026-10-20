@@ -25,10 +25,10 @@ import {
 	importsOf,
 	instrumentIn,
 	type RemoteBank,
+	remoteScope,
 	resolveUses,
 	type SchemeEvaluation,
 	type SchemeFileEvaluation,
-	scopeOf,
 } from "@qretools/core";
 import { questionJsonSchema } from "@qretools/core/editor";
 import {
@@ -97,11 +97,14 @@ export interface RemoteGiven {
 
 /** A remote bank's files, read: one evaluation per read, never per keystroke. */
 const remoteScopes = new WeakMap<object, BankScope>();
-const scopeOfRead = (files: Readonly<Record<string, string>>): BankScope => {
-	const kept = remoteScopes.get(files);
+const scopeOfRead = (
+	key: AddressKey,
+	read: Extract<RemoteBank, { kind: "files" }>,
+): BankScope => {
+	const kept = remoteScopes.get(read);
 	if (kept !== undefined) return kept;
-	const scope = scopeOf(files);
-	remoteScopes.set(files, scope);
+	const scope = remoteScope(key, read);
+	remoteScopes.set(read, scope);
 	return scope;
 };
 
@@ -166,7 +169,7 @@ export function createEvaluations(): Evaluations {
 			for (const [key, read] of Object.entries(remoteBanks)) {
 				if (read.kind === "loading") continue;
 				reads[key] = read;
-				if (read.kind === "files") scopes[key] = scopeOfRead(read.files);
+				if (read.kind === "files") scopes[key] = scopeOfRead(key, read);
 			}
 			given = { banks: remoteBanks, given: { reads, scopes } };
 			return given.given;

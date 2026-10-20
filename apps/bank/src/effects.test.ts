@@ -165,7 +165,9 @@ describe("reading the banks in other repositories that instruments use", () => {
 				({
 					loadBankAt: (tag: string) => {
 						read.push(`${bank.repo}@${tag}`);
-						return Promise.resolve(ok({ found: true, files: [], unread: [] }));
+						return Promise.resolve(
+							ok({ found: true, commit: "c", files: [], unread: [] }),
+						);
 					},
 				}) as unknown as Store,
 			credentialStore: {

@@ -73,11 +73,21 @@ const options = () => ({
 describe("a bank in another repository, read at its tag with git", () => {
 	it("reads its folder at the tag, then from the cache once read", async () => {
 		const read = await readTagged(remote("o/bank/banks/hh@v1"), options());
+		const at = async (expression: string) =>
+			(await run("git", ["-C", origin, "rev-parse", expression])).stdout.trim();
 		expect(read).toEqual({
 			kind: "files",
 			files: {
 				"workspace.yaml": "agency: org.example\n",
 				"questions/t/q.yaml": "name: q\n",
+			},
+			// The commit an annotated tag names, never the tag object; blobs by path in the folder.
+			at: {
+				commit: await at("v1^{commit}"),
+				blobs: {
+					"workspace.yaml": await at("v1:banks/hh/workspace.yaml"),
+					"questions/t/q.yaml": await at("v1:banks/hh/questions/t/q.yaml"),
+				},
 			},
 		});
 		// Read again with the repository unreachable: the cache answers.
@@ -91,7 +101,9 @@ describe("a bank in another repository, read at its tag with git", () => {
 	it("reads each folder at a tag apart, and tells tags apart by case", async () => {
 		const hh = await readTagged(remote("o/bank/banks/hh@v1"), options());
 		// Another folder at the same tag, after the first: its own entry, not the first's checkout.
-		expect(await readTagged(remote("o/bank/banks/b@v1"), options())).toEqual({
+		expect(
+			await readTagged(remote("o/bank/banks/b@v1"), options()),
+		).toMatchObject({
 			kind: "files",
 			files: { "workspace.yaml": "agency: org.b\n" },
 		});

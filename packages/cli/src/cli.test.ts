@@ -69,6 +69,28 @@ describe("a bank in another repository", () => {
 	});
 });
 
+it("exports its questions saying where each was read: repository, path, tag, commit", async () => {
+	const hh = await readWorkspace(here("../../core/fixtures/households"));
+	const path = "questions/household/consent.yaml";
+	const r = await runWith(
+		async () => ({
+			kind: "files",
+			files: hh,
+			at: { commit: "c0ffee", blobs: { [path]: "b1" } },
+		}),
+		"instrument",
+		"export",
+		here("../../core/fixtures/households/instruments/remote.yaml"),
+		"--agency",
+		"org.example",
+	);
+	expect(r.code).toBe(0);
+	expect(r.out).toContain('"StringValue": "b1"');
+	expect(r.out).toContain(`"StringValue": "${path}"`);
+	expect(r.out).toContain('"StringValue": "c0ffee"');
+	expect(r.out).toContain('"StringValue": "https://github.com/owner/bank"');
+});
+
 describe("qretools check", () => {
 	it("passes a clean bank, saying how many files it read", async () => {
 		const r = await run("check", SAMPLE);
