@@ -19,8 +19,6 @@ import {
 	type NamedScheme,
 	parseSurface,
 	type Range,
-	type RemoteBank,
-	type Result,
 	remotesOf,
 	SCHEME_NAME,
 	SHAPE,
@@ -58,8 +56,8 @@ import {
 	type Link,
 	parseBank,
 	parseLink,
+	remoteBankOf,
 	sameBank,
-	type TaggedBank,
 } from "@qretools/shell";
 import {
 	describeChange,
@@ -205,37 +203,6 @@ function wantedRemote(model: Model): readonly RemoteAddress[] {
 	return remotesOf(sources).filter(
 		(a) => model.remoteBanks[a.key] === undefined,
 	);
-}
-
-/** What a read of a bank at its tag gives an instrument: its files, or why it can't. */
-function remoteRead(result: Result<TaggedBank, Failure>): RemoteBank {
-	// Each failure in its own words: the adapter's hint says what to check (the name,
-	// and that the GitHub App is installed there) where that's the likely cause.
-	if (!result.ok)
-		return {
-			kind: "unavailable",
-			reason:
-				result.error.hint === undefined
-					? result.error.message
-					: `${result.error.message} ${result.error.hint}`,
-		};
-	return result.value.found
-		? {
-				kind: "files",
-				files: Object.fromEntries(
-					result.value.files.map((f) => [f.path, f.text]),
-				),
-				at: {
-					commit: result.value.commit,
-					blobs: Object.fromEntries(
-						result.value.files.map((f) => [f.path, f.sha]),
-					),
-					...(result.value.message !== undefined && {
-						message: result.value.message,
-					}),
-				},
-			}
-		: { kind: "unavailable", reason: result.value.reason };
 }
 
 /** Banks read and found, or being read, are kept across a reload; the rest are read again. */
@@ -1547,7 +1514,7 @@ function step(model: Model, msg: Msg): Step {
 							...model,
 							remoteBanks: {
 								...model.remoteBanks,
-								[msg.key]: remoteRead(msg.result),
+								[msg.key]: remoteBankOf(msg.result),
 							},
 						},
 						[],

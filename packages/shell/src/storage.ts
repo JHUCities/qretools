@@ -5,7 +5,7 @@
  *
  * A Failure is a shell value: HTTP and networks are not the core's vocabulary.
  */
-import { err, ok, type Result } from "@qretools/core";
+import { err, ok, type RemoteBank, type Result } from "@qretools/core";
 import type { Credentials } from "./auth.ts";
 
 export interface File {
@@ -323,4 +323,35 @@ export class AuthError extends Error {
 		super(failure.message);
 		this.name = "AuthError";
 	}
+}
+
+/** What a read of a bank at its tag gives an instrument: its files, or why it can't. */
+export function remoteBankOf(result: Result<TaggedBank, Failure>): RemoteBank {
+	// Each failure in its own words: the adapter's hint says what to check (the name,
+	// and that the GitHub App is installed there) where that's the likely cause.
+	if (!result.ok)
+		return {
+			kind: "unavailable",
+			reason:
+				result.error.hint === undefined
+					? result.error.message
+					: `${result.error.message} ${result.error.hint}`,
+		};
+	return result.value.found
+		? {
+				kind: "files",
+				files: Object.fromEntries(
+					result.value.files.map((f) => [f.path, f.text]),
+				),
+				at: {
+					commit: result.value.commit,
+					blobs: Object.fromEntries(
+						result.value.files.map((f) => [f.path, f.sha]),
+					),
+					...(result.value.message !== undefined && {
+						message: result.value.message,
+					}),
+				},
+			}
+		: { kind: "unavailable", reason: result.value.reason };
 }
