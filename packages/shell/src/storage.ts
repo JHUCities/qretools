@@ -199,7 +199,11 @@ export interface LoadedWorkspace extends Loaded {
 
 /** A bank in another repository, read at a tag: its files by path in its folder, or why not. */
 export type TaggedBank =
-	| ({ readonly found: true } & Pick<LoadedWorkspace, "files" | "unread">)
+	| ({
+			readonly found: true;
+			/** The commit the tag named when read. */
+			readonly commit: string;
+	  } & Pick<LoadedWorkspace, "files" | "unread">)
 	| { readonly found: false; readonly reason: string };
 
 export interface Store {

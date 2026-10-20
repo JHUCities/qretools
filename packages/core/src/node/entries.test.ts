@@ -101,6 +101,7 @@ describe("the entry points", () => {
 			    "questionItems",
 			    "readsInWorkspace",
 			    "refusalReason",
+			    "remoteScope",
 			    "remotesOf",
 			    "resolveUses",
 			    "respondentView",

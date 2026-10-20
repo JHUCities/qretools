@@ -896,6 +896,7 @@ describe("a bank in another repository an instrument uses", () => {
 			key: KEY,
 			result: ok({
 				found: true,
+				commit: "c",
 				files: [{ path: "workspace.yaml", sha: "b", text: "agency: x\n" }],
 				unread: [],
 			}),
@@ -903,6 +904,7 @@ describe("a bank in another repository an instrument uses", () => {
 		expect(read.remoteBanks[KEY]).toEqual({
 			kind: "files",
 			files: { "workspace.yaml": "agency: x\n" },
+			at: { commit: "c", blobs: { "workspace.yaml": "b" } },
 		});
 		const [missing] = update(started, {
 			kind: "remoteBankLoaded",

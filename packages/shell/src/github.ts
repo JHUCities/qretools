@@ -530,13 +530,19 @@ export const makeGitHubStore = (
 	async function bankAt(tag: string): Promise<Result<TaggedBank, Failure>> {
 		const r = await graphql<{
 			repository: {
-				tag: { name: string } | null;
+				tag: {
+					name: string;
+					target: { oid: string; target?: { oid: string } };
+				} | null;
 				dir: { __typename: string; oid: string } | null;
 			} | null;
 		}>(
 			`query Tagged($owner: String!, $repo: String!, $tag: String!, $dir: String!) {
   repository(owner: $owner, name: $repo) {
-    tag: ref(qualifiedName: $tag) { name }
+    tag: ref(qualifiedName: $tag) {
+      name
+      target { oid ... on Tag { target { oid } } }
+    }
     dir: object(expression: $dir) { __typename oid }
   }
 }`,
@@ -567,7 +573,10 @@ export const makeGitHubStore = (
 				reason: `\`${where}\`: there's no folder \`${folder}\` at \`${tag}\`.`,
 			});
 		const read = await treeFiles(data.dir.oid);
-		return read.ok ? ok({ found: true, ...read.value }) : read;
+		// An annotated tag's target is the tag object, a lightweight one's the commit.
+		// shortcut: a tag of a tag isn't peeled further; loop if one is ever met.
+		const commit = data.tag.target.target?.oid ?? data.tag.target.oid;
+		return read.ok ? ok({ found: true, commit, ...read.value }) : read;
 	}
 
 	/** Blobs by oid, in one request: each one's text, or null for an oid GitHub lacks. */

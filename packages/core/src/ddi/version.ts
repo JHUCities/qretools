@@ -22,6 +22,19 @@ export interface Version {
 	readonly blob?: string;
 	/** IsPublished: false for a preview of a change not yet merged; absent when not stated. */
 	readonly published?: boolean;
+	/** Where the file was read, for an item rebuilt from another repository at a tag. */
+	readonly origin?: GitOrigin;
+}
+
+/** A file in a repository on GitHub at a tag, as read: recorded as UserAttributePairs. */
+export interface GitOrigin {
+	/** `owner/repo`, from the address key, which lowercases them as GitHub compares them. */
+	readonly repository: string;
+	/** The file's path in the repository. */
+	readonly path: string;
+	readonly tag: string;
+	/** The commit the tag named when it was read. */
+	readonly commit: string;
 }
 
 /** Versions by bank-relative path (`questions/nhd/nhd_sat.yaml`, `scales/agree4.yaml`). */
@@ -33,10 +46,31 @@ export const UNVERSIONED: Version = { number: "1" };
 /** How a git blob sha is labelled among an item's UserIDs. */
 const BLOB = "git-blob";
 
+/** The keys an origin's UserAttributePairs use: one vocabulary, written once. */
+const ORIGIN_KEYS = {
+	repository: "git-repository",
+	path: "git-path",
+	tag: "git-tag",
+	commit: "git-commit",
+} as const;
+
+const pair = (key: string, value: string): JsonObject => ({
+	AttributeKey: { StringValue: key },
+	AttributeValue: { StringValue: value },
+});
+
+/** An origin's UserAttributePairs. An `owner/repo` address means GitHub, so the repository is its URL there. */
+const originPairs = (o: GitOrigin): JsonObject[] => [
+	pair(ORIGIN_KEYS.repository, `https://github.com/${o.repository}`),
+	pair(ORIGIN_KEYS.path, o.path),
+	pair(ORIGIN_KEYS.tag, o.tag),
+	pair(ORIGIN_KEYS.commit, o.commit),
+];
+
 /**
  * A versionable item's version fields. Only the file's principal item carries the blob
  * as its UserID, since a UserID must be unique within its type and every item from one
- * file shares the blob.
+ * file shares the blob; its origin rides beside it, on the same item.
  */
 export const versionFields = (
 	version: Version,
@@ -49,6 +83,10 @@ export const versionFields = (
 		UserID:
 			principal && version.blob !== undefined
 				? [{ StringValue: version.blob, TypeOfUserID: { StringValue: BLOB } }]
+				: undefined,
+		UserAttributePair:
+			principal && version.origin !== undefined
+				? originPairs(version.origin)
 				: undefined,
 		IsPublished: version.published,
 	});

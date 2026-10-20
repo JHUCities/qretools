@@ -134,6 +134,28 @@ describe("DDI versions", () => {
 		}
 	});
 
+	it("says where a file read at a tag came from, on its principal item only", () => {
+		const origin = {
+			repository: "org/bank",
+			path: "surveys/questions/q.yaml",
+			tag: "v1",
+			commit: "c0ffee",
+		};
+		const doc = ddi(QUESTION, { own: { number: "1", blob: "q-blob", origin } });
+		expect(validate(doc)).toEqual([]);
+		const pairs = (k: string, v: string) => ({
+			AttributeKey: { StringValue: k },
+			AttributeValue: { StringValue: v },
+		});
+		expect(only(doc, "QuestionItem")[0]?.UserAttributePair).toEqual([
+			pairs("git-repository", "https://github.com/org/bank"),
+			pairs("git-path", "surveys/questions/q.yaml"),
+			pairs("git-tag", "v1"),
+			pairs("git-commit", "c0ffee"),
+		]);
+		expect(only(doc, "Variable")[0]).not.toHaveProperty("UserAttributePair");
+	});
+
 	it("an unmerged preview is said to be unpublished", () => {
 		const doc = ddi(QUESTION, { own: { number: "5", published: false } });
 		expect(only(doc, "QuestionItem")[0]?.IsPublished).toBe(false);

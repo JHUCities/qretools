@@ -7,7 +7,7 @@
  * resolved to is written beside the clone, for a lock to compare with one day.
  */
 import { execFile } from "node:child_process";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -127,5 +127,45 @@ export async function readTagged(
 			kind: "unavailable",
 			reason: `\`${where}\`: there's no folder \`${path}\` at \`${ref}\`.`,
 		};
-	return { kind: "files", files: await readWorkspace(folder) };
+	const files = await readWorkspace(folder);
+	// Where each file came from is part of the read: an export without it would publish
+	// the questions with no record of their source, so a failure here is the read's.
+	try {
+		const commit = (
+			await readFile(join(clone, ".qretools-commit"), "utf8")
+		).trim();
+		return {
+			kind: "files",
+			files,
+			at: { commit, blobs: await blobsOf(clone, path, files) },
+		};
+	} catch (e) {
+		return {
+			kind: "unavailable",
+			reason: `\`${where}\` can't be read: ${gitSaid(e)}`,
+		};
+	}
+}
+
+/** Each file's blob, by its path in the bank's folder (`ls-tree` of that tree, so no prefix to strip). */
+async function blobsOf(
+	clone: string,
+	path: string,
+	files: Readonly<Record<string, string>>,
+): Promise<Record<string, string>> {
+	const { stdout } = await run(
+		"git",
+		["-C", clone, "ls-tree", "-r", "-z", path === "" ? "HEAD" : `HEAD:${path}`],
+		{ maxBuffer: 1 << 30 },
+	);
+	const blobs: Record<string, string> = {};
+	for (const entry of stdout.split("\0")) {
+		// `<mode> <type> <sha>\t<path>`
+		const tab = entry.indexOf("\t");
+		if (tab < 0) continue;
+		const [, type, sha] = entry.slice(0, tab).split(" ");
+		const at = entry.slice(tab + 1);
+		if (type === "blob" && sha !== undefined && at in files) blobs[at] = sha;
+	}
+	return blobs;
 }

@@ -10,7 +10,7 @@ import {
 	HERE,
 	notHere,
 } from "./address.ts";
-import type { Versions } from "./ddi/version.ts";
+import { UNVERSIONED, type Version, type Versions } from "./ddi/version.ts";
 import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
 import type { Use } from "./instrument/draft.ts";
 import {
@@ -71,6 +71,12 @@ export type RemoteBank =
 			readonly kind: "files";
 			/** By path within the bank's own folder (the address's `path`), never the repository's. */
 			readonly files: Readonly<Record<string, string>>;
+			/** What the tag named when read, for provenance; absent for a bank read from a folder instead. */
+			readonly at?: {
+				readonly commit: string;
+				/** Each file's git blob, by the same paths as `files`. */
+				readonly blobs: Readonly<Record<string, string>>;
+			};
 	  }
 	| { readonly kind: "unavailable"; readonly reason: string };
 
@@ -122,6 +128,36 @@ function unreadOf(r: Resolution): Unread | undefined {
 }
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
+
+/**
+ * What an instrument reads of a bank in another repository, read at `key`: each file
+ * read at the tag carries where it came from (repository, path, tag, commit, blob) on
+ * its DDI items. Its version stays "1": nothing of the bank's history is read.
+ */
+export function remoteScope(
+	key: AddressKey,
+	read: Extract<RemoteBank, { kind: "files" }>,
+): BankScope {
+	const a = addressOf(key);
+	if (read.at === undefined || a.kind !== "remote") return scopeOf(read.files);
+	const { commit, blobs } = read.at;
+	const versions: Record<string, Version> = {};
+	for (const path of Object.keys(read.files)) {
+		const blob = blobs[path];
+		if (blob === undefined) continue;
+		versions[path] = {
+			...UNVERSIONED,
+			blob,
+			origin: {
+				repository: `${a.owner}/${a.repo}`,
+				path: a.path === "" ? path : `${a.path}/${path}`,
+				tag: a.ref,
+				commit,
+			},
+		};
+	}
+	return scopeOf(read.files, versions);
+}
 
 /** The banks in other repositories the workspace's instruments use, each once, in key order. */
 export function remotesOf(
@@ -230,7 +266,7 @@ export function workspaceOf(
 	// Read only: what instruments read of them, never the findings a check of them adds.
 	const remoteBanks: Record<AddressKey, BankScope> = {};
 	for (const [key, read] of Object.entries(remote))
-		if (read.kind === "files") remoteBanks[key] = scopeOf(read.files);
+		if (read.kind === "files") remoteBanks[key] = remoteScope(key, read);
 	const settings = files[ROOT.workspace];
 	const agency = settings === undefined ? undefined : agencyWritten(settings);
 	const instruments: Record<string, InstrumentIn> = {};

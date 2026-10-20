@@ -3,6 +3,7 @@ import {
 	instrumentAt,
 	instrumentPath,
 	readsInWorkspace,
+	remoteScope,
 	workspaceOf,
 } from "./workspace.ts";
 
@@ -117,5 +118,38 @@ describe("an instrument's path", () => {
 			"workspace.yaml",
 		])
 			expect(instrumentAt(path), path).toBeUndefined();
+	});
+});
+
+describe("a bank read from another repository", () => {
+	const files = {
+		"questions/t/q.yaml": "name: q\ntext: Q?\nintent: i\nopen: {}\n",
+		"workspace.yaml": "agency: org.example\n",
+	};
+
+	it("says on each file's items the repository, path in it, tag, commit and blob", () => {
+		const scope = remoteScope("org/bank/surveys@v1", {
+			kind: "files",
+			files,
+			at: { commit: "c0ffee", blobs: { "questions/t/q.yaml": "b1" } },
+		});
+		expect(scope.versions?.["questions/t/q.yaml"]).toEqual({
+			number: "1",
+			blob: "b1",
+			origin: {
+				repository: "org/bank",
+				path: "surveys/questions/t/q.yaml",
+				tag: "v1",
+				commit: "c0ffee",
+			},
+		});
+		// A file with no blob given has no origin, rather than a made-up one.
+		expect(scope.versions?.["workspace.yaml"]).toBeUndefined();
+	});
+
+	it("says nothing of where it came from when read from a folder instead", () => {
+		expect(
+			remoteScope("org/bank@v1", { kind: "files", files }).versions,
+		).toBeUndefined();
 	});
 });

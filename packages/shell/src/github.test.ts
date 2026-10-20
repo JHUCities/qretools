@@ -617,7 +617,20 @@ describe("loading a workspace", () => {
 				return json({
 					data: {
 						repository: {
-							tag: tag in branches ? { name: tag } : null,
+							// `v1` is annotated (a Tag object naming the commit), any other lightweight.
+							tag:
+								tag in branches
+									? {
+											name: tag,
+											target:
+												tag === "v1"
+													? {
+															oid: `tag-${tag}`,
+															target: { oid: `commit-${tag}` },
+														}
+													: { oid: `commit-${tag}` },
+										}
+									: null,
 							dir:
 								tree === null || tree === undefined
 									? null
@@ -719,6 +732,7 @@ describe("loading a workspace", () => {
 				branches: {
 					v1: { "workspace.yaml": "agency: org.example\n" },
 					v2: null,
+					v4: { "workspace.yaml": "agency: org.example\n" },
 				},
 			}),
 		);
@@ -726,6 +740,8 @@ describe("loading a workspace", () => {
 			ok: true,
 			value: {
 				found: true,
+				// The commit an annotated tag names, never the tag object.
+				commit: "commit-v1",
 				files: [
 					{
 						path: "workspace.yaml",
@@ -747,6 +763,11 @@ describe("loading a workspace", () => {
 		expect(await s.loadBankAt("v2")).toMatchObject({
 			ok: true,
 			value: { found: false, reason: expect.stringMatching(/no folder/) },
+		});
+		// A lightweight tag names its commit itself.
+		expect(await s.loadBankAt("v4")).toMatchObject({
+			ok: true,
+			value: { found: true, commit: "commit-v4" },
 		});
 	});
 

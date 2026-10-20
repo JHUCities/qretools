@@ -30,7 +30,10 @@ repository. Only `refs/tags/v1` is fetched, never a branch of that name, shallow
 only its folder, into a cache by tag and folder (`$XDG_CACHE_HOME/qretools`, else
 `~/.cache/qretools`) beside the commit it resolved to; later runs read the cache. A tag
 is immutable by convention only: to read one that was moved, delete its entry in the
-cache. In CI, a private one needs git credentials for it, such as `GITHUB_TOKEN` given
+cache. Its questions' DDI items say where they were read: UserAttributePairs
+`git-repository`, `git-path`, `git-tag` and `git-commit` (the commit the tag named),
+beside the file's `git-blob` UserID. Their version is 1, as nothing of its history is
+read; one read from a folder with `--bank` says nothing of where it came from. In CI, a private one needs git credentials for it, such as `GITHUB_TOKEN` given
 to git (`git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf https://github.com/`)
 or a deploy key.
 
