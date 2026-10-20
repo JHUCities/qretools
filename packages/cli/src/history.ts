@@ -8,6 +8,7 @@ import { execFile, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { promisify } from "node:util";
 import { type History, readsInWorkspace, type Snapshot } from "@qretools/core";
+import { isNoGit, noGit } from "./git.ts";
 
 const run = promisify(execFile);
 
@@ -100,10 +101,12 @@ export async function readHistory(dir: string): Promise<HistoryRead> {
 	try {
 		top = (await git(dir, "rev-parse", "--show-toplevel")).trim();
 		prefix = (await git(dir, "rev-parse", "--show-prefix")).trim();
-	} catch {
+	} catch (e) {
 		return {
 			kind: "unavailable",
-			reason: `${dir} isn't in a git repository: versions are counted from its history.`,
+			reason: isNoGit(e)
+				? noGit("to build versions from history")
+				: `${dir} isn't in a git repository: versions are counted from its history.`,
 		};
 	}
 	if (

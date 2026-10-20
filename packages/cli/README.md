@@ -1,7 +1,9 @@
 # The `qretools` command
 
 For a workspace checked out on disk, in CI or at a terminal. Install it from npm (Node 22
-or later), or run it without installing:
+or later), or run it without installing. `check` and `export` of a folder need only Node;
+reading a workspace in another repository (`owner/repo@v1`) and `build` also need
+[git](https://git-scm.com) on your PATH.
 
 ```sh
 npm install -g qretools       # then `qretools …`

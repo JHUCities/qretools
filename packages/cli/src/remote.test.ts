@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { addressOf } from "@qretools/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { isNoGit } from "./git.ts";
 import { readTagged } from "./remote.ts";
 
 const run = promisify(execFile);
@@ -121,4 +122,13 @@ describe("a bank in another repository, read at its tag with git", () => {
 			reason: expect.stringMatching(/^`o\/missing@v1` can't be read: /),
 		});
 	}, 30000);
+});
+
+describe("without git", () => {
+	it("tells a program not found from one that failed", async () => {
+		const missing = await run("qretools-no-such-program").catch((e) => e);
+		expect(isNoGit(missing)).toBe(true);
+		const failed = await run("git", ["no-such-command"]).catch((e) => e);
+		expect(isNoGit(failed)).toBe(false);
+	});
 });
