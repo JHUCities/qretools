@@ -32,8 +32,11 @@ only its folder, into a cache by tag and folder (`$XDG_CACHE_HOME/qretools`, els
 is immutable by convention only: to read one that was moved, delete its entry in the
 cache. Its questions' DDI items say where they were read: UserAttributePairs
 `git-repository`, `git-path`, `git-tag` and `git-commit` (the commit the tag named),
-beside the file's `git-blob` UserID. Their version is 1, as nothing of its history is
-read; one read from a folder with `--bank` says nothing of where it came from. In CI, a private one needs git credentials for it, such as `GITHUB_TOKEN` given
+beside the file's `git-blob` UserID. Their versions come from the tag's message when it
+is a release's (`build --tag-message`, below) and describes exactly the files at the tag;
+otherwise they are 1, as nothing of its history is read, and a manifest that doesn't fit
+is a warning on the `uses` line. One read from a folder with `--bank` says nothing of
+where it came from. In CI, a private one needs git credentials for it, such as `GITHUB_TOKEN` given
 to git (`git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf https://github.com/`)
 or a deploy key.
 
@@ -52,6 +55,12 @@ question moves when its scale does); its date is that commit's, its git blob a U
 It builds the last commit, not the working tree (uncommitted changes are left out, and
 said to be), needs the whole history (a shallow clone is refused: `fetch-depth: 0` in
 CI), and writes `<outdir>/ddi.json`, `-o` naming the folder (default `<dir>/dist`).
+`--tag-message <file>` also writes a release's tag message: a line, a blank line, then
+each file's version, date and blob as JSON. Tag the commit built with it, verbatim, so
+git's cleanup leaves it whole: `git tag -a --cleanup=verbatim -F <file> v2 HEAD`. A
+workspace can do that in a workflow it runs by hand with the tag's name (qretools-gss's
+`release.yml` is one): the tag points at the default branch's own commit, and only the tag
+is pushed.
 
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses

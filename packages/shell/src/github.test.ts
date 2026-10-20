@@ -626,6 +626,7 @@ describe("loading a workspace", () => {
 												tag === "v1"
 													? {
 															oid: `tag-${tag}`,
+															message: `${tag}\n`,
 															target: { oid: `commit-${tag}` },
 														}
 													: { oid: `commit-${tag}` },
@@ -742,6 +743,7 @@ describe("loading a workspace", () => {
 				found: true,
 				// The commit an annotated tag names, never the tag object.
 				commit: "commit-v1",
+				message: "v1\n",
 				files: [
 					{
 						path: "workspace.yaml",
@@ -769,6 +771,7 @@ describe("loading a workspace", () => {
 			ok: true,
 			value: { found: true, commit: "commit-v4" },
 		});
+		expect(await s.loadBankAt("v4")).not.toHaveProperty("value.message");
 	});
 
 	it("reports a missing repository as unreadable", async () => {

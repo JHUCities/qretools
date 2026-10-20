@@ -203,6 +203,8 @@ export type TaggedBank =
 			readonly found: true;
 			/** The commit the tag named when read. */
 			readonly commit: string;
+			/** An annotated tag's message (a release's holds its manifest); absent for a lightweight one. */
+			readonly message?: string;
 	  } & Pick<LoadedWorkspace, "files" | "unread">)
 	| { readonly found: false; readonly reason: string };
 

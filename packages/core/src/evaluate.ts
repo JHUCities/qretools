@@ -104,6 +104,11 @@ export interface BankScope {
 	readonly agency?: string;
 	/** Each file's DDI version, by path, when history is known. */
 	readonly versions?: Versions;
+	/** A release's manifest that couldn't be used, read at a tag: its versions are 1. */
+	readonly manifest?: {
+		readonly kind: "stale" | "unreadable";
+		readonly reason: string;
+	};
 }
 
 /** What a bank question's DDI is published with: a `BankScope` is one. */

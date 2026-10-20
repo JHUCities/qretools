@@ -11,11 +11,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { bankOf, questionItems } from "@qretools/core";
+import { addressOf, bankOf, questionItems, remoteScope } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
 import { readHistory } from "./history.ts";
+import { readTagged } from "./remote.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
@@ -67,28 +68,28 @@ describe("a bank in another repository", () => {
 		expect(r.err).not.toMatch(/Can't read/);
 		expect(r.code).toBe(0);
 	});
-});
 
-it("exports its questions saying where each was read: repository, path, tag, commit", async () => {
-	const hh = await readWorkspace(here("../../core/fixtures/households"));
-	const path = "questions/household/consent.yaml";
-	const r = await runWith(
-		async () => ({
-			kind: "files",
-			files: hh,
-			at: { commit: "c0ffee", blobs: { [path]: "b1" } },
-		}),
-		"instrument",
-		"export",
-		here("../../core/fixtures/households/instruments/remote.yaml"),
-		"--agency",
-		"org.example",
-	);
-	expect(r.code).toBe(0);
-	expect(r.out).toContain('"StringValue": "b1"');
-	expect(r.out).toContain(`"StringValue": "${path}"`);
-	expect(r.out).toContain('"StringValue": "c0ffee"');
-	expect(r.out).toContain('"StringValue": "https://github.com/owner/bank"');
+	it("exports its questions saying where each was read: repository, path, tag, commit", async () => {
+		const hh = await readWorkspace(here("../../core/fixtures/households"));
+		const path = "questions/household/consent.yaml";
+		const r = await runWith(
+			async () => ({
+				kind: "files",
+				files: hh,
+				at: { commit: "c0ffee", blobs: { [path]: "b1" } },
+			}),
+			"instrument",
+			"export",
+			here("../../core/fixtures/households/instruments/remote.yaml"),
+			"--agency",
+			"org.example",
+		);
+		expect(r.code).toBe(0);
+		expect(r.out).toContain('"StringValue": "b1"');
+		expect(r.out).toContain(`"StringValue": "${path}"`);
+		expect(r.out).toContain('"StringValue": "c0ffee"');
+		expect(r.out).toContain('"StringValue": "https://github.com/owner/bank"');
+	});
 });
 
 describe("qretools check", () => {
@@ -261,6 +262,55 @@ describe("qretools build", () => {
 		expect(ddi).toContain("Nope");
 		expect(ddi).not.toContain('"urn:ddi:org.example:q:1"');
 		expect(ddi).toMatch(/"VersionDate"/);
+	});
+
+	it("writes a release's tag message that a reader at the tag takes its versions from", async () => {
+		const ws = await repo();
+		const file = join(ws, "..", "tag.txt");
+		const r = await run("build", ws, "--tag-message", file);
+		expect(r.code).toBe(0);
+		const message = r.written[file] ?? "";
+		expect(message).toMatch(/^Each file's DDI version, by QREtools /);
+		// As the release workflow tags: verbatim, so git's cleanup can't alter the manifest.
+		await writeFile(file, message);
+		const root = dirname(ws);
+		await git(
+			root,
+			"-c",
+			"tag.gpgsign=false",
+			"tag",
+			"-a",
+			"--cleanup=verbatim",
+			"-F",
+			file,
+			"v2",
+		);
+		const address = addressOf("o/r/sub@v2");
+		if (address.kind !== "remote") throw new Error("address");
+		const read = await readTagged(address, {
+			root: await mkdtemp(join(tmpdir(), "qretools-cache-")),
+			urlOf: () => root,
+		});
+		if (read.kind !== "files") throw new Error(read.reason);
+		expect(read.at?.message).toBe(message);
+		const scope = remoteScope(address.key, read);
+		expect(scope.manifest).toBeUndefined();
+		// The scale changed once since the first commit, and the question with it.
+		expect(scope.versions?.["questions/work/q.yaml"]?.number).toBe("2");
+		expect(scope.versions?.["scales/yes_no.yaml"]?.number).toBe("2");
+		expect(scope.versions?.["questions/work/q.yaml"]?.date).toMatch(/^\d{4}-/);
+	}, 30000);
+
+	it("writes no tag message when the build is refused, and takes the option only for build", async () => {
+		const ws = await repo();
+		await writeFile(join(ws, "workspace.yaml"), "name: no agency\n");
+		await git(dirname(ws), "commit", "-q", "-am", "no agency");
+		const file = join(ws, "..", "tag.txt");
+		const r = await run("build", ws, "--tag-message", file);
+		expect(r.code).toBe(1);
+		expect(r.written[file]).toBeUndefined();
+		const c = await run("check", ws, "--tag-message", file);
+		expect(c.err).toMatch(/`--tag-message` isn't an option of `check`/);
 	});
 
 	it("builds the commit, not the working tree, and says so", async () => {

@@ -230,6 +230,9 @@ function remoteRead(result: Result<TaggedBank, Failure>): RemoteBank {
 					blobs: Object.fromEntries(
 						result.value.files.map((f) => [f.path, f.sha]),
 					),
+					...(result.value.message !== undefined && {
+						message: result.value.message,
+					}),
 				},
 			}
 		: { kind: "unavailable", reason: result.value.reason };

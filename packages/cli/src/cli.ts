@@ -39,12 +39,14 @@ import {
 	type Severity,
 	scopeOf,
 	status,
+	tagMessage,
 	versionsOf,
 	WORKSPACE,
 	workspaceOf,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
+import pkg from "../package.json" with { type: "json" };
 import type { HistoryRead } from "./history.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
@@ -63,7 +65,8 @@ type RemoteAddress = Extract<Address, { kind: "remote" }>;
 const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
-  qretools build [dir] [-o outdir]  Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
+  qretools build [dir] [-o outdir] [--tag-message file]
+                                    Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -74,6 +77,8 @@ An instrument reads its own workspace (\`../\` in its \`uses\`) and other worksp
 a tag (\`owner/repo@v1\`, with git).
 --bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
 --strict  also fail on warnings.
+--tag-message  also write the message a release's annotated tag carries: each file's
+          version, so a workspace that uses this one at the tag reads them.
 --agency  the DDI agency the instrument is published under, when it isn't its own
           workspace's (workspace.yaml), as for a file that uses none.
 --qsf     write the instrument as a Qualtrics survey (QSF, made from its DDI) instead of
@@ -118,9 +123,11 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 				? "--agency"
 				: args.values.qsf === true
 					? "--qsf"
-					: command === "check"
-						? args.values.output !== undefined && "--output"
-						: args.values.strict === true && "--strict";
+					: command !== "build" && args.values["tag-message"] !== undefined
+						? "--tag-message"
+						: command === "check"
+							? args.values.output !== undefined && "--output"
+							: args.values.strict === true && "--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -128,7 +135,12 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	if (command === "check")
 		return checkWorkspace(dir, args.values.strict === true, io);
 	if (command === "build")
-		return build(dir, args.values.output ?? join(dir, "dist"), io);
+		return build(
+			dir,
+			args.values.output ?? join(dir, "dist"),
+			args.values["tag-message"],
+			io,
+		);
 	let files: Readonly<Record<string, string>>;
 	try {
 		files = await readWorkspace(dir);
@@ -162,6 +174,7 @@ function parse(argv: readonly string[]) {
 			bank: { type: "string", multiple: true },
 			agency: { type: "string" },
 			qsf: { type: "boolean" },
+			"tag-message": { type: "string" },
 			help: { type: "boolean", short: "h" },
 		},
 	});
@@ -335,7 +348,12 @@ async function exportBank(
  * first-parent history gives (`versionsOf`), exported as `export` does to `out/ddi.json`.
  * Uncommitted changes are left out, and said to be.
  */
-async function build(dir: string, out: string, io: Io): Promise<number> {
+async function build(
+	dir: string,
+	out: string,
+	message: string | undefined,
+	io: Io,
+): Promise<number> {
 	const read = await io.readHistory(dir);
 	if (read.kind === "unavailable") {
 		io.err(`Can't build ${dir}: ${read.reason}\n`);
@@ -345,17 +363,22 @@ async function build(dir: string, out: string, io: Io): Promise<number> {
 		io.err(
 			`${dir} has uncommitted changes: they aren't built, as they have no version yet.\n`,
 		);
+	const versions = versionsOf(read.history);
 	const bank = bankOf(
 		Object.fromEntries(
 			Object.entries(read.files).filter(([p]) => instrumentAt(p) === undefined),
 		),
-		versionsOf(read.history),
+		versions,
 	);
 	if (readIn(bank) === 0) {
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	return exportBank(bank, join(out, "ddi.json"), io);
+	const code = await exportBank(bank, join(out, "ddi.json"), io);
+	// Only for a build that exported: a refused one is no release.
+	if (code === OK && message !== undefined)
+		await io.writeFile(message, tagMessage(versions, pkg.version));
+	return code;
 }
 
 /**
