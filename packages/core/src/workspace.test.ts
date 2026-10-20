@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { tagMessage } from "./manifest.ts";
 import {
 	instrumentAt,
 	instrumentPath,
@@ -145,6 +146,54 @@ describe("a bank read from another repository", () => {
 		});
 		// A file with no blob given has no origin, rather than a made-up one.
 		expect(scope.versions?.["workspace.yaml"]).toBeUndefined();
+	});
+
+	it("takes a release's versions from its tag's manifest, or says why not", () => {
+		const blobs = { "questions/t/q.yaml": "b1" };
+		const message = tagMessage(
+			{
+				"questions/t/q.yaml": {
+					number: "4",
+					date: "2026-10-01T12:00:00Z",
+					blob: "b1",
+				},
+			},
+			"2.0.0",
+		);
+		const used = remoteScope("org/bank@v1", {
+			kind: "files",
+			files,
+			at: { commit: "c0ffee", blobs, message },
+		});
+		expect(used.versions?.["questions/t/q.yaml"]).toMatchObject({
+			number: "4",
+			date: "2026-10-01T12:00:00Z",
+			blob: "b1",
+			origin: { commit: "c0ffee" },
+		});
+		expect(used).not.toHaveProperty("manifest");
+		// The same release read with the question changed: every version is 1, and why is said.
+		const read = {
+			kind: "files",
+			files,
+			at: { commit: "c0ffee", blobs: { "questions/t/q.yaml": "b2" }, message },
+		} as const;
+		const stale = remoteScope("org/bank@v1", read);
+		expect(stale.versions?.["questions/t/q.yaml"]?.number).toBe("1");
+		expect(stale.manifest?.kind).toBe("stale");
+		const ws = workspaceOf(
+			{
+				"workspace.yaml": "agency: org.example\n",
+				"instruments/x.yaml":
+					"name: x\nuses:\n  b: org/bank@v1\nflow:\n  - ask: b.q\n",
+			},
+			{ remote: { "org/bank@v1": read } },
+		);
+		expect(
+			ws.instruments["instruments/x.yaml"]?.instrument.findings.find(
+				(f) => f.code === "manifest",
+			),
+		).toMatchObject({ severity: "warning", path: "uses.b" });
 	});
 
 	it("says nothing of where it came from when read from a folder instead", () => {

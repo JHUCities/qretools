@@ -134,10 +134,15 @@ export async function readTagged(
 		const commit = (
 			await readFile(join(clone, ".qretools-commit"), "utf8")
 		).trim();
+		const message = await tagMessageOf(clone, ref);
 		return {
 			kind: "files",
 			files,
-			at: { commit, blobs: await blobsOf(clone, path, files) },
+			at: {
+				commit,
+				blobs: await blobsOf(clone, path, files),
+				...(message !== undefined && { message }),
+			},
 		};
 	} catch (e) {
 		return {
@@ -145,6 +150,30 @@ export async function readTagged(
 			reason: `\`${where}\` can't be read: ${gitSaid(e)}`,
 		};
 	}
+}
+
+/** An annotated tag's message, signature included as git keeps it; none for a lightweight tag. */
+async function tagMessageOf(
+	clone: string,
+	ref: string,
+): Promise<string | undefined> {
+	const { stdout } = await run(
+		"git",
+		[
+			"-C",
+			clone,
+			"for-each-ref",
+			"--format=%(objecttype)%00%(contents)",
+			`refs/tags/${ref}`,
+		],
+		{ maxBuffer: 1 << 30 },
+	);
+	const nul = stdout.indexOf("\0");
+	// A lightweight tag's `contents` are its commit's message: not the tag's. The
+	// format's own newline after each ref is not the message's.
+	return stdout.slice(0, nul) === "tag"
+		? stdout.slice(nul + 1).replace(/\n$/, "")
+		: undefined;
 }
 
 /** Each file's blob, by its path in the bank's folder (`ls-tree` of that tree, so no prefix to strip). */

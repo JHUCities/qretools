@@ -22,6 +22,8 @@ export type ParseCode =
 	| "too-many-domains"
 	| "missing-space"
 	| "invalid-agency"
+	/** A remote release's manifest of versions that can't be used: its items are version 1. */
+	| "manifest"
 	/** Advice: a response code YAML reads as a number, not text (`1:` for `"1":`). */
 	| "unquoted-code"
 	/** One code written two ways YAML can't tell apart (`"1"` and `1`). */

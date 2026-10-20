@@ -60,6 +60,7 @@ beforeAll(async () => {
 	await git("add", ".");
 	await git("commit", "--quiet", "-m", "v1");
 	await git("tag", "-a", "v1", "-m", "v1");
+	await git("tag", "v6");
 	// A branch named like a tag that doesn't exist: never read as one.
 	await git("branch", "v9");
 }, 30000);
@@ -88,6 +89,8 @@ describe("a bank in another repository, read at its tag with git", () => {
 					"workspace.yaml": await at("v1:banks/hh/workspace.yaml"),
 					"questions/t/q.yaml": await at("v1:banks/hh/questions/t/q.yaml"),
 				},
+				// An annotated tag's message, here prose: no manifest, so no versions from it.
+				message: "v1\n",
 			},
 		});
 		// Read again with the repository unreachable: the cache answers.
@@ -96,6 +99,14 @@ describe("a bank in another repository, read at its tag with git", () => {
 			urlOf: () => join(dir, "nowhere"),
 		});
 		expect(again).toEqual(read);
+	}, 30000);
+
+	it("gives no message for a lightweight tag, never its commit's", async () => {
+		const read = await readTagged(remote("o/bank/banks/hh@v6"), options());
+		expect(read.kind === "files" && read.at).toMatchObject({
+			commit: expect.any(String),
+		});
+		expect(read.kind === "files" && read.at?.message).toBeUndefined();
 	}, 30000);
 
 	it("reads each folder at a tag apart, and tells tags apart by case", async () => {

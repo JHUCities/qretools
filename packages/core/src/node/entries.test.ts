@@ -112,6 +112,7 @@ describe("the entry points", () => {
 			    "selectAllText",
 			    "skippedFolder",
 			    "status",
+			    "tagMessage",
 			    "textOf",
 			    "toFillIn",
 			    "unknownFolders",

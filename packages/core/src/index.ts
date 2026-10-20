@@ -119,6 +119,7 @@ export {
 	instrumentRefs,
 } from "./instrument/refs.ts";
 export { lint } from "./lint.ts";
+export { tagMessage } from "./manifest.ts";
 export {
 	type Exportable,
 	exportRefusal,

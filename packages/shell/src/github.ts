@@ -532,7 +532,7 @@ export const makeGitHubStore = (
 			repository: {
 				tag: {
 					name: string;
-					target: { oid: string; target?: { oid: string } };
+					target: { oid: string; message?: string; target?: { oid: string } };
 				} | null;
 				dir: { __typename: string; oid: string } | null;
 			} | null;
@@ -541,7 +541,7 @@ export const makeGitHubStore = (
   repository(owner: $owner, name: $repo) {
     tag: ref(qualifiedName: $tag) {
       name
-      target { oid ... on Tag { target { oid } } }
+      target { oid ... on Tag { message target { oid } } }
     }
     dir: object(expression: $dir) { __typename oid }
   }
@@ -575,8 +575,18 @@ export const makeGitHubStore = (
 		const read = await treeFiles(data.dir.oid);
 		// An annotated tag's target is the tag object, a lightweight one's the commit.
 		// shortcut: a tag of a tag isn't peeled further; loop if one is ever met.
-		const commit = data.tag.target.target?.oid ?? data.tag.target.oid;
-		return read.ok ? ok({ found: true, commit, ...read.value }) : read;
+		const { target } = data.tag;
+		const commit = target.target?.oid ?? target.oid;
+		// Only an annotated tag has a message of its own: a release's holds its manifest.
+		const message = target.message;
+		return read.ok
+			? ok({
+					found: true,
+					commit,
+					...(message !== undefined && { message }),
+					...read.value,
+				})
+			: read;
 	}
 
 	/** Blobs by oid, in one request: each one's text, or null for an oid GitHub lacks. */

@@ -19,6 +19,7 @@ import {
 	instrumentOf,
 } from "./instrument/instrument.ts";
 import type { Unread } from "./instrument/parse.ts";
+import { manifestVersions } from "./manifest.ts";
 import { ROOT } from "./schemes.ts";
 import { agencyWritten } from "./surface/bankfile.ts";
 
@@ -76,6 +77,8 @@ export type RemoteBank =
 				readonly commit: string;
 				/** Each file's git blob, by the same paths as `files`. */
 				readonly blobs: Readonly<Record<string, string>>;
+				/** The tag's message, when it is an annotated tag: a release's holds its manifest. */
+				readonly message?: string;
 			};
 	  }
 	| { readonly kind: "unavailable"; readonly reason: string };
@@ -132,7 +135,8 @@ type RemoteAddress = Extract<Address, { kind: "remote" }>;
 /**
  * What an instrument reads of a bank in another repository, read at `key`: each file
  * read at the tag carries where it came from (repository, path, tag, commit, blob) on
- * its DDI items. Its version stays "1": nothing of the bank's history is read.
+ * its DDI items, at the version the tag's manifest gives (`manifestVersions`), or 1
+ * when it has none it can use; one it can't use is said (`BankScope.manifest`).
  */
 export function remoteScope(
 	key: AddressKey,
@@ -140,13 +144,20 @@ export function remoteScope(
 ): BankScope {
 	const a = addressOf(key);
 	if (read.at === undefined || a.kind !== "remote") return scopeOf(read.files);
-	const { commit, blobs } = read.at;
+	const { commit, blobs, message } = read.at;
+	// shortcut: the manifest's paths are relative to the workspace `build` ran on, assumed
+	// to be the address's folder; one built elsewhere reads as stale. Map them if banks
+	// ever release a folder other than the one they're used at.
+	const manifest =
+		message === undefined
+			? ({ kind: "none" } as const)
+			: manifestVersions(message, blobs);
 	const versions: Record<string, Version> = {};
 	for (const path of Object.keys(read.files)) {
 		const blob = blobs[path];
 		if (blob === undefined) continue;
 		versions[path] = {
-			...UNVERSIONED,
+			...((manifest.kind === "used" && manifest.versions[path]) || UNVERSIONED),
 			blob,
 			origin: {
 				repository: `${a.owner}/${a.repo}`,
@@ -156,7 +167,10 @@ export function remoteScope(
 			},
 		};
 	}
-	return scopeOf(read.files, versions);
+	const scope = scopeOf(read.files, versions);
+	return manifest.kind === "stale" || manifest.kind === "unreadable"
+		? { ...scope, manifest }
+		: scope;
 }
 
 /** The banks in other repositories the workspace's instruments use, each once, in key order. */

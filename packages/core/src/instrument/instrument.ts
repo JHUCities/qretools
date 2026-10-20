@@ -108,6 +108,23 @@ export function instrumentOf(
 				]
 			: [],
 	);
+	// A release whose manifest can't be used: its questions are published, at version 1.
+	const staleManifests: Finding[] = parsed.draft.uses.flatMap(
+		(u): Finding[] => {
+			const m = context.banks[u.alias]?.manifest;
+			return m === undefined
+				? []
+				: [
+						{
+							code: "manifest",
+							severity: "warning",
+							path: `uses.${u.alias}`,
+							message: `\`${u.alias}\`'s tag has a manifest of versions, but ${m.reason}`,
+							hint: "So its questions are published at version 1. A release made by the workspace's release workflow has one that fits.",
+						},
+					];
+		},
+	);
 	return {
 		draft: parsed.draft,
 		...(context.agency !== undefined && { agency: context.agency }),
@@ -118,6 +135,7 @@ export function instrumentOf(
 				...clashes,
 				...agency,
 				...banksWithout,
+				...staleManifests,
 			],
 			parsed.ranges,
 		),
