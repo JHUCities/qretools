@@ -1,0 +1,8 @@
+{
+	// The contract test spans both readers: the command's (Node) and the app's (browser).
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"types": ["vite/client", "node"]
+	},
+	"include": ["src/contract.test.ts"]
+}

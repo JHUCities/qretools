@@ -51,6 +51,7 @@ export {
 	type MakeStore,
 	parseBank,
 	parseRepo,
+	remoteBankOf,
 	type Store,
 	sameBank,
 	type TaggedBank,

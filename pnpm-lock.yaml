@@ -81,6 +81,9 @@ importers:
       '@qretools/qsf':
         specifier: workspace:*
         version: link:../qsf
+      '@qretools/shell':
+        specifier: workspace:*
+        version: link:../shell
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.5
