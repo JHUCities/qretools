@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { Address, RemoteBank } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
+import { isNoGit, noGit } from "./git.ts";
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
 
@@ -35,6 +36,7 @@ const exists = (path: string): Promise<boolean> =>
 
 /** What git said, without its own prefix: its last line is the reason. */
 const gitSaid = (e: unknown): string => {
+	if (isNoGit(e)) return noGit("to import questions from remote workspaces");
 	const text =
 		typeof e === "object" && e !== null && "stderr" in e
 			? String((e as { stderr: unknown }).stderr)
