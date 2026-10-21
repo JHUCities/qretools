@@ -54,8 +54,8 @@ const FILES = [
 function renderWorkspace(
 	files = FILES,
 	access = { kind: "write" },
-	/** This tab's kept work, and a load that waits for `loading`. */
-	start: { work?: Work; loading?: Promise<void> } = {},
+	/** This tab's kept work, a load that waits for `loading`, and the real DDI schema. */
+	start: { work?: Work; loading?: Promise<void>; schema?: true } = {},
 ) {
 	const store = {
 		whoAmI: () =>
@@ -105,6 +105,11 @@ function renderWorkspace(
 		},
 		{
 			makeStore: () => store,
+			// Compiled only for a test that exports: about a second of CPU otherwise spent
+			// in whichever test is running when it finishes.
+			...(start.schema !== true && {
+				ddiSchema: () => new Promise<never>(() => {}),
+			}),
 			credentialStore: {
 				load: () => ({ credentials: { access: "t" }, remember: false }),
 				save: () => {},
@@ -454,7 +459,7 @@ describe("a workspace's instruments", () => {
 		URL.revokeObjectURL = (u: string) => {
 			revoked.push(u);
 		};
-		const app = renderWorkspace();
+		const app = renderWorkspace(FILES, { kind: "write" }, { schema: true });
 		await act(async () => {});
 		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
 		// The official schema loads on its own; then the export may be written.

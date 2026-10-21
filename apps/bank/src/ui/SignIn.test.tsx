@@ -16,6 +16,8 @@ describe("the sign-in page", () => {
 			{ work: ok(undefined), hasToken: false },
 			{
 				makeStore: () => ({}) as unknown as Store,
+				// No export here: the DDI schema is never compiled.
+				ddiSchema: () => new Promise<never>(() => {}),
 				credentialStore: { load: () => null, save: () => {}, clear: () => {} },
 			},
 			{ template: "https://github.com/o/template/generate" },
