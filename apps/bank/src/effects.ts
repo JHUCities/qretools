@@ -36,8 +36,17 @@ import {
 	WORK_KEY,
 } from "./persist.js";
 
-/** What the credentials need (the store, sign-in, the clock, the Worker, the lock). */
-export type Deps = CredentialsDeps;
+/**
+ * What the credentials need (the store, sign-in, the clock, the Worker, the lock), and
+ * where the official DDI schema's text comes from: the bundled file unless given, so a
+ * test that never exports needn't compile it (about a second of CPU, in the background).
+ */
+export type Deps = CredentialsDeps & {
+	readonly ddiSchema?: () => Promise<string>;
+};
+
+const bundledSchema = (): Promise<string> =>
+	import("@qretools/core/schema.json?raw").then((m) => m.default);
 
 export interface Effects {
 	exec(cmd: Cmd, dispatch: Dispatch): void;
@@ -125,8 +134,8 @@ export function createEffects(deps: Deps): Effects {
 					else editor?.reveal(cmd.range, cmd.complete);
 					return;
 				case "loadDdiSchema":
-					import("@qretools/core/schema.json?raw")
-						.then((m) => makeValidator(JSON.parse(m.default)))
+					(deps.ddiSchema ?? bundledSchema)()
+						.then((text) => makeValidator(JSON.parse(text)))
 						.then((compiled) => {
 							if (compiled.ok) validator = compiled.value;
 							dispatch({

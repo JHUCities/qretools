@@ -64,6 +64,8 @@ function renderBank(
 		},
 		{
 			makeStore: () => store,
+			// No export here: the DDI schema is never compiled.
+			ddiSchema: () => new Promise<never>(() => {}),
 			credentialStore: {
 				load: () => ({ credentials: { access: "t" }, remember: false }),
 				save: () => {},

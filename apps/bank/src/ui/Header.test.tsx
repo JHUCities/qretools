@@ -35,6 +35,8 @@ function renderApp(opts: { token: boolean; who?: Who }) {
 		{ work: ok(undefined), settings: SETTINGS, hasToken: opts.token },
 		{
 			makeStore: () => store,
+			// No export here: the DDI schema is never compiled.
+			ddiSchema: () => new Promise<never>(() => {}),
 			credentialStore: {
 				load: () =>
 					opts.token ? { credentials: { access: "t" }, remember: false } : null,
