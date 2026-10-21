@@ -119,6 +119,13 @@ export {
 	instrumentRefs,
 } from "./instrument/refs.ts";
 export { lint } from "./lint.ts";
+export {
+	type Locks,
+	locksFor,
+	movedTags,
+	shortCommit,
+	unlockedTags,
+} from "./lock.ts";
 export { tagMessage } from "./manifest.ts";
 export {
 	type Exportable,
@@ -170,9 +177,11 @@ export {
 export {
 	AGENCY_PATTERN,
 	agencyWritten,
+	locksWritten,
 	type ParsedSettingsFile,
 	parseSelectAllFile,
 	parseSettingsFile,
+	withLocks,
 } from "./surface/bankfile.ts";
 export {
 	type Code,
@@ -229,6 +238,7 @@ export {
 	type RemoteBank,
 	type Resolution,
 	readsInWorkspace,
+	remoteKeys,
 	remoteScope,
 	remotesOf,
 	resolveUses,

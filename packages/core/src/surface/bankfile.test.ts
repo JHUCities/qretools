@@ -13,6 +13,7 @@ import {
 	agencyWritten,
 	parseSelectAllFile,
 	parseSettingsFile,
+	withLocks,
 } from "./bankfile.ts";
 import { EMPTY_ENV, envAt } from "./env.ts";
 import { parseSurface } from "./parse.ts";
@@ -26,6 +27,7 @@ describe("the workspace's settings file", () => {
 			agency: "edu.example.dept-1",
 			required: [],
 			requiredIn: {},
+			locked: {},
 			findings: [],
 		});
 	});
@@ -437,5 +439,45 @@ describe("how a bank stores a select-all option's answer", () => {
 				(f) => f.code,
 			),
 		).toEqual(["unknown-key"]);
+	});
+});
+
+describe("the locks in the workspace's settings file", () => {
+	const A = "a".repeat(40);
+	const B = "b".repeat(40);
+
+	it("reads each tag's commit by its key, and says where an entry isn't one", () => {
+		const parsed = parseSettingsFile(
+			`agency: org.example\nlocked:\n  Org/Bank@v1: ${A}\n  ../: ${A}\n  org/other@v1: abc\n`,
+		);
+		expect(parsed.locked).toEqual({ "org/bank@v1": A });
+		expect(parsed.findings.map((f) => f.path)).toEqual([
+			"locked.../",
+			"locked.org/other@v1",
+		]);
+		expect(parseSettingsFile(workspaceTemplate).locked).toEqual({});
+	});
+
+	it("are written under `locked:`, the template's `{}` becoming a list, its explanation kept", () => {
+		expect(withLocks("agency: org.example\n", { "o/a@v1": A })).toBe(
+			`agency: org.example\nlocked:\n  o/a@v1: ${A}\n`,
+		);
+		expect(withLocks(workspaceTemplate, { "o/a@v1": A })).toContain(
+			`\nlocked:\n  o/a@v1: ${A}\n`,
+		);
+		expect(withLocks("", { "o/a@v1": A })).toBe(`locked:\n  o/a@v1: ${A}\n`);
+		expect(withLocks("# only a comment\n", {})).toBe("# only a comment\n");
+	});
+
+	it("keep every other entry, written by hand, valid or not, and set one written with other capitals", () => {
+		const source = `locked:\n  o/a@v1: ${A} # checked\n  o/b@v1: oops\n  O/C@v1: ${A}\n`;
+		expect(withLocks(source, { "o/c@v1": B, "o/d@v1": B })).toBe(
+			`locked:\n  o/a@v1: ${A} # checked\n  o/b@v1: oops\n  O/C@v1: ${B}\n  o/d@v1: ${B}\n`,
+		);
+	});
+
+	it("write nothing into a file they can't read", () => {
+		expect(withLocks("locked: x\n", { "o/c@v1": B })).toBeUndefined();
+		expect(withLocks("- a list\n", { "o/c@v1": B })).toBeUndefined();
 	});
 });

@@ -81,6 +81,8 @@ export interface Base extends Blob {
 /** What is happening to a file. Absent from `Model.activity` means idle. */
 export type Activity =
 	| { readonly kind: "saving" }
+	/** An instrument's save held until the tags it reads (and locks) have been read. */
+	| { readonly kind: "waiting"; readonly keys: readonly AddressKey[] }
 	| { readonly kind: "deleting" }
 	| { readonly kind: "failed"; readonly failure: Failure };
 

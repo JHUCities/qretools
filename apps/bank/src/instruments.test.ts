@@ -31,6 +31,7 @@ import {
 	offersExample,
 	signOutPlan,
 	update,
+	writeBlocked,
 } from "./update.js";
 import { instrumentsUsing, instrumentUses } from "./usedBy.js";
 
@@ -1190,5 +1191,182 @@ describe("adding a bank", () => {
 		expect(next.screen).toEqual({ kind: "editing", id });
 		expect(cmds[0]?.kind).toBe("revealRange");
 		expect(cmds.some((c) => c.kind === "loadRemoteBanks" && c.now)).toBe(true);
+	});
+});
+
+describe("a tag in another repository, locked when the instrument is saved", () => {
+	const REMOTE = "instruments/remote.yaml";
+	const KEY = "owner/bank@v1";
+	const A = "a".repeat(40);
+	const B = "b".repeat(40);
+	/** The instrument using `owner/bank@v1` edited, that bank read at `commit`, the details as given. */
+	const ready = (commit: string, details = "agency: org.example\n"): Model => {
+		const m = loaded();
+		const bank = Object.fromEntries(
+			Object.entries(files).filter(([p]) => !p.includes("instruments/")),
+		);
+		const d = detailsOf(m.local.schemes);
+		if (d === undefined) throw new Error("no details");
+		const edited = edit(m, REMOTE);
+		return {
+			...edited,
+			local: {
+				...edited.local,
+				schemes: {
+					...edited.local.schemes,
+					[d.id]: {
+						...d,
+						source: details,
+						base: {
+							...(d.base ?? { path: "workspace.yaml", sha: "s" }),
+							text: details,
+						},
+					},
+				},
+			},
+			remote: {
+				...edited.remote,
+				schemes: {
+					...edited.remote.schemes,
+					"workspace.yaml": { sha: d.base?.sha ?? "s", text: details },
+				},
+			},
+			remoteBanks: {
+				[KEY]: { kind: "files", files: bank, at: { commit, blobs: {} } },
+			},
+		};
+	};
+	const findings = (m: Model) =>
+		createEvaluations().instrument(m, at(m, REMOTE) as InstrumentEntry)
+			.instrument.findings;
+	const workspaceChange = (cmds: readonly Cmd[]) =>
+		commitOf(cmds)?.changes.find((c) => c.path === "workspace.yaml");
+
+	it("writes the lock into the workspace's details in the same commit, and says so before", () => {
+		const m = ready(A);
+		expect(findings(m).filter((f) => f.path === "uses.bas")).toEqual([]);
+		const e = at(m, REMOTE) as InstrumentEntry;
+		const evaluations = createEvaluations();
+		expect(
+			instrumentAlsoSaves(
+				instrumentDependencies(m, evaluations.instrument(m, e), () => []),
+				() => "",
+			),
+		).toEqual(["workspace details"]);
+		const [saving, cmds] = save(m, REMOTE);
+		expect(workspaceChange(cmds)?.text).toBe(
+			`agency: org.example\nlocked:\n  ${KEY}: ${A}\n`,
+		);
+		expect(commitOf(cmds)?.message).not.toMatch(/WARNING/);
+		expect(detailsOf(saving.local.schemes)?.source).toContain(`${KEY}: ${A}`);
+	});
+
+	it("warns of a moved tag, and a save re-locks it with a warning in the commit message", () => {
+		const m = ready(B, `agency: org.example\nlocked:\n  ${KEY}: ${A}\n`);
+		expect(findings(m).find((f) => f.path === "uses.bas")).toMatchObject({
+			code: "moved-tag",
+			severity: "warning",
+		});
+		const [saving, cmds] = save(m, REMOTE);
+		expect(workspaceChange(cmds)?.text).toBe(
+			`agency: org.example\nlocked:\n  ${KEY}: ${B}\n`,
+		);
+		expect(commitOf(cmds)?.message).toMatch(
+			/^\[WARNING\] .*\n\n\[WARNING\] The tag `owner\/bank@v1` was moved: it was locked at `aaaaaaaaaaaa` and names `bbbbbbbbbbbb` now\./,
+		);
+		expect(findings(saving).filter((f) => f.code === "moved-tag")).toEqual([]);
+	});
+
+	it("says a save that only locks is that, not a change to the instrument", () => {
+		const m = ready(B, `agency: org.example\nlocked:\n  ${KEY}: ${A}\n`);
+		const clean: Model = {
+			...m,
+			local: {
+				...m.local,
+				workspace: {
+					...m.local.workspace,
+					[at(m, REMOTE).id]: {
+						...(at(m, REMOTE) as InstrumentEntry),
+						source: at(m, REMOTE).base?.text ?? "",
+					},
+				},
+			},
+		};
+		const commit = commitOf(save(clean, REMOTE)[1]);
+		expect(commit?.message.split("\n")[0]).toBe(
+			"[WARNING] Lock the tags instrument remote reads",
+		);
+	});
+
+	it("waits for a tag still being read, then saves with its lock", () => {
+		const m = ready(A);
+		const id = at(m, REMOTE).id;
+		const reading: Model = {
+			...m,
+			remoteBanks: { [KEY]: { kind: "loading" } },
+		};
+		const [waiting, cmds] = save(reading, REMOTE);
+		expect(commitOf(cmds)).toBeUndefined();
+		expect(waiting.activity[id]).toEqual({ kind: "waiting", keys: [KEY] });
+		// One commit at a time: another save meanwhile waits, saying why.
+		expect(writeBlocked(waiting)).toBe(`Reading \`${KEY}\` before saving…`);
+		const loaded = m.remoteBanks[KEY];
+		if (loaded?.kind !== "files") throw new Error("no read");
+		const [, resumed] = update(waiting, {
+			kind: "remoteBankLoaded",
+			key: KEY,
+			result: ok({
+				found: true,
+				commit: A,
+				files: Object.entries(loaded.files).map(([path, text]) => ({
+					path,
+					sha: "x",
+					text,
+				})),
+				unread: [],
+			}),
+		});
+		expect(workspaceChange(resumed)?.text).toContain(`${KEY}: ${A}`);
+	});
+
+	it("leaves the details as they were when the save is refused", () => {
+		const m = ready(A);
+		const changed: Model = {
+			...m,
+			remote: {
+				...m.remote,
+				schemes: {
+					...m.remote.schemes,
+					"workspace.yaml": { sha: "theirs", text: "agency: org.other\n" },
+				},
+			},
+		};
+		const [refused, cmds] = save(changed, REMOTE);
+		expect(commitOf(cmds)).toBeUndefined();
+		expect(detailsOf(refused.local.schemes)?.source).toBe(
+			"agency: org.example\n",
+		);
+	});
+
+	it("starts the workspace's details from the template when it has none", () => {
+		const m = ready(A);
+		const details = detailsOf(m.local.schemes);
+		if (details === undefined) throw new Error("no details");
+		const { [details.id]: _, ...schemes } = m.local.schemes;
+		const { "workspace.yaml": __, ...remoteSchemes } = m.remote.schemes;
+		const [, cmds] = save(
+			{
+				...m,
+				local: { ...m.local, schemes },
+				remote: { ...m.remote, schemes: remoteSchemes },
+			},
+			REMOTE,
+		);
+		expect(workspaceChange(cmds)?.text).toBe(
+			SCHEME_TEMPLATES.workspace.replace(
+				"locked: {}",
+				`locked:\n  ${KEY}: ${A}`,
+			),
+		);
 	});
 });

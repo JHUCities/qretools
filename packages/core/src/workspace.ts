@@ -12,6 +12,7 @@ import {
 } from "./address.ts";
 import { UNVERSIONED, type Version, type Versions } from "./ddi/version.ts";
 import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
+import { inDocumentOrder } from "./findings.ts";
 import type { Use } from "./instrument/draft.ts";
 import {
 	type Instrument,
@@ -19,9 +20,10 @@ import {
 	instrumentOf,
 } from "./instrument/instrument.ts";
 import type { Unread } from "./instrument/parse.ts";
+import { type Locks, movedTags, unlockedTags } from "./lock.ts";
 import { manifestVersions } from "./manifest.ts";
 import { ROOT } from "./schemes.ts";
-import { agencyWritten } from "./surface/bankfile.ts";
+import { agencyWritten, locksWritten } from "./surface/bankfile.ts";
 
 /** Where a workspace keeps what its bank doesn't read: its instruments' folder (one file each). */
 export const WORKSPACE = { instruments: "instruments" } as const;
@@ -117,6 +119,16 @@ export function resolveUses(
 	return out;
 }
 
+/** The key each use read at a tag reads, by alias: what a save or export locks. */
+export const remoteKeys = (
+	uses: Readonly<Record<string, Resolution>>,
+): Readonly<Record<string, AddressKey>> =>
+	Object.fromEntries(
+		Object.entries(uses).flatMap(([alias, r]) =>
+			r.kind === "remote" ? [[alias, r.key]] : [],
+		),
+	);
+
 /** What the parser is told of a use that found no bank (see `Unread`). */
 function unreadOf(r: Resolution): Unread | undefined {
 	switch (r.kind) {
@@ -209,6 +221,7 @@ export function instrumentIn(
 		remote,
 		remoteBanks,
 		agency,
+		locks = {},
 	}: {
 		/** The workspace's own bank; needed only when a use is local (`resolveUses`). */
 		readonly bank: BankScope | undefined;
@@ -216,6 +229,8 @@ export function instrumentIn(
 		readonly remoteBanks: Readonly<Record<AddressKey, BankScope>>;
 		/** As `workspace.yaml` writes it, valid or not: the instrument says when it isn't one. */
 		readonly agency?: string | undefined;
+		/** The commits `workspace.yaml` locks its tags at (`locksWritten`): a tag moved from one is warned of. */
+		readonly locks?: Locks;
 	},
 ): InstrumentIn {
 	const uses = resolveUses(importsOf(source), remote);
@@ -232,12 +247,23 @@ export function instrumentIn(
 		if (found !== undefined) given[alias] = found;
 		else if (unread !== undefined) unresolved[alias] = unread;
 	}
+	const instrument = instrumentOf(source, {
+		banks: given,
+		unresolved,
+		...(agency !== undefined && { agency }),
+	});
+	const moved = movedTags(remoteKeys(uses), remote, locks);
 	return {
-		instrument: instrumentOf(source, {
-			banks: given,
-			unresolved,
-			...(agency !== undefined && { agency }),
-		}),
+		instrument:
+			moved.length === 0
+				? instrument
+				: {
+						...instrument,
+						findings: inDocumentOrder(
+							[...instrument.findings, ...moved],
+							instrument.ranges,
+						),
+					},
 		uses,
 	};
 }
@@ -283,6 +309,7 @@ export function workspaceOf(
 		if (read.kind === "files") remoteBanks[key] = remoteScope(key, read);
 	const settings = files[ROOT.workspace];
 	const agency = settings === undefined ? undefined : agencyWritten(settings);
+	const locks = settings === undefined ? {} : locksWritten(settings);
 	const instruments: Record<string, InstrumentIn> = {};
 	// The bank holds every file but the workspace's own, so what it reads as nothing
 	// (a `workspace.yaml` in a folder, say) is the workspace's to report too.
@@ -293,12 +320,30 @@ export function workspaceOf(
 			if (readsInWorkspace(path)) ignored.push(path);
 			continue;
 		}
-		instruments[path] = instrumentIn(outside[path] ?? "", {
+		const read = instrumentIn(outside[path] ?? "", {
 			bank,
 			remote,
 			remoteBanks,
 			agency,
+			locks,
 		});
+		// The workspace as committed, as `check` reads it: a tag no lock holds got here
+		// unlocked (`unlockedTags`). Only here, never in `instrumentIn`, which the app
+		// evaluates while a `uses` line is still being typed (its save locks it).
+		const unlocked = unlockedTags(remoteKeys(read.uses), remote, locks);
+		instruments[path] =
+			unlocked.length === 0
+				? read
+				: {
+						...read,
+						instrument: {
+							...read.instrument,
+							findings: inDocumentOrder(
+								[...read.instrument.findings, ...unlocked],
+								read.instrument.ranges,
+							),
+						},
+					};
 	}
 	return { bank, remote: remoteBanks, instruments, ignored: ignored.sort() };
 }

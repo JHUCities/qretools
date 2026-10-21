@@ -4,7 +4,7 @@
  */
 
 import type { Draft, SchemeKind } from "@qretools/core";
-import { isRoot, SCHEME_NAME } from "@qretools/core";
+import { isRoot, SCHEME_NAME, shortCommit } from "@qretools/core";
 import type { WorkspaceEntry } from "./model.js";
 
 const FIELDS = [
@@ -88,7 +88,26 @@ export const describeWorkspaceChange = (
 export const describeChangeSet = (
 	subject: string,
 	others: readonly string[],
-): string =>
-	others.length === 0
-		? subject
-		: `${subject}\n\nWith:\n${others.map((o) => `- ${o}`).join("\n")}`;
+	/** Tags this commit re-locks because they were moved: a bad smell, so said first and loudly. */
+	moved: readonly TagMove[] = [],
+): string => {
+	const warnings = moved.map(
+		(m) =>
+			`[WARNING] The tag \`${m.key}\` was moved: it was locked at \`${shortCommit(m.from)}\` and names \`${shortCommit(m.to)}\` now. This commit locks it at the new commit, so its questions may have changed.`,
+	);
+	const head = moved.length === 0 ? subject : `[WARNING] ${subject}`;
+	return [
+		head,
+		...(warnings.length === 0 ? [] : [warnings.join("\n")]),
+		...(others.length === 0
+			? []
+			: [`With:\n${others.map((o) => `- ${o}`).join("\n")}`]),
+	].join("\n\n");
+};
+
+/** A tag locked at one commit that names another now. */
+export interface TagMove {
+	readonly key: string;
+	readonly from: string;
+	readonly to: string;
+}

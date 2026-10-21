@@ -29,8 +29,20 @@ that tag with your own `git`, so whatever credentials git has reach a private
 repository. Only `refs/tags/v1` is fetched, never a branch of that name, shallow and
 only its folder, into a cache by tag and folder (`$XDG_CACHE_HOME/qretools`, else
 `~/.cache/qretools`) beside the commit it resolved to; later runs read the cache. A tag
-is immutable by convention only: to read one that was moved, delete its entry in the
-cache. Its questions' DDI items say where they were read: UserAttributePairs
+can be moved, a commit can't: `instrument export` locks each tag the instrument reads at
+the commit read, under `locked:` in its workspace's `workspace.yaml` (commit it with
+the rest), as a build writes its lockfile (Cargo, npm), and saving an instrument in the
+app does the same. A tag that names another commit than its lock is a `moved-tag`
+warning on its `uses` line (in `check`, so `--strict` fails on it); the next export or
+save re-locks it, saying `[WARNING]`, and the changed line in `workspace.yaml` is what
+review sees. A tag with no lock (an instrument written by hand, never saved in the app
+or exported) is an `unlocked-tag` warning in `check`. Locks are only ever set, never removed. Git's own guarantee, so it holds on
+any forge. The command reads a tag from its cache, so a move shows where the cache is
+fresh, as in CI; delete a tag's entry in the cache to read it again here. An
+instrument outside a workspace, or in one without a `workspace.yaml`, exports, but its
+tags aren't locked.
+
+Its questions' DDI items say where they were read: UserAttributePairs
 `git-repository`, `git-path`, `git-tag` and `git-commit` (the commit the tag named),
 beside the file's `git-blob` UserID. Their versions come from the tag's message when it
 is a release's (`build --tag-message`, below) and describes exactly the files at the tag;

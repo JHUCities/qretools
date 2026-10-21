@@ -24,6 +24,8 @@ import {
 	type InstrumentIn,
 	importsOf,
 	instrumentIn,
+	type Locks,
+	locksWritten,
 	type RemoteBank,
 	remoteScope,
 	resolveUses,
@@ -124,7 +126,10 @@ export function createEvaluations(): Evaluations {
 		| undefined;
 	// The settings' agency as written, valid or not, per text: an instrument reports an
 	// invalid one, where the DDI pane and the scope use only a valid one (`agencyOf`).
-	let written: { source: string; agency: string | undefined } | undefined;
+	// Its locks too, read once per text, so an unchanged file keeps the instrument's cache.
+	let written:
+		| { source: string; agency: string | undefined; locks: Locks }
+		| undefined;
 	// The bank's environment as each folder has it, kept for as long as the bank's is.
 	const placed = new WeakMap<Env, Map<string, Env>>();
 	// The editor's schema, kept for as long as its environment is.
@@ -143,6 +148,7 @@ export function createEvaluations(): Evaluations {
 			source: string;
 			remote: Readonly<Record<AddressKey, RemoteBank>>;
 			agency: string | undefined;
+			locks: Locks | undefined;
 			bank: BankScope | undefined;
 			read: InstrumentIn;
 		}
@@ -272,12 +278,15 @@ export function createEvaluations(): Evaluations {
 				written = {
 					source: details.source,
 					agency: agencyWritten(details.source),
+					locks: locksWritten(details.source),
 				};
 			const agency = written?.agency;
+			const locks = written?.locks;
 			if (
 				hit &&
 				hit.source === e.source &&
 				hit.agency === agency &&
+				hit.locks === locks &&
 				hit.remote === remote &&
 				hit.bank === bank
 			)
@@ -287,11 +296,13 @@ export function createEvaluations(): Evaluations {
 				remote,
 				remoteBanks,
 				agency,
+				...(locks !== undefined && { locks }),
 			});
 			instruments.set(e.id, {
 				source: e.source,
 				remote,
 				agency,
+				locks,
 				bank,
 				read,
 			});

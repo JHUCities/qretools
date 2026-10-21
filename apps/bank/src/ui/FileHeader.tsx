@@ -68,7 +68,7 @@ export function FileHeader({
 			Reload from GitHub
 		</Banner.PrimaryAction>
 	);
-	const saving = activity?.kind === "saving";
+	const saving = activity?.kind === "saving" || activity?.kind === "waiting";
 	const nothing = !unsaved && also.length === 0;
 	const alsoText = `Also saves ${also.join(", ")}.`;
 	// Why a write cannot happen now is the session's, and the top bar says it in full.

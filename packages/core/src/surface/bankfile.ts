@@ -6,7 +6,9 @@
  * beside `SelectAll` would close an import cycle (env.ts reads the usual coding).
  */
 import { isMap, isScalar, parseDocument } from "yaml";
+import { addressOf } from "../address.ts";
 import type { Finding } from "../findings.ts";
+import { COMMIT_PATTERN, type Locks } from "../lock.ts";
 import {
 	DEFAULT_SELECT_ALL,
 	type SelectAll,
@@ -41,12 +43,19 @@ export interface ParsedSettingsFile {
 	 * in the workspace, in author order. Only ever more than `required`: see `envAt`.
 	 */
 	readonly requiredIn: RequiredIn;
+	/** The commit each tag its instruments use was locked at (`locked`): only valid entries. */
+	readonly locked: Locks;
 	readonly findings: readonly Finding[];
 }
 
 export type RequiredIn = Readonly<Record<string, readonly RequirableKey[]>>;
 
-const FIELDS: readonly string[] = ["agency", "required", "required_in"];
+const FIELDS: readonly string[] = [
+	"agency",
+	"required",
+	"required_in",
+	"locked",
+];
 
 /** `workspace.yaml`, read. Total: an empty or broken file is findings, never a throw. */
 export function parseSettingsFile(source: string): ParsedSettingsFile {
@@ -59,6 +68,7 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 		return {
 			required: [],
 			requiredIn: {},
+			locked: {},
 			findings: [
 				...syntax,
 				yamlError(e instanceof Error ? e.message : String(e)),
@@ -69,6 +79,7 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 		return {
 			required: [],
 			requiredIn: {},
+			locked: {},
 			findings: [
 				...syntax,
 				error("not-a-map", "", "This file is fields, such as `agency:`."),
@@ -90,17 +101,21 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 		"required_in" in js
 			? readRequiredIn(js.required_in, required.value)
 			: { value: {}, findings: [] };
+	const locked =
+		"locked" in js ? readLocked(js.locked) : { value: {}, findings: [] };
 	const agency = readAgency(doc);
 	return {
 		...(agency.value !== undefined && { agency: agency.value }),
 		required: required.value,
 		requiredIn: requiredIn.value,
+		locked: locked.value,
 		findings: [
 			...syntax,
 			...unknown,
 			...agency.findings,
 			...required.findings,
 			...requiredIn.findings,
+			...locked.findings,
 		],
 	};
 }
@@ -431,4 +446,102 @@ function readRequiredIn(
 		findings.push(...read.findings);
 	}
 	return { value: folders, findings };
+}
+
+const LOCKED_EXAMPLE =
+	"Saving or exporting an instrument writes it: each tag it reads, with the commit it named, such as `owner/repo@v1: <the commit's full sha>`.";
+
+/**
+ * `locked:`, a map from a tag an instrument uses (`owner/repo@v1`) to the commit it was
+ * locked at. An entry that isn't one is an error at its key and locks nothing. Keys are
+ * read as addresses, so one bank has one entry however it's capitalised.
+ */
+function readLocked(value: unknown): {
+	value: Locks;
+	findings: readonly Finding[];
+} {
+	if (value === null)
+		return {
+			value: {},
+			findings: [
+				hole(
+					"locked",
+					"`locked` is empty.",
+					`${LOCKED_EXAMPLE} Or remove the line.`,
+				),
+			],
+		};
+	if (!isPlainObject(value))
+		return {
+			value: {},
+			findings: [
+				error(
+					"wrong-type",
+					"locked",
+					"`locked` is tags, each with the commit it was locked at.",
+					LOCKED_EXAMPLE,
+				),
+			],
+		};
+	const locks: Record<string, string> = {};
+	const findings: Finding[] = [];
+	for (const [written, commit] of Object.entries(value)) {
+		const at = `locked.${written}`;
+		const address = addressOf(written);
+		if (address.kind !== "remote")
+			findings.push(
+				error(
+					"wrong-type",
+					at,
+					`\`${written}\` isn't a tag in another repository.`,
+					"Write it as the instrument's `uses` does, such as `owner/repo@v1`.",
+				),
+			);
+		else if (typeof commit !== "string" || !COMMIT_PATTERN.test(commit))
+			findings.push(
+				error(
+					"wrong-type",
+					at,
+					`\`${String(commit)}\` isn't a commit: a lock is the commit's full sha.`,
+					LOCKED_EXAMPLE,
+				),
+			);
+		else locks[address.key] = commit;
+	}
+	return { value: locks, findings };
+}
+
+/** The locks `workspace.yaml` writes: its valid entries, by key. */
+export const locksWritten = (source: string): Locks =>
+	parseSettingsFile(source).locked;
+
+/**
+ * `workspace.yaml` with these tags locked (`locksFor`), as saving or exporting an
+ * instrument locks them: every other entry, valid or not, and the file's comments as
+ * written; `locked:` a block map (the template's `locked: {}` becomes one). Never drops an
+ * entry. Undefined for a file that isn't fields, or whose `locked` isn't a map, to write into.
+ */
+export function withLocks(source: string, locks: Locks): string | undefined {
+	const doc = parseDocument(source);
+	if (doc.errors.length > 0 || (doc.contents !== null && !isMap(doc.contents)))
+		return undefined;
+	if (Object.keys(locks).length === 0) return source;
+	const locked = doc.get("locked", true);
+	if (locked === undefined || (isScalar(locked) && locked.value === null)) {
+		doc.set("locked", doc.createNode({ ...locks }));
+		return doc.toString();
+	}
+	if (!isMap(locked)) return undefined;
+	for (const [key, commit] of Object.entries(locks)) {
+		// One bank, one entry: a key written with other capitals is the same tag's.
+		const written = locked.items.find((pair) => {
+			const k = isScalar(pair.key) ? String(pair.key.value) : undefined;
+			const a = k === undefined ? undefined : addressOf(k);
+			return a?.kind === "remote" && a.key === key;
+		});
+		if (written !== undefined) written.value = doc.createNode(commit);
+		else locked.set(key, commit);
+	}
+	locked.flow = false;
+	return doc.toString();
 }

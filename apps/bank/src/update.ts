@@ -13,18 +13,23 @@ import {
 	instrumentPath,
 	instrumentRefAt,
 	isRoot,
+	locksFor,
+	locksWritten,
 	type Mention,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
 	type NamedScheme,
 	parseSurface,
 	type Range,
+	type RemoteBank,
+	remoteKeys,
 	remotesOf,
 	SCHEME_NAME,
 	SHAPE,
 	saveableName,
 	UNNAMED,
 	WORKSPACE,
+	withLocks,
 } from "@qretools/core";
 import {
 	addInstrumentFill,
@@ -65,6 +70,7 @@ import {
 	describeMove,
 	describeSchemeChange,
 	describeWorkspaceChange,
+	type TagMove,
 } from "./commits.js";
 import { createEvaluations, type Evaluations } from "./evaluations.js";
 import {
@@ -74,6 +80,7 @@ import {
 	type BankEntry,
 	type Blob,
 	type Cmd,
+	detailsOf,
 	EMPTY_LOCAL,
 	EMPTY_REMOTE,
 	type Entry,
@@ -1433,6 +1440,8 @@ function step(model: Model, msg: Msg): Step {
 				? signOut({ ...model, local: EMPTY_LOCAL })
 				: [model, []];
 
+		// shortcut: a save at sign-out commits directly, without the wait or the locks an
+		// instrument's Save writes; `check` warns `unlocked-tag` and the next save repairs it.
 		case "signOutSaveConfirmed": {
 			const as = writable(model);
 			const plan = signOutPlan(model);
@@ -1505,20 +1514,34 @@ function step(model: Model, msg: Msg): Step {
 				[],
 			];
 
-		case "remoteBankLoaded":
+		case "remoteBankLoaded": {
 			// Only an answer still awaited: one from before a sign-out or reload is dropped.
-			return model.remoteBanks[msg.key]?.kind !== "loading"
-				? [model, []]
-				: [
-						{
-							...model,
-							remoteBanks: {
-								...model.remoteBanks,
-								[msg.key]: remoteBankOf(msg.result),
-							},
-						},
-						[],
-					];
+			if (model.remoteBanks[msg.key]?.kind !== "loading") return [model, []];
+			const read: Model = {
+				...model,
+				remoteBanks: {
+					...model.remoteBanks,
+					[msg.key]: remoteBankOf(msg.result),
+				},
+			};
+			// A save waiting for this read goes ahead once nothing it reads is loading,
+			// read or not: one that can't be read has its own error, and saves unlocked.
+			// A key not asked for yet counts as done: `withRemoteReads` asks for it at once,
+			// and the resumed save, finding it still pending, simply waits again.
+			const waiting = Object.entries(read.activity).find(
+				([, a]) =>
+					a.kind === "waiting" &&
+					a.keys.every((k) => read.remoteBanks[k]?.kind !== "loading"),
+			);
+			if (waiting === undefined) return [read, []];
+			const id = Number(waiting[0]);
+			// Resumed as a plain save: an instrument reaches `write` only from Save (a move is
+			// a question's). If instruments ever move, carry the path here.
+			return step(withActivity(read, id, undefined), {
+				kind: "saveRequested",
+				id,
+			});
+		}
 
 		default:
 			return msg satisfies never;
@@ -1540,6 +1563,23 @@ function write(
 	subject?: string,
 ): Step {
 	const own = syncOf(q, remoteBlob(model.remote, q));
+	const read =
+		q.kind === "instrument"
+			? createEvaluations().instrument(model, q)
+			: undefined;
+	// A tag still being read has no commit to lock yet: the save waits for it, so an
+	// instrument never lands on the branch without its locks (`remoteBankLoaded` resumes it).
+	const reading = Object.values(read?.uses ?? {}).flatMap((u) =>
+		u.kind === "pending" ? [u.key] : [],
+	);
+	if (reading.length > 0)
+		return [withActivity(model, id, { kind: "waiting", keys: reading }), []];
+	// An instrument locks the tags it reads in the workspace's details, which save with it
+	// (`lockedDetails`). A save refused before the commit leaves them untouched; a commit
+	// GitHub refuses (stale) leaves the lock as an unsaved change, true to what was read.
+	const relocked = read === undefined ? undefined : lockedDetails(model, read);
+	const saving =
+		relocked === undefined ? model : withDetails(model, relocked.source);
 	if (own === "conflict")
 		return [
 			refuse(
@@ -1561,19 +1601,23 @@ function write(
 					parseSurface(q.source, envIn(model)).mentions,
 				)
 			: q.kind === "instrument"
-				? savedWith(model, q)
+				? savedWith(saving, q)
 				: { include: [], blocked: [] };
 	const [stuck] = deps.blocked;
 	if (stuck !== undefined) {
 		const name = nameOf(model, stuck);
+		// A root file is named by its kind alone: "the workspace details".
+		const root = stuck.kind !== "question" && isRoot(stuck.kind);
 		return [
 			refuse(
 				model,
 				id,
 				stuck.kind === "question"
 					? `The question \`${name}\` this instrument asks changed on GitHub since you started.`
-					: `The ${SCHEME_NAME[stuck.kind]} \`${name}\` this ${q.kind === "question" ? "question names" : "instrument reads"} changed on GitHub since you started.`,
-				`Open \`${name}\` and reload it from GitHub, then save again.`,
+					: `The ${SCHEME_NAME[stuck.kind]}${root ? "" : ` \`${name}\``} this ${q.kind === "question" ? "question names" : "instrument reads"} changed on GitHub since you started.`,
+				root
+					? `Open the ${SCHEME_NAME[stuck.kind]} and reload them from GitHub, then save again.`
+					: `Open \`${name}\` and reload it from GitHub, then save again.`,
 			),
 			[],
 		];
@@ -1585,11 +1629,16 @@ function write(
 			: [];
 	// The file being saved comes first: a refused commit reports on `changes[0]`.
 	return commitFiles(
-		model,
+		saving,
 		as,
 		[changeOf(q, path), ...claimedChanges(deps.include), ...moved],
 		[q, ...deps.include],
-		subject,
+		// Only the locks changed: say so, not that the instrument did.
+		subject ??
+			(relocked !== undefined && own === "inSync" && q.kind === "instrument"
+				? `Lock the tags instrument ${q.name} reads`
+				: undefined),
+		relocked?.moved,
 	);
 }
 
@@ -1606,12 +1655,13 @@ const nameOf = (model: Model, f: BankEntry): string =>
  * unsaved shared files. The second step goes beyond a question's save because the
  * instrument's DDI elaborates its questions through their banks' shared files: an
  * unsaved scale changes what the instrument means. Only what is named is taken, never
- * every unsaved file of a bank, and never the missing values, the select-all coding
- * or the workspace's details implicitly, as for a question. Not yet followed: a bank
+ * every unsaved file of a bank, and never the missing values or the select-all coding
+ * implicitly, as for a question. The workspace's details go along when it reads another
+ * repository's bank: they hold the tags' locks, which saving it writes. Not yet followed: a bank
  * name in a condition, or an input's shared scale (`refs` doesn't hold them).
  */
 export function instrumentDependencies(
-	model: Pick<Model, "local" | "remote">,
+	model: Pick<Model, "local" | "remote" | "remoteBanks">,
 	read: InstrumentIn,
 	/** The names a question writes: the view passes its kept evaluations', `update` reads afresh. */
 	mentionsOf: (q: Question) => readonly Mention[],
@@ -1632,6 +1682,16 @@ export function instrumentDependencies(
 		else if (sync === "conflict" || sync === "deletedOnGitHub")
 			blocked.set(f.id, f);
 	};
+	const details = detailsOf(model.local.schemes);
+	if (
+		details !== undefined &&
+		Object.values(read.uses).some((u) => u.kind !== "local")
+	) {
+		consider(details);
+		// Saving locks the tags it reads there, so they go along even when saved.
+		if (!blocked.has(details.id) && lockedDetails(model, read) !== undefined)
+			include.set(details.id, details);
+	}
 	for (const ref of read.instrument.refs) {
 		// A name declared in the instrument itself is no bank file to take along.
 		if (ref.kind !== "bank") continue;
@@ -1646,6 +1706,44 @@ export function instrumentDependencies(
 		for (const s of own.blocked) blocked.set(s.id, s);
 	}
 	return { include: [...include.values()], blocked: [...blocked.values()] };
+}
+
+/**
+ * What saving an instrument writes into the workspace's details: each tag it reads,
+ * locked at the commit read (`locksFor`), so the lock lands on the branch with it, and a
+ * moved tag's new lock is a change review sees (and its commit message warns of). The
+ * details start from their template when there are none. Undefined when nothing
+ * changes, or the details can't be written into (their own findings say why).
+ */
+export function lockedDetails(
+	model: Pick<Model, "local" | "remoteBanks">,
+	read: InstrumentIn,
+): { readonly source: string; readonly moved: readonly TagMove[] } | undefined {
+	const source =
+		detailsOf(model.local.schemes)?.source ?? SCHEME_TEMPLATES.workspace;
+	const locks = locksWritten(source);
+	const reads: Record<string, RemoteBank> = {};
+	for (const [key, r] of Object.entries(model.remoteBanks))
+		if (r.kind !== "loading") reads[key] = r;
+	const next = locksFor(Object.values(remoteKeys(read.uses)), reads, locks);
+	if (Object.keys(next).length === 0) return undefined;
+	const text = withLocks(source, next);
+	if (text === undefined) return undefined;
+	return {
+		source: text,
+		moved: Object.entries(next).flatMap(([key, to]) => {
+			const from = locks[key];
+			return from === undefined ? [] : [{ key, from, to }];
+		}),
+	};
+}
+
+/** The workspace's details as `source`: their working copy, or a new one when there are none. */
+function withDetails(model: Model, source: string): Model {
+	const details = detailsOf(model.local.schemes);
+	return details === undefined
+		? add(model, { kind: "workspace", name: "workspace", source })[0]
+		: withSource(model, details.id, source);
 }
 
 /**
@@ -1673,7 +1771,9 @@ export const instrumentAlsoSaves = (
 	deps.include.map((f) =>
 		f.kind === "question"
 			? questionName(f)
-			: `${SCHEME_NAME[f.kind]} ${f.name}`,
+			: isRoot(f.kind)
+				? SCHEME_NAME[f.kind]
+				: `${SCHEME_NAME[f.kind]} ${f.name}`,
 	);
 
 /**
@@ -1759,6 +1859,8 @@ function commitFiles(
 	files: readonly Entry[],
 	/** The first file's line, when the caller has a better one than `messageOf` (a move). */
 	subject?: string,
+	/** Tags the commit re-locks because they were moved: its message warns of each. */
+	movedTags: readonly TagMove[] = [],
 ): Step {
 	const busy = changes.reduce<Model>(
 		(m, c) =>
@@ -1776,6 +1878,7 @@ function commitFiles(
 				message: describeChangeSet(
 					subject ?? (first === undefined ? "" : messageOf(model, first)),
 					others.map((e) => messageOf(model, e)),
+					movedTags,
 				),
 			},
 		],
@@ -2494,7 +2597,13 @@ export function blockage(model: Model): Blockage | undefined {
 		};
 	if (model.loading.kind !== "loaded") return brief("Loading the workspace…");
 	// One commit at a time: two in flight naming the same file would make the second
-	// look stale for a save that worked. Commits to one branch are serial anyway.
+	// look stale for a save that worked. Commits to one branch are serial anyway. A save
+	// waiting for its tags holds the rest, as one in flight does.
+	for (const a of Object.values(model.activity))
+		if (a.kind === "waiting")
+			return brief(
+				`Reading ${a.keys.map((k) => `\`${k}\``).join(", ")} before saving…`,
+			);
 	if (
 		Object.values(model.activity).some(
 			(a) => a.kind === "saving" || a.kind === "deleting",

@@ -119,7 +119,7 @@ const marks = (model: TreeInput, e: Entry) => {
 		unsaved: isUnsaved(e),
 		draft: e.base === undefined,
 		failed: activity?.kind === "failed",
-		busy: activity?.kind === "saving" || activity?.kind === "deleting",
+		busy: activity !== undefined && activity.kind !== "failed",
 	};
 };
 
