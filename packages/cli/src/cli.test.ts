@@ -76,7 +76,10 @@ describe("a bank in another repository", () => {
 			async () => ({
 				kind: "files",
 				files: hh,
-				at: { commit: "c0ffee", blobs: { [path]: "b1" } },
+				at: {
+					commit: "c0ffee0000000000000000000000000000000000",
+					blobs: { [path]: "b1" },
+				},
 			}),
 			"instrument",
 			"export",
@@ -87,7 +90,9 @@ describe("a bank in another repository", () => {
 		expect(r.code).toBe(0);
 		expect(r.out).toContain('"StringValue": "b1"');
 		expect(r.out).toContain(`"StringValue": "${path}"`);
-		expect(r.out).toContain('"StringValue": "c0ffee"');
+		expect(r.out).toContain(
+			'"StringValue": "c0ffee0000000000000000000000000000000000"',
+		);
 		expect(r.out).toContain('"StringValue": "https://github.com/owner/bank"');
 	});
 });
@@ -417,5 +422,113 @@ describe("the command under real Node", () => {
 				)
 					stale.push(`${root}/${file}`);
 		expect(stale).toEqual([]);
+	});
+});
+
+describe("a tag locked to the commit it named", () => {
+	const A = "a".repeat(40);
+	const B = "b".repeat(40);
+	const at =
+		(commit: string): Io["readRemote"] =>
+		async () => ({
+			kind: "files",
+			files: { "workspace.yaml": "agency: org.example\n" },
+			at: { commit, blobs: {} },
+		});
+	const workspace = async (settings: string) => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-lock-"));
+		await mkdir(join(dir, "instruments"));
+		await writeFile(join(dir, "workspace.yaml"), settings);
+		await writeFile(
+			join(dir, "instruments", "x.yaml"),
+			"name: x\nuses:\n  b: owner/bank@v1\nflow: []\n",
+		);
+		return dir;
+	};
+	const exportIn = (dir: string, commit: string) =>
+		runWith(
+			at(commit),
+			"instrument",
+			"export",
+			join(dir, "instruments", "x.yaml"),
+			"--agency",
+			"org.example",
+		);
+
+	it("is written when the instrument is exported, keeping the file's own lines", async () => {
+		const dir = await workspace("# Ours.\nagency: org.example\n");
+		const r = await exportIn(dir, A);
+		expect(r.code).toBe(0);
+		expect(r.written[join(dir, "workspace.yaml")]).toBe(
+			`# Ours.\nagency: org.example\nlocked:\n  owner/bank@v1: ${A}\n`,
+		);
+		expect(r.err).toMatch(/Locked `owner\/bank@v1` at `aaaaaaaaaaaa`/);
+		// Nothing to write when the tag still names it; a check never writes.
+		await writeFile(
+			join(dir, "workspace.yaml"),
+			r.written[join(dir, "workspace.yaml")] ?? "",
+		);
+		expect((await exportIn(dir, A)).written).toEqual({});
+		const checked = await runWith(
+			at(A),
+			"instrument",
+			"check",
+			join(dir, "instruments", "x.yaml"),
+		);
+		expect(checked.written).toEqual({});
+	});
+
+	it("warns of a moved tag in check, and an export re-locks it, saying so loudly", async () => {
+		const dir = await workspace(
+			`agency: org.example\nlocked:\n  owner/bank@v1: ${A}\n`,
+		);
+		const checked = await runWith(at(B), "check", dir);
+		expect(checked.code).toBe(0);
+		expect(checked.out).toMatch(/warning: .*the tag was moved.*\[moved-tag\]/);
+		expect((await runWith(at(B), "check", dir, "--strict")).code).toBe(1);
+		const exported = await exportIn(dir, B);
+		expect(exported.code).toBe(0);
+		expect(exported.err).toMatch(/\[WARNING\] Re-locked `owner\/bank@v1`/);
+		expect(exported.written[join(dir, "workspace.yaml")]).toBe(
+			`agency: org.example\nlocked:\n  owner/bank@v1: ${B}\n`,
+		);
+	});
+
+	it("is asked for in check when a tag has none", async () => {
+		const dir = await workspace("agency: org.example\n");
+		const r = await runWith(at(A), "check", dir);
+		expect(r.out).toMatch(/warning: .*isn't locked.*\[unlocked-tag\]/);
+		expect(r.written).toEqual({});
+	});
+
+	it("isn't written into a workspace that has no workspace.yaml", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-lock-"));
+		await mkdir(join(dir, "instruments"));
+		await writeFile(
+			join(dir, "instruments", "x.yaml"),
+			"name: x\nuses:\n  b: owner/bank@v1\nflow: []\n",
+		);
+		const r = await exportIn(dir, A);
+		expect(r.code).toBe(0);
+		expect(r.written).toEqual({});
+		expect(r.err).toMatch(/Not locked: .* has no readable workspace\.yaml/);
+	});
+
+	it("isn't written for an instrument outside a workspace, which still exports", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-lock-"));
+		await writeFile(
+			join(dir, "x.yaml"),
+			"name: x\nuses:\n  b: owner/bank@v1\nflow: []\n",
+		);
+		const r = await runWith(
+			at(A),
+			"instrument",
+			"export",
+			join(dir, "x.yaml"),
+			"--agency",
+			"org.example",
+		);
+		expect(r.code).toBe(0);
+		expect(r.err).toMatch(/Not locked/);
 	});
 });

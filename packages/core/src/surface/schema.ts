@@ -365,6 +365,12 @@ export const WorkspaceFileSchema = z.strictObject({
 		.describe(
 			"Fields the questions in one folder must also have, by the folder's path, such as `questions/health`. It adds to `required`, never removes.",
 		),
+	locked: z
+		.record(z.string(), z.string())
+		.optional()
+		.describe(
+			"The commit each tag this workspace's instruments use named when it was locked, such as `owner/repo@v1: <the commit's full sha>`. A tag that names another commit now is warned of. Saving or exporting an instrument writes it.",
+		),
 });
 export const workspaceFileJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(WorkspaceFileSchema) as Record<string, unknown>;

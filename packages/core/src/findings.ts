@@ -95,7 +95,11 @@ export type InstrumentCode =
 	/** Advice on whom a question is asked of, against the path that reaches it. */
 	| "universe"
 	/** A roster's `max` below what it counts allows: later rows aren't asked. */
-	| "max-below-count";
+	| "max-below-count"
+	/** Advice: a tag that names another commit than `workspace.yaml` locked it at. */
+	| "moved-tag"
+	/** Advice, in `check`: a tag read with no lock in `workspace.yaml`. */
+	| "unlocked-tag";
 
 export type FindingCode = ParseCode | LintCode | InstrumentCode | "ddi-invalid";
 

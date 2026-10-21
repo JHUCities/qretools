@@ -176,14 +176,19 @@ describe("a bank read from another repository", () => {
 		const read = {
 			kind: "files",
 			files,
-			at: { commit: "c0ffee", blobs: { "questions/t/q.yaml": "b2" }, message },
+			at: {
+				commit: "c0ffee0000000000000000000000000000000000",
+				blobs: { "questions/t/q.yaml": "b2" },
+				message,
+			},
 		} as const;
 		const stale = remoteScope("org/bank@v1", read);
 		expect(stale.versions?.["questions/t/q.yaml"]?.number).toBe("1");
 		expect(stale.manifest?.kind).toBe("stale");
 		const ws = workspaceOf(
 			{
-				"workspace.yaml": "agency: org.example\n",
+				"workspace.yaml":
+					"agency: org.example\nlocked:\n  org/bank@v1: c0ffee0000000000000000000000000000000000\n",
 				"instruments/x.yaml":
 					"name: x\nuses:\n  b: org/bank@v1\nflow:\n  - ask: b.q\n",
 			},
@@ -200,5 +205,58 @@ describe("a bank read from another repository", () => {
 		expect(
 			remoteScope("org/bank@v1", { kind: "files", files }).versions,
 		).toBeUndefined();
+	});
+});
+
+describe("a tag locked to a commit in workspace.yaml", () => {
+	const A = "a".repeat(40);
+	const B = "b".repeat(40);
+	const bank = {
+		"questions/t/q.yaml": "name: q\ntext: Q?\nintent: i\nopen: {}\n",
+		"workspace.yaml": "agency: org.example\n",
+	};
+	const at = (commit: string) =>
+		({
+			kind: "files",
+			files: bank,
+			at: { commit, blobs: { "questions/t/q.yaml": "b1" } },
+		}) as const;
+	const findings = (settings: string, commit: string) =>
+		workspaceOf(
+			{
+				"workspace.yaml": settings,
+				"instruments/x.yaml":
+					"name: x\nuses:\n  b: Org/Bank@v1\nflow:\n  - ask: b.q\n",
+			},
+			{ remote: { "org/bank@v1": at(commit) } },
+		).instruments["instruments/x.yaml"]?.instrument.findings ?? [];
+
+	it("says nothing when the tag still names the commit locked, however the key is capitalised", () => {
+		expect(
+			findings(`agency: org.example\nlocked:\n  ORG/bank@v1: ${A}\n`, A),
+		).toEqual([]);
+	});
+
+	it("warns of a tag no lock holds: the instrument got here without one", () => {
+		expect(findings("agency: org.example\n", A)).toEqual([
+			expect.objectContaining({
+				code: "unlocked-tag",
+				severity: "warning",
+				path: "uses.b",
+			}),
+		]);
+	});
+
+	it("warns of a tag that names another commit now, and still reads it", () => {
+		expect(
+			findings(`agency: org.example\nlocked:\n  org/bank@v1: ${A}\n`, B),
+		).toEqual([
+			expect.objectContaining({
+				code: "moved-tag",
+				severity: "warning",
+				path: "uses.b",
+				message: expect.stringContaining("the tag was moved"),
+			}),
+		]);
 	});
 });

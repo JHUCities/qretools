@@ -832,9 +832,7 @@ function BranchLine({ model }: { model: Model }) {
 }
 
 const saving = (model: Model): boolean =>
-	Object.values(model.activity).some(
-		(a) => a.kind === "saving" || a.kind === "deleting",
-	);
+	Object.values(model.activity).some((a) => a.kind !== "failed");
 
 const busy = (model: Model): boolean =>
 	model.session.kind === "connecting" ||

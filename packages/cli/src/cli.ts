@@ -23,10 +23,14 @@ import {
 	HERE,
 	type Item,
 	importsOf,
+	inDocumentOrder,
 	instrumentAt,
 	instrumentOf,
 	locate,
+	locksFor,
+	locksWritten,
 	makeValidator,
+	movedTags,
 	notHere,
 	placeFindings,
 	questionItems,
@@ -38,10 +42,13 @@ import {
 	remotesOf,
 	type Severity,
 	scopeOf,
+	shortCommit,
 	status,
 	tagMessage,
+	unlockedTags,
 	versionsOf,
 	WORKSPACE,
+	withLocks,
 	workspaceOf,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
@@ -74,7 +81,9 @@ dir is the workspace's folder (default: the current directory): workspace.yaml,
 questions/<folder>/, the shared folders (scales/ and so on), missing.yaml,
 select_all.yaml and instruments/.
 An instrument reads its own workspace (\`../\` in its \`uses\`) and other workspaces at
-a tag (\`owner/repo@v1\`, with git).
+a tag (\`owner/repo@v1\`, with git). A tag can be moved: \`instrument export\` locks
+each tag it reads at the commit read, under \`locked:\` in its workspace.yaml, and a
+tag that names another commit than its lock is a warning until the next export locks it.
 --bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
 --strict  also fail on warnings.
 --tag-message  also write the message a release's annotated tag carries: each file's
@@ -210,6 +219,22 @@ export function findingLine(
 	return `${path}:${line}:${col}: ${LEVEL[f.severity]}: ${f.message} [${what}]`;
 }
 
+/** Each workspace in another repository its instruments use, read once at its tag, by key. */
+const readRemotes = async (
+	files: Readonly<Record<string, string>>,
+	io: Io,
+): Promise<Record<string, RemoteBank>> =>
+	Object.fromEntries(
+		await Promise.all(
+			remotesOf(files).map(
+				async (a): Promise<[string, RemoteBank]> => [
+					a.key,
+					await io.readRemote(a),
+				],
+			),
+		),
+	);
+
 /** The workspace in `dir`, checked: every file's findings in path order, then a count. */
 async function checkWorkspace(
 	dir: string,
@@ -226,16 +251,7 @@ async function checkWorkspace(
 		return USAGE_ERROR;
 	}
 	// Workspaces in other repositories, each read once at its tag; one that can't be says why on its use.
-	const remote = Object.fromEntries(
-		await Promise.all(
-			remotesOf(files).map(
-				async (a): Promise<[string, RemoteBank]> => [
-					a.key,
-					await io.readRemote(a),
-				],
-			),
-		),
-	);
+	const remote = await readRemotes(files, io);
 	const ws = workspaceOf(files, { remote });
 	// Each file as the workspace has it: its findings, its text, and its ranges.
 	const checked: {
@@ -484,6 +500,20 @@ async function instrument(
 			);
 			return USAGE_ERROR;
 		}
+	// Its workspace's settings, when it's in one: the locks a moved tag is warned against,
+	// and where an export locks the tags it read.
+	const settingsPath =
+		basename(dirname(resolve(file))) === WORKSPACE.instruments
+			? join(dirname(file), HERE, ROOT.workspace)
+			: undefined;
+	const settings =
+		settingsPath === undefined
+			? undefined
+			: await readFile(settingsPath, "utf8").catch(() => undefined);
+	const locks = settings === undefined ? {} : locksWritten(settings);
+	/** Each bank read at its tag, and the key each alias reads it by. */
+	const reads: Record<string, RemoteBank> = {};
+	const tagged: Record<string, string> = {};
 	const banks: Record<string, BankScope> = {};
 	/** Its own workspace's `workspace.yaml`, once a `../` use has read it. */
 	let own: string | undefined;
@@ -517,6 +547,8 @@ async function instrument(
 				io.err(`Can't read \`${use.alias}\`: ${read.reason}\n`);
 				return USAGE_ERROR;
 			}
+			reads[address.key] = read;
+			tagged[use.alias] = address.key;
 			banks[use.alias] = remoteScope(address.key, read);
 			continue;
 		}
@@ -539,11 +571,23 @@ async function instrument(
 		banks,
 		...(agency !== undefined && { agency }),
 	});
+	// In a workspace, `check` says a tag no lock holds, as the workspace's check does; an
+	// export locks it instead, and says so.
+	const moved = [
+		...movedTags(tagged, reads, locks),
+		...(settingsPath === undefined || command !== "check"
+			? []
+			: unlockedTags(tagged, reads, locks)),
+	];
 	if (command === "check") {
-		for (const f of result.findings)
+		const findings = inDocumentOrder(
+			[...result.findings, ...moved],
+			result.ranges,
+		);
+		for (const f of findings)
 			io.out(`${findingLine(file, source, result.ranges, f)}\n`);
-		const s = status(result.findings);
-		io.err(`${result.findings.length} findings.\n`);
+		const s = status(findings);
+		io.err(`${findings.length} findings.\n`);
 		return s.kind === "incomplete" ||
 			(args.values.strict === true &&
 				s.kind === "advice" &&
@@ -557,11 +601,49 @@ async function instrument(
 		io.err(
 			"The instrument has something to fill in or fix; what it lacks is left out of the DDI (`qretools instrument check` lists it).\n",
 		);
+	for (const f of moved)
+		io.err(`${findingLine(file, source, result.ranges, f)}\n`);
+	let code = OK;
 	if (args.values.qsf === true)
-		return exportQsf(file, source, result, args, io);
-	const text = `${JSON.stringify(result.ddi, null, 2)}\n`;
-	if (args.values.output === undefined) io.out(text);
-	else await io.writeFile(args.values.output, text);
+		code = await exportQsf(file, source, result, args, io);
+	else {
+		const text = `${JSON.stringify(result.ddi, null, 2)}\n`;
+		if (args.values.output === undefined) io.out(text);
+		else await io.writeFile(args.values.output, text);
+	}
+	if (code !== OK) return code;
+	// Exported: the tags it read are locked at the commits read, as a build writes its lockfile.
+	const next = locksFor(Object.values(tagged), reads, locks);
+	if (Object.keys(next).length === 0) return OK;
+	if (settingsPath === undefined) {
+		io.err(
+			`Not locked: ${file} isn't in a workspace's \`${WORKSPACE.instruments}/\` folder, so there's no workspace.yaml to lock its tags in.\n`,
+		);
+		return OK;
+	}
+	if (settings === undefined) {
+		io.err(
+			`Not locked: ${dirname(settingsPath)} has no readable workspace.yaml (a workspace needs one for its agency).\n`,
+		);
+		return OK;
+	}
+	const locked = withLocks(settings, next);
+	if (locked === undefined) {
+		io.err(
+			`Not locked: ${settingsPath} can't be read as fields (\`qretools check\` says why).\n`,
+		);
+		return OK;
+	}
+	// Written whether the DDI went to a file or to stdout: piping it to a file is an export too.
+	await io.writeFile(settingsPath, locked);
+	for (const [key, commit] of Object.entries(next)) {
+		const was = locks[key];
+		io.err(
+			was === undefined
+				? `Locked \`${key}\` at \`${shortCommit(commit)}\` in ${settingsPath}.\n`
+				: `[WARNING] Re-locked \`${key}\` at \`${shortCommit(commit)}\` in ${settingsPath}: the tag was moved from \`${shortCommit(was)}\`, so its questions may have changed.\n`,
+		);
+	}
 	return OK;
 }
 

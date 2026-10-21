@@ -37,6 +37,9 @@ const EXAMPLE_QUESTIONS = Object.entries(
 
 const QUESTION = (name: string) =>
 	`name: ${name}\ntext: Is it so?\nintent: To see.\nresponses: yn\n`;
+/** The commit the other repository's tag names, as this workspace locks it. */
+const FAR = "f".repeat(40);
+
 const FILES = [
 	file("workspace.yaml", "agency: org.example\n"),
 	file("scales/yn.yaml", 'labels:\n  "1": Yes\n  "2": No\n'),
@@ -70,6 +73,7 @@ function renderWorkspace(
 			Promise.resolve(
 				ok({
 					found: true,
+					commit: FAR,
 					files: [
 						{
 							path: "workspace.yaml",
@@ -507,7 +511,14 @@ describe("a workspace's instruments", () => {
 
 	it("mark a name of this workspace's bank apart from one of another repository's", async () => {
 		renderWorkspace([
-			...FILES.filter((f) => f.path !== "instruments/wave1.yaml"),
+			...FILES.filter(
+				(f) =>
+					f.path !== "instruments/wave1.yaml" && f.path !== "workspace.yaml",
+			),
+			file(
+				"workspace.yaml",
+				`agency: org.example\nlocked:\n  o/elsewhere@v1: ${FAR}\n`,
+			),
 			file(
 				"instruments/wave1.yaml",
 				"name: wave1\nuses:\n  a: ../\n  far: o/elsewhere@v1\nflow:\n  - ask: a.alpha\n  - ask: far.far\n",

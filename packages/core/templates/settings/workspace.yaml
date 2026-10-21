@@ -30,3 +30,13 @@ agency:
 #required_in:
 #  questions/example:
 #    - universe
+
+# The commit each tag this workspace's instruments use (owner/name@v1) named
+# when it was locked. A tag can be moved to another commit, but a commit can't
+# change, so a lock shows when another workspace's questions may have changed
+# under the same tag. Saving an instrument in QREtools, or exporting it with
+# `qretools instrument export`, writes these lines for the tags it reads: you
+# don't edit them. A tag that names another commit than its lock is a warning;
+# the next save locks it at the new commit, and the change shows here, in
+# review, with a [WARNING] in the commit message.
+locked: {}
