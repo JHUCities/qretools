@@ -5,6 +5,3 @@ dist/
 .DS_Store
 worker/.wrangler/
 worker/.dev.vars
-
-# The backlog is kept locally, not in the repository.
-FEATURES.md
