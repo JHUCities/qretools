@@ -53,9 +53,11 @@ to git (`git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.
 or a deploy key.
 
 For one instrument, `qretools instrument check <file>` and `qretools instrument export
-<file> --agency <agency>`: it reads its own workspace (`../`, the folder above it) and
-others at their tags; `--bank alias=dir` reads an alias written as `owner/repo@v1` from a
-directory instead, to work offline. Any other local address is refused.
+<file>`, under its workspace's agency (`workspace.yaml`), or `--agency <agency>` for a
+file outside a workspace's `instruments/`: it reads its own workspace (`../`, the folder
+above it) and others at their tags; `--bank alias=dir` reads an alias written as
+`owner/repo@v1` from a directory instead, to work offline. Any other local address is
+refused.
 
 `qretools instrument export <file> --qsf` writes the instrument as a Qualtrics survey
 (QSF) made from its DDI, to import under Projects → Create project → Survey. Everything

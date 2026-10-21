@@ -88,8 +88,8 @@ tag that names another commit than its lock is a warning until the next export l
 --strict  also fail on warnings.
 --tag-message  also write the message a release's annotated tag carries: each file's
           version, so a workspace that uses this one at the tag reads them.
---agency  the DDI agency the instrument is published under, when it isn't its own
-          workspace's (workspace.yaml), as for a file that uses none.
+--agency  the DDI agency the instrument is published under, when it isn't its
+          workspace's (workspace.yaml), as for a file outside a workspace's instruments/.
 --qsf     write the instrument as a Qualtrics survey (QSF, made from its DDI) instead of
           its DDI; refused when anything in it can't be run in Qualtrics as the DDI says.`;
 
@@ -406,7 +406,7 @@ function refused(r: Refusal, io: Io): number {
 		case "noAgency":
 			// The instrument's words: the workspace's export says its own before it gets here.
 			io.err(
-				"Not exported: the instrument has no DDI agency. Its workspace declares none (workspace.yaml, agency:) and none is given with --agency.\n",
+				"Not exported: the instrument has no DDI agency. It isn't in a workspace that declares one (workspace.yaml, agency:), and none is given with --agency.\n",
 			);
 			break;
 		case "invalidAgency":
@@ -515,8 +515,6 @@ async function instrument(
 	const reads: Record<string, RemoteBank> = {};
 	const tagged: Record<string, string> = {};
 	const banks: Record<string, BankScope> = {};
-	/** Its own workspace's `workspace.yaml`, once a `../` use has read it. */
-	let own: string | undefined;
 	for (const use of uses) {
 		const address: Address =
 			use.address === undefined
@@ -556,8 +554,6 @@ async function instrument(
 		try {
 			const files = await readWorkspace(dir);
 			banks[use.alias] = scopeOf(files);
-			// Its own workspace's agency is the instrument's, as in the app: one per workspace.
-			if (offline === undefined) own = files[ROOT.workspace];
 		} catch (e) {
 			io.err(
 				`Can't read \`${use.alias}\` at ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
@@ -565,8 +561,11 @@ async function instrument(
 			return USAGE_ERROR;
 		}
 	}
+	// Its workspace's agency is the instrument's, as in the app and `check`: one per
+	// workspace, whichever banks the instrument reads.
 	const agency =
-		args.values.agency ?? (own === undefined ? undefined : agencyWritten(own));
+		args.values.agency ??
+		(settings === undefined ? undefined : agencyWritten(settings));
 	const result = instrumentOf(source, {
 		banks,
 		...(agency !== undefined && { agency }),

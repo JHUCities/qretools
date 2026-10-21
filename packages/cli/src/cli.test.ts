@@ -532,3 +532,44 @@ describe("a tag locked to the commit it named", () => {
 		expect(r.err).toMatch(/Not locked/);
 	});
 });
+
+describe("an instrument that reads only other workspaces", () => {
+	const at: Io["readRemote"] = async () => ({
+		kind: "files",
+		files: { "workspace.yaml": "agency: org.bank\n" },
+		at: { commit: "a".repeat(40), blobs: {} },
+	});
+	const file = async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-agency-"));
+		await mkdir(join(dir, "instruments"));
+		await writeFile(join(dir, "workspace.yaml"), "agency: org.example\n");
+		await writeFile(
+			join(dir, "instruments", "x.yaml"),
+			"name: x\nuses:\n  b: owner/bank@v1\nflow: []\n",
+		);
+		return join(dir, "instruments", "x.yaml");
+	};
+
+	it("is published under its workspace's agency, as check and the app publish it", async () => {
+		const x = await file();
+		const exported = await runWith(at, "instrument", "export", x);
+		expect(exported.code).toBe(0);
+		expect(exported.out).toContain('"Agency": "org.example"');
+		const checked = await runWith(at, "instrument", "check", x);
+		expect(checked.out).not.toMatch(/invalid-agency|no DDI agency/);
+	});
+
+	it("is published under `--agency` when one is given", async () => {
+		const r = await runWith(
+			at,
+			"instrument",
+			"export",
+			await file(),
+			"--agency",
+			"org.other",
+		);
+		expect(r.code).toBe(0);
+		expect(r.out).toContain('"Agency": "org.other"');
+		expect(r.out).not.toContain('"Agency": "org.example"');
+	});
+});
