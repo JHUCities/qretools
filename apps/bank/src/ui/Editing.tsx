@@ -376,7 +376,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 						range: r.range,
 						about: r.about,
 					};
-				const href = externalUrl(read, r);
+				const href = externalUrl(read, r, slices.remoteBanks);
 				if (r.kind === "code")
 					return {
 						kind: "codeRef",
@@ -388,7 +388,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 					? { kind: "ref", range: r.range }
 					: { kind: "external", range: r.range, href };
 			}),
-		[instrument.refs, read],
+		[instrument.refs, read, slices.remoteBanks],
 	);
 	// What the workspace's details say, beside the DDI they publish it under.
 	const details = detailsOf(slices.local.schemes);

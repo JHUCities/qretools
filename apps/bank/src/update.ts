@@ -1777,12 +1777,15 @@ export const instrumentAlsoSaves = (
 	);
 
 /**
- * Where a name in a bank of another repository is, on GitHub at the tag the
- * instrument names; undefined for a name in a bank of this workspace.
+ * Where a name in a bank of another repository is, on GitHub at the commit it was read
+ * at, so the page shows exactly the text the app does, whatever the tag names later;
+ * at the tag the instrument names when no commit is known (a read without one).
+ * Undefined for a name in a bank of this workspace.
  */
 export function externalUrl(
 	read: InstrumentIn,
 	ref: { readonly alias: string; readonly path: string },
+	remoteBanks: Model["remoteBanks"],
 ): string | undefined {
 	// A code is followed into its list as a name is into its file.
 	if (read.uses[ref.alias]?.kind !== "remote") return undefined;
@@ -1790,14 +1793,16 @@ export function externalUrl(
 		(u) => u.alias === ref.alias,
 	)?.address;
 	const address = written === undefined ? undefined : addressOf(written);
-	return address?.kind === "remote"
-		? blobUrl(
-				address,
-				address.ref,
-				// In that repository, under the folder its workspace is in.
-				address.path === "" ? ref.path : `${address.path}/${ref.path}`,
-			)
-		: undefined;
+	if (address?.kind !== "remote") return undefined;
+	// The read, never the lock: a moved tag's lock names text the app isn't showing.
+	const bank = remoteBanks[address.key];
+	const commit = bank?.kind === "files" ? bank.at?.commit : undefined;
+	return blobUrl(
+		address,
+		commit ?? address.ref,
+		// In that repository, under the folder its workspace is in.
+		address.path === "" ? ref.path : `${address.path}/${ref.path}`,
+	);
 }
 
 /**
@@ -1810,11 +1815,11 @@ export type Follow =
 	| { readonly kind: "file"; readonly file: BankEntry };
 
 export function followOf(
-	model: Pick<Model, "local">,
+	model: Pick<Model, "local" | "remoteBanks">,
 	read: InstrumentIn,
 	ref: { readonly alias: string; readonly path: string },
 ): Follow | undefined {
-	const url = externalUrl(read, ref);
+	const url = externalUrl(read, ref, model.remoteBanks);
 	if (url !== undefined) return { kind: "external", url };
 	const use = read.uses[ref.alias];
 	const file =

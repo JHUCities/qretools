@@ -1092,6 +1092,34 @@ describe("a name from a bank in another repository", () => {
 		expect(m.screen.kind).toBe("editing");
 	});
 
+	it("opens at the commit it was read at, when the read says which", () => {
+		const m = loaded();
+		const e = at(m, "instruments/remote.yaml") as InstrumentEntry;
+		const commit = "c".repeat(40);
+		const read: Model = {
+			...m,
+			remoteBanks: {
+				"owner/bank@v1": {
+					kind: "files",
+					files: hh(),
+					at: { commit, blobs: {} },
+				},
+			},
+		};
+		const [opened] = update(read, { kind: "fileOpened", id: e.id });
+		const [, cmds] = update(opened, {
+			kind: "definitionRequested",
+			id: e.id,
+			offset: e.source.indexOf("bas.consent") + 3,
+		});
+		expect(cmds).toEqual([
+			{
+				kind: "openExternal",
+				url: `https://github.com/owner/bank/blob/${commit}/questions/household/consent.yaml`,
+			},
+		]);
+	});
+
 	it("opens within the bank's folder when the address names one", () => {
 		const [, cmds] = follow(
 			"Owner/Bank/surveys/hh@release/2026.1",
