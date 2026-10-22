@@ -1,0 +1,278 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import {
+	bankOf,
+	documentOf,
+	instrumentOf,
+	type Json,
+	questionItems,
+} from "@qretools/core";
+import { readWorkspace } from "@qretools/core/node";
+import { describe, expect, it } from "vitest";
+import { type Codebook, codebookOf, parse } from "../model.ts";
+import { asking, outline } from "../testing.ts";
+
+const fixture = (name: string) =>
+	fileURLToPath(new URL(`../../../core/fixtures/${name}`, import.meta.url));
+
+const codebook = (ddi: Json): Codebook => {
+	const parsed = parse(ddi);
+	if (!parsed.ok) throw new Error("unparsed");
+	return codebookOf(parsed.value);
+};
+
+/** The example bank's questions as one document, as `qretools export` writes them. */
+const bank = async () => {
+	const b = bankOf(await readWorkspace(fixture("bank")));
+	return documentOf(
+		Object.keys(b.questions)
+			.sort()
+			.flatMap((p) => {
+				const ev = b.questions[p];
+				return ev === undefined ? [] : questionItems(ev.draft, b, p);
+			}),
+	);
+};
+
+/** An instrument's DDI, its source using the households workspace as `hh`. */
+const instrument = async (source: string) =>
+	instrumentOf(source, {
+		banks: { hh: bankOf(await readWorkspace(fixture("households"))) },
+		agency: "org.example",
+	}).ddi;
+
+describe("the example bank's codebook", () => {
+	it("has an entry per variable, an option of a select-all grouped under its question", async () => {
+		const cb = codebook(await bank());
+		expect(cb.findings).toEqual([]);
+		expect(cb.entries.map((e) => e.name)).toEqual([
+			"consent",
+			"household_size",
+			"library_visits",
+			"member_age",
+			"news_sources_1",
+			"news_sources_2",
+			"news_sources_3",
+			"news_sources_4",
+			"news_sources_5",
+			"parks_spending",
+			"parks_spending_reversed",
+			"service_comments",
+			"service_satisfaction",
+		]);
+		const news = cb.entries.filter((e) => e.group !== undefined);
+		expect(news.map((e) => e.group?.option.code)).toEqual([
+			"1",
+			"2",
+			"3",
+			"4",
+			"5",
+		]);
+		expect(new Set(news.map((e) => e.group?.question)).size).toBe(1);
+		expect(outline(cb)).toMatchInlineSnapshot(`
+			[
+			  "Variable consent "Consent to the interview": Do you agree to take part in this survey?",
+			  "  instruction Select one",
+			  "  codes 1=Yes, 2=No, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "Variable household_size "People in the household": How many people live in your household, including you?",
+			  "  codes -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  format {"kind":"number","min":1,"max":20}",
+			  "  universe all_respondents",
+			  "Variable library_visits "Days visiting a library": In the past 30 days, on how many days did you visit a public library?",
+			  "  codes -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  format {"kind":"number","min":0,"max":30,"unit":"days"}",
+			  "  universe all_respondents",
+			  "  concept library_use",
+			  "Variable member_age "Age of a household member": How old is this person?",
+			  "  codes -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  format {"kind":"number","min":0,"max":120,"unit":"years"}",
+			  "  universe household_members",
+			  "Variable news_sources_1 "Newspaper": Where do you get news about your community?",
+			  "  option 1 A local newspaper or its website",
+			  "  instruction Select all that apply",
+			  "  codes 0=No, 1=Yes, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept news_consumption",
+			  "Variable news_sources_2 "Broadcast": Where do you get news about your community?",
+			  "  option 2 Television or radio",
+			  "  instruction Select all that apply",
+			  "  codes 0=No, 1=Yes, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept news_consumption",
+			  "Variable news_sources_3 "Social media": Where do you get news about your community?",
+			  "  option 3 Social media",
+			  "  instruction Select all that apply",
+			  "  codes 0=No, 1=Yes, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept news_consumption",
+			  "Variable news_sources_4 "Word of mouth": Where do you get news about your community?",
+			  "  option 4 Friends, family or neighbors",
+			  "  instruction Select all that apply",
+			  "  codes 0=No, 1=Yes, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept news_consumption",
+			  "Variable news_sources_5 "None": Where do you get news about your community?",
+			  "  option 5 None of these",
+			  "  instruction Select all that apply",
+			  "  codes 0=No, 1=Yes, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept news_consumption",
+			  "Variable parks_spending "Support for more parks spending": Would you support the city spending more on parks, even if it meant higher taxes?",
+			  "  instruction Select one",
+			  "  codes 1=Strongly support, 2=Somewhat support, 3=Somewhat oppose, 4=Strongly oppose, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept parks_spending_support",
+			  "Variable parks_spending_reversed "Support for more parks spending (reversed order)": Would you support the city spending more on parks, even if it meant higher taxes?",
+			  "  instruction Select one",
+			  "  codes 1=Strongly oppose, 2=Somewhat oppose, 3=Somewhat support, 4=Strongly support, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept parks_spending_support",
+			  "Variable service_comments "Comments on the service": You answered "<rating>". What would have made the service better?",
+			  "  codes -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  format {"kind":"text","maxLength":500}",
+			  "  universe all_respondents",
+			  "  concept service_satisfaction",
+			  "Variable service_satisfaction "Overall satisfaction": Overall, how satisfied are you with the service you received?",
+			  "  instruction Select one",
+			  "  codes 1=Very satisfied, 2=Somewhat satisfied, 3=Neither satisfied nor dissatisfied, 4=Somewhat dissatisfied, 5=Very dissatisfied, -8!=Item non-response, -7!=Question not presented due to skip pattern",
+			  "  universe all_respondents",
+			  "  concept service_satisfaction",
+			]
+		`);
+	});
+
+	it("lists each shared item once, the missing values among them", async () => {
+		const cb = codebook(await bank());
+		expect({
+			concepts: cb.shared.concepts.map((c) => c.name),
+			universes: cb.shared.universes.map((u) => u.name),
+			codeLists: cb.shared.codeLists.length,
+			missing: cb.shared.missing.map((m) => m.rows.map((r) => r.code)),
+		}).toMatchInlineSnapshot(`
+			{
+			  "codeLists": 5,
+			  "concepts": [
+			    "library_use",
+			    "news_consumption",
+			    "parks_spending_support",
+			    "service_satisfaction",
+			  ],
+			  "missing": [
+			    [
+			      "-8",
+			      "-7",
+			    ],
+			  ],
+			  "universes": [
+			    "all_respondents",
+			    "household_members",
+			  ],
+			}
+		`);
+	});
+
+	it("keeps provenance as written: the blob a version was made from", async () => {
+		const path = "questions/example/consent.yaml";
+		const b = bankOf(await readWorkspace(fixture("bank")), {
+			[path]: { number: "3", blob: "abc" },
+		});
+		const draft = b.questions[path]?.draft;
+		if (draft === undefined) throw new Error("no consent");
+		const [consent] = codebook(
+			documentOf(questionItems(draft, b, path)),
+		).entries;
+		expect(consent?.version).toBe("3");
+		expect(consent?.provenance?.ids).toEqual([
+			{ value: "abc", type: expect.stringMatching(/blob/) },
+		]);
+	});
+});
+
+describe("an instrument's codebook", () => {
+	it("says where each question is asked, in the instrument's order", async () => {
+		const root = fixture("households");
+		const cb = codebook(
+			await instrument(
+				await readFile(`${root}/instruments/households.yaml`, "utf8"),
+			),
+		);
+		expect(cb.findings).toEqual([]);
+		expect(outline(cb)).toMatchInlineSnapshot(`
+			[
+			  "title Households and housing",
+			  "Variable consent: Do you agree to take part in this survey?",
+			  "  codes 1=Yes, 2=No, -8!=Refused, -9!=Don't know",
+			  "  asked always",
+			  "Variable size: How many people live in your household, including you?",
+			  "  codes -8!=Refused, -9!=Don't know",
+			  "  format {"kind":"number","min":1,"max":20}",
+			  "  asked not (consent = "2")",
+			  "Variable age: How old is this person?",
+			  "  codes -8!=Refused, -9!=Don't know",
+			  "  format {"kind":"number","min":0,"max":120}",
+			  "  asked not (consent = "2") in 1 loop",
+			  "  universe members",
+			  "Variable works: Does this person work for pay?",
+			  "  codes 1=Yes, 2=No, -8!=Refused, -9!=Don't know",
+			  "  asked not (consent = "2") in 1 loop",
+			  "  universe members",
+			  "Variable tenure: Do you own or rent your home?",
+			  "  codes 1=Own, 2=Rent, 3=Neither, -8!=Refused, -9!=Don't know",
+			  "  asked not (consent = "2")",
+			  "Variable rent: How much is your rent each month, in dollars?",
+			  "  codes -8!=Refused, -9!=Don't know",
+			  "  format {"kind":"number","min":0}",
+			  "  asked not (consent = "2") and (renter)",
+			  "  universe renters",
+			  "Variable utilities: You said you pay <rent> a month. Does that include utilities?",
+			  "  codes 1=Yes, 2=No, -8!=Refused, -9!=Don't know",
+			  "  asked not (consent = "2") and (renter)",
+			  "  universe renters",
+			  "Variable vehicle: What kind of vehicle is it?",
+			  "  codes 1=Car, 2=Truck, 3=Motorcycle, -8!=Refused, -9!=Don't know",
+			  "  asked not (consent = "2") in 1 loop",
+			  "Variable more_vehicles: Does your household have another vehicle?",
+			  "  codes 1=Yes, 2=No, -8!=Refused, -9!=Don't know",
+			  "  asked not (consent = "2") in 1 loop",
+			  "Variable comments: Is there anything else you'd like to tell us?",
+			  "  codes -8!=Refused, -9!=Don't know",
+			  "  format {"kind":"text","maxLength":500}",
+			  "  asked not (consent = "2")",
+			  "Variable county",
+			  "  codes 1=North County, 2=South County",
+			  "  notes From the sample file.",
+			]
+		`);
+	});
+
+	it("gives each ask its own place: conditions, a section's order and the options'", async () => {
+		const cb = codebook(
+			await instrument(`name: orders
+uses:
+  hh: ../
+flow:
+  - section: Housing
+    order: random
+    flow:
+      - ask: hh.tenure
+        options: rotate
+  - if: hh.tenure = "1"
+    then:
+      - ask: hh.comments
+    else:
+      - ask: hh.comments
+        as: comments_again
+`),
+		);
+		expect(cb.findings).toEqual([]);
+		expect(
+			cb.entries.map((e) => `${e.name}: ${e.asked.map(asking).join(" | ")}`),
+		).toMatchInlineSnapshot(`
+			[
+			  "tenure: always order Random options Rotate",
+			  "comments: (tenure = "1")",
+			  "comments_again: not (tenure = "1")",
+			]
+		`);
+	});
+});
