@@ -345,6 +345,30 @@ describe("codes nested in codes", () => {
 	});
 });
 
+describe("shared items", () => {
+	it("lists one referred to at two versions once, at its newest", () => {
+		const parsed = parse({
+			Concept: {
+				old: { ...id("pet"), Label: [s("Pets")] },
+				new: { ...id("pet", "2"), Label: [s("Pets kept")] },
+			},
+			Variable: {
+				a: { ...id("a"), ConceptReference: "urn:ddi:org.other:pet:1" },
+				b: { ...id("b"), ConceptReference: "urn:ddi:org.other:pet:2" },
+			},
+		});
+		if (!parsed.ok) throw new Error("unparsed");
+		const cb = codebookOf(parsed.value);
+		expect(cb.shared.concepts.map((c) => [c.urn, c.label?.[0]?.[0]])).toEqual([
+			["urn:ddi:org.other:pet:2", { kind: "text", text: "Pets kept" }],
+		]);
+		expect(cb.entries.map((e) => e.concepts[0]?.urn)).toEqual([
+			"urn:ddi:org.other:pet:1",
+			"urn:ddi:org.other:pet:2",
+		]);
+	});
+});
+
 describe("parse", () => {
 	it("refuses anything but a JSON object, without throwing", () => {
 		for (const j of [null, undefined, 1, "x", [], [{}], true])
