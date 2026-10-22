@@ -97,6 +97,13 @@ const partsOf = (
 	return { item: `${agency}:${id}`, ...(!latest && { version }) };
 };
 
+/**
+ * An item's key whatever version a URN names (`agency:id`), the key `latest` is indexed
+ * by: what a permalink to an item names, since its version changes with its content.
+ */
+export const itemKeyOf = (urn: string): string | undefined =>
+	partsOf(urn)?.item;
+
 /** Dotted versions compared part by part as numbers: `1.10` is after `1.9`. */
 // shortcut: a version that isn't digits and dots compares as neither newer nor older, so the first seen stays; read it when a producer writes one.
 const newer = (a: string, b: string): boolean => {

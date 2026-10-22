@@ -84,6 +84,7 @@ describe("the entry points", () => {
 			    "instrumentRefAt",
 			    "instrumentRefs",
 			    "isRoot",
+			    "itemKeyOf",
 			    "kindAt",
 			    "labelOf",
 			    "latestOf",

@@ -310,6 +310,12 @@ describe("a codebook of loosely written DDI", () => {
 		`);
 	});
 
+	it("reads the document's first language when none is asked for", () => {
+		expect(codebookOf(parsed.value).lang).toBe("en");
+		const empty = parse({});
+		if (empty.ok) expect(codebookOf(empty.value).lang).toBeUndefined();
+	});
+
 	it("reads the language asked for, else the first", () => {
 		const cb = codebookOf(parsed.value, { lang: "fr" });
 		expect(outline(cb).slice(4, 10)).toMatchInlineSnapshot(`
@@ -342,6 +348,30 @@ describe("codes nested in codes", () => {
 		expect(codebookOf(parsed.value).entries[0]?.responses?.rows.length).toBe(
 			DDI_DEPTH + 1,
 		);
+	});
+});
+
+describe("shared items", () => {
+	it("lists one referred to at two versions once, at its newest", () => {
+		const parsed = parse({
+			Concept: {
+				old: { ...id("pet"), Label: [s("Pets")] },
+				new: { ...id("pet", "2"), Label: [s("Pets kept")] },
+			},
+			Variable: {
+				a: { ...id("a"), ConceptReference: "urn:ddi:org.other:pet:1" },
+				b: { ...id("b"), ConceptReference: "urn:ddi:org.other:pet:2" },
+			},
+		});
+		if (!parsed.ok) throw new Error("unparsed");
+		const cb = codebookOf(parsed.value);
+		expect(cb.shared.concepts.map((c) => [c.urn, c.label?.[0]?.[0]])).toEqual([
+			["urn:ddi:org.other:pet:2", { kind: "text", text: "Pets kept" }],
+		]);
+		expect(cb.entries.map((e) => e.concepts[0]?.urn)).toEqual([
+			"urn:ddi:org.other:pet:1",
+			"urn:ddi:org.other:pet:2",
+		]);
 	});
 });
 

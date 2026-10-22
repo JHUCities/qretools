@@ -9,14 +9,15 @@
 	},
 	"scripts": {
 		"test": "vitest run",
-		"typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
-		"check": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && vitest run"
+		"typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.dom.json",
+		"check": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.dom.json && vitest run"
 	},
 	"dependencies": {
 		"@qretools/core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/node": "^26.6.4",
+		"jsdom": "^30.1.1",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.0",
 		"vitest": "^5.0.1"
