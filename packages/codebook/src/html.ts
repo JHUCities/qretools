@@ -55,7 +55,7 @@ export const hrefOf = (anchor: string): string =>
 	`#${encodeURIComponent(anchor.replace(/[\uD800-\uDFFF]/gu, "\uFFFD")).replaceAll("%3A", ":")}`;
 
 /** How text is written where it is: `inLink` inside an `<a>`, where another link can't go. */
-interface Context {
+interface Context extends Options {
 	/** The anchors the page has: a reference to anything else is named, not linked. */
 	readonly anchors: ReadonlySet<string>;
 	/** ` lang="en"` for the page's own words, where the page isn't in English; else "". */
@@ -63,7 +63,17 @@ interface Context {
 	readonly inLink?: boolean;
 }
 
-function spanHtml(s: Span, { anchors, inLink }: Context): string {
+/** What a host decides about the codebook it shows. */
+export interface Options {
+	/**
+	 * Where a reference goes, when the host knows better than the page (an app opening
+	 * the item's file): an address, else undefined (or "") for the anchor on the page, if
+	 * any.
+	 */
+	readonly href?: (ref: Ref) => string | undefined;
+}
+
+function spanHtml(s: Span, { anchors, inLink, href }: Context): string {
 	switch (s.kind) {
 		case "text":
 			return escapeHtml(s.text);
@@ -78,9 +88,16 @@ function spanHtml(s: Span, { anchors, inLink }: Context): string {
 			const anchor = anchorOf(s.urn);
 			const data = `data-urn="${escapeHtml(s.urn)}" data-kind="${escapeHtml(s.type)}"${s.name === undefined ? "" : ` data-name="${escapeHtml(s.name)}"`}`;
 			const words = escapeHtml(s.name ?? s.urn);
-			return !inLink && anchor !== undefined && anchors.has(anchor)
-				? `<a href="${hrefOf(anchor)}" ${data}>${words}</a>`
-				: `<span ${data}>${words}</span>`;
+			const to = inLink
+				? undefined
+				: // An empty address is no destination: it would reload the page.
+					href?.(s) ||
+					(anchor !== undefined && anchors.has(anchor)
+						? hrefOf(anchor)
+						: undefined);
+			return to === undefined
+				? `<span ${data}>${words}</span>`
+				: `<a href="${escapeHtml(to)}" ${data}>${words}</a>`;
 		}
 		default:
 			return s satisfies never;
@@ -97,10 +114,6 @@ export const blockHtml = (text: Text, context: Context): string =>
 		.map((p) => `<p>${p.map((s) => spanHtml(s, context)).join("")}</p>`)
 		.join("");
 
-/** The page's own words amid the document's, marked English where the page isn't. */
-const english = (words: string, cx: Context): string =>
-	cx.en === "" ? words : `<span${cx.en}>${words}</span>`;
-
 /** Words with the names a backtick marks (a finding's message) as code. */
 const marked = (s: string): Text => [
 	s
@@ -109,6 +122,10 @@ const marked = (s: string): Text => [
 			text === "" ? [] : [{ kind: i % 2 === 1 ? "code" : "text", text }],
 		),
 ];
+
+/** The page's own words amid the document's, marked English where the page isn't. */
+const english = (words: string, cx: Context): string =>
+	cx.en === "" ? words : `<span${cx.en}>${words}</span>`;
 
 /**
  * One `<dt>` and its `<dd>`, nothing when there is nothing to say. The term is the page's
@@ -455,15 +472,9 @@ function contentsHtml(
 	return `<nav aria-labelledby="contents"><h2 id="contents"${cx.en}>Contents</h2><ol>${entries.join("")}</ol>${rest === "" ? "" : `<ul${cx.en}>${rest}</ul>`}</nav>`;
 }
 
-/**
- * A codebook as one HTML page: everything inline (its style too), no script, nothing
- * fetched. The contents, then each entry, then the shared items they refer to, then any
- * reference that leads nowhere. The page is in the language the codebook was read in
- * (none when the document writes none); its own words are English, marked so.
- */
-export function pageOf(cb: Codebook): string {
-	const blocks = blocksOf(cb.entries);
-	const anchors = new Set(
+/** The anchors a codebook's HTML has: its entries', its select-all questions' and its shared items'. */
+const anchorsOf = (cb: Codebook, blocks: readonly Block[]): Set<string> =>
+	new Set(
 		[
 			...cb.entries.map((e) => e.urn),
 			...blocks.flatMap((b) => (b.kind === "group" ? [b.question.urn] : [])),
@@ -473,19 +484,23 @@ export function pageOf(cb: Codebook): string {
 			return anchor === undefined ? [] : [anchor];
 		}),
 	);
+
+/**
+ * A codebook as HTML to place in a page: the contents, then each entry, then the shared
+ * items they refer to, then any reference that leads nowhere, each part headed by an
+ * `<h2>`. No landmark but the contents' `<nav>`, no `<h1>`, no style: what holds it
+ * (`pageOf`, `<ddi-codebook>`) says what it is part of. The codebook's own text is in
+ * the language it was read in, which what holds it says; its own words are English,
+ * marked so unless that language is English.
+ */
+export function codebookHtml(cb: Codebook, options: Options = {}): string {
+	const blocks = blocksOf(cb.entries);
 	const english = cb.lang !== undefined && /^en(-|$)/i.test(cb.lang);
-	const cx: Context = { anchors, en: english ? "" : ' lang="en"' };
-	const title = cb.title ?? "Codebook";
-	const variables = cb.entries.filter((e) => e.type === "Variable").length;
-	const questions = cb.entries.length - variables;
-	const counted = [
-		variables > 0 || questions === 0
-			? count(variables, "variable", "variables")
-			: "",
-		questions > 0 ? count(questions, "question", "questions") : "",
-	]
-		.filter((s) => s !== "")
-		.join(", ");
+	const cx: Context = {
+		...options,
+		anchors: anchorsOf(cb, blocks),
+		en: english ? "" : ' lang="en"',
+	};
 	const shared = SHARED.filter((s) => cb.shared[s.key].length > 0)
 		.map(
 			(s) =>
@@ -502,6 +517,30 @@ export function pageOf(cb: Codebook): string {
 			: `<section aria-labelledby="broken"${cx.en}><h2 id="broken">Broken references</h2><ul>${cb.findings
 					.map((f) => `<li>${inlineHtml(marked(f.message), cx)}</li>`)
 					.join("")}</ul></section>`;
+	return `${contentsHtml(cb, blocks, cx)}
+<section aria-labelledby="variables"><h2 id="variables"${cx.en}>Variables</h2>${blocks.map((b) => blockOfHtml(b, cx)).join("")}</section>
+${shared === "" ? "" : `<section aria-labelledby="shared"><h2 id="shared"${cx.en}>Shared</h2>${shared}</section>`}
+${broken}`;
+}
+
+/**
+ * A codebook as one HTML page: everything inline (its style too), no script, nothing
+ * fetched. Its title and count, then the codebook. The page is in the language the
+ * codebook was read in (none when the document writes none).
+ */
+export function pageOf(cb: Codebook): string {
+	const title = cb.title ?? "Codebook";
+	const english = cb.lang !== undefined && /^en(-|$)/i.test(cb.lang);
+	const variables = cb.entries.filter((e) => e.type === "Variable").length;
+	const questions = cb.entries.length - variables;
+	const counted = [
+		variables > 0 || questions === 0
+			? count(variables, "variable", "variables")
+			: "",
+		questions > 0 ? count(questions, "question", "questions") : "",
+	]
+		.filter((s) => s !== "")
+		.join(", ");
 	return `<!doctype html>
 <html${cb.lang === undefined ? "" : ` lang="${escapeHtml(cb.lang)}"`}>
 <head>
@@ -510,15 +549,12 @@ export function pageOf(cb: Codebook): string {
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(title)}</title>
 <link rel="icon" href="data:,">
-<style>${STYLE}</style>
+<style>${STYLE}${PAGE_STYLE}</style>
 </head>
 <body>
-<header><h1>${escapeHtml(title)}</h1><p${cx.en}>${counted}</p></header>
-${contentsHtml(cb, blocks, cx)}
+<header><h1>${escapeHtml(title)}</h1><p class="count"${english ? "" : ' lang="en"'}>${counted}</p></header>
 <main>
-<section aria-labelledby="variables"><h2 id="variables"${cx.en}>Variables</h2>${blocks.map((b) => blockOfHtml(b, cx)).join("")}</section>
-${shared === "" ? "" : `<section aria-labelledby="shared"><h2 id="shared"${cx.en}>Shared</h2>${shared}</section>`}
-${broken}
+${codebookHtml(cb)}
 </main>
 </body>
 </html>
@@ -526,14 +562,39 @@ ${broken}
 }
 
 /**
- * Primer's look without fetching anything: its token values (Primer Primitives, light
- * and dark) as custom properties, each picked by `light-dark()` from the reader's colour
- * scheme, and its system font stacks without the web font. A shared name is the green
- * the app gives one everywhere.
+ * The page's own: its colour scheme the reader's, its background, its width. What holds
+ * the codebook decides these; an element inherits its host's colour scheme.
  */
-const STYLE = `
-:root {
-	color-scheme: light dark;
+const PAGE_STYLE = `
+/* After STYLE: the root keeps the browser's text size, so rem is its, as anywhere. */
+:root { color-scheme: light dark; font-size: 100%; }
+body {
+	font-size: 0.875rem;
+	margin: 0 auto;
+	max-inline-size: 1012px;
+	padding: 1.5rem 1rem 4rem;
+	background: var(--bgColor-default);
+}
+h1 { font-size: 2rem; font-weight: 600; line-height: 1.25; margin: 0 0 0.25rem; }
+.count { color: var(--fgColor-muted); }
+@media print {
+	:root { color-scheme: light; }
+	body { max-inline-size: none; padding: 0; }
+}
+`;
+
+/**
+ * Primer's look without fetching anything: its token values (Primer Primitives, light
+ * and dark) as custom properties, each picked by `light-dark()` from the colour scheme
+ * in use, and its system font stacks without the web font. A shared name is the green
+ * the app gives one everywhere. Rooted at `:scope`: the document's root in a page, the
+ * element in `<ddi-codebook>`'s `@scope`.
+ */
+export const STYLE = `
+:scope {
+	display: block;
+	color: var(--fgColor-default);
+	font: 400 0.875rem / 1.5 var(--fontStack-sansSerif);
 	--fgColor-default: light-dark(#1f2328, #f0f6fc);
 	--fgColor-muted: light-dark(#59636e, #9198a1);
 	--fgColor-accent: light-dark(#0969da, #4493f8);
@@ -550,20 +611,11 @@ const STYLE = `
 	--borderRadius-medium: 0.375rem;
 	--borderRadius-small: 0.1875rem;
 }
-body {
-	margin: 0 auto;
-	max-inline-size: 1012px;
-	padding: 1.5rem 1rem 4rem;
-	background: var(--bgColor-default);
-	color: var(--fgColor-default);
-	font: 400 0.875rem / 1.5 var(--fontStack-sansSerif);
-}
-h1 { font-size: 2rem; font-weight: 600; line-height: 1.25; margin: 0 0 0.25rem; }
 h2 { font-size: 1.25rem; font-weight: 600; margin: 2.5rem 0 1rem; padding-block-end: 0.5rem; border-block-end: 1px solid var(--borderColor-default); }
 h3 { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem; }
 h4 { font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem; }
 p { margin: 0 0 0.5rem; }
-header p, .from, .language, .urn, dt { color: var(--fgColor-muted); }
+.from, .language, .urn, dt { color: var(--fgColor-muted); }
 /* Underlined always, not only on hover as the app does: colour alone doesn't tell a link (WCAG 1.4.1). */
 a { color: var(--fgColor-accent); text-decoration: underline; text-underline-position: under; }
 :focus-visible { outline: 2px solid var(--borderColor-accent-emphasis); outline-offset: 2px; border-radius: var(--borderRadius-small); }
@@ -594,8 +646,6 @@ tbody th { font-weight: 400; }
 .missing th[scope="rowgroup"] { padding-block-start: 0.75rem; color: var(--fgColor-muted); font-weight: 600; }
 footer dl { color: var(--fgColor-muted); }
 @media print {
-	:root { color-scheme: light; }
-	body { max-inline-size: none; padding: 0; }
 	nav { display: none; }
 	h2, h3, h4 { break-after: avoid; }
 	article { break-inside: avoid; }
