@@ -63,11 +63,21 @@ export interface Indexed {
  */
 export const DDI_DEPTH = 64;
 
+/** A reference as written, in the identified object it's written in (none at the top level). */
+export interface DdiReference {
+	readonly from?: Indexed;
+	/** The field it's written in (`QuestionReference`). */
+	readonly field: string;
+	readonly ref: unknown;
+}
+
 export interface DdiIndex {
 	/** Every item, by its URN (`urnKey`). */
 	readonly byUrn: ReadonlyMap<string, Indexed>;
 	/** The highest version of each item, by `agency:id`: what a versionless reference names. */
 	readonly latest: ReadonlyMap<string, Indexed>;
+	/** Every reference in the document, every version of every item included. */
+	readonly references: readonly DdiReference[];
 }
 
 /** A URN as a key: the scheme is case-insensitive (`URN:DDI:`), the rest is compared as written. */
@@ -114,15 +124,19 @@ const urnFrom = (o: JsonObject): string | undefined => {
  * (`Variable: { "a:id:1": {…} }`), and every identified object written inside one at
  * any depth (a question's parameters, a response domain's or a command's, a list's
  * codes and their codes), which references name too. A field named `…Reference…` holds
- * references, except where it holds a structure (`isReference`): the schema writes some
- * definitions there (a loop's or a computation's parameter), so those are searched last,
- * and a copy of a definition found there never replaces the real one. An object with neither a URN
+ * references, listed in `references`, except where it holds a structure
+ * (`isReference`): the schema writes some definitions there (a loop's or a computation's
+ * parameter), so those are searched last, and a copy of a definition found there never
+ * replaces the real one. An object with neither a URN
  * nor an Agency and ID can't be referred to, so it isn't indexed; a nested one never
  * replaces an item already indexed. Total: anything else is no items.
  */
 export function ddiIndexOf(doc: unknown): DdiIndex {
 	const byUrn = new Map<string, Indexed>();
 	const latest = new Map<string, Indexed>();
+	const references: DdiReference[] = [];
+	const refer = (from: Indexed | undefined, field: string, ref: unknown) =>
+		references.push({ ...(from && { from }), field, ref });
 	const add = (type: string, o: JsonObject, owner?: Indexed) => {
 		const urn = urnFrom(o);
 		const parts = urn === undefined ? undefined : partsOf(urn);
@@ -151,7 +165,8 @@ export function ddiIndexOf(doc: unknown): DdiIndex {
 			if (field.includes("Reference")) {
 				for (const x of Array.isArray(value) ? value : [value]) {
 					const nested = asObj(x);
-					if (nested !== undefined && !isReference(nested))
+					if (isReference(x)) refer(owner, field, x);
+					else if (nested !== undefined)
 						structures.push([field, nested, owner, depth + 1]);
 				}
 				continue;
@@ -175,8 +190,31 @@ export function ddiIndexOf(doc: unknown): DdiIndex {
 	// lacks, so that reference doesn't read as dangling; in 4.0 the schema calls it a definition.
 	for (const [field, o, owner, depth] of structures)
 		if (depth <= DDI_DEPTH) within(o, add(field, o, owner) ?? owner, depth);
-	return { byUrn, latest };
+	for (const [field, value] of Object.entries(asObj(doc) ?? {}))
+		if (field.includes("Reference"))
+			for (const x of Array.isArray(value) ? value : [value])
+				if (isReference(x)) refer(undefined, field, x);
+	return { byUrn, latest, references };
 }
+
+/** Fields whose references point outside the document by nature: provenance cites other studies. */
+const OUTSIDE = new Set(["BasedOnReference"]);
+
+/**
+ * Each reference that names a URN the document has no item for, with that URN; one that
+ * points outside by nature (`OUTSIDE`) isn't.
+ */
+export const danglingIn = (
+	index: DdiIndex,
+): readonly { readonly from?: Indexed; readonly urn: string }[] =>
+	index.references.flatMap(({ from, field, ref }) => {
+		const urn = refUrn(ref);
+		return urn === undefined ||
+			OUTSIDE.has(field) ||
+			deref(index, ref) !== undefined
+			? []
+			: [{ ...(from && { from }), urn }];
+	});
 
 /** The highest version the index holds of an item: what a versionless reference to it names. */
 export const latestOf = (index: DdiIndex, it: Indexed): Indexed => {

@@ -57,6 +57,7 @@ describe("the entry points", () => {
 			    "codebookView",
 			    "collisions",
 			    "compact",
+			    "danglingIn",
 			    "ddiIndexOf",
 			    "definedVariables",
 			    "deref",
