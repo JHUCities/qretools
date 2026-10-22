@@ -45,7 +45,7 @@ const CODEBOOK: Codebook = {
 				instructions: [t("Read aloud.")],
 			},
 			responses: { many: false, rows: MISSING, from: [] },
-			format: { kind: "number", min: 0, max: 120, unit: "years" },
+			format: { kind: "number", min: 0, max: 120, unit: "</dd><b>years" },
 			universes: [
 				{
 					kind: "ref",
@@ -265,8 +265,14 @@ describe("a codebook's page", () => {
 			Universe: "adults",
 			Asked:
 				"Unless consent = 2 (VTL) and if adult; repeated in people; section order: Random",
-			Format: "Number from 0 to 120, in years",
+			Format: "Number from 0 to 120, in </dd><b>years",
 		});
+		// The one plain string written into a particular: still escaped.
+		expect(
+			[...(age?.querySelectorAll("dd") ?? [])].find((dd) =>
+				dd.textContent?.startsWith("Number"),
+			)?.children,
+		).toHaveLength(0);
 		expect(age?.querySelector("blockquote")?.children).toHaveLength(2);
 		expect(age?.querySelector(".instruction")?.textContent).toBe("Read aloud.");
 	});
