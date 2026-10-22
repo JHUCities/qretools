@@ -58,6 +58,7 @@ export {
 	elaborate,
 	elaborateItems,
 	NOT_TICKED,
+	sharedOf,
 	TICKED,
 	type Versioning,
 } from "./ddi/elaborate.ts";
@@ -151,8 +152,6 @@ export {
 	refusalReason,
 } from "./refusal.ts";
 export {
-	type CodebookView,
-	codebookView,
 	type Hole,
 	type Input,
 	type Resolved,

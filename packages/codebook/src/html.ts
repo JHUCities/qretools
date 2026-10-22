@@ -186,7 +186,8 @@ function askedHtml(asked: readonly Asking[], cx: Context): string | undefined {
 		: `<ul>${places.map((p) => `<li>${p}</li>`).join("")}</ul>`;
 }
 
-function formatHtml(f: Format): string {
+/** A number's or a text's format in words, as a codebook says it. */
+export function formatWords(f: Format): string {
 	if (f.kind === "text")
 		return f.maxLength === undefined
 			? "Text"
@@ -203,7 +204,7 @@ function formatHtml(f: Format): string {
 		f.decimals === undefined
 			? ""
 			: `, ${count(f.decimals, "decimal place", "decimal places")}`;
-	const unit = f.unit === undefined ? "" : `, in ${escapeHtml(f.unit)}`;
+	const unit = f.unit === undefined ? "" : `, in ${f.unit}`;
 	return `Number${range}${decimals}${unit}`;
 }
 
@@ -290,7 +291,7 @@ function entryHtml(e: Entry, level: 3 | 4, cx: Context): string {
 		pair(
 			cx,
 			"Format",
-			e.format === undefined ? undefined : formatHtml(e.format),
+			e.format === undefined ? undefined : escapeHtml(formatWords(e.format)),
 			true,
 		),
 		// The missing codes on one line, where the table also has valid ones to read past.
@@ -385,7 +386,7 @@ type Block =
 /** A question's key at every version, so options citing two versions of it stay together. */
 const groupKey = (urn: string): string => anchorOf(urn) ?? urn;
 
-function blocksOf(entries: readonly Entry[]): Block[] {
+export function blocksOf(entries: readonly Entry[]): Block[] {
 	const blocks: Block[] = [];
 	const seen = new Set<string>();
 	for (const e of entries) {

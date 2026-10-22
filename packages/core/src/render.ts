@@ -1,25 +1,21 @@
 /**
  * Render models: what the previews show, as plain data. The shell turns these
- * into DOM and decides nothing. Survey policy lives here: field order, how a
- * codebook formats values, what a hole says. Previews evaluate around holes:
+ * into DOM and decides nothing; what a hole says is decided here. (The codebook's
+ * view is of the question's DDI: @qretools/codebook.) Previews evaluate around holes:
  * a required field that is missing becomes a visible `hole` slot, never a crash
  * and never an empty space. A reference is shown resolved, with its name kept
  * so the shell can offer "go to definition".
  */
 
 import { compact } from "./compact.ts";
-import { UNNAMED } from "./copy.ts";
-import { selectAllText } from "./selectAll.ts";
 import {
 	type Code,
 	type Domain,
 	type Draft,
 	labelOf,
 	type Named,
-	optionVariable,
 	textOf,
 } from "./surface/draft.ts";
-import type { Env } from "./surface/env.ts";
 import { hasFill, type Piece, piecesOf } from "./surface/fills.ts";
 
 export interface Hole {
@@ -72,40 +68,13 @@ export interface RespondentView {
 	readonly input: Input;
 }
 
-/**
- * The codebook entry, in the style of the Baltimore Area Survey codebook; the Concept
- * line is ours (BAS's codebook has none), shown since concepts became shared.
- */
-export interface CodebookView {
-	readonly title: Slot;
-	readonly variable: Slot;
-	readonly text: TextSlot;
-	readonly values:
-		| { readonly kind: "lines"; readonly lines: readonly string[] }
-		| Hole;
-	/** The bank's missing-value codes, as the codebook prints them, when the bank declares any. */
-	readonly missing?: string;
-	/** What the question measures: the shared concept's label (its definition is its own file's). */
-	readonly concept?: Resolved;
-	readonly universe?: Resolved;
-	readonly source?: string;
-	readonly notes: readonly string[];
-}
-
 /** Short prompts of render's own: the schema descriptions are hover prose, too long for a placeholder. */
 const PROMPT = {
-	name: "variable name",
 	text: "question text",
-	title: "title",
 } as const;
 
 /** Neutral on purpose: the author may have typed a domain that parse rejected. */
 const DOMAIN_PROMPT = "No way to answer yet: responses, number, or open";
-
-const slot = (value: string | undefined, path: "name" | "text"): Slot =>
-	value === undefined
-		? { kind: "hole", path, prompt: PROMPT[path] }
-		: { kind: "filled", text: value };
 
 const domainHole: Hole = { kind: "hole", path: "", prompt: DOMAIN_PROMPT };
 
@@ -155,102 +124,4 @@ function input(domain: Domain): Input {
 		default:
 			return domain satisfies never;
 	}
-}
-
-export function codebookView(draft: Draft, env: Env): CodebookView {
-	const values: CodebookView["values"] = draft.domain
-		? { kind: "lines", lines: valueLines(draft.domain, draft.name) }
-		: domainHole;
-	return compact({
-		title: title(draft),
-		variable: slot(draft.name, "name"),
-		text: textSlot(draft),
-		values,
-		missing:
-			env.missing.length === 0
-				? undefined
-				: env.missing.map((c) => `${c.code} (${c.label})`).join(", "),
-		concept: resolved(draft.concept, labelOf),
-		universe: resolved(draft.universe, textOf),
-		source: draft.source,
-		notes: notes(draft, env),
-	});
-}
-
-/** The codebook title: `title`, else the concept, else the name. Upper-casing is the shell's. */
-function title(draft: Draft): Slot {
-	const source =
-		draft.title ??
-		(draft.concept === undefined ? undefined : labelOf(draft.concept)) ??
-		draft.name;
-	return source === undefined
-		? { kind: "hole", path: "name", prompt: PROMPT.title }
-		: { kind: "filled", text: source };
-}
-
-function valueLines(
-	domain: Domain,
-	name: string | undefined,
-): readonly string[] {
-	switch (domain.kind) {
-		case "responses":
-			// A select-many option is its own variable in the dataset, listed the way the
-			// codebook publishes it: the variable, then the option's title.
-			return domain.select === "many"
-				? domain.codes.map(
-						(c) =>
-							`${optionVariable(name, c) ?? UNNAMED}: ${c.title ?? c.label}`,
-					)
-				: domain.codes.map((c) => `${c.code} = ${c.label}`);
-		case "number":
-			return [
-				numberLine(
-					domain.min,
-					domain.max,
-					domain.unit === undefined ? undefined : labelOf(domain.unit),
-				),
-			];
-		case "open":
-			return [
-				domain.maxLength === undefined
-					? "Free text"
-					: `Free text, up to ${domain.maxLength} characters`,
-			];
-		default:
-			return domain satisfies never;
-	}
-}
-
-function numberLine(
-	min: number | undefined,
-	max: number | undefined,
-	unit: string | undefined,
-): string {
-	const range =
-		min !== undefined && max !== undefined
-			? `Range: ${min}–${max}`
-			: min !== undefined
-				? `Minimum: ${min}`
-				: max !== undefined
-					? `Maximum: ${max}`
-					: "Numeric";
-	return unit === undefined ? range : `${range} ${unit}`;
-}
-
-function notes(draft: Draft, env: Env): readonly string[] {
-	const out: string[] = [];
-	const d = draft.domain;
-	if (d?.kind === "responses" && d.scale !== undefined)
-		out.push(`Uses the shared scale ${d.scale}.`);
-	if (d?.kind === "responses" && d.select === "many") {
-		out.push(
-			`Select all that apply: each option is its own variable, coded ${selectAllText(env.selectAll)}.`,
-		);
-	}
-	// An option's note is documentation whatever the select mode; it must never vanish.
-	if (d?.kind === "responses")
-		for (const c of d.codes)
-			if (c.note !== undefined) out.push(`${c.code}: ${c.note}`);
-	if (draft.note !== undefined) out.push(draft.note);
-	return out;
 }
