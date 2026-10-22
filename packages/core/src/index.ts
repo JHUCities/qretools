@@ -65,6 +65,7 @@ export {
 export {
 	asList,
 	asObj,
+	DDI_DEPTH,
 	type DdiIndex,
 	ddiIndexOf,
 	deref,

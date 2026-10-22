@@ -14,6 +14,7 @@ describe("the entry points", () => {
 			{
 			  "core": [
 			    "AGENCY_PATTERN",
+			    "DDI_DEPTH",
 			    "DDI_FUNCTIONS",
 			    "DEFAULT_SELECT_ALL",
 			    "EMPTY_ENV",
