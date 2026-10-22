@@ -67,6 +67,8 @@ export {
 	asObj,
 	DDI_DEPTH,
 	type DdiIndex,
+	type DdiReference,
+	danglingIn,
 	ddiIndexOf,
 	deref,
 	type Indexed,

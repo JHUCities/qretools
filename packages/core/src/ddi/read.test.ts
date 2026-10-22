@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	asList,
+	danglingIn,
 	ddiIndexOf,
 	deref,
 	isReference,
@@ -239,6 +240,35 @@ describe("ddiIndexOf and deref", () => {
 		});
 		expect(deref(doc, "urn:ddi:a:v:1")?.type).toBe("Variable");
 		expect(deref(doc, "urn:ddi:a:bottom:1")).toBeUndefined();
+	});
+
+	it("finds every reference to an item the document doesn't have", () => {
+		const doc = ddiIndexOf({
+			topLevelReference: [{ $type: "Instrument", value: ["a", "gone-i", "1"] }],
+			Variable: {
+				v: {
+					URN: "urn:ddi:a:v:1",
+					QuestionReference: ["urn:ddi:a:q:1", "urn:ddi:a:gone-q:1"],
+					// A structure: searched, never a reference.
+					SourceParameterReference: { URN: "urn:ddi:a:p:1", Alias: "p" },
+					UniverseReference: { TypeOfObject: "Universe" },
+				},
+			},
+			QuestionItem: {
+				q: {
+					URN: "urn:ddi:a:q:1",
+					BasedOnObject: { BasedOnReference: ["urn:ddi:other:q:4"] },
+					ResponseDomain: { CodeListReference: { URN: "urn:ddi:a:gone-l:1" } },
+				},
+			},
+		});
+		expect(
+			danglingIn(doc).map((d) => `${d.from?.urn ?? "top"} ${d.urn}`),
+		).toEqual([
+			"urn:ddi:a:v:1 urn:ddi:a:gone-q:1",
+			"urn:ddi:a:q:1 urn:ddi:a:gone-l:1",
+			"top urn:ddi:a:gone-i:1",
+		]);
 	});
 
 	it("names an item's highest version", () => {

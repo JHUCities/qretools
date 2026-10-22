@@ -12,6 +12,7 @@ import {
 	asList,
 	asObj,
 	type DdiIndex,
+	deref,
 	type Indexed,
 	latestOf,
 	str,
@@ -126,14 +127,9 @@ interface Context {
 }
 
 /**
- * The flow of every instrument in the index, its newest version. `follow` derefs a
- * reference and reports one that names nothing in the document.
+ * The flow of every instrument in the index, its newest version.
  */
-export function flowOf(
-	index: DdiIndex,
-	follow: (from: Indexed, r: unknown) => Indexed | undefined,
-	lang?: string,
-): Flow {
+export function flowOf(index: DdiIndex, lang?: string): Flow {
 	const asked = new Map<string, Asking[]>();
 	const constructs = new Map<string, Indexed>();
 	const position = new Map<string, number>();
@@ -141,7 +137,7 @@ export function flowOf(
 	// shortcut: every path is walked, so constructs shared many times over multiply the work; memoise per construct and context if a real document is slow.
 	const down = (node: Indexed, at: Context, path: ReadonlySet<Indexed>) => {
 		if (node.type === "QuestionConstruct") {
-			const found = follow(node, node.item.QuestionReference);
+			const found = deref(index, node.item.QuestionReference);
 			if (found === undefined) return;
 			const question = latestOf(index, found).urn;
 			if (!position.has(question)) position.set(question, position.size);
@@ -166,7 +162,7 @@ export function flowOf(
 				? str(asObj(node.item.ConstructSequence)?.ItemSequenceType)
 				: undefined;
 		for (const [r, branch] of childrenOf(node)) {
-			const child = follow(node, r);
+			const child = deref(index, r);
 			if (child === undefined || path.has(child)) continue;
 			down(
 				child,

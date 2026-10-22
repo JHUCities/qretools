@@ -11,7 +11,8 @@ const parsed = parse(JSON.parse(text)); // refused only when it isn't a JSON obj
 if (parsed.ok) {
 	const codebook = codebookOf(parsed.value, { lang: "en" });
 	// codebook.entries: one per variable, and one per question no variable records
-	// codebook.findings: references to items the document doesn't have
+	// codebook.findings: each reference anywhere in the document to an item it doesn't
+	// have, not only those the codebook reads (provenance, which cites other studies, aside)
 }
 ```
 

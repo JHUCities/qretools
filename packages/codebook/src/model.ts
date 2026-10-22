@@ -14,6 +14,7 @@ import {
 	type Finding as CoreFinding,
 	DDI_DEPTH,
 	type DdiIndex,
+	danglingIn,
 	ddiIndexOf,
 	deref,
 	err,
@@ -178,27 +179,29 @@ const codeValue = (code: Record<string, unknown>): string | undefined => {
 	return str(value) ?? (typeof value === "number" ? String(value) : undefined);
 };
 
+/** Each reference to an item the document doesn't have, once per object it's written in. */
+const findingsOf = (index: DdiIndex): Finding[] => {
+	const findings = new Map<string, Finding>();
+	for (const { from, urn } of danglingIn(index)) {
+		const path = from?.urn ?? "";
+		findings.set(`${path} ${urn}`, {
+			code: "codebook-dangling",
+			severity: "error",
+			path,
+			message: `\`${urn}\` isn't in the document.`,
+		});
+	}
+	return [...findings.values()];
+};
+
 export function codebookOf(
 	index: DdiIndex,
 	{ lang }: { readonly lang?: string } = {},
 ): Codebook {
-	const findings = new Map<string, Finding>();
-	/** The item a reference names, reporting one that names nothing here. */
-	const follow = (from: Indexed, r: unknown): Indexed | undefined => {
-		const found = deref(index, r);
-		const urn = refUrn(r);
-		if (found === undefined && urn !== undefined)
-			findings.set(`${from.urn} ${urn}`, {
-				code: "codebook-dangling",
-				severity: "error",
-				path: from.urn,
-				message: `\`${urn}\` isn't in the document.`,
-			});
-		return found;
-	};
-	const followAll = (from: Indexed, r: unknown): Indexed[] =>
+	const follow = (r: unknown): Indexed | undefined => deref(index, r);
+	const followAll = (r: unknown): Indexed[] =>
 		(Array.isArray(r) ? r : r === undefined ? [] : [r]).flatMap((x) => {
-			const it = follow(from, x);
+			const it = follow(x);
 			return it === undefined ? [] : [it];
 		});
 	const text = (j: unknown) => textOf(words(j, lang));
@@ -211,7 +214,7 @@ export function codebookOf(
 	};
 	/** The highest version of an item: a question's flow is keyed by it, whichever version is cited. */
 	const latestOf = (it: Indexed): Indexed => latestIn(index, it);
-	const flow = flowOf(index, follow, lang);
+	const flow = flowOf(index, lang);
 
 	const concepts = new Map<string, Described>();
 	const universes = new Map<string, Described>();
@@ -239,7 +242,7 @@ export function codebookOf(
 		// shortcut: codes nested deeper than DDI_DEPTH aren't read.
 		const rows = (codes: unknown, depth = 0): Row[] =>
 			(depth > DDI_DEPTH ? [] : asList(codes)).flatMap((c) => {
-				const category = follow(list, c.CategoryReference);
+				const category = follow(c.CategoryReference);
 				const label =
 					category === undefined ? undefined : text(category.item.Label);
 				return [
@@ -259,12 +262,8 @@ export function codebookOf(
 	};
 
 	/** A managed representation, followed, as the domain it stands for. */
-	const managed = (
-		from: Indexed | undefined,
-		r: unknown,
-	): Record<string, unknown> | undefined => {
-		const it =
-			from === undefined || r === undefined ? undefined : follow(from, r);
+	const managed = (r: unknown): Record<string, unknown> | undefined => {
+		const it = follow(r);
 		if (it === undefined) return undefined;
 		const $type = MANAGED[it.type];
 		return $type === undefined ? it.item : { ...it.item, $type };
@@ -272,38 +271,37 @@ export function codebookOf(
 
 	/** A domain's codes (a CodeDomain's list, then the missing values'), or its format. */
 	const valuesOf = (
-		from: Indexed,
 		domain: Record<string, unknown> | undefined,
 		missingRef: unknown,
 		/** The question's own ResponseCardinality, when the domain shown is the question's. */
 		cardinality: unknown,
 	): Pick<Entry, "responses" | "format"> => {
-		const from_: Ref[] = [];
+		const from: Ref[] = [];
 		const rows: Row[] = [];
 		const list =
 			domain?.CodeListReference === undefined
 				? undefined
-				: follow(from, domain.CodeListReference);
+				: follow(domain.CodeListReference);
 		if (list !== undefined) {
 			const own = rowsOf(list, false);
 			if (!codeLists.has(list.urn)) codeLists.set(list.urn, listed(list, own));
 			rows.push(...own);
-			from_.push(refOf(list, lang));
+			from.push(refOf(list, lang));
 		}
 		const representation =
-			missingRef === undefined ? undefined : follow(from, missingRef);
+			missingRef === undefined ? undefined : follow(missingRef);
 		if (representation !== undefined) {
 			// shortcut: missing values given as numeric or text ranges aren't read, only codes.
 			const own = asList(representation.item.MissingCodeRepresentation).flatMap(
 				(m) => {
-					const l = follow(representation, m.CodeListReference);
+					const l = follow(m.CodeListReference);
 					return l === undefined ? [] : rowsOf(l, true);
 				},
 			);
 			if (!missing.has(representation.urn))
 				missing.set(representation.urn, listed(representation, own));
 			rows.push(...own);
-			from_.push(refOf(representation, lang));
+			from.push(refOf(representation, lang));
 		}
 		const many =
 			(num(
@@ -311,7 +309,7 @@ export function codebookOf(
 			) ?? 1) > 1;
 		const responses =
 			list !== undefined || rows.length > 0
-				? { responses: { many, rows, from: from_ } }
+				? { responses: { many, rows, from } }
 				: {};
 		const type = str(domain?.$type);
 		if (type === "NumericDomain" || domain?.NumberRange !== undefined) {
@@ -366,7 +364,7 @@ export function codebookOf(
 	/** The option a variable records, when its source is a subset of its question's codes. */
 	const groupOf = (v: Indexed, question: Indexed): Entry["group"] => {
 		const source = v.item.SourceParameterReference;
-		const parameter = source === undefined ? undefined : follow(v, source);
+		const parameter = source === undefined ? undefined : follow(source);
 		const included = asObj(
 			asObj(asObj(parameter?.item.ValueRepresentation)?.CodeSubsetInformation)
 				?.IncludedCode,
@@ -375,13 +373,10 @@ export function codebookOf(
 		const code =
 			parameter === undefined || codes.length !== 1
 				? undefined
-				: follow(parameter, codes[0]);
+				: follow(codes[0]);
 		if (code === undefined) return undefined;
 		const value = codeValue(code.item);
-		const category =
-			code.owner === undefined
-				? undefined
-				: follow(code.owner, code.item.CategoryReference);
+		const category = follow(code.item.CategoryReference);
 		const label =
 			category === undefined ? undefined : text(category.item.Label);
 		return value === undefined
@@ -409,16 +404,16 @@ export function codebookOf(
 		const instruction =
 			representation?.ProcessingInstructionReference === undefined
 				? undefined
-				: follow(v, representation.ProcessingInstructionReference);
+				: follow(representation.ProcessingInstructionReference);
 		for (const c of asList(instruction?.item.CommandCode)) {
 			const cmd = commandOf(c);
 			if (cmd !== undefined) commands.push(cmd);
 		}
 		const from = [
-			...followAll(v, v.item.SourceVariableReference),
+			...followAll(v.item.SourceVariableReference),
 			...(instruction === undefined
 				? []
-				: followAll(instruction, instruction.item.InputVariableReference)),
+				: followAll(instruction.item.InputVariableReference)),
 		].map((it) => refOf(it, lang));
 		const said =
 			instruction === undefined
@@ -434,11 +429,11 @@ export function codebookOf(
 		const representation = asObj(v?.item.VariableRepresentation);
 		const recorded =
 			asObj(representation?.ValueRepresentation) ??
-			managed(v, representation?.ValueRepresentationReference);
+			managed(representation?.ValueRepresentationReference);
 		const domain =
 			recorded ??
 			asObj(q?.item.ResponseDomain) ??
-			managed(q, q?.item.ResponseDomainReference);
+			managed(q?.item.ResponseDomainReference);
 		// Where the question is asked; where an ask binds its answer into this variable, only there.
 		const all = q === undefined ? [] : (flow.asked.get(latestOf(q).urn) ?? []);
 		const out = v?.item.OutParameter;
@@ -450,7 +445,7 @@ export function codebookOf(
 		const asked = bound.length > 0 ? bound : all;
 		const askedUniverses = asked.flatMap((a) => {
 			const c = flow.constructs.get(a.construct);
-			return c === undefined ? [] : followAll(c, c.item.UniverseReference);
+			return c === undefined ? [] : followAll(c.item.UniverseReference);
 		});
 		const unique = (its: readonly Indexed[]) => [...new Set(its)];
 		const name = nameOf(principal, lang);
@@ -477,23 +472,15 @@ export function codebookOf(
 				? undefined
 				: (() => {
 						const qname = nameOf(q, lang);
-						const qtext = dynamicTextOf(
-							q.item.QuestionText,
-							(r) => follow(q, r),
-							lang,
-						);
+						const qtext = dynamicTextOf(q.item.QuestionText, follow, lang);
 						return {
 							urn: q.urn,
 							...(qname !== undefined && { name: qname }),
 							...(qtext !== undefined && { text: qtext }),
 							instructions: asList(q.item.InterviewerInstructionAttachment)
-								.flatMap((a) => followAll(q, a.InterviewerInstructionReference))
+								.flatMap((a) => followAll(a.InterviewerInstructionReference))
 								.flatMap((i) => {
-									const t = dynamicTextOf(
-										i.item.InstructionText,
-										(r) => follow(i, r),
-										lang,
-									);
+									const t = dynamicTextOf(i.item.InstructionText, follow, lang);
 									return t === undefined ? [] : [t];
 								}),
 						};
@@ -506,7 +493,6 @@ export function codebookOf(
 			...(label !== undefined && { label }),
 			...(question !== undefined && { question }),
 			...valuesOf(
-				principal,
 				domain,
 				representation?.MissingValuesReference,
 				// A select-all question's limit isn't each option variable's.
@@ -515,15 +501,15 @@ export function codebookOf(
 			universes: share(
 				universes,
 				unique([
-					...(v === undefined ? [] : followAll(v, v.item.UniverseReference)),
+					...(v === undefined ? [] : followAll(v.item.UniverseReference)),
 					...askedUniverses,
 				]),
 			),
 			concepts: share(
 				concepts,
 				unique([
-					...(v === undefined ? [] : followAll(v, v.item.ConceptReference)),
-					...(q === undefined ? [] : followAll(q, q.item.ConceptReference)),
+					...(v === undefined ? [] : followAll(v.item.ConceptReference)),
+					...(q === undefined ? [] : followAll(q.item.ConceptReference)),
 				]),
 			),
 			...(intent !== undefined && { intent }),
@@ -545,7 +531,7 @@ export function codebookOf(
 	const entries: { entry: Entry; question?: Indexed }[] = [];
 	for (const v of items.filter((it) => it.type === "Variable")) {
 		// shortcut: a variable recorded by several questions is listed under its first.
-		const q = followAll(v, v.item.QuestionReference)[0];
+		const q = followAll(v.item.QuestionReference)[0];
 		if (q !== undefined) recorded.add(latestOf(q));
 		entries.push({
 			entry: entryOf(v, q),
@@ -579,6 +565,6 @@ export function codebookOf(
 			codeLists: [...codeLists.values()],
 			missing: [...missing.values()],
 		},
-		findings: [...findings.values()],
+		findings: findingsOf(index),
 	};
 }
