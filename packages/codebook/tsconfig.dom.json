@@ -5,7 +5,7 @@
 		// `?raw` imports: a page written by a test, read back here.
 		"types": ["vite/client"]
 	},
-	// Tests that parse the page with a real HTML parser.
-	"include": ["src/dom"],
+	// The custom element, and tests that parse the page with a real HTML parser.
+	"include": ["src/dom", "src/element"],
 	"exclude": []
 }
