@@ -5,6 +5,7 @@ import {
 	ddiIndexOf,
 	deref,
 	isReference,
+	itemKeyOf,
 	latestOf,
 	refUrn,
 	words,
@@ -114,6 +115,12 @@ describe("ddiIndexOf and deref", () => {
 		])
 			expect(deref(index, r)).toBe(latest);
 		expect(refUrn({ Agency: "a", ID: "v" })).toBe("urn:ddi:a:v:");
+	});
+
+	it("keys an item the same at every version", () => {
+		for (const urn of ["urn:ddi:a:v:1", "URN:DDI:a:v:1.10", "urn:ddi:a:v"])
+			expect(itemKeyOf(urn)).toBe("a:v");
+		expect(itemKeyOf("urn:isbn:1")).toBeUndefined();
 	});
 
 	it("indexes a question's parameters and a list's codes, with their owner", () => {
