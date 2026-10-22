@@ -45,20 +45,20 @@ export function words(j: unknown, lang?: string): string | undefined {
 export interface Indexed {
 	/**
 	 * The root key it was found under, the DDI type name (`Variable`, `QuestionItem`); for
-	 * a definition inside an item (`NESTED`), the field it was found in (`OutParameter`).
+	 * a definition inside an item, the field it was found in (`OutParameter`, `Code`).
 	 */
 	readonly type: string;
 	readonly urn: string;
 	readonly item: JsonObject;
-	/** The item a nested definition was found in: a parameter's question, a code's list. */
+	/**
+	 * The nearest identified object a nested definition was found in: a parameter's
+	 * question or response domain's question, a code's list or parent code.
+	 */
 	readonly owner?: Indexed;
 }
 
-/**
- * Definitions DDI writes inside their item rather than at the root, which references
- * still name by URN: a question's parameters (a variable's source), a list's codes.
- */
-const NESTED = ["OutParameter", "InParameter", "Code"] as const;
+/** How deep `ddiIndexOf` searches inside an item for definitions. */
+const DEPTH = 64;
 
 export interface DdiIndex {
 	/** Every item, by its URN (`urnKey`). */
@@ -108,9 +108,12 @@ const urnFrom = (o: JsonObject): string | undefined => {
 
 /**
  * A document's items by URN: each object under each root key whose value is an object
- * (`Variable: { "a:id:1": {…} }`), and the definitions inside them (`NESTED`). An item
- * with neither a URN nor an Agency and ID
- * can't be referred to, so it isn't indexed. Total: anything else is no items.
+ * (`Variable: { "a:id:1": {…} }`), and every identified object written inside one at
+ * any depth (a question's parameters, a response domain's or a command's, a list's
+ * codes and their codes), which references name too. A field named `…Reference…` is a
+ * reference, never a definition, so it isn't searched. An object with neither a URN
+ * nor an Agency and ID can't be referred to, so it isn't indexed; a nested one never
+ * replaces an item already indexed. Total: anything else is no items.
  */
 export function ddiIndexOf(doc: unknown): DdiIndex {
 	const byUrn = new Map<string, Indexed>();
@@ -119,27 +122,50 @@ export function ddiIndexOf(doc: unknown): DdiIndex {
 		const urn = urnFrom(o);
 		const parts = urn === undefined ? undefined : partsOf(urn);
 		if (urn === undefined || parts === undefined) return undefined;
+		if (owner !== undefined && byUrn.has(urnKey(urn))) return undefined;
 		const it: Indexed = { type, urn, item: o, ...(owner && { owner }) };
 		byUrn.set(urnKey(urn), it);
 		const was = latest.get(parts.item);
 		const wasVersion = was === undefined ? undefined : partsOf(was.urn);
+		// An item's root version is authoritative: a nested object never displaces it as latest;
+		// nested ones (a code in two versions of a list) compete among themselves.
+		const displaces = owner === undefined || was?.owner !== undefined;
 		if (
 			was === undefined ||
-			newer(parts.version ?? "0", wasVersion?.version ?? "0")
+			(displaces && newer(parts.version ?? "0", wasVersion?.version ?? "0"))
 		)
 			latest.set(parts.item, it);
 		return it;
 	};
-	for (const [type, bucket] of Object.entries(asObj(doc) ?? {}))
-		for (const item of Object.values(asObj(bucket) ?? {})) {
+	// shortcut: nesting deeper than DEPTH isn't searched, so a hostile document can't
+	// overflow the stack; real DDI nests a few levels. Raise it if a producer needs more.
+	const within = (o: JsonObject, owner: Indexed, depth = 0) => {
+		if (depth > DEPTH) return;
+		for (const [field, value] of Object.entries(o)) {
+			if (field.includes("Reference")) continue;
+			for (const x of Array.isArray(value) ? value : [value]) {
+				const nested = asObj(x);
+				if (nested === undefined) continue;
+				within(nested, add(field, nested, owner) ?? owner, depth + 1);
+			}
+		}
+	};
+	const roots = Object.entries(asObj(doc) ?? {}).flatMap(([type, bucket]) =>
+		Object.values(asObj(bucket) ?? {}).flatMap((item) => {
 			const o = asObj(item);
 			const it = o === undefined ? undefined : add(type, o);
-			if (o === undefined || it === undefined) continue;
-			for (const field of NESTED)
-				for (const nested of asList(o[field])) add(field, nested, it);
-		}
+			return o === undefined || it === undefined ? [] : [[o, it] as const];
+		}),
+	);
+	for (const [o, it] of roots) within(o, it);
 	return { byUrn, latest };
 }
+
+/** The highest version the index holds of an item: what a versionless reference to it names. */
+export const latestOf = (index: DdiIndex, it: Indexed): Indexed => {
+	const parts = partsOf(it.urn);
+	return (parts === undefined ? undefined : index.latest.get(parts.item)) ?? it;
+};
 
 /**
  * The URN a reference names, in any form a producer writes one: `{ $type, value:

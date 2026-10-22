@@ -84,6 +84,7 @@ describe("the entry points", () => {
 			    "isRoot",
 			    "kindAt",
 			    "labelOf",
+			    "latestOf",
 			    "lint",
 			    "locate",
 			    "locksFor",
