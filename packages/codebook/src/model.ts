@@ -92,7 +92,11 @@ export interface Entry {
 	};
 	/** The codes, valid ones first then missing ones, and the lists they come from. */
 	readonly responses?: {
-		/** More than one may be chosen (the question's ResponseCardinality). */
+		/**
+		 * The domain shown allows more than one choice (its ResponseCardinality). A
+		 * variable's representation, shown when there is one, never says so: an option of
+		 * a select-all question says it by `group`.
+		 */
 		readonly many: boolean;
 		readonly rows: readonly Row[];
 		readonly from: readonly Ref[];
@@ -160,6 +164,12 @@ export function parse(json: unknown): Result<DdiIndex, readonly Finding[]> {
 const num = (j: unknown): number | undefined =>
 	typeof j === "number" ? j : undefined;
 
+/** A Code's value: its CodeValue's string, or the value itself where a producer writes it bare. */
+const codeValue = (code: Record<string, unknown>): string | undefined => {
+	const value = asObj(code.Value)?.StringValue ?? code.Value;
+	return str(value) ?? (typeof value === "number" ? String(value) : undefined);
+};
+
 export function codebookOf(
 	index: DdiIndex,
 	{ lang }: { readonly lang?: string } = {},
@@ -184,6 +194,16 @@ export function codebookOf(
 			return it === undefined ? [] : [it];
 		});
 	const text = (j: unknown) => textOf(words(j, lang));
+	/** Whether two references name one item, however each is written. */
+	const same = (a: unknown, b: unknown): boolean => {
+		const x = deref(index, a);
+		return x !== undefined
+			? x === deref(index, b)
+			: refUrn(a) !== undefined && refUrn(a) === refUrn(b);
+	};
+	/** The highest version of an item: what an older version's reference stands for here. */
+	const latestOf = (it: Indexed): Indexed =>
+		deref(index, it.urn.split(":").slice(0, 4).join(":")) ?? it;
 	const flow = flowOf(index, follow, lang);
 
 	const concepts = new Map<string, Described>();
@@ -212,9 +232,8 @@ export function codebookOf(
 			const category = follow(list, c.CategoryReference);
 			const label =
 				category === undefined ? undefined : text(category.item.Label);
-			const value = asObj(c.Value)?.StringValue ?? c.Value;
 			return {
-				code: str(value) ?? (typeof value === "number" ? String(value) : ""),
+				code: codeValue(c) ?? "",
 				...(label !== undefined && { label }),
 				missing: isMissing || category?.item.IsMissing === true,
 			};
@@ -327,7 +346,7 @@ export function codebookOf(
 				? undefined
 				: follow(parameter, codes[0]);
 		if (code === undefined) return undefined;
-		const value = str(asObj(code.item.Value)?.StringValue);
+		const value = codeValue(code.item);
 		const category =
 			code.owner === undefined
 				? undefined
@@ -342,19 +361,17 @@ export function codebookOf(
 				};
 	};
 
-	// What assigns each parameter, for a variable no question records.
-	const computed = new Map<string, Indexed>();
-	for (const it of index.byUrn.values())
-		if (it.type === "ComputationItem") {
-			const urn = refUrn(it.item.AssignedVariableReference);
-			if (urn !== undefined) computed.set(urn, it);
-		}
+	const computations = [...index.byUrn.values()].filter(
+		(it) => it.type === "ComputationItem",
+	);
 	const derivationOf = (v: Indexed): Entry["derivation"] => {
 		const commands: Command[] = [];
-		const assigned = [v.item.OutParameter, v.item.SourceParameterReference]
-			.map(refUrn)
-			.flatMap((u) => (u === undefined ? [] : [computed.get(u)]))
-			.find((c) => c !== undefined);
+		// What assigns the variable's own parameter, or the one it holds.
+		const assigned = computations.find((c) =>
+			[v.item.OutParameter, v.item.SourceParameterReference].some(
+				(p) => p !== undefined && same(c.item.AssignedVariableReference, p),
+			),
+		);
 		const assignedBy = commandOf(assigned?.item.CommandCode);
 		if (assignedBy !== undefined) commands.push(assignedBy);
 		const representation = asObj(v.item.VariableRepresentation);
@@ -389,10 +406,10 @@ export function codebookOf(
 			asObj(q?.item.ResponseDomain);
 		// Where the question is asked; where an ask binds its answer into this variable, only there.
 		const all = q === undefined ? [] : (flow.asked.get(q.urn) ?? []);
-		const out = refUrn(v?.item.OutParameter);
+		const out = v?.item.OutParameter;
 		const bound = all.filter((a) =>
 			asList(flow.constructs.get(a.construct)?.item.Binding).some(
-				(b) => out !== undefined && refUrn(b.TargetParameterReference) === out,
+				(b) => out !== undefined && same(b.TargetParameterReference, out),
 			),
 		);
 		const asked = bound.length > 0 ? bound : all;
@@ -425,7 +442,11 @@ export function codebookOf(
 				? undefined
 				: (() => {
 						const qname = nameOf(q, lang);
-						const qtext = dynamicTextOf(q.item.QuestionText, index, lang);
+						const qtext = dynamicTextOf(
+							q.item.QuestionText,
+							(r) => follow(q, r),
+							lang,
+						);
 						return {
 							urn: q.urn,
 							...(qname !== undefined && { name: qname }),
@@ -433,7 +454,11 @@ export function codebookOf(
 							instructions: asList(q.item.InterviewerInstructionAttachment)
 								.flatMap((a) => followAll(q, a.InterviewerInstructionReference))
 								.flatMap((i) => {
-									const t = dynamicTextOf(i.item.InstructionText, index, lang);
+									const t = dynamicTextOf(
+										i.item.InstructionText,
+										(r) => follow(i, r),
+										lang,
+									);
 									return t === undefined ? [] : [t];
 								}),
 						};
@@ -480,7 +505,7 @@ export function codebookOf(
 	for (const v of items.filter((it) => it.type === "Variable")) {
 		// shortcut: a variable recorded by several questions is listed under its first.
 		const q = followAll(v, v.item.QuestionReference)[0];
-		if (q !== undefined) recorded.add(q);
+		if (q !== undefined) recorded.add(latestOf(q));
 		entries.push({
 			entry: entryOf(v, q),
 			...(q !== undefined && { question: q }),

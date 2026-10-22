@@ -131,9 +131,11 @@ export function flowOf(
 	follow: (from: Indexed, r: unknown) => Indexed | undefined,
 	lang?: string,
 ): Flow {
+	// Only each construct's highest version: an older one left in the document isn't the flow.
+	const current = [...new Set(index.latest.values())];
 	const parents = new Map<Indexed, Edge[]>();
 	const children = new Map<Indexed, Indexed[]>();
-	for (const it of index.byUrn.values())
+	for (const it of current)
 		for (const [r, branch] of childrenOf(it)) {
 			const child = follow(it, r);
 			if (child === undefined) continue;
@@ -189,7 +191,7 @@ export function flowOf(
 
 	const asked = new Map<string, Asking[]>();
 	const constructs = new Map<string, Indexed>();
-	for (const it of index.byUrn.values()) {
+	for (const it of current) {
 		if (it.type !== "QuestionConstruct") continue;
 		const question = follow(it, it.item.QuestionReference);
 		if (question === undefined) continue;
@@ -213,7 +215,6 @@ export function flowOf(
 		}
 		for (const child of children.get(it) ?? []) visit(child);
 	};
-	for (const it of index.byUrn.values())
-		if (it.type === "Instrument") visit(it);
+	for (const it of current) if (it.type === "Instrument") visit(it);
 	return { asked, constructs, position };
 }

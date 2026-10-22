@@ -1,8 +1,8 @@
 /**
  * DDI another producer might write: references as URN strings, as objects and without a
  * version, a missing code marked on its category, questions no variable records, two
- * languages, an item type the codebook doesn't know, an ElseIf, and a variable derived
- * by a GenerationInstruction. Written by hand, for the reader's generality.
+ * languages, an item type the codebook doesn't know, an ElseIf, a variable derived by a
+ * GenerationInstruction and one by a ComputationItem, and an ask bound to its variable. Written by hand, for the reader's generality.
  */
 import { describe, expect, it } from "vitest";
 import { codebookOf, parse } from "./model.ts";
@@ -86,7 +86,7 @@ const FOREIGN = {
 				},
 				{
 					...id("pet-codes.9"),
-					Value: { StringValue: "9" },
+					Value: "9",
 					CategoryReference: { Agency: "org.other", ID: "dk" },
 				},
 			],
@@ -122,6 +122,24 @@ const FOREIGN = {
 				},
 			},
 			SourceVariableReference: ["urn:ddi:org.other:birth-year:1"],
+		},
+		senior: {
+			...id("senior"),
+			VariableName: [s("senior")],
+			OutParameter: { URN: "urn:ddi:org.other:senior.out:1" },
+		},
+		now: {
+			...id("pets-now"),
+			VariableName: [s("pets_now")],
+			QuestionReference: ["urn:ddi:org.other:pets"],
+			OutParameter: { URN: "urn:ddi:org.other:pets-now.out:1" },
+		},
+	},
+	ComputationItem: {
+		c: {
+			...id("compute-senior"),
+			AssignedVariableReference: "urn:ddi:org.other:senior.out",
+			CommandCode: vtl("age >= 65"),
 		},
 	},
 	GenerationInstruction: {
@@ -166,6 +184,7 @@ const FOREIGN = {
 		again: {
 			...id("ask-pets-again"),
 			QuestionReference: { URN: "urn:ddi:org.other:pets:2" },
+			Binding: [{ TargetParameterReference: "urn:ddi:org.other:pets-now.out" }],
 		},
 	},
 };
@@ -182,15 +201,16 @@ describe("a codebook of another producer's DDI", () => {
 			  "QuestionItem age: How old are you?",
 			  "  format {"kind":"number","min":18}",
 			  "  asked always",
-			  "QuestionItem pets: Which pets do you have?",
+			  "Variable pets_now: Which pets do you have?",
 			  "  instruction Read all options.",
 			  "  codes many 1=Dog, 9!=Don't know",
-			  "  asked (age < 21)",
 			  "  asked not (age < 21) and (age < 65)",
 			  "  notes Asked since 2019. ¶ See [https://example.org/pets].",
 			  "Variable adult",
 			  "  codes 1=Dog, 9!=Don't know",
 			  "  derived VTL:age >= 18 From the age asked.",
+			  "Variable senior",
+			  "  derived VTL:age >= 65",
 			]
 		`);
 		expect(
@@ -198,7 +218,6 @@ describe("a codebook of another producer's DDI", () => {
 		).toMatchInlineSnapshot(`
 			[
 			  "always",
-			  "(age < 21)",
 			  "not (age < 21) and (age < 65)",
 			]
 		`);
@@ -218,12 +237,12 @@ describe("a codebook of another producer's DDI", () => {
 		const cb = codebookOf(parsed.value, { lang: "fr" });
 		expect(outline(cb).slice(4, 10)).toMatchInlineSnapshot(`
 			[
-			  "QuestionItem pets: Quels animaux avez-vous ?",
+			  "Variable pets_now: Quels animaux avez-vous ?",
 			  "  instruction Read all options.",
 			  "  codes many 1=Chien, 9!=Ne sait pas",
-			  "  asked (age < 21)",
 			  "  asked not (age < 21) and (age < 65)",
 			  "  notes Posée depuis 2019.",
+			  "Variable adult",
 			]
 		`);
 	});
