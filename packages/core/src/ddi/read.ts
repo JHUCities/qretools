@@ -27,14 +27,12 @@ export const str = (j: unknown): string | undefined =>
 
 /**
  * The words of an InternationalString, a StructuredString (a Name, a Label, a
- * Description, a LiteralText's Text) or a list of them: the first one's, in `lang`
- * when it is written in `lang`, else in its first language.
+ * Description, a LiteralText's Text) or a list of them: the words in `lang`, else the
+ * first words written. A list may hold one language per element, or all in each.
  */
 export function words(j: unknown, lang?: string): string | undefined {
-	const first = Array.isArray(j) ? j[0] : j;
-	const o = asObj(first);
-	if (o === undefined) return undefined;
-	const values = [...asList(o.String), ...asList(o.Content), o]
+	const values = asList(j)
+		.flatMap((o) => [...asList(o.String), ...asList(o.Content), o])
 		.map((s) => asObj(s.MultilingualStringValue))
 		.filter((m) => m !== undefined && typeof m.Value === "string");
 	const chosen =
@@ -87,6 +85,7 @@ const partsOf = (
 };
 
 /** Dotted versions compared part by part as numbers: `1.10` is after `1.9`. */
+// shortcut: a version that isn't digits and dots compares as neither newer nor older, so the first seen stays; read it when a producer writes one.
 const newer = (a: string, b: string): boolean => {
 	const x = a.split(".").map(Number);
 	const y = b.split(".").map(Number);

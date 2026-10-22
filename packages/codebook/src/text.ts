@@ -8,8 +8,6 @@
 import {
 	asList,
 	asObj,
-	type DdiIndex,
-	deref,
 	type Indexed,
 	refUrn,
 	str,
@@ -103,7 +101,7 @@ export const refOf = (it: Indexed, lang?: string): Ref => {
  */
 export function dynamicTextOf(
 	j: unknown,
-	index: DdiIndex,
+	follow: (r: unknown) => Indexed | undefined,
 	lang?: string,
 ): Text | undefined {
 	const all = asList(j);
@@ -116,7 +114,7 @@ export function dynamicTextOf(
 		const p = asObj(t.SourceParameterReference);
 		const urn = refUrn(p);
 		if (p === undefined || urn === undefined) return [];
-		const target = deref(index, p);
+		const target = follow(p);
 		const name =
 			nameOf({ type: "Parameter", urn, item: p }, lang) ??
 			(target === undefined ? undefined : nameOf(target, lang));
