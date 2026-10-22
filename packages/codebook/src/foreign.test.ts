@@ -310,6 +310,12 @@ describe("a codebook of loosely written DDI", () => {
 		`);
 	});
 
+	it("reads the document's first language when none is asked for", () => {
+		expect(codebookOf(parsed.value).lang).toBe("en");
+		const empty = parse({});
+		if (empty.ok) expect(codebookOf(empty.value).lang).toBeUndefined();
+	});
+
 	it("reads the language asked for, else the first", () => {
 		const cb = codebookOf(parsed.value, { lang: "fr" });
 		expect(outline(cb).slice(4, 10)).toMatchInlineSnapshot(`

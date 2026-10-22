@@ -44,7 +44,7 @@ describe("codebook text as HTML", () => {
 				{ kind: "ref", type: s, urn: "urn:ddi:org.x:pets:1", name: s },
 				{ kind: "ref", type: "Universe", urn: `urn:ddi:org.x:${s}:1` },
 			];
-			const body = parsed(blockHtml([spans], { anchors: ANCHORS }));
+			const body = parsed(blockHtml([spans], { anchors: ANCHORS, en: "" }));
 			expect(body.children).toHaveLength(1);
 			const p = body.children[0] as HTMLElement;
 			expect([...p.children].map((c) => c.tagName)).toEqual([
@@ -77,7 +77,7 @@ describe("codebook text as HTML", () => {
 					{ kind: "ref", type: "Loop", urn: "urn:ddi:org.x:cars:2" },
 				],
 			],
-			{ anchors: ANCHORS },
+			{ anchors: ANCHORS, en: "" },
 		);
 		const [pets, cars] = [...parsed(html).children];
 		expect(pets?.getAttribute("href")).toBe("#org.x:pets");
@@ -98,7 +98,7 @@ describe("codebook text as HTML", () => {
 				[{ kind: "link", text: "a.org", url: "https://a.org" }],
 				[{ kind: "ref", type: "Universe", urn: "urn:ddi:org.x:pets:1" }],
 			],
-			{ anchors: ANCHORS, inLink: true },
+			{ anchors: ANCHORS, en: "", inLink: true },
 		);
 		const body = parsed(`<a href="#x">${html}</a>`);
 		expect(body.querySelectorAll("a")).toHaveLength(1);

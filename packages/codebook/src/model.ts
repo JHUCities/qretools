@@ -197,10 +197,38 @@ const findingsOf = (index: DdiIndex): Finding[] => {
 	return [...findings.values()];
 };
 
+/** The first language a document writes anything in, so a page can say what it is in. */
+// shortcut: a string with no words in this language shows in its own first one, under the
+// page's language, which is then wrong for it; mark each string's own language (`words`
+// returning its tag) when a multilingual producer shows it matters.
+function firstLanguageOf(index: DdiIndex): string | undefined {
+	const find = (j: unknown, depth: number): string | undefined => {
+		if (depth > DDI_DEPTH || j === null || typeof j !== "object")
+			return undefined;
+		const tag = str((j as Record<string, unknown>).LanguageTag);
+		if (tag !== undefined) return tag;
+		for (const x of Object.values(j)) {
+			const found = find(x, depth + 1);
+			if (found !== undefined) return found;
+		}
+		return undefined;
+	};
+	for (const it of index.byUrn.values()) {
+		const found = find(it.item, 0);
+		if (found !== undefined) return found;
+	}
+	return undefined;
+}
+
+/**
+ * The codebook of a document, read in `lang` where a string has it, else in each
+ * string's first language. Without `lang`, the document's first language is the one asked for.
+ */
 export function codebookOf(
 	index: DdiIndex,
-	{ lang }: { readonly lang?: string } = {},
+	{ lang: asked }: { readonly lang?: string } = {},
 ): Codebook {
+	const lang = asked ?? firstLanguageOf(index);
 	const follow = (r: unknown): Indexed | undefined => deref(index, r);
 	const followAll = (r: unknown): Indexed[] =>
 		(Array.isArray(r) ? r : r === undefined ? [] : [r]).flatMap((x) => {

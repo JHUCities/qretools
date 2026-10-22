@@ -39,11 +39,12 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem; }
 h4 { font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem; }
 p { margin: 0 0 0.5rem; }
 header p, .from, .language, .urn, dt { color: var(--fgColor-muted); }
-a { color: var(--fgColor-accent); text-decoration: none; }
-a:hover { text-decoration: underline; text-underline-position: under; }
+/* Underlined always, not only on hover as the app does: colour alone doesn't tell a link (WCAG 1.4.1). */
+a { color: var(--fgColor-accent); text-decoration: underline; text-underline-position: under; }
 :focus-visible { outline: 2px solid var(--borderColor-accent-emphasis); outline-offset: 2px; border-radius: var(--borderRadius-small); }
 code { font: 0.9285em var(--fontStack-monospace); padding: 0.1em 0.3em; border-radius: var(--borderRadius-medium); background: var(--bgColor-neutral-muted); }
-[data-urn] { color: var(--fgColor-shared); font: 0.9285em var(--fontStack-monospace); }
+[data-urn] { font: 0.9285em var(--fontStack-monospace); }
+a[data-urn] { color: var(--fgColor-shared); }
 nav ol, nav ul { margin: 0; padding-inline-start: 1.25rem; }
 nav > ul { list-style: none; padding-inline-start: 0; margin-block-start: 0.5rem; }
 nav li { margin-block: 0.125rem; }
