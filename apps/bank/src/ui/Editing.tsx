@@ -14,7 +14,9 @@ import {
 	PageHeader,
 } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
+import { codebookOf, parse as parseDdi } from "@qretools/codebook";
 import {
+	type DdiDocument,
 	DEFAULT_SELECT_ALL,
 	documentOf,
 	type Evaluation,
@@ -121,7 +123,7 @@ import {
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
 import { FileSkeleton, Panes } from "./FileSkeleton.js";
-import { AgencyNotice, Codebook, Respondent } from "./Previews.js";
+import { AgencyNotice, Codebook, type Follow, Respondent } from "./Previews.js";
 
 /**
  * How long typing must pause before the findings list catches up with the text. The
@@ -212,6 +214,22 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const ddi = useMemo(
 		() => documentOf(questionItems(ev.draft, { env, agency })),
 		[ev.draft, env, agency],
+	);
+	const codebook = useMemo(() => codebookOfDdi(ddi), [ddi]);
+	// A shared name in the codebook opens its file, as the inspector's and Cmd-click do.
+	const follow = useCallback<Follow>(
+		(shared, chip) => {
+			const f = schemeFileNamed(local.schemes, shared.kind, shared.name);
+			return f === undefined ? undefined : (
+				<FileLink
+					id={f.id}
+					onOpen={() => dispatch({ kind: "fileOpened", id: f.id })}
+				>
+					{chip}
+				</FileLink>
+			);
+		},
+		[local.schemes, dispatch],
 	);
 	// The instruments here that use it (none before its first save: no path yet).
 	const instruments = instrumentsUsing(useInstrumentUses(), claimOf(q));
@@ -312,7 +330,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 							) : pane === "respondent" ? (
 								<Respondent view={ev.respondent} onTarget={onTarget} />
 							) : pane === "codebook" ? (
-								<Codebook view={ev.codebook} onTarget={onTarget} />
+								codebook && <Codebook codebook={codebook} follow={follow} />
 							) : pane === "usedBy" ? (
 								<InstrumentsUsing uses={instruments} />
 							) : null
@@ -1129,6 +1147,12 @@ export function InspectorBox({ children }: { children?: ReactNode }) {
 	);
 }
 
+/** A DDI document's codebook: the app's own document, which always reads. */
+function codebookOfDdi(ddi: DdiDocument) {
+	const read = parseDdi(ddi);
+	return read.ok ? codebookOf(read.value) : undefined;
+}
+
 /** One empty list, so an editor with nothing to mark is not re-synced for a new one. */
 const NO_MARKS: readonly Mark[] = [];
 
@@ -1175,6 +1199,18 @@ export function ForeignView({
 				? undefined
 				: evaluate(file.text, placed),
 		[file, kind, placed],
+	);
+	// Their question's codebook, of its DDI under this workspace's agency (not checked
+	// against their branch's). Its shared names aren't followed: read only.
+	const agency = useAgency();
+	const codebook = useMemo(
+		() =>
+			ev === undefined
+				? undefined
+				: codebookOfDdi(
+						documentOf(questionItems(ev.draft, { env: placed, agency })),
+					),
+		[ev, placed, agency],
 	);
 	const scheme = useMemo(
 		() =>
@@ -1260,8 +1296,8 @@ export function ForeignView({
 									<Findings findings={findings} />
 								) : pane === "respondent" && ev ? (
 									<Respondent view={ev.respondent} />
-								) : pane === "codebook" && ev ? (
-									<Codebook view={ev.codebook} />
+								) : pane === "codebook" && codebook ? (
+									<Codebook codebook={codebook} />
 								) : pane === "value" ? (
 									<SchemeValueView value={scheme?.value} />
 								) : null
