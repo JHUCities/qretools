@@ -123,6 +123,7 @@ describe("the entry points", () => {
 			    "schemePath",
 			    "scopeOf",
 			    "selectAllText",
+			    "sharedOf",
 			    "shortCommit",
 			    "skippedFolder",
 			    "status",
