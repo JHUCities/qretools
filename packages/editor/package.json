@@ -20,7 +20,7 @@
 		"@codemirror/lint": "^6.9.7",
 		"@codemirror/state": "^6.7.5",
 		"@codemirror/view": "^6.43.12",
-		"@lezer/highlight": "1.2.3",
+		"@lezer/highlight": "1.2.5",
 		"@primer/octicons": "^19.38.0",
 		"@qretools/core": "workspace:*",
 		"codemirror": "^6.0.2",
