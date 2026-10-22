@@ -58,6 +58,7 @@ export {
 	elaborate,
 	elaborateItems,
 	NOT_TICKED,
+	sharedOf,
 	TICKED,
 	type Versioning,
 } from "./ddi/elaborate.ts";

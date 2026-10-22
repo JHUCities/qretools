@@ -50,6 +50,7 @@ import {
 	ref,
 	structured,
 } from "./document.ts";
+import { itemKeyOf } from "./read.ts";
 import {
 	UNVERSIONED,
 	type Version,
@@ -71,6 +72,55 @@ export const NOT_TICKED = "not selected";
 
 /** The code list every select-all option's variable is coded on: the bank's two values. */
 export const SELECT_ALL_ID = "select-all";
+
+/**
+ * How a bank's named shared file is published: its items' ID, or the base its list's
+ * items hang off (`scale-agree4.codes`), is its name after its kind's prefix. One
+ * spelling, read both ways (`sharedOf`). A name has no hyphen (`NAME_PATTERN`), so
+ * none of these can be a question's.
+ */
+const SHARED_PREFIX = {
+	concept: "concept-",
+	universe: "universe-",
+	instruction: "instruction-",
+	scale: "scale-",
+} as const satisfies Partial<Record<SchemeKind, string>>;
+
+const sharedId = (kind: keyof typeof SHARED_PREFIX, name: string): string =>
+	`${SHARED_PREFIX[kind]}${name}`;
+
+/**
+ * The bank's shared file a DDI item was published from, by the item's URN: the kind
+ * and name its version is taken from (`ctx.shared`), so a program reading the DDI back
+ * (a codebook) can open the file. Undefined for anything else, a question's own items
+ * among them.
+ */
+export function sharedOf(
+	urn: string,
+): { readonly kind: SchemeKind; readonly name: string } | undefined {
+	const key = itemKeyOf(urn);
+	if (key === undefined) return undefined;
+	const id = key.slice(key.indexOf(":") + 1);
+	// Only a list's ID ends in `.codes`: a scale's, the missing values' and select all's.
+	const list = id.endsWith(".codes");
+	const base = list ? id.slice(0, -".codes".length) : id;
+	if (base === MISSING_ID) return { kind: "missing", name: "missing" };
+	if (base === SELECT_ALL_ID) return { kind: "select_all", name: "select_all" };
+	for (const [kind, prefix] of Object.entries(SHARED_PREFIX) as [
+		keyof typeof SHARED_PREFIX,
+		string,
+	][]) {
+		const name = base.slice(prefix.length);
+		if (
+			base.startsWith(prefix) &&
+			name !== "" &&
+			!name.includes(".") &&
+			list === (kind === "scale")
+		)
+			return { kind, name };
+	}
+	return undefined;
+}
 
 /**
  * What is known of the versions a question's items take: its own file's, and each
@@ -285,7 +335,7 @@ function conceptItem(c: Named<LabelledEntry>, ctx: Ctx, own: string): Item {
 		: versioned(
 				ctx,
 				"Concept",
-				`concept-${c.name}`,
+				sharedId("concept", c.name),
 				ctx.shared("concept", c.name),
 				{
 					ConceptName: [intl(c.name)],
@@ -308,7 +358,7 @@ function universeItem(u: Named<TextEntry>, ctx: Ctx, own: string): Item {
 		: versioned(
 				ctx,
 				"Universe",
-				`universe-${u.name}`,
+				sharedId("universe", u.name),
 				ctx.shared("universe", u.name),
 				{
 					UniverseName: [intl(u.name)],
@@ -327,7 +377,7 @@ function instructionItem(i: Named<TextEntry>, ctx: Ctx, own: string): Item {
 		: versioned(
 				ctx,
 				"Instruction",
-				`instruction-${i.name}`,
+				sharedId("instruction", i.name),
 				ctx.shared("instruction", i.name),
 				{
 					InstructionName: [intl(i.name)],
@@ -434,7 +484,7 @@ function elaborateResponses(
 			: codeListItems(
 					ctx,
 					ctx.shared("scale", domain.scale),
-					`scale-${domain.scale}`,
+					sharedId("scale", domain.scale),
 					domain.codes,
 					{ principal: true },
 				);
