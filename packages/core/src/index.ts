@@ -61,6 +61,18 @@ export {
 	TICKED,
 	type Versioning,
 } from "./ddi/elaborate.ts";
+// Reading DDI any producer wrote, for a program that reads it back (a codebook).
+export {
+	asList,
+	asObj,
+	type DdiIndex,
+	ddiIndexOf,
+	deref,
+	type Indexed,
+	refUrn,
+	str,
+	words,
+} from "./ddi/read.ts";
 export { makeValidator, type Validator } from "./ddi/validate.ts";
 export {
 	type GitOrigin,
