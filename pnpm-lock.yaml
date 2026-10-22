@@ -153,7 +153,7 @@ importers:
         version: 1.2.5
       '@primer/octicons':
         specifier: ^19.38.0
-        version: 19.38.0
+        version: 19.41.0
       '@qretools/core':
         specifier: workspace:*
         version: link:../core
@@ -559,8 +559,8 @@ packages:
     peerDependencies:
       react: '>=16.3'
 
-  '@primer/octicons@19.38.0':
-    resolution: {integrity: sha512-YUU2R66aDm72CdjlTyD663sCAjILrHWK2czw+BdTUkzZfcB7bXfO6GNXm22sepLOWKPkLHezVjIHch/KNd8rMg==}
+  '@primer/octicons@19.41.0':
+    resolution: {integrity: sha512-JHtX77XMyLA7ZlYEnEJlvQCtT6FQzYmeL+mbAqdcws1D7ETYKS473tO/e485J8nS53RBwlNaFus+3XIPg3na5Q==}
 
   '@primer/primitives@11.10.0':
     resolution: {integrity: sha512-ihZxIst4Izry284StKFjpbYvX6R/IBFTLu+qiuAmR93PsKF2hdjoabhSYwKI8iCxOUx94jVP55bI3NoY7STjYQ==}
@@ -1921,7 +1921,7 @@ snapshots:
     dependencies:
       react: 19.3.1
 
-  '@primer/octicons@19.38.0':
+  '@primer/octicons@19.41.0':
     dependencies:
       object-assign: 4.1.1
 
