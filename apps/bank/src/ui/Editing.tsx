@@ -33,6 +33,7 @@ import {
 	isRoot,
 	kindAt,
 	type Mark,
+	ok,
 	othersOf,
 	placeFindings,
 	questionItems,
@@ -123,7 +124,12 @@ import {
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
 import { FileSkeleton, Panes } from "./FileSkeleton.js";
-import { AgencyNotice, Codebook, type Follow, Respondent } from "./Previews.js";
+import {
+	AgencyNotice,
+	CodebookPane,
+	type Follow,
+	Respondent,
+} from "./Previews.js";
 
 /**
  * How long typing must pause before the findings list catches up with the text. The
@@ -216,7 +222,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		[ev.draft, env, agency],
 	);
 	const codebook = useMemo(() => codebookOfDdi(ddi), [ddi]);
-	// A shared name in the codebook opens its file, as the inspector's and Cmd-click do.
+	// A shared name in the codebook is a link to its file's address, which opens it here
+	// with history; a draft's, which has no address yet, a button that opens it.
 	const follow = useCallback<Follow>(
 		(shared, chip) => {
 			const f = schemeFileNamed(local.schemes, shared.kind, shared.name);
@@ -330,7 +337,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 							) : pane === "respondent" ? (
 								<Respondent view={ev.respondent} onTarget={onTarget} />
 							) : pane === "codebook" ? (
-								codebook && <Codebook codebook={codebook} follow={follow} />
+								<CodebookPane read={codebook} follow={follow} />
 							) : pane === "usedBy" ? (
 								<InstrumentsUsing uses={instruments} />
 							) : null
@@ -1147,10 +1154,10 @@ export function InspectorBox({ children }: { children?: ReactNode }) {
 	);
 }
 
-/** A DDI document's codebook: the app's own document, which always reads. */
+/** A DDI document's codebook, or why it can't be read. */
 function codebookOfDdi(ddi: DdiDocument) {
 	const read = parseDdi(ddi);
-	return read.ok ? codebookOf(read.value) : undefined;
+	return read.ok ? ok(codebookOf(read.value)) : read;
 }
 
 /** One empty list, so an editor with nothing to mark is not re-synced for a new one. */
@@ -1297,7 +1304,7 @@ export function ForeignView({
 								) : pane === "respondent" && ev ? (
 									<Respondent view={ev.respondent} />
 								) : pane === "codebook" && codebook ? (
-									<Codebook codebook={codebook} />
+									<CodebookPane read={codebook} />
 								) : pane === "value" ? (
 									<SchemeValueView value={scheme?.value} />
 								) : null
