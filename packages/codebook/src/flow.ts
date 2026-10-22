@@ -1,18 +1,19 @@
 /**
  * Where a question is asked, read from an instrument's control constructs: for each
  * QuestionConstruct, the conditions on the way to it, the loops around it and the order
- * its section and its options are shown in. One parent map, from every construct to
- * the constructs that hold it and on which branch; walking it up from an ask gives
- * one path per place the ask is held. Conditions are the producer's commands, verbatim:
- * nothing is parsed, so any program language reads.
+ * its section and its options are shown in. Walked down from each instrument, following
+ * each reference as written (a version it names, else the newest), so a construct no
+ * instrument reaches is asked nowhere, and every path to an ask is a place it is asked.
+ * Conditions are the producer's commands, verbatim: nothing is parsed, so any program
+ * language reads.
  */
 
 import {
 	asList,
 	asObj,
 	type DdiIndex,
-	deref,
 	type Indexed,
+	latestOf,
 	str,
 } from "@qretools/core";
 import { type Ref, refOf } from "./text.ts";
@@ -48,11 +49,6 @@ type Branch =
 	| { readonly kind: "elseIf"; readonly index: number }
 	| { readonly kind: "else" }
 	| { readonly kind: "loop" };
-
-interface Edge {
-	readonly parent: Indexed;
-	readonly branch: Branch;
-}
 
 /** The constructs a construct holds, in order, and on which branch. */
 const childrenOf = (it: Indexed): readonly (readonly [unknown, Branch])[] => {
@@ -114,107 +110,86 @@ function conditionsOn(it: Indexed, branch: Branch): Condition[] {
 }
 
 export interface Flow {
-	/** Every place a question is asked, by the question's URN. */
+	/** Every place a question is asked, by the URN of the question's newest version. */
 	readonly asked: ReadonlyMap<string, readonly Asking[]>;
 	/** Each asking's construct, for its universes. */
 	readonly constructs: ReadonlyMap<string, Indexed>;
-	/** Each question's position in the instruments' flow, by the question's URN. */
+	/** Each question's position in the instruments' flow, by the URN of its newest version. */
 	readonly position: ReadonlyMap<string, number>;
 }
 
+/** What holds on the way down to a construct. */
+interface Context {
+	readonly conditions: readonly Condition[];
+	readonly loops: readonly Ref[];
+	readonly order?: string;
+}
+
 /**
- * The flow of every instrument in the index. `follow` derefs a reference and reports one
- * that names nothing in the document.
+ * The flow of every instrument in the index, its newest version. `follow` derefs a
+ * reference and reports one that names nothing in the document.
  */
 export function flowOf(
 	index: DdiIndex,
 	follow: (from: Indexed, r: unknown) => Indexed | undefined,
 	lang?: string,
 ): Flow {
-	// Only each construct's highest version: an older one left in the document isn't the flow.
-	const current = [...new Set(index.latest.values())];
-	const parents = new Map<Indexed, Edge[]>();
-	const children = new Map<Indexed, Indexed[]>();
-	for (const it of current)
-		for (const [r, branch] of childrenOf(it)) {
-			const child = follow(it, r);
-			if (child === undefined) continue;
-			parents.set(child, [
-				...(parents.get(child) ?? []),
-				{ parent: it, branch },
-			]);
-			children.set(it, [...(children.get(it) ?? []), child]);
-		}
-
-	const askings = (ask: Indexed): Asking[] => {
-		const responseOrder = str(
-			asObj(ask.item.ResponseSequence)?.ItemSequenceType,
-		);
-		const out: Asking[] = [];
-		const up = (
-			node: Indexed,
-			conditions: readonly Condition[],
-			loops: readonly Ref[],
-			order: string | undefined,
-			seen: ReadonlySet<Indexed>,
-		) => {
-			const edges = (parents.get(node) ?? []).filter(
-				(e) => !seen.has(e.parent),
-			);
-			if (edges.length === 0)
-				out.push({
-					construct: ask.urn,
-					conditions,
-					loops,
-					...(order !== undefined && { order }),
-					...(responseOrder !== undefined && { responseOrder }),
-				});
-			for (const { parent, branch } of edges) {
-				const sequence =
-					parent.type === "Sequence"
-						? str(asObj(parent.item.ConstructSequence)?.ItemSequenceType)
-						: undefined;
-				up(
-					parent,
-					parent.type === "IfThenElse"
-						? [...conditionsOn(parent, branch), ...conditions]
-						: conditions,
-					branch.kind === "loop" ? [...loops, refOf(parent, lang)] : loops,
-					order ?? sequence,
-					new Set([...seen, parent]),
-				);
-			}
-		};
-		up(ask, [], [], undefined, new Set([ask]));
-		return out;
-	};
-
 	const asked = new Map<string, Asking[]>();
 	const constructs = new Map<string, Indexed>();
-	for (const it of current) {
-		if (it.type !== "QuestionConstruct") continue;
-		const question = follow(it, it.item.QuestionReference);
-		if (question === undefined) continue;
-		constructs.set(it.urn, it);
-		asked.set(question.urn, [
-			...(asked.get(question.urn) ?? []),
-			...askings(it),
-		]);
-	}
-
-	// Depth first from each instrument: the order its questions are first asked in.
 	const position = new Map<string, number>();
-	const seen = new Set<Indexed>();
-	const visit = (it: Indexed) => {
-		if (seen.has(it)) return;
-		seen.add(it);
-		if (it.type === "QuestionConstruct") {
-			const q = deref(index, it.item.QuestionReference);
-			if (q !== undefined && !position.has(q.urn))
-				position.set(q.urn, position.size);
+	// Depth first, so questions are positioned in the order first asked; `path` stops a cycle.
+	// shortcut: every path is walked, so constructs shared many times over multiply the work; memoise per construct and context if a real document is slow.
+	const down = (node: Indexed, at: Context, path: ReadonlySet<Indexed>) => {
+		if (node.type === "QuestionConstruct") {
+			const found = follow(node, node.item.QuestionReference);
+			if (found === undefined) return;
+			const question = latestOf(index, found).urn;
+			if (!position.has(question)) position.set(question, position.size);
+			constructs.set(node.urn, node);
+			const responseOrder = str(
+				asObj(node.item.ResponseSequence)?.ItemSequenceType,
+			);
+			asked.set(question, [
+				...(asked.get(question) ?? []),
+				{
+					construct: node.urn,
+					conditions: at.conditions,
+					loops: at.loops,
+					...(at.order !== undefined && { order: at.order }),
+					...(responseOrder !== undefined && { responseOrder }),
+				},
+			]);
+			return;
 		}
-		for (const child of children.get(it) ?? []) visit(child);
+		const sequence =
+			node.type === "Sequence"
+				? str(asObj(node.item.ConstructSequence)?.ItemSequenceType)
+				: undefined;
+		for (const [r, branch] of childrenOf(node)) {
+			const child = follow(node, r);
+			if (child === undefined || path.has(child)) continue;
+			down(
+				child,
+				{
+					conditions:
+						node.type === "IfThenElse"
+							? [...at.conditions, ...conditionsOn(node, branch)]
+							: at.conditions,
+					loops:
+						branch.kind === "loop"
+							? [refOf(node, lang), ...at.loops]
+							: at.loops,
+					// The nearest enclosing sequence's order.
+					...((sequence ?? at.order) !== undefined && {
+						order: sequence ?? at.order,
+					}),
+				},
+				new Set([...path, child]),
+			);
+		}
 	};
-	for (const it of current) if (it.type === "Instrument") visit(it);
+	for (const it of new Set(index.latest.values()))
+		if (it.type === "Instrument")
+			down(it, { conditions: [], loops: [] }, new Set([it]));
 	return { asked, constructs, position };
 }

@@ -17,6 +17,7 @@ import {
 	deref,
 	err,
 	type Indexed,
+	latestOf as latestIn,
 	ok,
 	type Result,
 	refUrn,
@@ -201,9 +202,8 @@ export function codebookOf(
 			? x === deref(index, b)
 			: refUrn(a) !== undefined && refUrn(a) === refUrn(b);
 	};
-	/** The highest version of an item: what an older version's reference stands for here. */
-	const latestOf = (it: Indexed): Indexed =>
-		deref(index, it.urn.split(":").slice(0, 4).join(":")) ?? it;
+	/** The highest version of an item: a question's flow is keyed by it, whichever version is cited. */
+	const latestOf = (it: Indexed): Indexed => latestIn(index, it);
 	const flow = flowOf(index, follow, lang);
 
 	const concepts = new Map<string, Described>();
@@ -356,12 +356,12 @@ export function codebookOf(
 		return value === undefined
 			? undefined
 			: {
-					question: question.urn,
+					question: latestOf(question).urn,
 					option: { code: value, ...(label !== undefined && { label }) },
 				};
 	};
 
-	const computations = [...index.byUrn.values()].filter(
+	const computations = [...new Set(index.latest.values())].filter(
 		(it) => it.type === "ComputationItem",
 	);
 	const derivationOf = (v: Indexed): Entry["derivation"] => {
@@ -405,7 +405,7 @@ export function codebookOf(
 			asObj(representation?.ValueRepresentation) ??
 			asObj(q?.item.ResponseDomain);
 		// Where the question is asked; where an ask binds its answer into this variable, only there.
-		const all = q === undefined ? [] : (flow.asked.get(q.urn) ?? []);
+		const all = q === undefined ? [] : (flow.asked.get(latestOf(q).urn) ?? []);
 		const out = v?.item.OutParameter;
 		const bound = all.filter((a) =>
 			asList(flow.constructs.get(a.construct)?.item.Binding).some(
@@ -516,7 +516,7 @@ export function codebookOf(
 			entries.push({ entry: entryOf(undefined, q), question: q });
 	// Stable: in each instrument's order, then what no instrument asks in document order.
 	const at = (q: Indexed | undefined) =>
-		(q === undefined ? undefined : flow.position.get(q.urn)) ??
+		(q === undefined ? undefined : flow.position.get(latestOf(q).urn)) ??
 		Number.POSITIVE_INFINITY;
 	entries.sort((a, b) => {
 		const [x, y] = [at(a.question), at(b.question)];
