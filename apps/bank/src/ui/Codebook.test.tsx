@@ -118,6 +118,15 @@ describe("the codebook pane", () => {
 		expect(c.textContent).not.toMatch(/untitled|urn:|fill in/i);
 	});
 
+	it("shows a fill in the question's words as the gap it is", () => {
+		const c = pane(
+			"name: utilities\ntext: You pay {{rent}} a month. Does that include utilities?\nintent: i\nopen: {}\nfills:\n  rent: number\n",
+		);
+		expect(c.querySelector("blockquote .fill-slot")?.textContent).toBe(
+			"[rent]",
+		);
+	});
+
 	it("captions a table of missing values alone with the list they come from", () => {
 		const c = pane(
 			"name: rooms\ntext: How many rooms?\nintent: Size\nnumber:\n  min: 1\n",
@@ -138,6 +147,7 @@ select: many
 responses:
   1:
     label: Dog
+    title: Pets -- Dog
     variable: pets_dog
   2:
     label: Cat
@@ -150,7 +160,7 @@ responses:
 		expect(options?.caption?.textContent).toBe("Options");
 		expect(
 			[...(options?.tBodies[0]?.rows ?? [])].map((r) => r.textContent),
-		).toEqual(["1 Dogpets_dog Dog", "2 Catpets_cat Cat"]);
+		).toEqual(["1 Dogpets_dog Pets -- Dog", "2 Catpets_cat Cat"]);
 		// Select all's list has no file here: named nowhere, not a green name for nothing.
 		expect(values?.caption?.textContent).toBe("Each option's values");
 		expect(c.querySelectorAll("table")).toHaveLength(2);

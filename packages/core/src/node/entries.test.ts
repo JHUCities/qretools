@@ -54,7 +54,6 @@ describe("the entry points", () => {
 			    "bankLocation",
 			    "bankOf",
 			    "codeSpans",
-			    "codebookView",
 			    "collisions",
 			    "compact",
 			    "danglingIn",

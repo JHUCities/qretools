@@ -152,8 +152,6 @@ export {
 	refusalReason,
 } from "./refusal.ts";
 export {
-	type CodebookView,
-	codebookView,
 	type Hole,
 	type Input,
 	type Resolved,

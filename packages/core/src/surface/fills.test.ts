@@ -3,7 +3,7 @@ import schemaText from "../../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
 import { elaborate } from "../ddi/elaborate.ts";
 import { makeValidator } from "../ddi/validate.ts";
 import { locate } from "../findings.ts";
-import { codebookView, respondentView } from "../render.ts";
+import { respondentView } from "../render.ts";
 import { EMPTY_ENV } from "./env.ts";
 import { piecesOf, withoutFills } from "./fills.ts";
 import { parseSurface } from "./parse.ts";
@@ -117,7 +117,7 @@ describe("fills", () => {
 		}
 	});
 
-	it("show as the gap they are in the previews", () => {
+	it("show as the gap they are in the respondent's preview", () => {
 		const { draft } = parseSurface(RENT, EMPTY_ENV);
 		const respondent = respondentView(draft);
 		expect(
@@ -127,10 +127,6 @@ describe("fills", () => {
 			name: "rent",
 			type: "number",
 		});
-		const codebook = codebookView(draft, EMPTY_ENV);
-		expect(
-			codebook.text.kind === "filled" && codebook.text.pieces,
-		).toHaveLength(3);
 		const plain = respondentView(
 			parseSurface(question("Hi?", ""), EMPTY_ENV).draft,
 		);
