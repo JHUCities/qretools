@@ -2,8 +2,11 @@
  * DDI another producer might write: references as URN strings, as objects and without a
  * version, a missing code marked on its category, questions no variable records, two
  * languages, an item type the codebook doesn't know, an ElseIf, a variable derived by a
- * GenerationInstruction and one by a ComputationItem, and an ask bound to its variable. Written by hand, for the reader's generality.
+ * GenerationInstruction and one by a ComputationItem, an ask bound to its variable,
+ * domains by reference to managed representations, nested codes, and a select-all limit
+ * on the question item. Written by hand, for the reader's generality.
  */
+import { DDI_DEPTH } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { codebookOf, parse } from "./model.ts";
 import { asking, outline } from "./testing.ts";
@@ -65,6 +68,20 @@ const FOREIGN = {
 				],
 			},
 		},
+		colour: {
+			...id("colour"),
+			QuestionItemName: [s("colour")],
+			QuestionText: [said("en", "Which colours?")],
+			ResponseDomainReference: "urn:ddi:org.other:colour-domain:1",
+			ResponseCardinality: { MaximumResponses: 2 },
+		},
+		shade: {
+			...id("shade"),
+			QuestionItemName: [s("shade")],
+			QuestionText: [said("en", "Which shades?")],
+			ResponseDomainReference: "urn:ddi:org.other:colour-domain:1",
+			ResponseCardinality: { MaximumResponses: 2 },
+		},
 		c: {
 			...id("age"),
 			QuestionItemName: [s("age")],
@@ -76,6 +93,30 @@ const FOREIGN = {
 		},
 	},
 	CodeList: {
+		colours: {
+			...id("colour-codes"),
+			Code: [
+				{
+					...id("colour-codes.1"),
+					Value: "1",
+					CategoryReference: "urn:ddi:org.other:red:1",
+					Code: [
+						{
+							...id("colour-codes.11"),
+							Value: "11",
+							CategoryReference: "urn:ddi:org.other:crimson:1",
+						},
+					],
+				},
+			],
+		},
+		yesno: {
+			...id("yes-no"),
+			Code: [
+				{ ...id("yes-no.0"), Value: "0" },
+				{ ...id("yes-no.1"), Value: "1" },
+			],
+		},
 		l: {
 			...id("pet-codes"),
 			Code: [
@@ -92,7 +133,18 @@ const FOREIGN = {
 			],
 		},
 	},
+	ManagedCodeRepresentation: {
+		colours: {
+			...id("colour-domain"),
+			CodeListReference: "urn:ddi:org.other:colour-codes:1",
+		},
+	},
+	ManagedNumericRepresentation: {
+		cm: { ...id("centimetres"), DecimalPositions: 1 },
+	},
 	Category: {
+		red: { ...id("red"), Label: [s("Red")] },
+		crimson: { ...id("crimson"), Label: [s("Crimson")] },
 		dog: { ...id("dog"), Label: [s("Dog", "Chien")] },
 		dk: {
 			...id("dk"),
@@ -108,6 +160,23 @@ const FOREIGN = {
 	},
 	Widget: { w: { ...id("widget"), Anything: true } },
 	Variable: {
+		red: {
+			...id("colour-red"),
+			VariableName: [s("colour_red")],
+			QuestionReference: "urn:ddi:org.other:colour:1",
+			VariableRepresentation: {
+				ValueRepresentation: {
+					CodeListReference: "urn:ddi:org.other:yes-no:1",
+				},
+			},
+		},
+		height: {
+			...id("height"),
+			VariableName: [s("height")],
+			VariableRepresentation: {
+				ValueRepresentationReference: "urn:ddi:org.other:centimetres:1",
+			},
+		},
 		v: {
 			...id("adult"),
 			VariableName: [s("adult")],
@@ -206,11 +275,17 @@ describe("a codebook of another producer's DDI", () => {
 			  "  codes many 1=Dog, 9!=Don't know",
 			  "  asked not (age < 21) and (age < 65)",
 			  "  notes Asked since 2019. ¶ See [https://example.org/pets].",
+			  "Variable colour_red: Which colours?",
+			  "  codes 0=, 1=",
+			  "Variable height",
+			  "  format {"kind":"number","decimals":1}",
 			  "Variable adult",
 			  "  codes 1=Dog, 9!=Don't know",
 			  "  derived VTL:age >= 18 From the age asked.",
 			  "Variable senior",
 			  "  derived VTL:age >= 65",
+			  "QuestionItem shade: Which shades?",
+			  "  codes many 1=Red, 11=Crimson",
 			]
 		`);
 		expect(
@@ -242,9 +317,29 @@ describe("a codebook of another producer's DDI", () => {
 			  "  codes many 1=Chien, 9!=Ne sait pas",
 			  "  asked not (age < 21) and (age < 65)",
 			  "  notes Posée depuis 2019.",
-			  "Variable adult",
+			  "Variable colour_red: Which colours?",
 			]
 		`);
+	});
+});
+
+describe("codes nested in codes", () => {
+	it("stops far below a list, rather than overflow the stack", () => {
+		let code: Record<string, unknown> = { Value: "x" };
+		for (let i = 0; i < 10_000; i++) code = { Value: "x", Code: [code] };
+		const parsed = parse({
+			QuestionItem: {
+				q: {
+					...id("deep"),
+					ResponseDomain: { CodeListReference: "urn:ddi:org.other:list:1" },
+				},
+			},
+			CodeList: { l: { ...id("list"), Code: [code] } },
+		});
+		if (!parsed.ok) throw new Error("unparsed");
+		expect(codebookOf(parsed.value).entries[0]?.responses?.rows.length).toBe(
+			DDI_DEPTH + 1,
+		);
 	});
 });
 

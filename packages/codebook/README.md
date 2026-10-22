@@ -20,3 +20,12 @@ codes (missing ones marked), its format, universes and concepts, and every place
 instrument asks it: the conditions on the way there (the producer's commands, verbatim),
 the loops around it and the order its section and options are shown in. Private while
 the app's codebook pane and a `qretools codebook` command try it out.
+
+Not read yet, and left out without a word:
+
+- question grids and question blocks (`QuestionGrid`, `QuestionBlock`);
+- a question with several response domains (`StructuredMixedResponseDomain`, or a
+  `ResponseDomain` written as several);
+- a code list based on another list (`CodeList.CodeListReference`): only its own codes
+  are shown;
+- missing values given as numeric or text ranges: only missing codes are shown.

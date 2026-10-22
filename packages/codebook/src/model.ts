@@ -12,6 +12,7 @@ import {
 	asList,
 	asObj,
 	type Finding as CoreFinding,
+	DDI_DEPTH,
 	type DdiIndex,
 	ddiIndexOf,
 	deref,
@@ -162,6 +163,12 @@ export function parse(json: unknown): Result<DdiIndex, readonly Finding[]> {
 		: ok(ddiIndexOf(json));
 }
 
+/** The domain a managed representation stands for, where its fields don't say. */
+const MANAGED: Readonly<Record<string, string>> = {
+	ManagedNumericRepresentation: "NumericDomain",
+	ManagedTextRepresentation: "TextDomain",
+};
+
 const num = (j: unknown): number | undefined =>
 	typeof j === "number" ? j : undefined;
 
@@ -227,20 +234,40 @@ export function codebookOf(
 		return its.map((it) => refOf(it, lang));
 	};
 
-	const rowsOf = (list: Indexed, isMissing: boolean): Row[] =>
-		asList(list.item.Code).map((c) => {
-			const category = follow(list, c.CategoryReference);
-			const label =
-				category === undefined ? undefined : text(category.item.Label);
-			return {
-				code: codeValue(c) ?? "",
-				...(label !== undefined && { label }),
-				missing: isMissing || category?.item.IsMissing === true,
-			};
-		});
+	/** A list's codes, a code's own codes after it (a hierarchy, flattened). */
+	const rowsOf = (list: Indexed, isMissing: boolean): Row[] => {
+		// shortcut: codes nested deeper than DDI_DEPTH aren't read.
+		const rows = (codes: unknown, depth = 0): Row[] =>
+			(depth > DDI_DEPTH ? [] : asList(codes)).flatMap((c) => {
+				const category = follow(list, c.CategoryReference);
+				const label =
+					category === undefined ? undefined : text(category.item.Label);
+				return [
+					{
+						code: codeValue(c) ?? "",
+						...(label !== undefined && { label }),
+						missing: isMissing || category?.item.IsMissing === true,
+					},
+					...rows(c.Code, depth + 1),
+				];
+			});
+		return rows(list.item.Code);
+	};
 	const listed = (it: Indexed, rows: readonly Row[]): Listed => {
 		const { description: _, ...rest } = described(it);
 		return { ...rest, rows };
+	};
+
+	/** A managed representation, followed, as the domain it stands for. */
+	const managed = (
+		from: Indexed | undefined,
+		r: unknown,
+	): Record<string, unknown> | undefined => {
+		const it =
+			from === undefined || r === undefined ? undefined : follow(from, r);
+		if (it === undefined) return undefined;
+		const $type = MANAGED[it.type];
+		return $type === undefined ? it.item : { ...it.item, $type };
 	};
 
 	/** A domain's codes (a CodeDomain's list, then the missing values'), or its format. */
@@ -248,6 +275,8 @@ export function codebookOf(
 		from: Indexed,
 		domain: Record<string, unknown> | undefined,
 		missingRef: unknown,
+		/** The question's own ResponseCardinality, when the domain shown is the question's. */
+		cardinality: unknown,
 	): Pick<Entry, "responses" | "format"> => {
 		const from_: Ref[] = [];
 		const rows: Row[] = [];
@@ -277,7 +306,9 @@ export function codebookOf(
 			from_.push(refOf(representation, lang));
 		}
 		const many =
-			(num(asObj(domain?.ResponseCardinality)?.MaximumResponses) ?? 1) > 1;
+			(num(
+				asObj(domain?.ResponseCardinality ?? cardinality)?.MaximumResponses,
+			) ?? 1) > 1;
 		const responses =
 			list !== undefined || rows.length > 0
 				? { responses: { many, rows, from: from_ } }
@@ -401,9 +432,13 @@ export function codebookOf(
 	const entryOf = (v: Indexed | undefined, q: Indexed | undefined): Entry => {
 		const principal = (v ?? q) as Indexed;
 		const representation = asObj(v?.item.VariableRepresentation);
-		const domain =
+		const recorded =
 			asObj(representation?.ValueRepresentation) ??
-			asObj(q?.item.ResponseDomain);
+			managed(v, representation?.ValueRepresentationReference);
+		const domain =
+			recorded ??
+			asObj(q?.item.ResponseDomain) ??
+			managed(q, q?.item.ResponseDomainReference);
 		// Where the question is asked; where an ask binds its answer into this variable, only there.
 		const all = q === undefined ? [] : (flow.asked.get(latestOf(q).urn) ?? []);
 		const out = v?.item.OutParameter;
@@ -470,7 +505,13 @@ export function codebookOf(
 			...(name !== undefined && { name }),
 			...(label !== undefined && { label }),
 			...(question !== undefined && { question }),
-			...valuesOf(principal, domain, representation?.MissingValuesReference),
+			...valuesOf(
+				principal,
+				domain,
+				representation?.MissingValuesReference,
+				// A select-all question's limit isn't each option variable's.
+				recorded === undefined ? q?.item.ResponseCardinality : undefined,
+			),
 			universes: share(
 				universes,
 				unique([

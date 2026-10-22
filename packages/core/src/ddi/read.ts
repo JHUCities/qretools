@@ -57,8 +57,11 @@ export interface Indexed {
 	readonly owner?: Indexed;
 }
 
-/** How deep `ddiIndexOf` searches inside an item for definitions. */
-const DEPTH = 64;
+/**
+ * How deep a reader of DDI goes inside an item, so a hostile document can't overflow the
+ * stack; real DDI nests a few levels.
+ */
+export const DDI_DEPTH = 64;
 
 export interface DdiIndex {
 	/** Every item, by its URN (`urnKey`). */
@@ -137,10 +140,10 @@ export function ddiIndexOf(doc: unknown): DdiIndex {
 			latest.set(parts.item, it);
 		return it;
 	};
-	// shortcut: nesting deeper than DEPTH isn't searched, so a hostile document can't
+	// shortcut: nesting deeper than DDI_DEPTH isn't searched, so a hostile document can't
 	// overflow the stack; real DDI nests a few levels. Raise it if a producer needs more.
 	const within = (o: JsonObject, owner: Indexed, depth = 0) => {
-		if (depth > DEPTH) return;
+		if (depth > DDI_DEPTH) return;
 		for (const [field, value] of Object.entries(o)) {
 			if (field.includes("Reference")) continue;
 			for (const x of Array.isArray(value) ? value : [value]) {
