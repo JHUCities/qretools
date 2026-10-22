@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { asList, ddiIndexOf, deref, latestOf, refUrn, words } from "./read.ts";
+import {
+	asList,
+	ddiIndexOf,
+	deref,
+	isReference,
+	latestOf,
+	refUrn,
+	words,
+} from "./read.ts";
 
 const label = (...values: [string, string][]) => [
 	{
@@ -36,6 +44,26 @@ describe("asList", () => {
 		expect(asList([{ a: 1 }, 2, null, [3]])).toEqual([{ a: 1 }]);
 		expect(asList({ a: 1 })).toEqual([{ a: 1 }]);
 		expect(asList("x")).toEqual([]);
+	});
+});
+
+describe("isReference", () => {
+	it("is a string, or an object of nothing but a reference's or an identity's keys", () => {
+		for (const r of [
+			"urn:ddi:a:b:1",
+			{ $type: "Variable", value: ["a", "b", "1"] },
+			{ URN: "urn:ddi:a:b:1" },
+			{ Agency: "a", ID: "b", Version: "1", TypeOfObject: "Variable" },
+		])
+			expect(isReference(r)).toBe(true);
+		for (const r of [
+			{ URN: "urn:ddi:a:b:1", ParameterName: [] },
+			{ $type: "Variable", value: [], URN: "urn:ddi:a:b:1" },
+			{},
+			1,
+			null,
+		])
+			expect(isReference(r)).toBe(false);
 	});
 });
 
@@ -142,6 +170,42 @@ describe("ddiIndexOf and deref", () => {
 			"urn:ddi:a:l.1:1",
 		);
 		expect(deref(nested, "urn:ddi:a:gone:1")).toBeUndefined();
+	});
+
+	it("indexes a parameter defined in a …Reference field", () => {
+		const loop = ddiIndexOf({
+			Loop: {
+				l: {
+					URN: "urn:ddi:a:l:1",
+					LoopVariableReference: {
+						URN: "urn:ddi:a:l.i:1",
+						ParameterName: [{ Content: [] }],
+					},
+				},
+			},
+		});
+		expect(deref(loop, "urn:ddi:a:l.i:1")?.owner?.urn).toBe("urn:ddi:a:l:1");
+	});
+
+	it("never lets a copy in a …Reference field replace the real definition", () => {
+		const copy = {
+			URN: "urn:ddi:a:q.out:1",
+			ParameterName: [{ Content: [] }],
+		};
+		const variable = {
+			v: { URN: "urn:ddi:a:v:1", SourceParameterReference: copy },
+		};
+		const question = {
+			q: { URN: "urn:ddi:a:q:1", OutParameter: [copy] },
+		};
+		// Whichever the walk meets first.
+		for (const doc of [
+			{ Variable: variable, QuestionItem: question },
+			{ QuestionItem: question, Variable: variable },
+		])
+			expect(deref(ddiIndexOf(doc), "urn:ddi:a:q.out:1")?.owner?.urn).toBe(
+				"urn:ddi:a:q:1",
+			);
 	});
 
 	it("never lets a nested object replace an item", () => {

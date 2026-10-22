@@ -113,8 +113,10 @@ const urnFrom = (o: JsonObject): string | undefined => {
  * A document's items by URN: each object under each root key whose value is an object
  * (`Variable: { "a:id:1": {…} }`), and every identified object written inside one at
  * any depth (a question's parameters, a response domain's or a command's, a list's
- * codes and their codes), which references name too. A field named `…Reference…` is a
- * reference, never a definition, so it isn't searched. An object with neither a URN
+ * codes and their codes), which references name too. A field named `…Reference…` holds
+ * references, except where it holds a structure (`isReference`): the schema writes some
+ * definitions there (a loop's or a computation's parameter), so those are searched last,
+ * and a copy of a definition found there never replaces the real one. An object with neither a URN
  * nor an Agency and ID can't be referred to, so it isn't indexed; a nested one never
  * replaces an item already indexed. Total: anything else is no items.
  */
@@ -140,12 +142,20 @@ export function ddiIndexOf(doc: unknown): DdiIndex {
 			latest.set(parts.item, it);
 		return it;
 	};
+	const structures: [string, JsonObject, Indexed, number][] = [];
 	// shortcut: nesting deeper than DDI_DEPTH isn't searched, so a hostile document can't
 	// overflow the stack; real DDI nests a few levels. Raise it if a producer needs more.
 	const within = (o: JsonObject, owner: Indexed, depth = 0) => {
 		if (depth > DDI_DEPTH) return;
 		for (const [field, value] of Object.entries(o)) {
-			if (field.includes("Reference")) continue;
+			if (field.includes("Reference")) {
+				for (const x of Array.isArray(value) ? value : [value]) {
+					const nested = asObj(x);
+					if (nested !== undefined && !isReference(nested))
+						structures.push([field, nested, owner, depth + 1]);
+				}
+				continue;
+			}
 			for (const x of Array.isArray(value) ? value : [value]) {
 				const nested = asObj(x);
 				if (nested === undefined) continue;
@@ -161,6 +171,10 @@ export function ddiIndexOf(doc: unknown): DdiIndex {
 		}),
 	);
 	for (const [o, it] of roots) within(o, it);
+	// shortcut: a full parameter in a SourceParameterReference stands in for one the document
+	// lacks, so that reference doesn't read as dangling; in 4.0 the schema calls it a definition.
+	for (const [field, o, owner, depth] of structures)
+		if (depth <= DDI_DEPTH) within(o, add(field, o, owner) ?? owner, depth);
 	return { byUrn, latest };
 }
 
@@ -168,6 +182,25 @@ export function ddiIndexOf(doc: unknown): DdiIndex {
 export const latestOf = (index: DdiIndex, it: Indexed): Indexed => {
 	const parts = partsOf(it.urn);
 	return (parts === undefined ? undefined : index.latest.get(parts.item)) ?? it;
+};
+
+const REFERENCE_KEYS = [
+	new Set(["$type", "value"]),
+	new Set(["URN", "Agency", "ID", "Version", "TypeOfObject"]),
+];
+
+/**
+ * Whether a value is written as a reference, in a form `refUrn` reads: a string, or an
+ * object of nothing but the schema's `$type` and `value`, or of an identity (URN, Agency,
+ * ID, Version). Anything more is a structure, such as a parameter defined in place.
+ */
+export const isReference = (j: unknown): boolean => {
+	if (typeof j === "string") return true;
+	const keys = Object.keys(asObj(j) ?? {});
+	return (
+		keys.length > 0 &&
+		REFERENCE_KEYS.some((allowed) => keys.every((k) => allowed.has(k)))
+	);
 };
 
 /**
