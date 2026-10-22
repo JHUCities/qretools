@@ -19,6 +19,7 @@ import {
 	deref,
 	err,
 	type Indexed,
+	itemKeyOf,
 	latestOf as latestIn,
 	ok,
 	type Result,
@@ -136,6 +137,8 @@ export interface Entry {
 }
 
 export interface Codebook {
+	/** The language asked for: what the text is in where the document has it. */
+	readonly lang?: string;
 	/** The first instrument's label, else its name. */
 	readonly title?: string;
 	/** In the instruments' order where there are any, the rest in document order. */
@@ -215,6 +218,8 @@ export function codebookOf(
 	/** The highest version of an item: a question's flow is keyed by it, whichever version is cited. */
 	const latestOf = (it: Indexed): Indexed => latestIn(index, it);
 	const flow = flowOf(index, lang);
+	/** A shared item's key at every version: each is listed once, at its newest. */
+	const keyOf = (it: Indexed): string => itemKeyOf(it.urn) ?? it.urn;
 
 	const concepts = new Map<string, Described>();
 	const universes = new Map<string, Described>();
@@ -233,7 +238,7 @@ export function codebookOf(
 	};
 	const share = (into: Map<string, Described>, its: readonly Indexed[]) => {
 		for (const it of its)
-			if (!into.has(it.urn)) into.set(it.urn, described(it));
+			if (!into.has(keyOf(it))) into.set(keyOf(it), described(latestOf(it)));
 		return its.map((it) => refOf(it, lang));
 	};
 
@@ -269,6 +274,14 @@ export function codebookOf(
 		return $type === undefined ? it.item : { ...it.item, $type };
 	};
 
+	/** A missing-values representation's codes, each marked missing. */
+	// shortcut: missing values given as numeric or text ranges aren't read, only codes.
+	const missingRowsOf = (representation: Indexed): Row[] =>
+		asList(representation.item.MissingCodeRepresentation).flatMap((m) => {
+			const l = follow(m.CodeListReference);
+			return l === undefined ? [] : rowsOf(l, true);
+		});
+
 	/** A domain's codes (a CodeDomain's list, then the missing values'), or its format. */
 	const valuesOf = (
 		domain: Record<string, unknown> | undefined,
@@ -284,22 +297,24 @@ export function codebookOf(
 				: follow(domain.CodeListReference);
 		if (list !== undefined) {
 			const own = rowsOf(list, false);
-			if (!codeLists.has(list.urn)) codeLists.set(list.urn, listed(list, own));
+			if (!codeLists.has(keyOf(list))) {
+				const latest = latestOf(list);
+				codeLists.set(keyOf(list), listed(latest, rowsOf(latest, false)));
+			}
 			rows.push(...own);
 			from.push(refOf(list, lang));
 		}
 		const representation =
 			missingRef === undefined ? undefined : follow(missingRef);
 		if (representation !== undefined) {
-			// shortcut: missing values given as numeric or text ranges aren't read, only codes.
-			const own = asList(representation.item.MissingCodeRepresentation).flatMap(
-				(m) => {
-					const l = follow(m.CodeListReference);
-					return l === undefined ? [] : rowsOf(l, true);
-				},
-			);
-			if (!missing.has(representation.urn))
-				missing.set(representation.urn, listed(representation, own));
+			const own = missingRowsOf(representation);
+			if (!missing.has(keyOf(representation))) {
+				const latest = latestOf(representation);
+				missing.set(
+					keyOf(representation),
+					listed(latest, missingRowsOf(latest)),
+				);
+			}
 			rows.push(...own);
 			from.push(refOf(representation, lang));
 		}
@@ -557,6 +572,7 @@ export function codebookOf(
 			: (words(instrument.item.Label, lang) ??
 				words(instrument.item.InstrumentName, lang));
 	return {
+		...(lang !== undefined && { lang }),
 		...(title !== undefined && { title }),
 		entries: entries.map((e) => e.entry),
 		shared: {
