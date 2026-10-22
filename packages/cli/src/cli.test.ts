@@ -408,8 +408,93 @@ describe("qretools codebook", () => {
 		expect(r.code).toBe(1);
 		expect(r.err).toMatch(/declares no DDI agency/);
 		expect(r.written).toEqual({});
-		const s = await run("codebook", SAMPLE, "--strict");
-		expect(s.err).toMatch(/`--strict` isn't an option of `codebook`/);
+		const s = await run("codebook", SAMPLE, "--qsf");
+		expect(s.err).toMatch(/`--qsf` isn't an option of `codebook`/);
+	});
+
+	/** A DDI document written to a file of its own, for `codebook` to read. */
+	const fileOf = async (text: string): Promise<string> => {
+		const file = join(
+			await mkdtemp(join(tmpdir(), "qretools-cb-")),
+			"ddi.json",
+		);
+		await writeFile(file, text);
+		return file;
+	};
+	const idsOf = (page: string) =>
+		[...page.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]).sort();
+
+	it("reads any DDI document from a file, as it reads the workspace's", async () => {
+		const file = await fileOf((await run("export", SAMPLE)).out);
+		const r = await run("codebook", file);
+		expect(r).toMatchObject({ code: 0, err: "" });
+		expect(r.out).toBe((await run("codebook", SAMPLE)).out);
+	});
+
+	it("keeps every anchor when every version changes", async () => {
+		const ddi: unknown = JSON.parse((await run("export", SAMPLE)).out);
+		// Every version 1 made 2: Version fields, URNs and the schema's reference values.
+		const bump = (j: unknown, key?: string): unknown =>
+			typeof j === "string"
+				? key === "Version" && j === "1"
+					? "2"
+					: j.replace(/^(urn:ddi:[^:]+:[^:]+):1$/i, "$1:2")
+				: Array.isArray(j)
+					? j.map((x, i) =>
+							key === "value" && i === 2 && x === "1" ? "2" : bump(x),
+						)
+					: j !== null && typeof j === "object"
+						? Object.fromEntries(
+								Object.entries(j).map(([k, v]) => [k, bump(v, k)]),
+							)
+						: j;
+		const text = JSON.stringify(bump(ddi));
+		// (A bucket's keys, "agency:id:1", are labels, not versions: left as they are.)
+		const one = /"urn:ddi:[^"]*:1"|"Version":"1"|,"1"\]/;
+		expect(JSON.stringify(ddi)).toMatch(one);
+		expect(text).not.toMatch(one);
+		const before = await run("codebook", await fileOf(JSON.stringify(ddi)));
+		const after = await run("codebook", await fileOf(text));
+		expect(after).toMatchObject({ code: 0, err: "" });
+		expect(idsOf(after.out)).toEqual(idsOf(before.out));
+		expect(idsOf(after.out).length).toBeGreaterThan(10);
+	});
+
+	it("says a reference that leads nowhere as check says a finding, and fails on it only when strict", async () => {
+		const file = await fileOf(
+			JSON.stringify({
+				Variable: {
+					v: { URN: "urn:ddi:a:v:1", QuestionReference: ["urn:ddi:a:gone:1"] },
+				},
+			}),
+		);
+		const line = `${file}: error: urn:ddi:a:v:1: \`urn:ddi:a:gone:1\` isn't in the document. [codebook-dangling]\n`;
+		const r = await run("codebook", file);
+		expect(r).toMatchObject({ code: 0, err: line });
+		expect(r.out).toMatch(/^<!doctype html>/);
+		const strict = await run("codebook", file, "--strict", "-o", "cb.html");
+		expect(strict).toMatchObject({ code: 1, err: line });
+		expect(strict.written["cb.html"]).toMatch(/^<!doctype html>/);
+	});
+
+	it("writes nothing for a file that isn't a DDI document, or isn't there", async () => {
+		for (const [text, said] of [
+			[
+				"[1, 2]",
+				/Not written: This isn't a DDI document.*\[codebook-unreadable\]/,
+			],
+			["{", /Not written: this isn't JSON.*\[codebook-unreadable\]/],
+		] as const) {
+			const r = await run("codebook", await fileOf(text), "-o", "cb.html");
+			expect(r).toMatchObject({ code: 1, out: "", written: {} });
+			expect(r.err).toMatch(said);
+		}
+		const gone = await run(
+			"codebook",
+			join(tmpdir(), "qretools-no-such-file.json"),
+		);
+		expect(gone).toMatchObject({ code: 2, out: "" });
+		expect(gone.err).toMatch(/^Can't read/);
 	});
 });
 

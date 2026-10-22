@@ -17,6 +17,7 @@ qretools check path/to/workspace --strict   # warnings fail too
 qretools export path/to/workspace -o questions.json   # its questions' DDI, validated
 qretools build path/to/workspace             # its last commit's DDI, versioned from git history, in path/to/workspace/dist/ddi.json
 qretools codebook path/to/workspace -o codebook.html  # its questions' codebook, one HTML page
+qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -83,8 +84,27 @@ opened from a file, attached or published as it is. Each variable has its name a
 label, its question's words, its codes (missing values after the others) and, where it
 has them, its format, universe and concept, and an anchor of its own (`codebook.html#org.example:variable-consent`)
 that stays the same when its version changes. Its title is "Codebook": a workspace has
-no name of its own yet. A codebook of one instrument (its routing beside each question)
-isn't written yet.
+no name of its own yet.
+
+Given a file, `codebook` reads it as DDI-Lifecycle 4.0 JSON, any producer's. So a
+codebook of one instrument, its routing beside each question, is its export's:
+
+```sh
+qretools instrument export instruments/wave1.yaml -o wave1.json
+qretools codebook wave1.json -o wave1.html
+```
+
+and in CI, the codebook of what `build` versioned, whose anchors are those of every
+earlier build, since an anchor is the item without its version:
+
+```sh
+qretools build . -o dist
+qretools codebook dist/ddi.json -o dist/codebook.html --strict
+```
+
+A reference to an item the document doesn't have is on the page, and said on stderr as
+`check` says a finding (`ddi.json: error: <where>: <message> [codebook-dangling]`);
+with `--strict` it fails the command, the page written all the same.
 
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses
