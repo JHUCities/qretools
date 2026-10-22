@@ -1,6 +1,6 @@
 {
 	"name": "qretools",
-	"version": "2.0.0-alpha.2",
+	"version": "2.0.0-alpha.3",
 	"type": "module",
 	"description": "The qretools command: check and export a workspace and its instruments, for CI and the terminal",
 	"license": "MIT",
