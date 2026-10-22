@@ -1,10 +1,12 @@
 /**
- * DDI another producer might write: references as URN strings, as objects and without a
+ * DDI written loosely, as a converter or a hand might, which the official schema would
+ * refuse: the reader tolerates it. References as URN strings, as objects and without a
  * version, a missing code marked on its category, questions no variable records, two
  * languages, an item type the codebook doesn't know, an ElseIf, a variable derived by a
  * GenerationInstruction and one by a ComputationItem, an ask bound to its variable,
  * domains by reference to managed representations, nested codes, and a select-all limit
- * on the question item. Written by hand, for the reader's generality.
+ * on the question item. Written by hand, for the reader's generality; valid.test.ts holds
+ * a document the schema accepts.
  */
 import { DDI_DEPTH } from "@qretools/core";
 import { describe, expect, it } from "vitest";
@@ -258,7 +260,7 @@ const FOREIGN = {
 	},
 };
 
-describe("a codebook of another producer's DDI", () => {
+describe("a codebook of loosely written DDI", () => {
 	const parsed = parse(FOREIGN);
 	if (!parsed.ok) throw new Error("unparsed");
 
