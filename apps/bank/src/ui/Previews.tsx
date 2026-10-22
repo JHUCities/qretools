@@ -4,6 +4,7 @@ import { Link } from "@primer/react";
 import { InlineMessage } from "@primer/react/experimental";
 import {
 	blocksOf,
+	type CodebookFinding,
 	type Codebook as CodebookModel,
 	type Described,
 	type Entry,
@@ -19,6 +20,7 @@ import {
 	itemKeyOf,
 	type Resolved,
 	type RespondentView,
+	type Result,
 	type Slot,
 	sharedOf,
 	type TextSlot,
@@ -516,6 +518,7 @@ export function Codebook({
 							<caption>Options</caption>
 							<thead>
 								<tr>
+									<th scope="col">Code</th>
 									<th scope="col">Option</th>
 									<th scope="col">Variable</th>
 								</tr>
@@ -524,11 +527,13 @@ export function Codebook({
 								{b.options.map((o) => (
 									<tr key={o.urn}>
 										<th scope="row">
-											<code className="code">{o.group?.option.code}</code>{" "}
+											<code className="code">{o.group?.option.code}</code>
+										</th>
+										<td>
 											{o.group?.option.label && (
 												<Inline text={o.group.option.label} />
 											)}
-										</th>
+										</td>
 										<td>
 											{o.name !== undefined && (
 												<code className="code">{o.name}</code>
@@ -554,6 +559,26 @@ export function Codebook({
 				);
 			})}
 		</div>
+	);
+}
+
+/**
+ * The codebook pane: the codebook, or why its DDI can't be read. The app's own documents
+ * always read; another's may not.
+ */
+export function CodebookPane({
+	read,
+	follow,
+}: {
+	read: Result<CodebookModel, readonly CodebookFinding[]>;
+	follow?: Follow;
+}) {
+	return read.ok ? (
+		<Codebook codebook={read.value} {...(follow && { follow })} />
+	) : (
+		<InlineMessage variant="critical">
+			The codebook can't be read: {read.error.map((f) => f.message).join(" ")}
+		</InlineMessage>
 	);
 }
 

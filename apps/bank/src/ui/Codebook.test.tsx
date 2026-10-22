@@ -14,7 +14,7 @@ import {
 } from "@qretools/core";
 import { render, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Codebook, type Follow } from "./Previews.js";
+import { Codebook, CodebookPane, type Follow } from "./Previews.js";
 
 const ENV = schemeEnv([
 	{ kind: "concept", name: "trust", text: "label: Trust in neighbors\n" },
@@ -118,6 +118,27 @@ describe("the codebook pane", () => {
 		expect(c.textContent).not.toMatch(/untitled|urn:|fill in/i);
 	});
 
+	it("draws no Concept row for a concept name nothing has", () => {
+		const c = pane(
+			QUESTION.replace("concept: trust", "concept: nobody_has_this"),
+		);
+		const terms = [...c.querySelectorAll("dt")].map((dt) => dt.textContent);
+		// The rest of the pane is there: the question, and the terms it does have.
+		expect(c.querySelector("blockquote")?.textContent).toMatch(/be trusted/);
+		expect(terms).toContain("Universe");
+		expect(terms).not.toContain("Concept");
+	});
+
+	it("says why a codebook can't be read, where it would be", () => {
+		const refused = parse([1]);
+		if (refused.ok) throw new Error("read");
+		const c = render(<CodebookPane read={refused} />).container;
+		expect(c.textContent).toMatch(
+			/^The codebook can't be read: This isn't a DDI document/,
+		);
+		expect(c.querySelector("table")).toBeNull();
+	});
+
 	it("shows a fill in the question's words as the gap it is", () => {
 		const c = pane(
 			"name: utilities\ntext: You pay {{rent}} a month. Does that include utilities?\nintent: i\nopen: {}\nfills:\n  rent: number\n",
@@ -158,9 +179,18 @@ responses:
 		expect(c.querySelectorAll("blockquote")).toHaveLength(1);
 		const [options, values] = [...c.querySelectorAll("table")];
 		expect(options?.caption?.textContent).toBe("Options");
+		const rows = [...(options?.tBodies[0]?.rows ?? [])];
 		expect(
-			[...(options?.tBodies[0]?.rows ?? [])].map((r) => r.textContent),
-		).toEqual(["1 Dogpets_dog Pets -- Dog", "2 Catpets_cat Cat"]);
+			rows.map((r) => [...r.cells].map((cell) => cell.textContent)),
+		).toEqual([
+			["1", "Dog", "pets_dog Pets -- Dog"],
+			["2", "Cat", "pets_cat Cat"],
+		]);
+		// A row's header is its key alone, so the code column can stay as narrow as its codes.
+		expect(rows.map((r) => r.querySelector("th")?.textContent)).toEqual([
+			"1",
+			"2",
+		]);
 		// Select all's list has no file here: named nowhere, not a green name for nothing.
 		expect(values?.caption?.textContent).toBe("Each option's values");
 		expect(c.querySelectorAll("table")).toHaveLength(2);

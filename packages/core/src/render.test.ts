@@ -37,6 +37,21 @@ describe("respondentView", () => {
 		});
 	});
 
+	it("shows a shared instruction's text, with its name", () => {
+		const env = {
+			...EMPTY_ENV,
+			instructions: { select_one: { text: "Select one" } },
+		};
+		const d = parseSurface(
+			"name: q\ntext: Q?\nintent: i\ninstruction: select_one\nopen: {}\n",
+			env,
+		).draft;
+		expect(respondentView(d).instruction).toEqual({
+			text: "Select one",
+			ref: "select_one",
+		});
+	});
+
 	it("evaluates around holes", () => {
 		const v = respondentView(draftOf(""));
 		expect(v.text.kind).toBe("hole");
