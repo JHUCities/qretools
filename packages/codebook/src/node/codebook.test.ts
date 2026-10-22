@@ -9,6 +9,7 @@ import {
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
+import { pageOf } from "../html.ts";
 import { type Codebook, codebookOf, parse } from "../model.ts";
 import { asking, outline } from "../testing.ts";
 
@@ -169,6 +170,12 @@ describe("the example bank's codebook", () => {
 			  ],
 			}
 		`);
+	});
+
+	it("writes its page", async () => {
+		await expect(pageOf(codebook(await bank()))).toMatchFileSnapshot(
+			"__snapshots__/bank.html",
+		);
 	});
 
 	it("keeps provenance as written: the blob a version was made from", async () => {
