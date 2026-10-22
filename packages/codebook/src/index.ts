@@ -4,7 +4,7 @@
  * `pageOf` writes it as one HTML page. Pure, as the core is: values in, values out.
  */
 export type { Asking, Command, Condition } from "./flow.ts";
-export { pageOf } from "./html.ts";
+export { blocksOf, formatWords, pageOf } from "./html.ts";
 export {
 	type Codebook,
 	type CodebookCode,
