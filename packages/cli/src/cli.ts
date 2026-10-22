@@ -1,6 +1,7 @@
 /**
  * The `qretools` command: `check` a workspace directory's findings (its questions',
  * shared files' and instruments'), as compilers report them, `export` its questions' DDI,
+ * write their `codebook` (an HTML page of that DDI),
  * or `build` it: the DDI of its last commit, each item at the version its history gives. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
@@ -8,6 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
 	type Address,
 	addressOf,
@@ -72,6 +74,7 @@ type RemoteAddress = Extract<Address, { kind: "remote" }>;
 const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
+  qretools codebook [dir] [-o file] Write its questions' codebook: one HTML page of that DDI
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
@@ -120,7 +123,12 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		(args.values.help ? io.out : io.err)(`${USAGE}\n`);
 		return args.values.help ? OK : USAGE_ERROR;
 	}
-	if (command !== "check" && command !== "export" && command !== "build") {
+	if (
+		command !== "check" &&
+		command !== "export" &&
+		command !== "build" &&
+		command !== "codebook"
+	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
@@ -169,8 +177,35 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	return exportBank(bank, args.values.output, io);
+	return exportBank(
+		bank,
+		args.values.output,
+		io,
+		command === "codebook" ? codebookPage(io) : asJson,
+	);
 }
+
+/** The DDI as `export` writes it. */
+const asJson = (document: DdiDocument): string =>
+	`${JSON.stringify(document, null, 2)}\n`;
+
+/**
+ * The DDI as its codebook: one HTML page. A reference to an item the document doesn't
+ * have is on the page, and said here too, since CI never reads the page.
+ */
+const codebookPage =
+	(io: Io) =>
+	(document: DdiDocument): string | undefined => {
+		const read = readDdi(document);
+		if (!read.ok) {
+			for (const f of read.error) io.err(`Not written: ${f.message}\n`);
+			return undefined;
+		}
+		const codebook = codebookOf(read.value);
+		for (const f of codebook.findings)
+			io.err(`${f.path}: ${f.message.replaceAll("`", "")}\n`);
+		return pageOf(codebook);
+	};
 
 function parse(argv: readonly string[]) {
 	return parseArgs({
@@ -314,12 +349,15 @@ async function checkWorkspace(
  * The workspace's questions' DDI: every question's items, keyed once. Refused, with reasons and nothing
  * written, when it would be wrong: no declared agency, two items under one identity, or
  * a document the official schema rejects. Holes don't refuse it: they leave elements out.
- * Shared items no question uses aren't in it.
+ * Shared items no question uses aren't in it. Written as `write` makes it: JSON, or its
+ * codebook.
  */
 async function exportBank(
 	bank: Bank,
 	output: string | undefined,
 	io: Io,
+	/** How the document is written: as JSON, or as a codebook; undefined when it can't be, said why. */
+	write: (document: DdiDocument) => string | undefined,
 ): Promise<number> {
 	// Each question's items, made as an instrument brings them.
 	const sources = Object.keys(bank.questions)
@@ -353,7 +391,8 @@ async function exportBank(
 			`${incomplete} files have something to fill in or fix; what they lack is left out of the DDI (\`qretools check\` lists it).\n`,
 		);
 	if (refusal !== undefined) return refused(refusal, io);
-	const text = `${JSON.stringify(document, null, 2)}\n`;
+	const text = write(document);
+	if (text === undefined) return PROBLEMS;
 	if (output === undefined) io.out(text);
 	else await io.writeFile(output, text);
 	return OK;
@@ -390,7 +429,7 @@ async function build(
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	const code = await exportBank(bank, join(out, "ddi.json"), io);
+	const code = await exportBank(bank, join(out, "ddi.json"), io, asJson);
 	// Only for a build that exported: a refused one is no release.
 	if (code === OK && message !== undefined)
 		await io.writeFile(message, tagMessage(versions, pkg.version));

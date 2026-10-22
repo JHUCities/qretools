@@ -16,6 +16,7 @@ qretools check path/to/workspace            # findings, one per line; exit 1 on 
 qretools check path/to/workspace --strict   # warnings fail too
 qretools export path/to/workspace -o questions.json   # its questions' DDI, validated
 qretools build path/to/workspace             # its last commit's DDI, versioned from git history, in path/to/workspace/dist/ddi.json
+qretools codebook path/to/workspace -o codebook.html  # its questions' codebook, one HTML page
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -75,6 +76,15 @@ git's cleanup leaves it whole: `git tag -a --cleanup=verbatim -F <file> v2 HEAD`
 workspace can do that in a workflow it runs by hand with the tag's name (qretools-gss's
 `release.yml` is one): the tag points at the default branch's own commit, and only the tag
 is pushed.
+
+`codebook` writes the codebook of the DDI `export` writes, refused as `export` refuses:
+one HTML page with its style inside it, no script and nothing fetched, so it can be
+opened from a file, attached or published as it is. Each variable has its name and
+label, its question's words, its codes (missing values after the others) and, where it
+has them, its format, universe and concept, and an anchor of its own (`codebook.html#org.example:variable-consent`)
+that stays the same when its version changes. Its title is "Codebook": a workspace has
+no name of its own yet. A codebook of one instrument (its routing beside each question)
+isn't written yet.
 
 `check` writes `path:line:col: level: message [code]`, as compilers do, so editors and
 CI annotate it. `export` writes every question's DDI items in one document, and refuses

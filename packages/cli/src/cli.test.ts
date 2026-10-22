@@ -384,6 +384,35 @@ describe("qretools export", () => {
 	});
 });
 
+describe("qretools codebook", () => {
+	it("writes the codebook of the DDI export writes: an entry per variable, each with its anchor", async () => {
+		const ddi = JSON.parse((await run("export", SAMPLE)).out);
+		const r = await run("codebook", SAMPLE, "-o", "codebook.html");
+		expect(r).toMatchObject({ code: 0, out: "", err: "" });
+		const page = r.written["codebook.html"] ?? "";
+		expect(page).toMatch(/^<!doctype html>/);
+		const variables = Object.values<{ ID: string }>(ddi.Variable);
+		expect(page.match(/<article id="[^"]*:variable-/g)).toHaveLength(
+			variables.length,
+		);
+		for (const v of variables)
+			expect(page).toContain(`id="org.example:${v.ID}"`);
+		expect((await run("codebook", SAMPLE)).out).toBe(page);
+	});
+
+	it("is refused as the export is, and takes only its options", async () => {
+		const ws = await mkdtemp(join(tmpdir(), "qretools-cb-"));
+		await cp(SAMPLE, ws, { recursive: true });
+		await writeFile(join(ws, "workspace.yaml"), "# No agency.\n");
+		const r = await run("codebook", ws, "-o", "codebook.html");
+		expect(r.code).toBe(1);
+		expect(r.err).toMatch(/declares no DDI agency/);
+		expect(r.written).toEqual({});
+		const s = await run("codebook", SAMPLE, "--strict");
+		expect(s.err).toMatch(/`--strict` isn't an option of `codebook`/);
+	});
+});
+
 describe("the command under real Node", () => {
 	it("runs from source with no build or loader", async () => {
 		const exec = promisify(execFile);
@@ -397,7 +426,10 @@ describe("the command under real Node", () => {
 		expect(stderr).toMatch(/^26 files/);
 		const exported = await exec(process.execPath, [bin, "export", SAMPLE]);
 		expect(JSON.parse(exported.stdout).QuestionItem).toBeDefined();
-		// The export package too, reached through the workspace's link to its source.
+		// The codebook package too.
+		const codebook = await exec(process.execPath, [bin, "codebook", SAMPLE]);
+		expect(codebook.stdout).toMatch(/^<!doctype html>/);
+		// The Qualtrics export package too, reached through the workspace's link to its source.
 		const qsf = await exec(process.execPath, [
 			bin,
 			"instrument",
@@ -406,14 +438,19 @@ describe("the command under real Node", () => {
 			"--qsf",
 		]);
 		expect(JSON.parse(qsf.stdout).SurveyEntry.SurveyName).toBe("households");
-		// Three real Node processes, each loading the core from source: slower than the
+		// Four real Node processes, each loading the core from source: slower than the
 		// default 5s on a CI runner, where it timed out.
 	}, 30_000);
 
 	it("imports the core's own modules by their .ts names, which Node can find", async () => {
 		const stale: string[] = [];
 		// The command runs the packages it uses from their source too.
-		for (const root of ["../../core/src", "../../qsf/src", "."])
+		for (const root of [
+			"../../core/src",
+			"../../qsf/src",
+			"../../codebook/src",
+			".",
+		])
 			for await (const file of glob("**/*.ts", { cwd: here(root) }))
 				if (
 					/from\s+"\.{1,2}\/[^"]*\.js"/.test(

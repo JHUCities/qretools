@@ -75,6 +75,9 @@ importers:
 
   packages/cli:
     devDependencies:
+      '@qretools/codebook':
+        specifier: workspace:*
+        version: link:../codebook
       '@qretools/core':
         specifier: workspace:*
         version: link:../core
