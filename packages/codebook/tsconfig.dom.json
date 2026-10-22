@@ -1,0 +1,9 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"lib": ["ES2023", "DOM", "DOM.Iterable"]
+	},
+	// Tests that parse the page with a real HTML parser.
+	"include": ["src/dom"],
+	"exclude": []
+}
