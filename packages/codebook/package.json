@@ -1,0 +1,24 @@
+{
+	"name": "@qretools/codebook",
+	"version": "2.0.0-alpha.0",
+	"private": true,
+	"type": "module",
+	"description": "A codebook from any DDI-Lifecycle 4.0 document: its variables and questions as a render model",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+		"check": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && vitest run"
+	},
+	"dependencies": {
+		"@qretools/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.4",
+		"typescript": "^7.0.2",
+		"vite": "^8.3.0",
+		"vitest": "^5.0.1"
+	}
+}
