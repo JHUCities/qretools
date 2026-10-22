@@ -34,7 +34,7 @@
 		"@qretools/qsf": "workspace:*",
 		"@qretools/shell": "workspace:*",
 		"@types/node": "^26.6.4",
-		"rolldown": "1.2.9",
+		"rolldown": "1.2.15",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.0",
 		"vitest": "^5.0.1"
