@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** A codebook's page read back by a real parser: its structure, its anchors and its links. */
 import { describe, expect, it } from "vitest";
-import { pageOf } from "../html.ts";
+import { anchorOf, hrefOf, pageOf } from "../html.ts";
 import type { Codebook, Entry } from "../model.ts";
 import bankPage from "../node/__snapshots__/bank.html?raw";
 import type { Text } from "../text.ts";
@@ -115,21 +115,32 @@ const CODEBOOK: Codebook = {
 const read = (html: string): Document =>
 	new DOMParser().parseFromString(html, "text/html");
 
+/**
+ * The element a fragment indicates, as HTML's "find a potential indicated element" says: the
+ * fragment as written, else percent-decoded. jsdom's `:target` neither decodes nor updates
+ * after the first fragment, so the browser's rule is followed here instead.
+ */
+const indicated = (page: Document, href: string): Element | null => {
+	const fragment = href.slice(1);
+	return (
+		page.getElementById(fragment) ??
+		page.getElementById(decodeURIComponent(fragment))
+	);
+};
+
 /** Every id once, and every link to the page finds its id. */
 function linksHold(page: Document): void {
 	const ids = [...page.querySelectorAll("[id]")].map((e) => e.id);
 	expect(new Set(ids).size).toBe(ids.length);
 	for (const a of page.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'))
 		expect(
-			page.getElementById(
-				decodeURIComponent(a.getAttribute("href")?.slice(1) ?? ""),
-			),
+			indicated(page, a.getAttribute("href") ?? ""),
 			a.outerHTML,
 		).not.toBeNull();
 }
 
 /** Nothing fetched, nothing run. */
-function selfContained(html: string, page: Document): void {
+function selfContained(page: Document): void {
 	expect(
 		page.querySelectorAll("script, link[rel=stylesheet], img, iframe"),
 	).toHaveLength(0);
@@ -138,7 +149,12 @@ function selfContained(html: string, page: Document): void {
 	);
 	for (const a of page.querySelectorAll("a[href]:not([href^='#'])"))
 		expect(a.getAttribute("rel")).toBe("external");
-	expect(html).not.toMatch(/@import|url\(/);
+	// The document's own words may say "url(": only the style could fetch with it.
+	for (const style of page.querySelectorAll("style"))
+		expect(style.textContent).not.toMatch(/@import|url\(/);
+	for (const e of page.querySelectorAll("*"))
+		for (const a of e.attributes)
+			expect(a.name.startsWith("on"), `${e.tagName} ${a.name}`).toBe(false);
 }
 
 describe("a codebook's page", () => {
@@ -146,10 +162,69 @@ describe("a codebook's page", () => {
 	const page = read(html);
 
 	it("is one page, nothing fetched, every anchor once and every link found", () => {
-		selfContained(html, page);
+		selfContained(page);
 		linksHold(page);
 		expect(page.title).toBe("Pets & <people>");
-		expect(page.querySelector("main")?.lang).toBe("fr");
+	});
+
+	it("is in the codebook's language, its own words marked English", () => {
+		expect(page.documentElement.lang).toBe("fr");
+		for (const english of page.querySelectorAll(
+			"#contents, #variables, header p, dt, caption, thead",
+		))
+			expect(english.closest("[lang]")?.getAttribute("lang")).toBe("en");
+		// What the document says is in its own language.
+		expect(
+			page
+				.querySelector("#org\\.x\\:age blockquote")
+				?.closest("[lang]")
+				?.getAttribute("lang"),
+		).toBe("fr");
+		const { lang: _, ...unknown } = CODEBOOK;
+		expect(read(pageOf(unknown)).documentElement.hasAttribute("lang")).toBe(
+			false,
+		);
+		const english = read(pageOf({ ...CODEBOOK, lang: "en-GB" }));
+		expect(english.querySelectorAll("body [lang]")).toHaveLength(0);
+	});
+
+	it("links to the anchor a browser finds, its key percent-encoded but for colons", () => {
+		const cb = {
+			...CODEBOOK,
+			entries: [entry("a@b"), entry("é", { label: t("See a@b") })],
+		};
+		const at = read(pageOf(cb));
+		expect(
+			[...at.querySelectorAll('nav a[href^="#org"]')].map((a) =>
+				a.getAttribute("href"),
+			),
+		).toEqual(["#org.x:a%40b", "#org.x:%C3%A9"]);
+		linksHold(at);
+	});
+
+	it("names, never links, a key holding half a character", () => {
+		const half = "a\uD800";
+		expect(anchorOf(urn(half))).toBeUndefined();
+		expect(hrefOf(half)).toBe("#a%EF%BF%BD");
+		const at = read(pageOf({ ...CODEBOOK, entries: [entry(half)] }));
+		expect(at.querySelector("article")?.hasAttribute("id")).toBe(false);
+		linksHold(at);
+	});
+
+	it("keeps a select-all question's options together whichever version each cites", () => {
+		const cites = (id: string, code: string, version: string): Entry => ({
+			...option(id, code),
+			group: { question: urn("pets", version), option: { code, label: t(id) } },
+		});
+		const at = read(
+			pageOf({
+				...CODEBOOK,
+				entries: [cites("dog", "1", "1"), cites("cat", "2", "2")],
+			}),
+		);
+		expect(at.querySelectorAll("section.group")).toHaveLength(1);
+		expect(at.querySelectorAll("section.group article")).toHaveLength(2);
+		linksHold(at);
 	});
 
 	it("lists a select-all question's options together, where its first is", () => {
@@ -229,7 +304,7 @@ describe("a codebook's page", () => {
 describe("the example bank's page", () => {
 	it("is one page, nothing fetched, every anchor once and every link found", () => {
 		const page = read(bankPage);
-		selfContained(bankPage, page);
+		selfContained(page);
 		linksHold(page);
 		expect(page.querySelectorAll("main article").length).toBeGreaterThan(13);
 	});
