@@ -67,16 +67,52 @@ describe("<ddi-codebook>", async () => {
 			"age Age",
 		);
 		expect(a.querySelectorAll("main, header, h1")).toHaveLength(0);
+		// jsdom doesn't apply @scope, so only the rule's text is checked, not what it styles.
 		expect(a.querySelector("style")?.textContent).toMatch(/^@scope \{/);
 	});
 
-	it("reads the document in its own language", () => {
+	it("reads the document in the language asked for, and says what that is", () => {
 		const el = element();
 		el.ddi = DDI;
-		el.lang = "fr";
+		// Its own lang is what its content is in, as for any element: not a choice.
+		el.lang = "de";
+		const box = el.firstElementChild;
+		expect(box?.getAttribute("lang")).toBe("en");
+		el.language = "fr";
+		expect(el.getAttribute("language")).toBe("fr");
+		expect(el.firstElementChild?.getAttribute("lang")).toBe("fr");
 		expect(el.querySelector("#org\\.x\\:age-var h3")?.textContent).toBe(
 			"age Âge",
 		);
+		expect(el.querySelector("#ddi-contents")?.getAttribute("lang")).toBe("en");
+	});
+
+	it("writes itself once for each change, and not again for the same", async () => {
+		const once = document.createElement("ddi-codebook-once");
+		once.setAttribute("ddi", JSON.stringify(DDI));
+		once.setAttribute("language", "fr");
+		Object.assign(once, { href: () => undefined });
+		document.body.append(once);
+		const writes = new MutationObserver(() => {});
+		writes.observe(once, { childList: true });
+		const { DdiCodebook } = await import("../element/element.ts");
+		customElements.define("ddi-codebook-once", class extends DdiCodebook {});
+		// Upgraded: attributes, then the property set before, written once.
+		expect(writes.takeRecords()).toHaveLength(1);
+		const el = once as InstanceType<typeof DdiCodebook>;
+		const { ddi, href } = el;
+		el.ddi = ddi;
+		el.setAttribute("language", "fr");
+		el.href = href;
+		expect(writes.takeRecords()).toHaveLength(0);
+		// So a reader's place is kept: the link they're on keeps focus.
+		const link = universe(el);
+		link?.focus();
+		el.setAttribute("ddi", el.getAttribute("ddi") ?? "");
+		expect(document.activeElement).toBe(link);
+		el.language = "en";
+		expect(writes.takeRecords()).toHaveLength(1);
+		writes.disconnect();
 	});
 
 	it("keeps what was set on it before it was defined", async () => {
@@ -92,8 +128,13 @@ describe("<ddi-codebook>", async () => {
 		const el = element();
 		el.setAttribute("ddi", "{ not json");
 		expect(el.textContent).toMatch(/^The document given isn't JSON/);
+		expect(el.firstElementChild?.getAttribute("lang")).toBe("en");
 		el.ddi = [1];
 		expect(el.textContent).toMatch(/isn't a JSON object/);
+		// Text that wasn't JSON had no document: taking it away still empties it.
+		el.setAttribute("ddi", "{ not json");
+		el.removeAttribute("ddi");
+		expect(el.childNodes).toHaveLength(0);
 	});
 
 	it("empties when its document is taken away, by attribute or property", () => {
@@ -125,13 +166,20 @@ describe("<ddi-codebook>", async () => {
 		const link = universe(el);
 		if (link === null) throw new Error("no link");
 		const seen: CustomEvent[] = [];
-		document.addEventListener("ddi-follow", (e) => seen.push(e));
+		const listen = (e: CustomEvent) => seen.push(e);
+		document.addEventListener("ddi-follow", listen);
 		expect(click(link).defaultPrevented).toBe(false);
 		el.addEventListener("ddi-follow", (e) => e.preventDefault(), {
 			once: true,
 		});
 		expect(click(link).defaultPrevented).toBe(true);
-		expect(seen.map((e) => [e.target, e.detail])).toEqual([
+		// Enter on a focused link activates it as a click: the same event.
+		link.click();
+		document.removeEventListener("ddi-follow", listen);
+		// Composed, so a host in a shadow root hears it too.
+		expect(seen.every((e) => e.composed)).toBe(true);
+		expect(seen).toHaveLength(3);
+		expect(seen.slice(0, 2).map((e) => [e.target, e.detail])).toEqual([
 			[
 				link,
 				{
@@ -167,6 +215,9 @@ describe("<ddi-codebook>", async () => {
 			{ metaKey: true },
 			{ ctrlKey: true },
 			{ shiftKey: true },
+			{ altKey: true },
+			// A middle click fires auxclick in today's browsers; a click with it, defensively.
+			{ button: 1 },
 		])
 			expect(click(link, init).defaultPrevented).toBe(false);
 		const contents = el.querySelector("nav a");

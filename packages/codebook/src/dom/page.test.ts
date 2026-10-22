@@ -172,7 +172,7 @@ describe("a codebook's page", () => {
 	it("is in the codebook's language, its own words marked English", () => {
 		expect(page.documentElement.lang).toBe("fr");
 		for (const english of page.querySelectorAll(
-			"#contents, #variables, header p, dt, caption, thead",
+			"#ddi-contents, #ddi-variables, header p, dt, caption, thead",
 		))
 			expect(english.closest("[lang]")?.getAttribute("lang")).toBe("en");
 		// What the document says is in its own language.
@@ -230,7 +230,7 @@ describe("a codebook's page", () => {
 	});
 
 	it("lists a select-all question's options together, where its first is", () => {
-		const blocks = [...page.querySelectorAll("#variables ~ *")].map(
+		const blocks = [...page.querySelectorAll("#ddi-variables ~ *")].map(
 			(e) => e.querySelector("h3")?.textContent,
 		);
 		expect(blocks).toEqual(["pets", "age Age", "tenure"]);
@@ -290,14 +290,14 @@ describe("a codebook's page", () => {
 
 	it("lists shared items and broken references in sections of their own", () => {
 		expect(
-			[...page.querySelectorAll("#shared ~ section h3")].map(
+			[...page.querySelectorAll("#ddi-shared ~ section h3")].map(
 				(h) => h.textContent,
 			),
 		).toEqual(["Universes", "Code lists"]);
 		expect(page.getElementById("org.x:adults")?.textContent).toBe(
 			"adultsPeople 18 or over.",
 		);
-		expect(page.querySelector("#broken + ul code")?.textContent).toBe(
+		expect(page.querySelector("#ddi-broken + ul code")?.textContent).toBe(
 			"urn:ddi:org.x:nothing:1",
 		);
 	});

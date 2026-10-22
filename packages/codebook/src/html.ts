@@ -31,8 +31,8 @@ export const escapeHtml = (s: string): string =>
 /**
  * The id of an item's anchor: its key at every version (`agency:id`), so a permalink
  * survives an edit that gives the item a new version, and a reference to an older
- * version still finds it. Every such id holds a colon, so the page's own ids
- * (`contents`) can't collide with one. None for a URN that isn't one, or whose key
+ * version still finds it. Every such id holds a colon, so the codebook's own ids
+ * (`ddi-contents`, …) can't collide with one. None for a URN that isn't one, or whose key
  * holds whitespace, which an id can't, or half a character, which a link can't name.
  */
 export const anchorOf = (urn: string): string | undefined => {
@@ -425,10 +425,10 @@ const sharedHtml = (it: Described | Listed, cx: Context): string =>
 
 /** The kinds of shared item, in the order the page lists them, with their sections' ids. */
 const SHARED = [
-	{ key: "concepts", id: "concepts", title: "Concepts" },
-	{ key: "universes", id: "universes", title: "Universes" },
-	{ key: "codeLists", id: "code-lists", title: "Code lists" },
-	{ key: "missing", id: "missing-values", title: "Missing values" },
+	{ key: "concepts", id: "ddi-concepts", title: "Concepts" },
+	{ key: "universes", id: "ddi-universes", title: "Universes" },
+	{ key: "codeLists", id: "ddi-code-lists", title: "Code lists" },
+	{ key: "missing", id: "ddi-missing-values", title: "Missing values" },
 ] as const;
 
 /** A link in the contents: an entry's name and label, no link inside it. */
@@ -464,12 +464,12 @@ function contentsHtml(
 	const rest = [
 		shared.length === 0
 			? ""
-			: `<li><a href="#shared">Shared</a><ol>${shared.join("")}</ol></li>`,
+			: `<li><a href="#ddi-shared">Shared</a><ol>${shared.join("")}</ol></li>`,
 		cb.findings.length === 0
 			? ""
-			: `<li><a href="#broken">Broken references</a></li>`,
+			: `<li><a href="#ddi-broken">Broken references</a></li>`,
 	].join("");
-	return `<nav aria-labelledby="contents"><h2 id="contents"${cx.en}>Contents</h2><ol>${entries.join("")}</ol>${rest === "" ? "" : `<ul${cx.en}>${rest}</ul>`}</nav>`;
+	return `<nav aria-labelledby="ddi-contents"><h2 id="ddi-contents"${cx.en}>Contents</h2><ol>${entries.join("")}</ol>${rest === "" ? "" : `<ul${cx.en}>${rest}</ul>`}</nav>`;
 }
 
 /** The anchors a codebook's HTML has: its entries', its select-all questions' and its shared items'. */
@@ -514,12 +514,12 @@ export function codebookHtml(cb: Codebook, options: Options = {}): string {
 	const broken =
 		cb.findings.length === 0
 			? ""
-			: `<section aria-labelledby="broken"${cx.en}><h2 id="broken">Broken references</h2><ul>${cb.findings
+			: `<section aria-labelledby="ddi-broken"${cx.en}><h2 id="ddi-broken">Broken references</h2><ul>${cb.findings
 					.map((f) => `<li>${inlineHtml(marked(f.message), cx)}</li>`)
 					.join("")}</ul></section>`;
 	return `${contentsHtml(cb, blocks, cx)}
-<section aria-labelledby="variables"><h2 id="variables"${cx.en}>Variables</h2>${blocks.map((b) => blockOfHtml(b, cx)).join("")}</section>
-${shared === "" ? "" : `<section aria-labelledby="shared"><h2 id="shared"${cx.en}>Shared</h2>${shared}</section>`}
+<section aria-labelledby="ddi-variables"><h2 id="ddi-variables"${cx.en}>Variables</h2>${blocks.map((b) => blockOfHtml(b, cx)).join("")}</section>
+${shared === "" ? "" : `<section aria-labelledby="ddi-shared"><h2 id="ddi-shared"${cx.en}>Shared</h2>${shared}</section>`}
 ${broken}`;
 }
 
