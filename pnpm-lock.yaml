@@ -20,6 +20,9 @@ importers:
       '@primer/react':
         specifier: ^38.40.0
         version: 38.40.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react-is@19.3.0)(react@19.3.1)
+      '@qretools/codebook':
+        specifier: workspace:*
+        version: link:../../packages/codebook
       '@qretools/core':
         specifier: workspace:*
         version: link:../../packages/core

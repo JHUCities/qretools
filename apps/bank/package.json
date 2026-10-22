@@ -17,6 +17,7 @@
 	"dependencies": {
 		"@primer/octicons-react": "^19.38.0",
 		"@primer/react": "^38.40.0",
+		"@qretools/codebook": "workspace:*",
 		"@qretools/core": "workspace:*",
 		"@qretools/editor": "workspace:*",
 		"@qretools/qsf": "workspace:*",
