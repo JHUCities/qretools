@@ -204,6 +204,36 @@ describe("a codebook's page", () => {
 		linksHold(at);
 	});
 
+	it("gives each item a link to itself to share, the contents' own, named in words", () => {
+		const items = [
+			...page.querySelectorAll("main [id]:is(article, section.group)"),
+		];
+		expect(items.length).toBeGreaterThan(0);
+		for (const item of items) {
+			const self = item.querySelectorAll(":scope > .heading > a.anchor");
+			expect(self, item.id).toHaveLength(1);
+			const href = self[0]?.getAttribute("href") ?? "";
+			expect(indicated(page, href)).toBe(item);
+			// Shared items aren't in the contents; every entry is.
+			if (item.closest("[aria-labelledby=ddi-shared]") === null)
+				expect(
+					page.querySelector(`nav a[href="${href}"]`),
+					href,
+				).not.toBeNull();
+		}
+		const age = page.querySelector("#org\\.x\\:age .anchor");
+		expect(age?.querySelector('[aria-hidden="true"]')?.textContent).toBe("#");
+		expect(age?.querySelector(".visually-hidden")?.textContent).toBe(
+			"Link to age Age",
+		);
+		expect(age?.querySelector("[lang]")?.getAttribute("lang")).toBe("en");
+		// The heading's own name is its words alone.
+		expect(age?.closest(".heading")?.querySelector("h3")?.textContent).toBe(
+			"age Age",
+		);
+		expect(page.querySelectorAll("a a")).toHaveLength(0);
+	});
+
 	it("names, never links, a key holding half a character", () => {
 		const half = "a\uD800";
 		expect(anchorOf(urn(half))).toBeUndefined();
@@ -300,9 +330,9 @@ describe("a codebook's page", () => {
 				(h) => h.textContent,
 			),
 		).toEqual(["Universes", "Code lists"]);
-		expect(page.getElementById("org.x:adults")?.textContent).toBe(
-			"adultsPeople 18 or over.",
-		);
+		const adults = page.getElementById("org.x:adults");
+		expect(adults?.querySelector("h4")?.textContent).toBe("adults");
+		expect(adults?.querySelector("p")?.textContent).toBe("People 18 or over.");
 		expect(page.querySelector("#ddi-broken + ul code")?.textContent).toBe(
 			"urn:ddi:org.x:nothing:1",
 		);
