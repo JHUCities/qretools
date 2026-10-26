@@ -262,11 +262,7 @@ const jsonOf = (text: string): Json => {
  * written when it isn't a DDI document. `strict` fails on a broken reference; the page
  * is written either way. `input` names what was read: the file, or the workspace.
  */
-function renderCodebook(
-	json: Json,
-	input: string,
-	strict: boolean,
-): Rendered {
+function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
 	if (!json.ok)
 		return {
 			lines: [
