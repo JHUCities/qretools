@@ -254,6 +254,24 @@ const titleHtml = (
 		.filter((s) => s !== "")
 		.join(" ") || `<span class="urn">${escapeHtml(urn)}</span>`;
 
+/**
+ * An item's heading, then a link to it to copy and share, as a markdown heading has;
+ * no link without an anchor. Outside the heading, so the heading's name stays its words.
+ */
+function headingHtml(
+	level: 3 | 4,
+	name: string | undefined,
+	label: Text | undefined,
+	urn: string,
+	cx: Context,
+): string {
+	const heading = `<h${level}>${titleHtml(name, label, urn, cx)}</h${level}>`;
+	const anchor = anchorOf(urn);
+	return anchor === undefined
+		? heading
+		: `<div class="heading">${heading}<a class="anchor" href="${hrefOf(anchor)}"><span aria-hidden="true">#</span><span class="visually-hidden">${english("Link to", cx)} ${titleHtml(name, label, urn, { ...cx, inLink: true })}</span></a></div>`;
+}
+
 /** A question's words: its text as quoted, then what the interviewer is told. */
 const questionHtml = (q: NonNullable<Entry["question"]>, cx: Context): string =>
 	`${q.text === undefined ? "" : `<blockquote>${blockHtml(q.text, cx)}</blockquote>`}${q.instructions
@@ -371,7 +389,7 @@ function entryHtml(e: Entry, level: 3 | 4, cx: Context): string {
 		(e.responses?.from ?? []).filter((r) => r.name !== undefined),
 		cx,
 	);
-	return `<article${idAttr(e.urn)}><h${level}>${titleHtml(e.name, e.label, e.urn, cx)}</h${level}>${option}${question}${particulars}${tableHtml(rows, from, cx)}${more === "" ? "" : `<footer>${more}</footer>`}</article>`;
+	return `<article${idAttr(e.urn)}>${headingHtml(level, e.name, e.label, e.urn, cx)}${option}${question}${particulars}${tableHtml(rows, from, cx)}${more === "" ? "" : `<footer>${more}</footer>`}</article>`;
 }
 
 /** Entries in order, the options of a select-all question together under its words, where its first option is. */
@@ -411,12 +429,12 @@ export function blocksOf(entries: readonly Entry[]): Block[] {
 function blockOfHtml(b: Block, cx: Context): string {
 	if (b.kind === "entry") return entryHtml(b.entry, 3, cx);
 	const q = b.question;
-	return `<section${idAttr(q.urn)} class="group"><h3>${titleHtml(q.name, undefined, q.urn, cx)}</h3>${questionHtml(q, cx)}<p class="answers"${cx.en}>Select all that apply, each option a variable of its own</p>${b.options.map((o) => entryHtml(o, 4, cx)).join("")}</section>`;
+	return `<section${idAttr(q.urn)} class="group">${headingHtml(3, q.name, undefined, q.urn, cx)}${questionHtml(q, cx)}<p class="answers"${cx.en}>Select all that apply, each option a variable of its own</p>${b.options.map((o) => entryHtml(o, 4, cx)).join("")}</section>`;
 }
 
 /** A shared item: its name and label, its description or its codes. */
 const sharedHtml = (it: Described | Listed, cx: Context): string =>
-	`<article${idAttr(it.urn)}><h4>${titleHtml(it.name, it.label, it.urn, cx)}</h4>${
+	`<article${idAttr(it.urn)}>${headingHtml(4, it.name, it.label, it.urn, cx)}${
 		"rows" in it
 			? tableHtml(it.rows, "", cx)
 			: it.description === undefined
@@ -616,6 +634,13 @@ h2 { font-size: 1.25rem; font-weight: 600; margin: 2.5rem 0 1rem; padding-block-
 h3 { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem; }
 h4 { font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem; }
 p { margin: 0 0 0.5rem; }
+.heading { display: flex; align-items: baseline; gap: 0.5rem; margin: 0 0 0.5rem; }
+.heading > :is(h3, h4) { margin: 0; }
+/* Shown where it can be used: on hover or focus, and always where nothing hovers. A lone "#", not words in a line, so no underline. */
+.anchor { color: var(--fgColor-muted); text-decoration: none; opacity: 0; }
+.heading:is(:hover, :focus-within) .anchor { opacity: 1; }
+@media (hover: none) { .anchor { opacity: 1; } }
+.visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .from, .language, .urn, dt { color: var(--fgColor-muted); }
 /* Underlined always, not only on hover as the app does: colour alone doesn't tell a link (WCAG 1.4.1). */
 a { color: var(--fgColor-accent); text-decoration: underline; text-underline-position: under; }
@@ -650,7 +675,8 @@ tbody th { font-weight: 400; }
 footer dl { color: var(--fgColor-muted); }
 @media print {
 	nav { display: none; }
-	h2, h3, h4 { break-after: avoid; }
+	.anchor { display: none; }
+	h2, h3, h4, .heading { break-after: avoid; }
 	article { break-inside: avoid; }
 	:target { background: none; outline: none; }
 	a { color: inherit; }
