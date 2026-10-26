@@ -206,11 +206,13 @@ describe("a codebook's page", () => {
 
 	it("gives each item a link to itself to share, the contents' own, named in words", () => {
 		const items = [
-			...page.querySelectorAll("main [id]:is(article, section.group)"),
+			...page.querySelectorAll("main [id]:is(article, section.ddi-group)"),
 		];
 		expect(items.length).toBeGreaterThan(0);
 		for (const item of items) {
-			const self = item.querySelectorAll(":scope > .heading > a.anchor");
+			const self = item.querySelectorAll(
+				":scope > .ddi-heading > a.ddi-anchor",
+			);
 			expect(self, item.id).toHaveLength(1);
 			const href = self[0]?.getAttribute("href") ?? "";
 			expect(indicated(page, href)).toBe(item);
@@ -221,14 +223,14 @@ describe("a codebook's page", () => {
 					href,
 				).not.toBeNull();
 		}
-		const age = page.querySelector("#org\\.x\\:age .anchor");
+		const age = page.querySelector("#org\\.x\\:age .ddi-anchor");
 		expect(age?.querySelector('[aria-hidden="true"]')?.textContent).toBe("#");
-		expect(age?.querySelector(".visually-hidden")?.textContent).toBe(
+		expect(age?.querySelector(".ddi-visually-hidden")?.textContent).toBe(
 			"Link to age Age",
 		);
 		expect(age?.querySelector("[lang]")?.getAttribute("lang")).toBe("en");
 		// The heading's own name is its words alone.
-		expect(age?.closest(".heading")?.querySelector("h3")?.textContent).toBe(
+		expect(age?.closest(".ddi-heading")?.querySelector("h3")?.textContent).toBe(
 			"age Age",
 		);
 		expect(page.querySelectorAll("a a")).toHaveLength(0);
@@ -254,8 +256,8 @@ describe("a codebook's page", () => {
 				entries: [cites("dog", "1", "1"), cites("cat", "2", "2")],
 			}),
 		);
-		expect(at.querySelectorAll("section.group")).toHaveLength(1);
-		expect(at.querySelectorAll("section.group article")).toHaveLength(2);
+		expect(at.querySelectorAll("section.ddi-group")).toHaveLength(1);
+		expect(at.querySelectorAll("section.ddi-group article")).toHaveLength(2);
 		linksHold(at);
 	});
 
@@ -304,7 +306,9 @@ describe("a codebook's page", () => {
 			)?.children,
 		).toHaveLength(0);
 		expect(age?.querySelector("blockquote")?.children).toHaveLength(2);
-		expect(age?.querySelector(".instruction")?.textContent).toBe("Read aloud.");
+		expect(age?.querySelector(".ddi-instruction")?.textContent).toBe(
+			"Read aloud.",
+		);
 	});
 
 	it("puts missing codes after valid ones, a table of missing values alone captioned so", () => {
