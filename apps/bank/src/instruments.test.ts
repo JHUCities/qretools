@@ -185,7 +185,23 @@ describe("saving an instrument", () => {
 			kind: "failed",
 			failure: {
 				message:
-					"The question `tenure` this instrument asks changed on GitHub since you started.",
+					"The question `tenure` this instrument asks changed on GitHub as well as here.",
+				hint: "Open `tenure`, copy your changes to it if you want to keep them, reload it from GitHub, then save again.",
+			},
+		});
+		// Deleted there: nothing to copy, and it can be dropped from the instrument instead.
+		const gone: Model = {
+			...m,
+			remote: { ...m.remote, questions: { ...m.remote.questions } },
+		};
+		delete (gone.remote.questions as Record<string, unknown>)[TENURE];
+		const [deleted] = save(gone, HOUSEHOLDS);
+		expect(deleted.activity[at(m, HOUSEHOLDS).id]).toMatchObject({
+			kind: "failed",
+			failure: {
+				message:
+					"The question `tenure` this instrument asks was deleted on GitHub.",
+				hint: "Open `tenure` and reload it from GitHub, or stop using it in this instrument, then save again.",
 			},
 		});
 	});
@@ -222,7 +238,7 @@ describe("saving an instrument", () => {
 		});
 		expect(commitOf(cmds)).toBeUndefined();
 		expect(refused.activity[m.nextId]).toMatchObject({
-			failure: { message: "`instruments/households.yaml` already exists." },
+			failure: { message: "`instruments/households.yaml` is already used." },
 		});
 	});
 

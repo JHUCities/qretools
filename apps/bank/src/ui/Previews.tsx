@@ -583,15 +583,16 @@ export function CodebookPane({
 }
 
 /**
- * Said beside the DDI while the workspace declares no valid agency: its items are published
- * under the placeholder, and this is where to add one.
+ * Said beside the DDI while the workspace declares no valid agency: its DDI can't be
+ * exported, the preview shows the placeholder, and this is where to add one.
  */
 export function AgencyNotice({ declare }: { declare: () => void }) {
 	return (
 		<InlineMessage variant="warning">
 			<span>
-				This workspace declares no valid DDI agency yet, so its items are
-				published under <code className="code">{UNDECLARED_AGENCY}</code>.{" "}
+				This workspace has no valid DDI agency yet, so its DDI can't be
+				exported, and this preview shows{" "}
+				<code className="code">{UNDECLARED_AGENCY}</code> in its place.{" "}
 				<Link as="button" type="button" onClick={declare}>
 					Add the workspace's agency
 				</Link>

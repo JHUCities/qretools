@@ -904,7 +904,8 @@ function readStep(
 				"wrong-type",
 				"error",
 				path,
-				"A step is one of `ask`, `say`, `section`, `if`, `stop` or `compute`, with its fields.",
+				`A step is one of ${CONSTRUCTS.map((c) => `\`${c}\``).join(", ")}, with its fields.`,
+				"Start it with one of them, such as `- ask: bas.x`.",
 			),
 		);
 		return hole;
@@ -1686,8 +1687,8 @@ function readCond(
 				"condition",
 				"error",
 				path,
-				"Write the condition on one line, as text.",
-				'If it has braces, quote it: `if: "bas.x in {\\"1\\", \\"2\\"}"`.',
+				`This reads as a list or a group of fields, not as a ${as === "fill" ? "fill's value" : as}.`,
+				'Unquoted braces or a leading `- ` do that. Put it all in quotes: `if: "bas.x in {\\"1\\", \\"2\\"}"`.',
 			),
 		);
 		return undefined;
@@ -1822,11 +1823,13 @@ function selectAllHint(
 	if (draft?.domain?.kind !== "responses" || draft.domain.select !== "many")
 		return undefined;
 	const alias = name.slice(0, dot);
-	return `It's a select-all-that-apply question: each option is its own answer, ${definedVariables(
+	return `\`${name}\` is a select all that apply question, so each option has its own answer: ${definedVariables(
 		draft,
 	)
 		.map((d) => `\`${alias}.${d.name}\``)
-		.join(", ")}, "1" when chosen.`;
+		.join(
+			", ",
+		)}. Each holds \`"${bank?.env.selectAll.chosen.code}"\` when the option is chosen.`;
 }
 
 /** A bank `uses` names that wasn't given: its names are said nowhere (see `readUses`). */
@@ -1914,7 +1917,7 @@ function readFills(
 					"hole",
 					path.replace(/\.fill$/, ".ask"),
 					`Fill \`${f.name}\` of \`${question?.alias}.${question?.name}\` has nothing to fill it.`,
-					`Add \`fill: {${f.name}: ...}\` naming an earlier answer or an input.`,
+					`Add \`fill: {${f.name}: ...}\` naming an earlier answer, an input or a computed value.`,
 				),
 			);
 		return [];
@@ -1975,8 +1978,8 @@ function readFills(
 					"not-yet",
 					"error",
 					at,
-					"A fill is filled by one answer or input, named; a coded answer may use `label(name)`.",
-					"Compute another value first (`compute:`), then fill with its name.",
+					"A fill takes one name: an answer, an input or a computed value. A coded answer may use `label(name)`.",
+					"To fill with anything more, compute it first (`- compute: …`) and fill with its name.",
 				),
 			);
 		bindings.push({
@@ -1994,7 +1997,7 @@ function readFills(
 					"hole",
 					path,
 					`Fill \`${f.name}\` has nothing to fill it.`,
-					`Add \`${f.name}: ...\` naming an earlier answer or an input.`,
+					`Add \`${f.name}: ...\` naming an earlier answer, an input or a computed value.`,
 				),
 			);
 	return bindings;

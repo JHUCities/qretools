@@ -276,7 +276,7 @@ const SAID: Readonly<
 		code: "duplicate-list",
 		what: "The same responses",
 		where: "are written in",
-		hint: "Make them a shared scale, so each question names it and a change reaches both.",
+		hint: "If each option is a plain `code: label` line, make them one shared scale that each question names, so one change reaches them all.",
 	},
 	universe: {
 		code: "duplicate-universe",
@@ -359,7 +359,9 @@ export function bankFindings<K>(
 				severity: "warning",
 				path: d.path,
 				message: `Variable \`${d.name}\` is also defined by ${names(keys).join(", ")}.`,
-				hint: "A variable is one column in the dataset: give each question its own name.",
+				hint: d.path.startsWith("responses.")
+					? "Each variable is one column in the dataset, so two with one name may stop the bank's DDI export. Give this option a different `variable:`."
+					: "Each variable is one column in the dataset, so two with one name may stop the bank's DDI export. Give this question another name.",
 				others: keys,
 			},
 		];

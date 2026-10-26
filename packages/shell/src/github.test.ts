@@ -487,6 +487,21 @@ describe("GitHub adapter (Octokit)", () => {
 			}),
 		).s.read(target, "questions/a/a.yaml");
 		expect(!limited.ok && limited.error.kind).toBe("rateLimited");
+		// A secondary limit lasts seconds: say them, never the primary limit's reset.
+		expect(!limited.ok && limited.error.message).toBe(
+			"GitHub is still limiting requests for now.",
+		);
+		expect(!limited.ok && limited.error.hint).toBe(
+			"Wait 60 seconds, then try again.",
+		);
+		const primary = await store(() =>
+			json({ message: "API rate limit exceeded" }, 403, {
+				"x-ratelimit-remaining": "0",
+			}),
+		).s.read(target, "questions/a/a.yaml");
+		expect(!primary.ok && primary.error.message).toBe(
+			"GitHub's rate limit is used up for now.",
+		);
 		const odd = await store(() => json({ unexpected: true })).s.ensureBranch(
 			target,
 		);

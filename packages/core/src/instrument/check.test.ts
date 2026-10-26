@@ -138,6 +138,53 @@ describe("checking an instrument's flow", () => {
 		]);
 	});
 
+	it("words the order error, the universe note and a roster's value as they are", () => {
+		const said = (flow: string, bank = BAS) =>
+			[
+				...((parsed) => [...parsed.findings, ...checkInstrument(parsed)])(
+					parseInstrument(`name: x\nuses:\n  bas: here\nflow:\n${flow}`, {
+						bas: bank,
+					}),
+				),
+			]
+				.filter((f) => f.severity !== "hole")
+				.map((f) => `${f.code}: ${f.message} | ${f.hint ?? ""}`);
+		expect(
+			said('  - if: bas.tenure = "2"\n    then: []\n  - ask: bas.tenure\n'),
+		).toContain(
+			"order: `bas.tenure` is used here, but no route asks it before this point. | Ask `bas.tenure` earlier in the flow, on every route that reaches here.",
+		);
+		expect(
+			said(
+				'  - ask: bas.consent\n  - if: bas.consent = "1"\n    then:\n      - ask: bas.why\n',
+			),
+		).toContain(
+			"universe: Some respondents may not reach this question, but it has no universe to say who is asked it. | Say who is asked it with `universe:` on this step.",
+		);
+		expect(
+			said(
+				'  - ask: bas.consent\n  - roster: people\n    more: bas.consent = "1"\n    max: 5\n    flow:\n      - compute: n\n        value: 1\n  - if: n = 1\n    then: []\n',
+			),
+		).toContain(
+			"misplaced: `n` has a value for each row of `people`, so it can only be used inside `people` or an `each` over it. | Move this into `people`, or into an `each: people` step.",
+		);
+		// A select all that apply question's options hold the bank's own chosen code.
+		const recoded = bankOf({
+			"workspace.yaml": "agency: org.example\n",
+			"select_all.yaml":
+				'chosen: { "Y": Selected }\nnot_chosen: { "N": Not selected }\n',
+			"questions/m/modes.yaml":
+				'name: modes\ntext: How?\nintent: i\nselect: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
+		});
+		const parsed = parseInstrument(
+			'name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.modes\n  - stop: bas.modes = "Y"\n',
+			{ bas: recoded },
+		);
+		expect(parsed.findings.find((f) => f.code === "unknown-name")?.hint).toBe(
+			'`bas.modes` is a select all that apply question, so each option has its own answer: `bas.modes_b`, `bas.modes_w`. Each holds `"Y"` when the option is chosen.',
+		);
+	});
+
 	it("allows one question in exclusive branches, not twice on one path", () => {
 		const branches = `  - ask: bas.consent
   - if: bas.consent = "1"

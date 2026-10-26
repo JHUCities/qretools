@@ -85,7 +85,7 @@ const duplicateLabels: Rule = ({ domain }) => {
 				"warning",
 				`responses.${code}`,
 				`${where} \`${first}\` and \`${code}\` have the same label.`,
-				"Options must be mutually exclusive: a respondent should fit exactly one.",
+				"Two options with the same label can't be told apart. Reword one, or remove it.",
 			),
 		];
 	});
@@ -222,7 +222,7 @@ const optionVariables: Rule = ({ name, domain }) => {
 					"info",
 					`responses.${c.code}`,
 					`Variable \`${c.variable}\` doesn't start with \`${name}\`.`,
-					"A codebook groups an option's variable with its question by name prefix.",
+					`In a dataset listed by name, this variable may not sit beside \`${name}\`'s other variables. Rename it to start with \`${name}\`, or keep the name if an older dataset used it.`,
 				),
 			);
 		return out;
@@ -268,7 +268,19 @@ const matchesScale: Rule = ({ domain }, env) => {
 			"warning",
 			"responses",
 			`These responses match ${which}${apart}.`,
-			`Write \`responses: ${matches[0]}\` to share it, so a change to the scale reaches every question that uses it.`,
+			[
+				matches.length === 1
+					? `Write \`responses: ${matches[0]}\` so a change to the scale reaches every question that uses it.`
+					: `Name one of them, such as \`responses: ${matches[0]}\`, so a change to the scale reaches every question that uses it.`,
+				apart === ""
+					? ""
+					: "Your data would then use the scale's codes, not these.",
+				plain
+					? ""
+					: "The options' own `title`, `variable` and `note` would be lost: a shared scale can't hold them.",
+			]
+				.filter((s) => s !== "")
+				.join(" "),
 			only !== undefined && apart === "" && plain
 				? nameFix("responses", only)
 				: undefined,

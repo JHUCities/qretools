@@ -182,22 +182,25 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "misplaced",
 				severity: "error",
 				path,
-				message: `\`${name}\` is answered once for each row of \`${row}\`, so it's read inside \`${row}\` or an \`each\` over it.`,
+				message: `\`${name}\` has a value for each row of \`${row}\`, so it can only be used inside \`${row}\` or an \`each\` over it.`,
+				hint: `Move this into \`${row}\`, or into an \`each: ${row}\` step.`,
 				...(range !== undefined && { range }),
 			});
 			return;
 		}
-		const what = named.kind === "compute" ? "computed" : "asked";
 		if (!seen.possible.has(key))
 			say({
 				code: "order",
 				severity: "error",
 				path,
-				message: `\`${name}\` is read here before it's ${what}.`,
+				message:
+					named.kind === "compute"
+						? `\`${name}\` is used here, but no route computes it before this point.`
+						: `\`${name}\` is used here, but no route asks it before this point.`,
 				hint:
 					named.kind === "compute"
-						? "Compute it earlier in the flow."
-						: "Ask it earlier, on every route that reaches here.",
+						? `Compute \`${name}\` earlier in the flow.`
+						: `Ask \`${name}\` earlier in the flow, on every route that reaches here.`,
 				...(range !== undefined && { range }),
 			});
 		else if (!seen.definite.has(key) && !guarded)
@@ -452,8 +455,10 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				severity: "info",
 				path: at,
 				message:
-					"Only some respondents reach this question, but its universe says everyone.",
-				hint: "Say whom it's asked of with `universe:`.",
+					effective === undefined
+						? "Some respondents may not reach this question, but it has no universe to say who is asked it."
+						: `Some respondents may not reach this question, but its universe is ${effective.said}, the whole instrument's.`,
+				hint: "Say who is asked it with `universe:` on this step.",
 			});
 	};
 

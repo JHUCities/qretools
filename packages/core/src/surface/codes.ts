@@ -38,7 +38,7 @@ function unquotedCode(key: Scalar, code: string, at: string): Finding {
 		severity: "info",
 		path: at,
 		message: `Put the code \`${code}\` in quotes: \`${quoted}\`.`,
-		hint: 'A code is text. In quotes it stays as written (`"010"`, not 10), and `"01"` and `"1"` are two codes.',
+		hint: "A code is text. Without quotes, other programs that read this file may read `010` as a number, and `01` and `1` count as the same code.",
 		// AST ranges are offsets into this source, so they are within it.
 		range: key.range ? ([key.range[0], key.range[1]] as const) : undefined,
 		fix: { kind: "quote", label: `Quote \`${code}\``, path: at, code },
