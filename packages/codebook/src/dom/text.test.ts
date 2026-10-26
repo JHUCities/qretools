@@ -92,6 +92,26 @@ describe("codebook text as HTML", () => {
 		).toBe(id);
 	});
 
+	it("sends a reference where the host says, else to its anchor, else nowhere", () => {
+		const href = (r: { urn: string }) =>
+			r.urn.includes("cars") ? `app#open=${r.urn}&"` : undefined;
+		const [pets, cars] = [
+			...parsed(
+				inlineHtml(
+					[
+						[
+							{ kind: "ref", type: "Universe", urn: "urn:ddi:org.x:pets:1" },
+							{ kind: "ref", type: "Loop", urn: "urn:ddi:org.x:cars:2" },
+						],
+					],
+					{ anchors: ANCHORS, en: "", href },
+				),
+			).children,
+		];
+		expect(pets?.getAttribute("href")).toBe("#org.x:pets");
+		expect(cars?.getAttribute("href")).toBe('app#open=urn:ddi:org.x:cars:2&"');
+	});
+
 	it("writes no link inside a link, and runs paragraphs on where none can go", () => {
 		const html = inlineHtml(
 			[

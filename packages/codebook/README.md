@@ -30,6 +30,44 @@ anchor made from its URN without the version (`#us.jhu:variable-consent`), so a 
 it survives a new version; a reference is a link to its anchor, with `data-urn`,
 `data-kind` and `data-name`.
 
+## `<ddi-codebook>`
+
+The same codebook in any page, as a custom element: import
+`@qretools/codebook/element` (it defines the element), then give it a document.
+
+```html
+<ddi-codebook language="en"></ddi-codebook>
+<script type="module">
+	import "@qretools/codebook/element";
+	const codebook = document.querySelector("ddi-codebook");
+	codebook.ddi = await (await fetch("ddi.json")).json(); // or the `ddi` attribute, as JSON text
+	codebook.href = (ref) => undefined; // where a reference goes; undefined: its anchor
+	codebook.addEventListener("ddi-follow", (e) => {
+		// e.detail is the reference as `href` receives it ({ kind: "ref", urn, type, name });
+		// e.target the link.
+		// e.preventDefault() keeps the browser from following it.
+	});
+</script>
+```
+
+- `language` (attribute or property) is the language the document is read in, where
+  it has it; without it, the document's first. The codebook is written in an element
+  that says that language, and its own words (headings, terms) are marked English. The
+  element's own `lang` keeps HTML's meaning.
+- `href` is compared by identity: give it the same function each time, or the codebook
+  is written again (and the reader's focus lost) whenever it changes.
+- `ddi-follow` fires only for a plain click (or Enter) on a reference, and is composed,
+  so a host in a shadow root hears it. A click with a
+  modifier key opens the link as the browser does. The contents' links are plain
+  `#…` links, never `ddi-follow`.
+- It renders into its own children, not a shadow root, so its links, `:target`,
+  history and find-in-page work as on the standalone page. Its style is scoped to it
+  (CSS `@scope`), but the host's CSS still reaches in.
+- It takes the host's colour scheme and sets no background.
+- It writes itself only when what it shows changes.
+- Show one codebook per page: its sections' ids (`ddi-contents`, `ddi-variables`,
+  `ddi-shared`, …) are fixed, prefixed so they don't collide with the host page's.
+
 Private while the app's codebook pane and a `qretools codebook` command try it out.
 
 Not read yet, and left out without a word:

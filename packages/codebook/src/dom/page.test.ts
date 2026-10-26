@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** A codebook's page read back by a real parser: its structure, its anchors and its links. */
 import { describe, expect, it } from "vitest";
-import { anchorOf, hrefOf, pageOf } from "../html.ts";
+import { anchorOf, codebookHtml, hrefOf, pageOf } from "../html.ts";
 import type { Codebook, Entry } from "../model.ts";
 import bankPage from "../node/__snapshots__/bank.html?raw";
 import type { Text } from "../text.ts";
@@ -165,12 +165,14 @@ describe("a codebook's page", () => {
 		selfContained(page);
 		linksHold(page);
 		expect(page.title).toBe("Pets & <people>");
+		for (const one of ["main", "h1", "header"])
+			expect(page.querySelectorAll(one)).toHaveLength(1);
 	});
 
 	it("is in the codebook's language, its own words marked English", () => {
 		expect(page.documentElement.lang).toBe("fr");
 		for (const english of page.querySelectorAll(
-			"#contents, #variables, header p, dt, caption, thead",
+			"#ddi-contents, #ddi-variables, header p, dt, caption, thead",
 		))
 			expect(english.closest("[lang]")?.getAttribute("lang")).toBe("en");
 		// What the document says is in its own language.
@@ -228,7 +230,7 @@ describe("a codebook's page", () => {
 	});
 
 	it("lists a select-all question's options together, where its first is", () => {
-		const blocks = [...page.querySelectorAll("#variables ~ *")].map(
+		const blocks = [...page.querySelectorAll("#ddi-variables ~ *")].map(
 			(e) => e.querySelector("h3")?.textContent,
 		);
 		expect(blocks).toEqual(["pets", "age Age", "tenure"]);
@@ -288,16 +290,25 @@ describe("a codebook's page", () => {
 
 	it("lists shared items and broken references in sections of their own", () => {
 		expect(
-			[...page.querySelectorAll("#shared ~ section h3")].map(
+			[...page.querySelectorAll("#ddi-shared ~ section h3")].map(
 				(h) => h.textContent,
 			),
 		).toEqual(["Universes", "Code lists"]);
 		expect(page.getElementById("org.x:adults")?.textContent).toBe(
 			"adultsPeople 18 or over.",
 		);
-		expect(page.querySelector("#broken + ul code")?.textContent).toBe(
+		expect(page.querySelector("#ddi-broken + ul code")?.textContent).toBe(
 			"urn:ddi:org.x:nothing:1",
 		);
+	});
+});
+
+describe("a codebook to place in a page", () => {
+	it("has no landmark but its contents, and no title of its own", () => {
+		const body = read(codebookHtml(CODEBOOK)).body;
+		expect(body.querySelectorAll("main, header, h1, style")).toHaveLength(0);
+		expect(body.querySelectorAll("nav")).toHaveLength(1);
+		linksHold(body.ownerDocument);
 	});
 });
 

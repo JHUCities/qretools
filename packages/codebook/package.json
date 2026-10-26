@@ -5,7 +5,8 @@
 	"type": "module",
 	"description": "A codebook from any DDI-Lifecycle 4.0 document: its variables and questions as a render model",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./element": "./src/element/element.ts"
 	},
 	"scripts": {
 		"test": "vitest run",

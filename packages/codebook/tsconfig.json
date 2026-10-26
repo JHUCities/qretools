@@ -7,6 +7,7 @@
 		"erasableSyntaxOnly": true
 	},
 	"include": ["src"],
-	// Tests that read fixtures from disk, or parse HTML, have their own configs.
-	"exclude": ["src/node", "src/dom"]
+	// Tests that read fixtures from disk, or parse HTML, and the custom element (the
+	// browser's shell around the codebook) have their own configs.
+	"exclude": ["src/node", "src/dom", "src/element"]
 }
