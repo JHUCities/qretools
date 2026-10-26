@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # Node and pnpm as mise.toml pins them.
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: pnpm --dir worker install --frozen-lockfile --ignore-workspace
