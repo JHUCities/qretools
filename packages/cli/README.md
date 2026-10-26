@@ -87,7 +87,8 @@ that stays the same when its version changes. Its title is "Codebook": a workspa
 no name of its own yet.
 
 Given a file, `codebook` reads it as DDI-Lifecycle 4.0 JSON, any producer's. So a
-codebook of one instrument, its routing beside each question, is its export's:
+codebook of one instrument, its map after the contents and its routing beside each
+question, is its export's:
 
 ```sh
 qretools instrument export instruments/wave1.yaml -o wave1.json
