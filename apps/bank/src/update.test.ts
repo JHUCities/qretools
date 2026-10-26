@@ -2364,7 +2364,7 @@ describe("a refused return from GitHub", () => {
 	});
 });
 
-describe("the author's own branch", () => {
+describe("the author's branch name", () => {
 	it("is named from the login, and read back from the name", () => {
 		expect(branchOwner(ownBranch("iain"))).toBe("iain");
 		expect(branchOwner("qretools-a-b")).toBe("a-b");
