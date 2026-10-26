@@ -72,6 +72,7 @@ export {
 	ddiIndexOf,
 	deref,
 	type Indexed,
+	itemKeyOf,
 	latestOf,
 	refUrn,
 	str,
