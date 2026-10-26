@@ -85,6 +85,59 @@ describe("checking an instrument's flow", () => {
 		expect(checked(flow('isnull(bas.tenure) or bas.tenure = "2"'))).toEqual([]);
 	});
 
+	it("says who has no answer, and what that does where it's read", () => {
+		// `bas.tenure` is asked only of those who consent; each use below reads it after.
+		const notes = (use: string) => {
+			const parsed = parseInstrument(
+				`name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.consent\n  - if: bas.consent = "1"\n    then:\n      - ask: bas.tenure\n      - ask: bas.rent\n      - compute: owner\n        value: bas.tenure = "1"\n${use}`,
+				{ bas: BAS },
+			);
+			return checkInstrument(parsed)
+				.filter((f) => f.code === "order" && f.severity === "info")
+				.map((f) => `${f.message} | ${f.hint}`);
+		};
+		const asked =
+			"It is possible that some respondents haven't been asked `bas.tenure` by this point. | Anyone not asked `bas.tenure` by this point has no answer to it";
+		expect(notes('  - if: bas.tenure = "2"\n    then: []\n')).toEqual([
+			`${asked}, so this condition may not be true for them and the branch may be skipped. To include them, add \`or isnull(bas.tenure)\`; to treat them differently, give them a branch on \`isnull(bas.tenure)\`.`,
+		]);
+		expect(
+			notes(
+				'  - ask: bas.why\n    checks:\n      - ensure: bas.tenure = "1"\n        severity: warning\n        message: Owners only.\n',
+			),
+		).toEqual([
+			`${asked}, so this check may pass for them and its message may not be shown. If the check should cover them too, add a check on \`isnull(bas.tenure)\`.`,
+		]);
+		expect(notes('  - compute: renter\n    value: bas.tenure = "2"\n')).toEqual(
+			[
+				`${asked}, so this value may be empty for them. To give them a value, compute it in a branch on \`isnull(bas.tenure)\`.`,
+			],
+		);
+		expect(notes('  - say: "You said {{bas.tenure}}."\n')).toEqual([
+			`${asked}, so this text shows nothing in its place for them. Ask \`bas.tenure\` on every route that reaches here, or move this text into the branch that asks it.`,
+		]);
+		expect(
+			notes(
+				"  - roster: rooms\n    count: bas.rent\n    max: 5\n    flow:\n      - ask: bas.why\n",
+			),
+		).toEqual([
+			"It is possible that some respondents haven't been asked `bas.rent` by this point. | Anyone not asked `bas.rent` by this point has no answer to it, so this roster may have no rows for them. To give them rows, ask `bas.rent` on every route that reaches here.",
+		]);
+		expect(notes('  - stop: bas.tenure = "2"\n')).toEqual([
+			`${asked}, so this condition may not be true for them and they may not be stopped here. To stop them too, add \`or isnull(bas.tenure)\`.`,
+		]);
+		expect(
+			notes(
+				'  - roster: visits\n    more: bas.tenure = "2"\n    max: 5\n    flow:\n      - ask: bas.why\n',
+			),
+		).toEqual([
+			`${asked}, so this condition may not be true for them and their roster may end here. To ask them for more rows, add \`or isnull(bas.tenure)\`.`,
+		]);
+		expect(notes("  - if: owner\n    then: []\n")).toEqual([
+			"It is possible that `owner` hasn't been computed for some respondents by this point. | Anyone for whom `owner` isn't computed by this point has no value for it, so this condition may not be true for them and the branch may be skipped. To include them, add `or isnull(owner)`; to treat them differently, give them a branch on `isnull(owner)`.",
+		]);
+	});
+
 	it("allows one question in exclusive branches, not twice on one path", () => {
 		const branches = `  - ask: bas.consent
   - if: bas.consent = "1"

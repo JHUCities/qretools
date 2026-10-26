@@ -51,6 +51,44 @@ export interface InstrumentCheck {
 	readonly fills: Readonly<Record<string, readonly FillSource[]>>;
 }
 
+/** Where a name is read, which decides what an unasked (empty) answer does there. */
+type Use = "branch" | "stop" | "more" | "check" | "value" | "count" | "text";
+
+/**
+ * What a missing answer does where it's read, and what the author can do about it. Each
+ * hint says who it's about, so it reads on its own, without its message.
+ */
+function emptyHint(name: string, use: Use, computed: boolean): string {
+	const n = `\`${name}\``;
+	const missing = computed
+		? `Anyone for whom ${n} isn't computed by this point has no value for it`
+		: `Anyone not asked ${n} by this point has no answer to it`;
+	const isnull = `\`isnull(${name})\``;
+	const add = `add \`or isnull(${name})\``;
+	// "May": a condition can still be true without this answer (`a = "1" or x = "2"`).
+	const untrue = `${missing}, so this condition may not be true for them`;
+	switch (use) {
+		case "branch":
+			return `${untrue} and the branch may be skipped. To include them, ${add}; to treat them differently, give them a branch on ${isnull}.`;
+		case "stop":
+			return `${untrue} and they may not be stopped here. To stop them too, ${add}.`;
+		case "more":
+			return `${untrue} and their roster may end here. To ask them for more rows, ${add}.`;
+		case "check":
+			return `${missing}, so this check may pass for them and its message may not be shown. If the check should cover them too, add a check on ${isnull}.`;
+		case "value":
+			return `${missing}, so this value may be empty for them. To give them a value, compute it in a branch on ${isnull}.`;
+		case "count":
+			return `${missing}, so this roster may have no rows for them. To give them rows, ${computed ? "compute" : "ask"} ${n} on every route that reaches here.`;
+		case "text":
+			return computed
+				? `${missing}, so this text shows nothing in its place for them. Compute ${n} on every route that reaches here, or move this text into the branch that computes it.`
+				: `${missing}, so this text shows nothing in its place for them. Ask ${n} on every route that reaches here, or move this text into the branch that asks it.`;
+		default:
+			return use satisfies never;
+	}
+}
+
 const NONE: Seen = {
 	definite: new Set(),
 	possible: new Set(),
@@ -120,11 +158,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 	};
 
 	/** A value read here: what it means must be asked or computed by now. */
-	const read = (cond: Cond | undefined, path: string, seen: Seen) => {
+	const read = (cond: Cond | undefined, path: string, seen: Seen, use: Use) => {
 		if (cond === undefined) return;
 		const guarded = isnullArgs(cond.expr);
 		for (const { name, range } of namesOf(cond.expr))
-			readName(name, range, path, seen, guarded.has(name));
+			readName(name, range, path, seen, guarded.has(name), use);
 	};
 	const readName = (
 		name: string,
@@ -132,6 +170,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 		path: string,
 		seen: Seen,
 		guarded: boolean,
+		use: Use,
 	) => {
 		const named = names.get(name);
 		if (named === undefined || named.kind === "input" || named.kind === "index")
@@ -158,7 +197,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				hint:
 					named.kind === "compute"
 						? "Compute it earlier in the flow."
-						: "Ask it earlier, on every path that reaches here.",
+						: "Ask it earlier, on every route that reaches here.",
 				...(range !== undefined && { range }),
 			});
 		else if (!seen.definite.has(key) && !guarded)
@@ -166,8 +205,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "order",
 				severity: "info",
 				path,
-				message: `\`${name}\` may not be ${what} on every path here.`,
-				hint: `Where it isn't, it reads as null, so the condition isn't true. Say what then with \`isnull(${name})\`.`,
+				message:
+					named.kind === "compute"
+						? `It is possible that \`${name}\` hasn't been computed for some respondents by this point.`
+						: `It is possible that some respondents haven't been asked \`${name}\` by this point.`,
+				hint: emptyHint(name, use, named.kind === "compute"),
 				...(range !== undefined && { range }),
 			});
 	};
@@ -177,7 +219,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 		path: string,
 		seen: Seen,
 	) => {
-		for (const p of reads) readName(p.name, p.range, path, seen, false);
+		for (const p of reads) readName(p.name, p.range, path, seen, false, "text");
 	};
 
 	/** A condition that comes out the same whatever is answered: a branch that's never, or always, taken. */
@@ -226,7 +268,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 							: [];
 					});
 				}
-				for (const fill of node.fills) read(fill.source, fill.path, seen);
+				for (const fill of node.fills)
+					read(fill.source, fill.path, seen, "text");
 				// Unresolved, it still records its `as`: the hole already says what's wrong.
 				if (q === undefined)
 					return node.as === undefined ? seen : add(seen, [node.as]);
@@ -260,7 +303,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				);
 				// A check reads the answer just given, and what came before.
 				for (const check of node.checks) {
-					read(check.ensure, `${check.path}.ensure`, after);
+					read(check.ensure, `${check.path}.ensure`, after, "check");
 					readPlaceholders(check.messageReads, `${check.path}.message`, after);
 				}
 				return after;
@@ -274,7 +317,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				const ends: Seen[] = [];
 				let decided = false;
 				for (const branch of node.branches) {
-					read(branch.cond, `${branch.path}.if`, seen);
+					read(branch.cond, `${branch.path}.if`, seen, "branch");
 					const value = constant(branch.cond);
 					if (decided || value === false)
 						say({
@@ -302,7 +345,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				return merge(ends);
 			}
 			case "stop":
-				read(node.cond, `${node.path}.stop`, seen);
+				read(node.cond, `${node.path}.stop`, seen, "stop");
 				readPlaceholders(node.sayReads, `${node.path}.say`, seen);
 				if (constant(node.cond) === true)
 					say({
@@ -314,7 +357,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					});
 				return seen;
 			case "compute": {
-				read(node.value, `${node.path}.value`, seen);
+				read(node.value, `${node.path}.value`, seen, "value");
 				if (node.name === undefined) return seen;
 				const named = parsed.scope.get(node.name);
 				const row = rows.at(-1);
@@ -330,11 +373,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 			case "roster": {
 				// `count` is read before the rows; `more` at the end of each.
 				if (node.end?.kind === "count")
-					read(node.end.value, `${node.path}.count`, seen);
+					read(node.end.value, `${node.path}.count`, seen, "count");
 				const end = inRows(node.name, () => {
 					const body = flow(node.flow, seen, true);
 					if (node.end?.kind === "more")
-						read(node.end.cond, `${node.path}.more`, body);
+						read(node.end.cond, `${node.path}.more`, body, "more");
 					return body;
 				});
 				if (node.name !== undefined)
