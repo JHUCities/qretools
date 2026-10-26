@@ -1,13 +1,15 @@
 /**
  * The `qretools` command: `check` a workspace directory's findings (its questions',
  * shared files' and instruments'), as compilers report them, `export` its questions' DDI,
+ * write their `codebook` (an HTML page of that DDI, or of any DDI document),
  * or `build` it: the DDI of its last commit, each item at the version its history gives. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
 	type Address,
 	addressOf,
@@ -72,6 +74,9 @@ type RemoteAddress = Extract<Address, { kind: "remote" }>;
 const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
+  qretools codebook [dir | file.json] [-o file] [--strict]
+                                    Write a codebook, one HTML page: of its questions' DDI, or of
+                                    any DDI-Lifecycle 4.0 JSON file
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
@@ -85,7 +90,8 @@ a tag (\`owner/repo@v1\`, with git). A tag can be moved: \`instrument export\` l
 each tag it reads at the commit read, under \`locked:\` in its workspace.yaml, and a
 tag that names another commit than its lock is a warning until the next export locks it.
 --bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
---strict  also fail on warnings.
+--strict  also fail on warnings; for codebook, fail on a reference to an item the
+          document doesn't have (the page is written either way).
 --tag-message  also write the message a release's annotated tag carries: each file's
           version, so a workspace that uses this one at the tag reads them.
 --agency  the DDI agency the instrument is published under, when it isn't its
@@ -120,7 +126,12 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		(args.values.help ? io.out : io.err)(`${USAGE}\n`);
 		return args.values.help ? OK : USAGE_ERROR;
 	}
-	if (command !== "check" && command !== "export" && command !== "build") {
+	if (
+		command !== "check" &&
+		command !== "export" &&
+		command !== "build" &&
+		command !== "codebook"
+	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
@@ -136,7 +147,9 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 						? "--tag-message"
 						: command === "check"
 							? args.values.output !== undefined && "--output"
-							: args.values.strict === true && "--strict";
+							: command !== "codebook" &&
+								args.values.strict === true &&
+								"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -150,6 +163,30 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values["tag-message"],
 			io,
 		);
+	const strict = args.values.strict === true;
+	// A file is a DDI document, any producer's; a directory is a workspace.
+	if (
+		command === "codebook" &&
+		(await stat(dir).then(
+			(s) => s.isFile(),
+			() => false,
+		))
+	) {
+		let text: string;
+		try {
+			text = await readFile(dir, "utf8");
+		} catch (e) {
+			io.err(
+				`Can't read ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return USAGE_ERROR;
+		}
+		return emit(
+			renderCodebook(jsonOf(text), dir, strict),
+			args.values.output,
+			io,
+		);
+	}
 	let files: Readonly<Record<string, string>>;
 	try {
 		files = await readWorkspace(dir);
@@ -169,7 +206,87 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	return exportBank(bank, args.values.output, io);
+	return exportBank(
+		bank,
+		args.values.output,
+		io,
+		command === "codebook"
+			? (document) => renderCodebook({ ok: true, value: document }, dir, strict)
+			: asJson,
+	);
+}
+
+/** What a command writes: the text, if any, and lines to say on stderr; `problems` fails it. */
+interface Rendered {
+	readonly text?: string;
+	readonly lines: readonly string[];
+	readonly problems: boolean;
+}
+
+/** Writes what was rendered: its lines on stderr, its text to the file or stdout. */
+async function emit(
+	r: Rendered,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	for (const line of r.lines) io.err(`${line}\n`);
+	if (r.text !== undefined)
+		if (output === undefined) io.out(r.text);
+		else await io.writeFile(output, r.text);
+	return r.problems ? PROBLEMS : OK;
+}
+
+/** The DDI as `export` writes it. */
+const asJson = (document: DdiDocument): Rendered => ({
+	text: `${JSON.stringify(document, null, 2)}\n`,
+	lines: [],
+	problems: false,
+});
+
+type Json =
+	| { readonly ok: true; readonly value: unknown }
+	| { readonly ok: false; readonly detail: string };
+
+/** A file's text as JSON, or why it isn't. */
+const jsonOf = (text: string): Json => {
+	try {
+		return { ok: true, value: JSON.parse(text) };
+	} catch (e) {
+		return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+	}
+};
+
+/**
+ * A DDI document as its codebook: one HTML page, and a line in `check`'s form for each
+ * reference to an item the document doesn't have, since CI never reads the page. Not
+ * written when it isn't a DDI document. `strict` fails on a broken reference; the page
+ * is written either way. `input` names what was read: the file, or the workspace.
+ */
+function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
+	if (!json.ok)
+		return {
+			lines: [
+				`${input}: error: Not written: this isn't JSON (${json.detail}). [codebook-unreadable]`,
+			],
+			problems: true,
+		};
+	const read = readDdi(json.value);
+	if (!read.ok)
+		return {
+			lines: read.error.map(
+				(f) => `${input}: error: Not written: ${f.message} [${f.code}]`,
+			),
+			problems: true,
+		};
+	const codebook = codebookOf(read.value);
+	return {
+		text: pageOf(codebook),
+		lines: codebook.findings.map(
+			(f) =>
+				`${input}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]`,
+		),
+		problems: strict && codebook.findings.length > 0,
+	};
 }
 
 function parse(argv: readonly string[]) {
@@ -314,12 +431,15 @@ async function checkWorkspace(
  * The workspace's questions' DDI: every question's items, keyed once. Refused, with reasons and nothing
  * written, when it would be wrong: no declared agency, two items under one identity, or
  * a document the official schema rejects. Holes don't refuse it: they leave elements out.
- * Shared items no question uses aren't in it.
+ * Shared items no question uses aren't in it. Written as `write` makes it: JSON, or its
+ * codebook.
  */
 async function exportBank(
 	bank: Bank,
 	output: string | undefined,
 	io: Io,
+	/** How the document is written: as JSON, or as a codebook. */
+	write: (document: DdiDocument) => Rendered,
 ): Promise<number> {
 	// Each question's items, made as an instrument brings them.
 	const sources = Object.keys(bank.questions)
@@ -353,10 +473,7 @@ async function exportBank(
 			`${incomplete} files have something to fill in or fix; what they lack is left out of the DDI (\`qretools check\` lists it).\n`,
 		);
 	if (refusal !== undefined) return refused(refusal, io);
-	const text = `${JSON.stringify(document, null, 2)}\n`;
-	if (output === undefined) io.out(text);
-	else await io.writeFile(output, text);
-	return OK;
+	return emit(write(document), output, io);
 }
 
 /**
@@ -390,7 +507,7 @@ async function build(
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	const code = await exportBank(bank, join(out, "ddi.json"), io);
+	const code = await exportBank(bank, join(out, "ddi.json"), io, asJson);
 	// Only for a build that exported: a refused one is no release.
 	if (code === OK && message !== undefined)
 		await io.writeFile(message, tagMessage(versions, pkg.version));

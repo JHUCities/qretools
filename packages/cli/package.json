@@ -2,7 +2,7 @@
 	"name": "qretools",
 	"version": "2.0.0-alpha.3",
 	"type": "module",
-	"description": "The qretools command: check and export a workspace and its instruments, for CI and the terminal",
+	"description": "The qretools command: check and export a workspace and its instruments, and write its codebook, for CI and the terminal",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
@@ -30,6 +30,7 @@
 		"access": "public"
 	},
 	"devDependencies": {
+		"@qretools/codebook": "workspace:*",
 		"@qretools/core": "workspace:*",
 		"@qretools/qsf": "workspace:*",
 		"@qretools/shell": "workspace:*",
