@@ -31,7 +31,8 @@ export interface InstrumentContext {
 	readonly unresolved?: Readonly<Record<string, Unread>>;
 	/**
 	 * The DDI agency the instrument is published under: its maker's, not necessarily its
-	 * banks'. Absent, it is published under `invalid`, and a finding says so.
+	 * banks'. Absent, its DDI shows `invalid` in its place and can't be exported, and a
+	 * finding says so.
 	 */
 	readonly agency?: string;
 	/** Its DDI version; "1" when nothing is known of its history. */
@@ -84,13 +85,13 @@ export function instrumentOf(
 							code: "hole",
 							severity: "hole",
 							path: "",
-							message: "No DDI agency is given for this instrument.",
-							hint: `Until one is, its DDI is published under \`${UNDECLARED_AGENCY}\`.`,
+							message: "This instrument has no DDI agency yet.",
+							hint: `Its DDI can't be exported until it has one: add an \`agency:\` line to the workspace's \`workspace.yaml\`. Until then the preview shows \`${UNDECLARED_AGENCY}\` in its place.`,
 						},
 					]
 				: [];
 	const clashes = clashFindings(collisions, parsed.draft.uses);
-	// A bank with no agency would publish its questions under `invalid`: say so where it's
+	// A bank with no agency stops the instrument's export: say so where it's
 	// used. Not for the instrument's own workspace (`../`): its agency is the instrument's,
 	// and the finding above already says it is missing or wrong.
 	const banksWithout: Finding[] = parsed.draft.uses.flatMap((u): Finding[] =>
@@ -102,8 +103,8 @@ export function instrumentOf(
 						code: "invalid-agency",
 						severity: "error",
 						path: `uses.${u.alias}`,
-						message: `\`${u.alias}\` declares no DDI agency, so its questions would be published under \`${UNDECLARED_AGENCY}\`.`,
-						hint: "A workspace gives its agency in its `workspace.yaml`.",
+						message: `\`${u.alias}\` has no DDI agency, so this instrument's DDI can't be exported.`,
+						hint: `Add an \`agency:\` line to that workspace's \`workspace.yaml\`. Until then the preview shows \`${UNDECLARED_AGENCY}\` in its place.`,
 					},
 				]
 			: [],

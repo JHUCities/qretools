@@ -307,7 +307,7 @@ export const bankEnv = (files: Readonly<Record<string, string>>): Env =>
 	schemeEnv(schemeFilesIn(files));
 
 /**
- * The agency items are published under while the bank declares none: `.invalid` is
+ * The agency the DDI shows while the bank declares none (a preview, never an export): `.invalid` is
  * reserved (RFC 6761) and never a real name, so the DDI stays valid and anyone reading
  * it sees at once that the agency is missing.
  */
@@ -325,8 +325,8 @@ export const absentRoot = (kind: RootKind): readonly Finding[] =>
 		? [
 				hole(
 					"agency",
-					"This workspace declares no DDI agency: add `workspace.yaml` with an `agency:` line.",
-					`Until then its items are published under \`${UNDECLARED_AGENCY}\`.`,
+					"This workspace has no DDI agency yet: add an `agency:` line to its `workspace.yaml`.",
+					`Until then its DDI can't be exported, and the preview shows \`${UNDECLARED_AGENCY}\` in its place.`,
 				),
 			]
 		: [];

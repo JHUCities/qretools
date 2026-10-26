@@ -100,7 +100,7 @@ export function callbackOf(
 	if (pending === undefined || params.get("state") !== pending.state)
 		return refused(
 			"This sign-in didn't start here, or has already been used.",
-			"Sign in again.",
+			"If you aren't signed in, sign in again.",
 		);
 	if (error !== null)
 		return refused(

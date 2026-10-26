@@ -106,7 +106,8 @@ draft.findings.map((f) => [f.severity, f.path]);
 A workspace's questions and shared files from a directory: each file's evaluation and
 findings by path, the shared files' environment, the paths read as nothing, and the DDI
 agency `workspace.yaml` declares. A workspace without one is reported once, under
-`workspace.yaml`, and its items are published under `invalid` until it has one.
+`workspace.yaml`, and its DDI can't be exported until it has one (the preview shows
+`invalid` in its place).
 
 `workspace.yaml` has three fields: `agency`; `required`, the fields every question must
 have beyond `name`, `text` and `intent` (such as `title`); and `required_in`, the fields

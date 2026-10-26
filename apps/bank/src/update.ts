@@ -936,7 +936,7 @@ function step(model: Model, msg: Msg): Step {
 							refuse(
 								model,
 								msg.id,
-								`\`${path}\` already exists${isBankEntry(q) ? " in the bank" : ""}.`,
+								`\`${path}\` is already used.`,
 								"Open the one already there to change it.",
 							),
 							[],
@@ -1608,16 +1608,27 @@ function write(
 		const name = nameOf(model, stuck);
 		// A root file is named by its kind alone: "the workspace details".
 		const root = stuck.kind !== "question" && isRoot(stuck.kind);
+		// Blocked means changed here and on GitHub (reloading drops the changes here), or deleted there.
+		const deleted =
+			syncOf(stuck, remoteBlob(model.remote, stuck)) === "deletedOnGitHub";
+		const subject =
+			stuck.kind === "question"
+				? `The question \`${name}\` this instrument asks`
+				: `The ${SCHEME_NAME[stuck.kind]}${root ? "" : ` \`${name}\``} this ${q.kind === "question" ? "question names" : "instrument reads"}`;
+		const open = root
+			? `Open the ${SCHEME_NAME[stuck.kind]}`
+			: `Open \`${name}\``;
+		const it = root ? "them" : "it";
 		return [
 			refuse(
 				model,
 				id,
-				stuck.kind === "question"
-					? `The question \`${name}\` this instrument asks changed on GitHub since you started.`
-					: `The ${SCHEME_NAME[stuck.kind]}${root ? "" : ` \`${name}\``} this ${q.kind === "question" ? "question names" : "instrument reads"} changed on GitHub since you started.`,
-				root
-					? `Open the ${SCHEME_NAME[stuck.kind]} and reload them from GitHub, then save again.`
-					: `Open \`${name}\` and reload it from GitHub, then save again.`,
+				deleted
+					? `${subject} ${root ? "were" : "was"} deleted on GitHub.`
+					: `${subject} changed on GitHub as well as here.`,
+				deleted
+					? `${open} and reload ${it} from GitHub${root ? "" : `, or stop using it in this ${q.kind}`}, then save again.`
+					: `${open}, copy your changes to ${it} if you want to keep them, reload ${it} from GitHub, then save again.`,
 			),
 			[],
 		];
@@ -2094,13 +2105,14 @@ export function moveProblem(
 	q: Question,
 	folder: string,
 ): string | undefined {
-	if (q.base === undefined) return "Only a question in the bank can move.";
+	if (q.base === undefined) return "Save this question before moving it.";
 	if (!FOLDER_PATTERN.test(folder)) return FOLDER_RULE_TEXT;
 	const to = movedPath(q.base.path, folder);
 	if (to === q.base.path) return "It's already in that folder.";
 	const sync = syncOf(q, remoteBlob(model.remote, q));
-	if (sync === "conflict" || sync === "deletedOnGitHub")
-		return "This question changed on GitHub since you started; reload it first.";
+	if (sync === "conflict")
+		return "This question changed on GitHub as well as here. Copy your changes if you want to keep them, then reload it from GitHub.";
+	if (sync === "deletedOnGitHub") return "This question was deleted on GitHub.";
 	if (taken(model, to, q.id)) return `\`${to}\` is already taken.`;
 	return undefined;
 }

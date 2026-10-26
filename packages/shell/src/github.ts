@@ -733,8 +733,8 @@ export const makeGitHubStore = (
 				: err({
 						failure: {
 							kind: "stale",
-							message: "Your branch kept changing while saving.",
-							hint: "Reload from GitHub, then save again.",
+							message: "Your branch kept changing while this was saving.",
+							hint: "Save again.",
 						},
 					});
 		},
@@ -826,15 +826,31 @@ function failureOf(e: unknown): Failure {
 			headers["retry-after"] !== undefined ||
 			/secondary rate limit/i.test(message))
 	) {
+		// The client has already waited once (the throttling plugin), so it's "still" limited.
 		const reset = Number(headers["x-ratelimit-reset"]);
-		const when = Number.isFinite(reset)
-			? new Date(reset * 1000).toLocaleTimeString()
-			: "later";
+		if (String(headers["x-ratelimit-remaining"]) === "0")
+			return {
+				kind: "rateLimited",
+				status,
+				...(Number.isFinite(reset)
+					? {
+							message: `GitHub's rate limit is used up until ${new Date(reset * 1000).toLocaleTimeString()}.`,
+							hint: "Try again then.",
+						}
+					: {
+							message: "GitHub's rate limit is used up for now.",
+							hint: "Try again later.",
+						}),
+			};
+		// A secondary limit lasts seconds, not until the primary limit's reset.
+		const wait = Number(headers["retry-after"]);
 		return {
 			kind: "rateLimited",
 			status,
-			message: `GitHub's rate limit is used up until ${when}.`,
-			hint: "Try again then.",
+			message: "GitHub is still limiting requests for now.",
+			hint: Number.isFinite(wait)
+				? `Wait ${wait} seconds, then try again.`
+				: "Wait a minute, then try again.",
 		};
 	}
 	if (status === 404)
