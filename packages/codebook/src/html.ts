@@ -5,7 +5,7 @@
  */
 
 import { itemKeyOf } from "@qretools/core";
-import type { Asking, Command } from "./flow.ts";
+import type { Asking, Command, LinkedAsk, Outline, Step } from "./flow.ts";
 import type {
 	Codebook,
 	Described,
@@ -61,6 +61,17 @@ interface Context extends Options {
 	/** ` lang="en"` for the page's own words, where the page isn't in English; else "". */
 	readonly en: string;
 	readonly inLink?: boolean;
+	/**
+	 * Where each ask is in an instrument's map, by its construct's URN: its anchor, and the
+	 * words of a link to it ("in the instrument", or naming the instrument when there are
+	 * several). None where there's no map.
+	 */
+	readonly places?: ReadonlyMap<string, Place>;
+}
+
+interface Place {
+	readonly anchor: string;
+	readonly words: string;
 }
 
 /** What a host decides about the codebook it shows. */
@@ -176,9 +187,20 @@ function askingHtml(a: Asking, cx: Context): string {
 	return sentence(parts.length === 0 ? "always" : parts.join("; "));
 }
 
-/** Where a question is asked; nothing when it is asked once, always, as it is. */
+/** A link from an asking to its place in the instrument's map, if the page has it. */
+function placeHtml(a: Asking, cx: Context): string {
+	const place = cx.places?.get(a.construct);
+	return place === undefined
+		? ""
+		: ` <a href="${hrefOf(place.anchor)}">${place.words}</a>`;
+}
+
+/**
+ * Where a question is asked, each place linked to the instrument's map; nothing when it is
+ * asked once, always, as it is, with no map to link to.
+ */
 function askedHtml(asked: readonly Asking[], cx: Context): string | undefined {
-	const places = asked.map((a) => askingHtml(a, cx));
+	const places = asked.map((a) => `${askingHtml(a, cx)}${placeHtml(a, cx)}`);
 	if (places.length === 0 || (places.length === 1 && places[0] === "Always"))
 		return undefined;
 	return places.length === 1
@@ -469,6 +491,11 @@ function contentsHtml(
 	blocks: readonly Block[],
 	cx: Context,
 ): string {
+	// The page's order: the instrument's map comes before the variables.
+	const instrument =
+		cb.instruments.length === 0
+			? ""
+			: `<ul${cx.en}><li><a href="#ddi-instrument">${cb.instruments.length === 1 ? "Instrument" : "Instruments"}</a></li></ul>`;
 	const entries = blocks.map((b) =>
 		b.kind === "entry"
 			? `<li>${contentsLink(b.entry.urn, b.entry.name, b.entry.label, cx)}</li>`
@@ -488,7 +515,7 @@ function contentsHtml(
 			? ""
 			: `<li><a href="#ddi-broken">Broken references</a></li>`,
 	].join("");
-	return `<nav aria-labelledby="ddi-contents"><h2 id="ddi-contents"${cx.en}>Contents</h2><ol>${entries.join("")}</ol>${rest === "" ? "" : `<ul${cx.en}>${rest}</ul>`}</nav>`;
+	return `<nav aria-labelledby="ddi-contents"><h2 id="ddi-contents"${cx.en}>Contents</h2>${instrument}<ol>${entries.join("")}</ol>${rest === "" ? "" : `<ul${cx.en}>${rest}</ul>`}</nav>`;
 }
 
 /** The anchors a codebook's HTML has: its entries', its select-all questions' and its shared items'. */
@@ -498,11 +525,160 @@ const anchorsOf = (cb: Codebook, blocks: readonly Block[]): Set<string> =>
 			...cb.entries.map((e) => e.urn),
 			...blocks.flatMap((b) => (b.kind === "group" ? [b.question.urn] : [])),
 			...SHARED.flatMap((s) => cb.shared[s.key].map((it) => it.urn)),
+			...cb.instruments.map((i) => i.urn),
 		].flatMap((urn) => {
 			const anchor = anchorOf(urn);
 			return anchor === undefined ? [] : [anchor];
 		}),
 	);
+
+/** The asks in a tree of steps, in order. */
+function asksOf(steps: readonly Step<LinkedAsk>[]): LinkedAsk[] {
+	return steps.flatMap((s) => {
+		switch (s.kind) {
+			case "ask":
+				return [s];
+			case "branch":
+				return [
+					...s.arms.flatMap((a) => asksOf(a.steps)),
+					...asksOf(s.otherwise ?? []),
+				];
+			case "loop":
+			case "section":
+				return asksOf(s.steps);
+			default:
+				return [];
+		}
+	});
+}
+
+/**
+ * Each ask's place in the map: its construct's anchor, on the first place it appears only
+ * (a construct reached by two paths is drawn twice, and an id is once a page).
+ */
+function placesOf(
+	instruments: readonly Outline<LinkedAsk>[],
+	en: string,
+): Map<string, Place> {
+	const places = new Map<string, Place>();
+	const words = (s: string) => (en === "" ? s : `<span${en}>${s}</span>`);
+	for (const i of instruments)
+		for (const ask of asksOf(i.steps)) {
+			const anchor = anchorOf(ask.construct);
+			if (anchor === undefined || places.has(ask.construct)) continue;
+			places.set(ask.construct, {
+				anchor,
+				words:
+					instruments.length === 1 || i.name === undefined
+						? words("in the instrument")
+						: `${words("in")} <code>${escapeHtml(i.name)}</code>`,
+			});
+		}
+	return places;
+}
+
+/** Steps as a list; nothing for none. */
+const flowHtml = (
+	steps: readonly Step<LinkedAsk>[],
+	cx: Context,
+	drawn: Set<string>,
+): string =>
+	steps.length === 0
+		? ""
+		: // role: a list styled without markers stays a list to VoiceOver.
+			`<ol class="ddi-flow" role="list">${steps.map((s) => stepHtml(s, cx, drawn)).join("")}</ol>`;
+
+/** A command and its program language, or that there is none. */
+const conditionHtml = (c: Command | undefined, cx: Context): string =>
+	c === undefined ? english("(no condition written)", cx) : commandHtml(c);
+
+/** One step as a list item; `drawn` holds the constructs that already have their id. */
+function stepHtml(s: Step<LinkedAsk>, cx: Context, drawn: Set<string>): string {
+	switch (s.kind) {
+		case "ask": {
+			const place = cx.places?.get(s.construct);
+			const id =
+				place === undefined || drawn.has(s.construct)
+					? ""
+					: ` id="${escapeHtml(place.anchor)}"`;
+			drawn.add(s.construct);
+			const to = s.entry === undefined ? undefined : anchorOf(s.entry.urn);
+			return `<li${id}>${
+				s.entry === undefined
+					? `<span class="ddi-urn">${escapeHtml(s.question)}</span>`
+					: to !== undefined && cx.anchors.has(to)
+						? contentsLink(s.entry.urn, s.entry.name, s.entry.label, cx)
+						: titleHtml(s.entry.name, s.entry.label, s.entry.urn, cx)
+			}</li>`;
+		}
+		case "say":
+			return `<li>${
+				s.text === undefined
+					? english("A statement with no text", cx)
+					: `<blockquote>${blockHtml(s.text, cx)}</blockquote>`
+			}</li>`;
+		case "compute":
+			return `<li><p>${english("Compute", cx)} ${
+				s.assigns.length === 0 ? "" : `${refsHtml(s.assigns, cx)}: `
+			}${conditionHtml(s.command, cx)}</p></li>`;
+		case "branch": {
+			const type =
+				s.type === undefined
+					? ""
+					: ` <span class="ddi-language">(${escapeHtml(s.type)})</span>`;
+			return `<li>${s.arms
+				.map(
+					(a, i) =>
+						`<p>${english(i === 0 ? "If" : "Else if", cx)} ${conditionHtml(a.command, cx)}${i === 0 ? type : ""}</p>${flowHtml(a.steps, cx, drawn)}`,
+				)
+				.join("")}${
+				s.otherwise === undefined
+					? ""
+					: `<p>${english("Else", cx)}</p>${flowHtml(s.otherwise, cx, drawn)}`
+			}</li>`;
+		}
+		case "loop": {
+			const how =
+				s.command === undefined
+					? ""
+					: ` ${english(s.loop === "RepeatUntil" ? "until" : "while", cx)} ${commandHtml(s.command)}`;
+			// An unnamed loop isn't named by its URN: "Repeated while …" says enough.
+			const named =
+				s.ref.name === undefined ? "" : ` ${inlineHtml([[s.ref]], cx)}`;
+			return `<li><p>${english("Repeated", cx)}${named}${how}</p>${flowHtml(s.steps, cx, drawn)}</li>`;
+		}
+		case "section": {
+			// A section's name is its title (QREtools writes it there), so words, not code.
+			const title =
+				s.label !== undefined
+					? inlineHtml(s.label, cx)
+					: s.name !== undefined
+						? escapeHtml(s.name)
+						: english("Section", cx);
+			const order =
+				s.order === undefined
+					? ""
+					: ` <span class="ddi-language">(${escapeHtml(s.order)})</span>`;
+			return `<li><p class="ddi-section">${title}${order}</p>${flowHtml(s.steps, cx, drawn)}</li>`;
+		}
+		default:
+			return s satisfies never;
+	}
+}
+
+/** Each instrument as a map: its title, what it is, then its steps. */
+function instrumentsHtml(cb: Codebook, cx: Context): string {
+	if (cb.instruments.length === 0) return "";
+	const drawn = new Set<string>();
+	return `<section aria-labelledby="ddi-instrument"><h2 id="ddi-instrument"${cx.en}>${cb.instruments.length === 1 ? "Instrument" : "Instruments"}</h2>${cb.instruments
+		.map(
+			(i) =>
+				`<article${idAttr(i.urn)}>${headingHtml(3, i.name, i.label, i.urn, cx)}${
+					i.description === undefined ? "" : blockHtml(i.description, cx)
+				}${flowHtml(i.steps, cx, drawn)}</article>`,
+		)
+		.join("")}</section>`;
+}
 
 /**
  * A codebook as HTML to place in a page: the contents, then each entry, then the shared
@@ -515,10 +691,12 @@ const anchorsOf = (cb: Codebook, blocks: readonly Block[]): Set<string> =>
 export function codebookHtml(cb: Codebook, options: Options = {}): string {
 	const blocks = blocksOf(cb.entries);
 	const english = cb.lang !== undefined && /^en(-|$)/i.test(cb.lang);
+	const en = english ? "" : ' lang="en"';
 	const cx: Context = {
 		...options,
 		anchors: anchorsOf(cb, blocks),
-		en: english ? "" : ' lang="en"',
+		en,
+		places: placesOf(cb.instruments, en),
 	};
 	const shared = SHARED.filter((s) => cb.shared[s.key].length > 0)
 		.map(
@@ -537,6 +715,7 @@ export function codebookHtml(cb: Codebook, options: Options = {}): string {
 					.map((f) => `<li>${inlineHtml(marked(f.message), cx)}</li>`)
 					.join("")}</ul></section>`;
 	return `${contentsHtml(cb, blocks, cx)}
+${instrumentsHtml(cb, cx)}
 <section aria-labelledby="ddi-variables"><h2 id="ddi-variables"${cx.en}>Variables</h2>${blocks.map((b) => blockOfHtml(b, cx)).join("")}</section>
 ${shared === "" ? "" : `<section aria-labelledby="ddi-shared"><h2 id="ddi-shared"${cx.en}>Shared</h2>${shared}</section>`}
 ${broken}`;
@@ -646,7 +825,8 @@ p { margin: 0 0 0.5rem; }
 a { color: var(--fgColor-accent); text-decoration: underline; text-underline-position: under; }
 :focus-visible { outline: 2px solid var(--borderColor-accent-emphasis); outline-offset: 2px; border-radius: var(--borderRadius-small); }
 code { font: 0.9285em var(--fontStack-monospace); padding: 0.1em 0.3em; border-radius: var(--borderRadius-medium); background: var(--bgColor-neutral-muted); }
-[data-urn] { font: 0.9285em var(--fontStack-monospace); }
+/* A reference with no name shows its URN, one long word: it may break anywhere. */
+[data-urn] { font: 0.9285em var(--fontStack-monospace); overflow-wrap: anywhere; }
 a[data-urn] { color: var(--fgColor-shared); }
 /* In an element, the contents come first: no space above them but the host's. */
 :scope > nav > h2 { margin-block-start: 0; }
@@ -660,6 +840,14 @@ section > h3 + article { border-block-start: 0; }
 :target { background: var(--bgColor-accent-muted); outline: 0.5rem solid var(--bgColor-accent-muted); }
 blockquote { margin: 0 0 0.5rem; padding-inline-start: 1rem; border-inline-start: 0.25em solid var(--borderColor-default); font-size: 1rem; }
 .ddi-instruction, .ddi-answers, .ddi-option { color: var(--fgColor-muted); }
+/* The instrument's map: nesting shown by indentation and a rule, not numbers. */
+.ddi-flow { list-style: none; margin: 0.25rem 0 0.5rem; padding-inline-start: 0; }
+.ddi-flow .ddi-flow { padding-inline-start: 1rem; border-inline-start: 2px solid var(--borderColor-muted); }
+.ddi-flow li { margin-block: 0.25rem; scroll-margin-block-start: 1rem; }
+.ddi-flow p, .ddi-flow blockquote { margin: 0; }
+.ddi-section { font-weight: 600; }
+/* A long command wraps rather than scrolling the page sideways. */
+:is(.ddi-flow, dd) code { white-space: pre-wrap; overflow-wrap: anywhere; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.75rem 0; }
 dt { font-weight: 600; }
 dd { margin: 0; }

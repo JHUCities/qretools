@@ -27,7 +27,16 @@ import {
 	str,
 	words,
 } from "@qretools/core";
-import { type Asking, type Command, commandOf, flowOf } from "./flow.ts";
+import {
+	type Asking,
+	type Command,
+	commandOf,
+	flowOf,
+	type Linked,
+	type LinkedAsk,
+	type Outline,
+	type Step,
+} from "./flow.ts";
 import {
 	dynamicTextOf,
 	nameOf,
@@ -143,6 +152,8 @@ export interface Codebook {
 	readonly title?: string;
 	/** In the instruments' order where there are any, the rest in document order. */
 	readonly entries: readonly Entry[];
+	/** Each instrument as a map, each question in it linked to its entry; none without one. */
+	readonly instruments: readonly Outline<LinkedAsk>[];
 	/** What the entries refer to, each once, in the order first referred to. */
 	readonly shared: {
 		readonly concepts: readonly Described[];
@@ -481,13 +492,13 @@ export function codebookOf(
 		const all = q === undefined ? [] : (flow.asked.get(latestOf(q).urn) ?? []);
 		const out = v?.item.OutParameter;
 		const bound = all.filter((a) =>
-			asList(flow.constructs.get(a.construct)?.item.Binding).some(
+			asList(follow(a.construct)?.item.Binding).some(
 				(b) => out !== undefined && same(b.TargetParameterReference, out),
 			),
 		);
 		const asked = bound.length > 0 ? bound : all;
 		const askedUniverses = asked.flatMap((a) => {
-			const c = flow.constructs.get(a.construct);
+			const c = follow(a.construct);
 			return c === undefined ? [] : followAll(c.item.UniverseReference);
 		});
 		const unique = (its: readonly Indexed[]) => [...new Set(its)];
@@ -593,6 +604,51 @@ export function codebookOf(
 		return x === y ? 0 : x - y;
 	});
 
+	// Each question to the entry recording it: its first variable's, or a select-all question's own.
+	const recordedIn = new Map<string, Linked>();
+	for (const { entry, question } of entries) {
+		if (question === undefined) continue;
+		const key = latestOf(question).urn;
+		if (recordedIn.has(key)) continue;
+		recordedIn.set(
+			key,
+			entry.group === undefined
+				? {
+						urn: entry.urn,
+						...(entry.name !== undefined && { name: entry.name }),
+						...(entry.label !== undefined && { label: entry.label }),
+					}
+				: {
+						urn: entry.group.question,
+						...(entry.question?.name !== undefined && {
+							name: entry.question.name,
+						}),
+					},
+		);
+	}
+	const linked = (steps: readonly Step[]): Step<LinkedAsk>[] =>
+		steps.map((s): Step<LinkedAsk> => {
+			switch (s.kind) {
+				case "ask": {
+					const entry = recordedIn.get(s.question);
+					return entry === undefined ? s : { ...s, entry };
+				}
+				case "branch":
+					return {
+						...s,
+						arms: s.arms.map((a) => ({ ...a, steps: linked(a.steps) })),
+						...(s.otherwise !== undefined && {
+							otherwise: linked(s.otherwise),
+						}),
+					};
+				case "loop":
+				case "section":
+					return { ...s, steps: linked(s.steps) };
+				default:
+					return s;
+			}
+		});
+
 	const instrument = items.find((it) => it.type === "Instrument");
 	const title =
 		instrument === undefined
@@ -603,6 +659,10 @@ export function codebookOf(
 		...(lang !== undefined && { lang }),
 		...(title !== undefined && { title }),
 		entries: entries.map((e) => e.entry),
+		instruments: flow.instruments.map((i) => ({
+			...i,
+			steps: linked(i.steps),
+		})),
 		shared: {
 			concepts: [...concepts.values()],
 			universes: [...universes.values()],

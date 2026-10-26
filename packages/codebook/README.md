@@ -23,6 +23,13 @@ codes (missing ones marked), its format, universes and concepts, and every place
 instrument asks it: the conditions on the way there (the producer's commands, verbatim),
 the loops around it and the order its section and options are shown in.
 
+Where the document has instruments, each is drawn as a map after the contents, before
+the variables: its statements, questions, conditions, loops, computations and named
+sections in order and nested as the instrument nests them, each question a link to its
+entry, and each entry's "Asked" place a link back to it. The wording stays in the
+entries. Conditions are the producer's commands as written; a CommandCode's description
+isn't shown.
+
 The page is self-contained: its style is inline, it runs no script and fetches nothing,
 so it can be opened from a file, attached or printed. It looks like GitHub's Primer, in
 light or dark as the reader's system is. Every entry and every shared item has an

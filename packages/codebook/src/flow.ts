@@ -1,7 +1,8 @@
 /**
- * Where a question is asked, read from an instrument's control constructs: for each
- * QuestionConstruct, the conditions on the way to it, the loops around it and the order
- * its section and its options are shown in. Walked down from each instrument, following
+ * An instrument's control constructs as a tree (its map), and from that tree where each
+ * question is asked: for each QuestionConstruct, the conditions on the way to it, the
+ * loops around it and the order its section and its options are shown in, so the map and
+ * the "Asked" places can't disagree. Walked down from each instrument, following
  * each reference as written (a version it names, else the newest), so a construct no
  * instrument reaches is asked nowhere, and every path to an ask is a place it is asked.
  * Conditions are the producer's commands, verbatim: nothing is parsed, so any program
@@ -11,13 +12,22 @@
 import {
 	asList,
 	asObj,
+	DDI_DEPTH,
 	type DdiIndex,
 	deref,
 	type Indexed,
 	latestOf,
 	str,
+	words,
 } from "@qretools/core";
-import { type Ref, refOf } from "./text.ts";
+import {
+	dynamicTextOf,
+	nameOf,
+	type Ref,
+	refOf,
+	type Text,
+	textOf,
+} from "./text.ts";
 
 /** A command as written, in its program language (`VTL`) when it says. */
 export interface Command {
@@ -44,42 +54,83 @@ export interface Asking {
 	readonly responseOrder?: string;
 }
 
-type Branch =
-	| { readonly kind: "in" }
-	| { readonly kind: "then" }
-	| { readonly kind: "elseIf"; readonly index: number }
-	| { readonly kind: "else" }
-	| { readonly kind: "loop" };
+/** A question asked at one place in an instrument. */
+export interface Ask {
+	readonly kind: "ask";
+	readonly construct: string;
+	/** The question's newest URN. */
+	readonly question: string;
+	readonly responseOrder?: string;
+}
 
-/** The constructs a construct holds, in order, and on which branch. */
-const childrenOf = (it: Indexed): readonly (readonly [unknown, Branch])[] => {
-	const o = it.item;
-	const each = (r: unknown, branch: Branch) =>
-		(Array.isArray(r) ? r : r === undefined ? [] : [r]).map(
-			(x) => [x, branch] as const,
-		);
-	switch (it.type) {
-		case "Instrument":
-		case "Sequence":
-			return each(o.ControlConstructReference, { kind: "in" });
-		case "Loop":
-			return each(o.ControlConstructReference, { kind: "loop" });
-		case "RepeatUntil":
-			return each(o.UntilConstructReference, { kind: "loop" });
-		case "RepeatWhile":
-			return each(o.WhileConstructReference, { kind: "loop" });
-		case "IfThenElse":
-			return [
-				...each(o.ThenConstructReference, { kind: "then" }),
-				...asList(o.ElseIf).flatMap((e, index) =>
-					each(e.ThenConstructReference, { kind: "elseIf", index }),
-				),
-				...each(o.ElseConstructReference, { kind: "else" }),
-			];
-		default:
-			return [];
-	}
-};
+/** An entry as a link names it: the anchor to go to, and its words. */
+export interface Linked {
+	readonly urn: string;
+	readonly name?: string;
+	readonly label?: Text;
+}
+
+/** An ask as the codebook draws it: with the entry recording its question, where there is one. */
+export interface LinkedAsk extends Ask {
+	readonly entry?: Linked;
+}
+
+/** One branch of an IfThenElse: the condition it is taken on, and what it holds. */
+export interface Arm<A extends Ask = Ask> {
+	readonly command?: Command;
+	readonly steps: readonly Step<A>[];
+}
+
+/**
+ * One construct of an instrument as a map shows it, its asks of type `A` (the walk's
+ * `Ask`; the codebook's `LinkedAsk`). An unnamed Sequence with no order of its own is no
+ * step: its steps are its parent's.
+ */
+export type Step<A extends Ask = Ask> =
+	| A
+	| { readonly kind: "say"; readonly construct: string; readonly text?: Text }
+	| {
+			readonly kind: "compute";
+			readonly construct: string;
+			readonly command?: Command;
+			readonly assigns: readonly Ref[];
+	  }
+	| {
+			readonly kind: "branch";
+			readonly construct: string;
+			/** TypeOfIfThenElse as written (`warning`, for an edit check). */
+			readonly type?: string;
+			/** The if, then each else-if, in order. */
+			readonly arms: readonly Arm<A>[];
+			readonly otherwise?: readonly Step<A>[];
+	  }
+	| {
+			readonly kind: "loop";
+			readonly construct: string;
+			readonly ref: Ref;
+			readonly loop: "Loop" | "RepeatUntil" | "RepeatWhile";
+			/** LoopWhile, UntilCondition or WhileCondition. */
+			readonly command?: Command;
+			readonly steps: readonly Step<A>[];
+	  }
+	| {
+			readonly kind: "section";
+			readonly construct: string;
+			readonly name?: string;
+			readonly label?: Text;
+			/** Its `ItemSequenceType` (`Random`, `Rotate`), verbatim. */
+			readonly order?: string;
+			readonly steps: readonly Step<A>[];
+	  };
+
+/** An instrument as a tree of steps. */
+export interface Outline<A extends Ask = Ask> {
+	readonly urn: string;
+	readonly name?: string;
+	readonly label?: Text;
+	readonly description?: Text;
+	readonly steps: readonly Step<A>[];
+}
 
 /** A CommandCode's first command. */
 // shortcut: a CommandCode may hold the same command in several languages; the first is shown.
@@ -92,29 +143,11 @@ export function commandOf(code: unknown): Command | undefined {
 		: { command, ...(language !== undefined && { language }) };
 }
 
-/** The conditions a branch of an IfThenElse is taken on: an else's are every earlier one, negated. */
-function conditionsOn(it: Indexed, branch: Branch): Condition[] {
-	const conds = [
-		commandOf(it.item.IfCondition),
-		...asList(it.item.ElseIf).map((e) => commandOf(e.IfCondition)),
-	];
-	const taken =
-		branch.kind === "then"
-			? 0
-			: branch.kind === "elseIf"
-				? branch.index + 1
-				: conds.length;
-	// Every condition before the branch taken is false; the branch's own (an else has none) is true.
-	return conds
-		.slice(0, taken + 1)
-		.flatMap((c, i) => (c === undefined ? [] : [{ ...c, negated: i < taken }]));
-}
-
 export interface Flow {
+	/** Each instrument as a tree, newest versions, in document order. */
+	readonly instruments: readonly Outline[];
 	/** Every place a question is asked, by the URN of the question's newest version. */
 	readonly asked: ReadonlyMap<string, readonly Asking[]>;
-	/** Each asking's construct, for its universes. */
-	readonly constructs: ReadonlyMap<string, Indexed>;
 	/** Each question's position in the instruments' flow, by the URN of its newest version. */
 	readonly position: ReadonlyMap<string, number>;
 }
@@ -126,66 +159,222 @@ interface Context {
 	readonly order?: string;
 }
 
+/** A parameter written in place (an assigned variable) as a reference to it. */
+function parameterRef(p: unknown, lang?: string): Ref[] {
+	const o = asObj(p);
+	const urn = str(o?.URN);
+	if (o === undefined || urn === undefined) return [];
+	const name = nameOf({ type: "Parameter", urn, item: o }, lang);
+	return [
+		{
+			kind: "ref",
+			type: "Parameter",
+			urn,
+			...(name !== undefined && { name }),
+		},
+	];
+}
+
 /**
- * The flow of every instrument in the index, its newest version.
+ * The flow of every instrument in the index, its newest version: each as a tree, and from
+ * that tree every place a question is asked, so the map and the "Asked" lines can't disagree.
  */
 export function flowOf(index: DdiIndex, lang?: string): Flow {
-	const asked = new Map<string, Asking[]>();
-	const constructs = new Map<string, Indexed>();
-	const position = new Map<string, number>();
-	// Depth first, so questions are positioned in the order first asked; `path` stops a cycle.
-	// shortcut: every path is walked, so constructs shared many times over multiply the work; memoise per construct and context if a real document is slow.
-	const down = (node: Indexed, at: Context, path: ReadonlySet<Indexed>) => {
-		if (node.type === "QuestionConstruct") {
-			const found = deref(index, node.item.QuestionReference);
-			if (found === undefined) return;
-			const question = latestOf(index, found).urn;
-			if (!position.has(question)) position.set(question, position.size);
-			constructs.set(node.urn, node);
-			const responseOrder = str(
-				asObj(node.item.ResponseSequence)?.ItemSequenceType,
-			);
-			asked.set(question, [
-				...(asked.get(question) ?? []),
-				{
-					construct: node.urn,
-					conditions: at.conditions,
-					loops: at.loops,
-					...(at.order !== undefined && { order: at.order }),
-					...(responseOrder !== undefined && { responseOrder }),
-				},
-			]);
-			return;
-		}
-		const sequence =
-			node.type === "Sequence"
-				? str(asObj(node.item.ConstructSequence)?.ItemSequenceType)
-				: undefined;
-		for (const [r, branch] of childrenOf(node)) {
-			const child = deref(index, r);
-			if (child === undefined || path.has(child)) continue;
-			down(
-				child,
-				{
-					conditions:
-						node.type === "IfThenElse"
-							? [...at.conditions, ...conditionsOn(node, branch)]
-							: at.conditions,
-					loops:
-						branch.kind === "loop"
-							? [refOf(node, lang), ...at.loops]
-							: at.loops,
-					// The nearest enclosing sequence's order.
-					...((sequence ?? at.order) !== undefined && {
-						order: sequence ?? at.order,
-					}),
-				},
-				new Set([...path, child]),
-			);
+	const follow = (r: unknown) => deref(index, r);
+	// `path` stops a cycle; DDI_DEPTH, a document nested past reading.
+	// shortcut: a construct reached by several paths is expanded on each; memoise if a real document is slow.
+	const under = (refs: unknown, path: ReadonlySet<Indexed>): Step[] =>
+		path.size > DDI_DEPTH
+			? []
+			: (Array.isArray(refs) ? refs : refs === undefined ? [] : [refs]).flatMap(
+					(r) => {
+						const child = follow(r);
+						return child === undefined || path.has(child)
+							? []
+							: stepsOf(child, new Set([...path, child]));
+					},
+				);
+	const stepsOf = (node: Indexed, path: ReadonlySet<Indexed>): Step[] => {
+		const o = node.item;
+		const construct = node.urn;
+		switch (node.type) {
+			case "QuestionConstruct": {
+				const found = follow(o.QuestionReference);
+				if (found === undefined) return [];
+				const responseOrder = str(asObj(o.ResponseSequence)?.ItemSequenceType);
+				return [
+					{
+						kind: "ask",
+						construct,
+						question: latestOf(index, found).urn,
+						...(responseOrder !== undefined && { responseOrder }),
+					},
+				];
+			}
+			case "StatementItem": {
+				const text = dynamicTextOf(o.DisplayText, follow, lang);
+				return [
+					{ kind: "say", construct, ...(text !== undefined && { text }) },
+				];
+			}
+			case "ComputationItem": {
+				const command = commandOf(o.CommandCode);
+				return [
+					{
+						kind: "compute",
+						construct,
+						...(command !== undefined && { command }),
+						assigns: asList(o.AssignedVariableReference).flatMap((p) =>
+							parameterRef(p, lang),
+						),
+					},
+				];
+			}
+			case "IfThenElse": {
+				const type = str(asObj(o.TypeOfIfThenElse)?.StringValue);
+				const arm = (condition: unknown, then: unknown): Arm => {
+					const command = commandOf(condition);
+					return {
+						...(command !== undefined && { command }),
+						steps: under(then, path),
+					};
+				};
+				return [
+					{
+						kind: "branch",
+						construct,
+						...(type !== undefined && { type }),
+						arms: [
+							arm(o.IfCondition, o.ThenConstructReference),
+							...asList(o.ElseIf).map((e) =>
+								arm(e.IfCondition, e.ThenConstructReference),
+							),
+						],
+						...(o.ElseConstructReference !== undefined && {
+							otherwise: under(o.ElseConstructReference, path),
+						}),
+					},
+				];
+			}
+			case "Loop":
+			case "RepeatUntil":
+			case "RepeatWhile": {
+				const [condition, body] =
+					node.type === "Loop"
+						? [o.LoopWhile, o.ControlConstructReference]
+						: node.type === "RepeatUntil"
+							? [o.UntilCondition, o.UntilConstructReference]
+							: [o.WhileCondition, o.WhileConstructReference];
+				const command = commandOf(condition);
+				return [
+					{
+						kind: "loop",
+						construct,
+						ref: refOf(node, lang),
+						loop: node.type,
+						...(command !== undefined && { command }),
+						steps: under(body, path),
+					},
+				];
+			}
+			case "Sequence": {
+				const steps = under(o.ControlConstructReference, path);
+				const name = nameOf(node, lang);
+				const label = textOf(words(o.Label, lang));
+				const order = str(asObj(o.ConstructSequence)?.ItemSequenceType);
+				return name === undefined && label === undefined && order === undefined
+					? steps
+					: [
+							{
+								kind: "section",
+								construct,
+								...(name !== undefined && { name }),
+								...(label !== undefined && { label }),
+								...(order !== undefined && { order }),
+								steps,
+							},
+						];
+			}
+			default:
+				// shortcut: Split and SplitJoin (constructs run in parallel) aren't shown.
+				return [];
 		}
 	};
-	for (const it of new Set(index.latest.values()))
-		if (it.type === "Instrument")
-			down(it, { conditions: [], loops: [] }, new Set([it]));
-	return { asked, constructs, position };
+	const instruments = [...new Set(index.latest.values())]
+		.filter((it) => it.type === "Instrument")
+		.map((it): Outline => {
+			const name = nameOf(it, lang);
+			const label = textOf(words(it.item.Label, lang));
+			const description = textOf(words(it.item.Description, lang));
+			return {
+				urn: it.urn,
+				...(name !== undefined && { name }),
+				...(label !== undefined && { label }),
+				...(description !== undefined && { description }),
+				steps: under(it.item.ControlConstructReference, new Set([it])),
+			};
+		});
+
+	// Depth first, so questions are positioned in the order first asked.
+	const asked = new Map<string, Asking[]>();
+	const position = new Map<string, number>();
+	const visit = (steps: readonly Step[], at: Context): void => {
+		for (const s of steps)
+			switch (s.kind) {
+				case "ask":
+					if (!position.has(s.question))
+						position.set(s.question, position.size);
+					asked.set(s.question, [
+						...(asked.get(s.question) ?? []),
+						{
+							construct: s.construct,
+							conditions: at.conditions,
+							loops: at.loops,
+							...(at.order !== undefined && { order: at.order }),
+							...(s.responseOrder !== undefined && {
+								responseOrder: s.responseOrder,
+							}),
+						},
+					]);
+					break;
+				case "branch": {
+					// Every arm before the one taken is false; its own condition (an else has none) true.
+					const not = (arms: readonly Arm[]): Condition[] =>
+						arms.flatMap((a) =>
+							a.command === undefined ? [] : [{ ...a.command, negated: true }],
+						);
+					s.arms.forEach((arm, i) => {
+						visit(arm.steps, {
+							...at,
+							conditions: [
+								...at.conditions,
+								...not(s.arms.slice(0, i)),
+								...(arm.command === undefined
+									? []
+									: [{ ...arm.command, negated: false }]),
+							],
+						});
+					});
+					if (s.otherwise !== undefined)
+						visit(s.otherwise, {
+							...at,
+							conditions: [...at.conditions, ...not(s.arms)],
+						});
+					break;
+				}
+				case "loop":
+					visit(s.steps, { ...at, loops: [s.ref, ...at.loops] });
+					break;
+				case "section":
+					visit(s.steps, {
+						...at,
+						...((s.order ?? at.order) !== undefined && {
+							order: s.order ?? at.order,
+						}),
+					});
+					break;
+			}
+	};
+	for (const i of instruments) visit(i.steps, { conditions: [], loops: [] });
+	return { instruments, asked, position };
 }

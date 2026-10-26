@@ -84,6 +84,88 @@ const CODEBOOK: Codebook = {
 			},
 		}),
 	],
+	instruments: [
+		{
+			urn: urn("survey"),
+			name: "survey",
+			label: t("Pets & people"),
+			steps: [
+				{ kind: "say", construct: urn("hello"), text: t("Hello.") },
+				{
+					kind: "section",
+					construct: urn("about"),
+					label: t("About you"),
+					order: "Random",
+					steps: [
+						{
+							kind: "branch",
+							construct: urn("if-adult"),
+							type: "warning",
+							arms: [
+								{
+									command: { command: "adult", language: "VTL" },
+									steps: [
+										{
+											kind: "loop",
+											construct: urn("people"),
+											ref: {
+												kind: "ref",
+												type: "Loop",
+												urn: urn("people"),
+												name: "people",
+											},
+											loop: "Loop",
+											command: { command: "i <= n" },
+											steps: [
+												{
+													kind: "ask",
+													construct: urn("ask-age"),
+													question: urn("age-q"),
+													entry: {
+														urn: urn("age"),
+														name: "age",
+														label: t("Age"),
+													},
+												},
+											],
+										},
+									],
+								},
+							],
+							otherwise: [
+								{
+									kind: "compute",
+									construct: urn("set-x"),
+									command: { command: "x := 1" },
+									assigns: [
+										{
+											kind: "ref",
+											type: "Parameter",
+											urn: urn("x"),
+											name: "x",
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+				{
+					kind: "ask",
+					construct: urn("ask-pets"),
+					question: urn("pets"),
+					entry: { urn: urn("pets"), name: "pets" },
+				},
+				// The same construct again: drawn twice, its id once.
+				{
+					kind: "ask",
+					construct: urn("ask-age"),
+					question: urn("age-q"),
+					entry: { urn: urn("age"), name: "age", label: t("Age") },
+				},
+			],
+		},
+	],
 	shared: {
 		concepts: [],
 		universes: [
@@ -216,8 +298,12 @@ describe("a codebook's page", () => {
 			expect(self, item.id).toHaveLength(1);
 			const href = self[0]?.getAttribute("href") ?? "";
 			expect(indicated(page, href)).toBe(item);
-			// Shared items aren't in the contents; every entry is.
-			if (item.closest("[aria-labelledby=ddi-shared]") === null)
+			// Shared items and instruments aren't in the contents one by one; every entry is.
+			if (
+				item.closest(
+					"[aria-labelledby=ddi-shared], [aria-labelledby=ddi-instrument]",
+				) === null
+			)
 				expect(
 					page.querySelector(`nav a[href="${href}"]`),
 					href,
@@ -236,12 +322,72 @@ describe("a codebook's page", () => {
 		expect(page.querySelectorAll("a a")).toHaveLength(0);
 	});
 
+	it("maps the instrument after the contents, each ask linked to its entry", () => {
+		const map = page.querySelector('[aria-labelledby="ddi-instrument"]');
+		expect(map?.previousElementSibling?.tagName).toBe("NAV");
+		expect(map?.nextElementSibling?.getAttribute("aria-labelledby")).toBe(
+			"ddi-variables",
+		);
+		// In the contents in the page's order: before the variables.
+		expect(page.querySelector("nav h2 + ul a")?.getAttribute("href")).toBe(
+			"#ddi-instrument",
+		);
+		expect(map?.querySelector("h3")?.textContent).toBe("survey Pets & people");
+		for (const list of map?.querySelectorAll("ol") ?? [])
+			expect(list.getAttribute("role")).toBe("list");
+		const asks = [...(map?.querySelectorAll("li > a") ?? [])];
+		expect(asks.map((a) => a.textContent)).toEqual([
+			"age Age",
+			"pets",
+			"age Age",
+		]);
+		expect(indicated(page, asks[0]?.getAttribute("href") ?? "")?.id).toBe(
+			"org.x:age",
+		);
+		// A select-all question links to its group.
+		expect(
+			indicated(page, asks[1]?.getAttribute("href") ?? "")?.classList.contains(
+				"ddi-group",
+			),
+		).toBe(true);
+		const words = (map?.textContent ?? "").replace(/\s+/g, " ");
+		for (const said of [
+			"Hello.",
+			"About you (Random)",
+			"If adult (VTL) (warning)",
+			"Repeated people while i <= n",
+			"Else",
+			"Compute x: x := 1",
+		])
+			expect(words).toContain(said);
+		// The page's own words, in a French codebook, are marked English.
+		const ifWord = [...(map?.querySelectorAll("p") ?? [])].find((p) =>
+			p.textContent?.startsWith("If"),
+		);
+		expect(ifWord?.querySelector("[lang]")?.getAttribute("lang")).toBe("en");
+	});
+
+	it("links where a question is asked to its place in the map, an id once however often it's drawn", () => {
+		const back = [
+			...page.querySelectorAll<HTMLAnchorElement>("#org\\.x\\:age dd a"),
+		].find((a) => a.textContent === "in the instrument");
+		expect(back?.textContent).toBe("in the instrument");
+		const place = indicated(page, back?.getAttribute("href") ?? "");
+		expect(place?.tagName).toBe("LI");
+		expect(place?.querySelector("a")?.textContent).toBe("age Age");
+		expect(page.querySelectorAll('[id="org.x:ask-age"]')).toHaveLength(1);
+	});
+
 	it("names, never links, a key holding half a character", () => {
 		const half = "a\uD800";
 		expect(anchorOf(urn(half))).toBeUndefined();
 		expect(hrefOf(half)).toBe("#a%EF%BF%BD");
 		const at = read(pageOf({ ...CODEBOOK, entries: [entry(half)] }));
-		expect(at.querySelector("article")?.hasAttribute("id")).toBe(false);
+		expect(
+			at
+				.querySelector("[aria-labelledby=ddi-variables] article")
+				?.hasAttribute("id"),
+		).toBe(false);
 		linksHold(at);
 	});
 
@@ -296,7 +442,7 @@ describe("a codebook's page", () => {
 		expect(terms).toEqual({
 			Universe: "adults",
 			Asked:
-				"Unless consent = 2 (VTL) and if adult; repeated in people; section order: Random",
+				"Unless consent = 2 (VTL) and if adult; repeated in people; section order: Random in the instrument",
 			Format: "Number from 0 to 120, in </dd><b>years",
 		});
 		// The one plain string written into a particular: still escaped.
