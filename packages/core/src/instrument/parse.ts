@@ -96,6 +96,9 @@ export const CONSTRUCTS = [
 	"roster",
 	"each",
 ] as const;
+/** What each check severity does, said wherever one is missing or misspelt. */
+const SEVERITY_HINT =
+	"`blocking` asks the question again until the check passes; `warning` and `info` show the message and go on.";
 /**
  * The fields whose value is a list of items: a flow's steps (the instrument's own, a
  * section's, a roster's, an `each`'s, an `if`'s `then` and `else`) and an ask's checks.
@@ -558,8 +561,8 @@ function readUses(
 						"unknown-bank",
 						"error",
 						path,
-						`No bank was given for \`${alias}\`.`,
-						`It names ${address}.`,
+						`QREtools hasn't read the bank \`${alias}\` names.`,
+						`\`${alias}\` is at \`${address}\`.`,
 					),
 				);
 		}
@@ -664,6 +667,7 @@ function readInputs(
 					"error",
 					`${path}.${kinds[1]}`,
 					`Input \`${name}\` has more than one type.`,
+					"Keep one of `responses`, `number` or `open`.",
 				),
 			);
 		const domain =
@@ -713,7 +717,7 @@ function readDomain(
 						"hole",
 						path,
 						`\`${node.value}\` names no shared scale.`,
-						"Name a bank's scale with its alias, such as `bas.agree4`, or write the codes.",
+						"Name a bank's scale with its alias, such as `bank.agree4`, or write the codes.",
 					),
 				);
 				return undefined;
@@ -905,7 +909,7 @@ function readStep(
 				"error",
 				path,
 				`A step is one of ${CONSTRUCTS.map((c) => `\`${c}\``).join(", ")}, with its fields.`,
-				"Start it with one of them, such as `- ask: bas.x`.",
+				"Start it with one of them, such as `- ask: bank.x`.",
 			),
 		);
 		return hole;
@@ -921,7 +925,7 @@ function readStep(
 				"hole",
 				path,
 				"This step does nothing yet.",
-				"Start it with `ask`, `say`, `section`, `if`, `stop` or `compute`.",
+				`Start it with ${CONSTRUCTS.map((c) => `\`${c}\``).join(", ")}.`,
 			),
 		);
 		return hole;
@@ -1098,7 +1102,7 @@ function readRoster(
 				"error",
 				at,
 				"A roster inside another roster's rows isn't in this version yet.",
-				"Rosters inside rosters wait for how their rows are recorded under each outer row.",
+				"For now, ask it as its own roster, outside this one.",
 			),
 		);
 	const name = readText(own, at, true, ctx.say);
@@ -1120,6 +1124,7 @@ function readRoster(
 					"error",
 					at,
 					`\`${name}\` already names something in this instrument.`,
+					"Give the roster a name of its own.",
 				),
 			);
 		else ctx.rosters.set(name, path);
@@ -1133,6 +1138,7 @@ function readRoster(
 				"error",
 				`${path}.more`,
 				"A roster ends one way: `count` (how many, asked first) or `more` (anyone else?, asked last in each row).",
+				"Keep `count` or `more`, and remove the other.",
 			),
 		);
 	const flowNode = item.get("flow", true);
@@ -1455,8 +1461,8 @@ function readAsk(
 					"not-yet",
 					"error",
 					`${path}.as`,
-					"Asking a select-all-that-apply question again under a new name isn't in this version yet.",
-					"How its option variables are renamed is still to be decided.",
+					"Asking a select all that apply question again under a new name isn't possible yet.",
+					"Remove `as` if this is the only place it's asked.",
 				),
 			);
 		} else if (!NAME_PATTERN.test(asName))
@@ -1585,6 +1591,7 @@ function resolveQuestion(
 				"hole",
 				path,
 				`\`${alias}\` has no question named \`${name}\`.`,
+				`Check the name in \`${alias}\`'s bank, or add the question there first.`,
 			),
 		);
 		return undefined;
@@ -1688,7 +1695,7 @@ function readCond(
 				"error",
 				path,
 				`This reads as a list or a group of fields, not as a ${as === "fill" ? "fill's value" : as}.`,
-				'Unquoted braces or a leading `- ` do that. Put it all in quotes: `if: "bas.x in {\\"1\\", \\"2\\"}"`.',
+				'Unquoted braces or a leading `- ` do that. Put it all in quotes: `if: "bank.x in {\\"1\\", \\"2\\"}"`.',
 			),
 		);
 		return undefined;
@@ -2084,8 +2091,8 @@ function readChecks(
 					"hole",
 					"hole",
 					`${at}.severity`,
-					"How serious is a failed check?",
-					`Severities: ${SEVERITIES.join(", ")}.`,
+					"This check has no severity.",
+					SEVERITY_HINT,
 				),
 			);
 		else if (severity === undefined)
@@ -2095,7 +2102,7 @@ function readChecks(
 					"error",
 					`${at}.severity`,
 					`\`${String(severityValue)}\` isn't a severity.`,
-					`Severities: ${SEVERITIES.join(", ")}.`,
+					SEVERITY_HINT,
 				),
 			);
 		const message = readText(

@@ -606,7 +606,9 @@ describe("a tag locked to the commit it named", () => {
 		);
 		const checked = await runWith(at(B), "check", dir);
 		expect(checked.code).toBe(0);
-		expect(checked.out).toMatch(/warning: .*the tag was moved.*\[moved-tag\]/);
+		expect(checked.out).toMatch(
+			/warning: .*now points at a different version of its bank.*\[moved-tag\]/,
+		);
 		expect((await runWith(at(B), "check", dir, "--strict")).code).toBe(1);
 		const exported = await exportIn(dir, B);
 		expect(exported.code).toBe(0);
@@ -619,7 +621,9 @@ describe("a tag locked to the commit it named", () => {
 	it("is asked for in check when a tag has none", async () => {
 		const dir = await workspace("agency: org.example\n");
 		const r = await runWith(at(A), "check", dir);
-		expect(r.out).toMatch(/warning: .*isn't locked.*\[unlocked-tag\]/);
+		expect(r.out).toMatch(
+			/warning: .*hasn't recorded which version.*\[unlocked-tag\]/,
+		);
 		expect(r.written).toEqual({});
 	});
 

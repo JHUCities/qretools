@@ -194,7 +194,7 @@ describe("typing conditions against the questions", () => {
 
 	it("explains `not`'s precedence where it bites", () => {
 		expect(typed('not bas.nhd_sat = "1"').problems[0]?.hint).toContain(
-			'not(bas.x = "1")',
+			'not(bank.x = "1")',
 		);
 	});
 });

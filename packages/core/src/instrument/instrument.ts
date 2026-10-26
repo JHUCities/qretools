@@ -120,8 +120,8 @@ export function instrumentOf(
 							code: "manifest",
 							severity: "warning",
 							path: `uses.${u.alias}`,
-							message: `\`${u.alias}\`'s tag has a manifest of versions, but ${m.reason}`,
-							hint: "So its questions are published at version 1. A release made by the workspace's release workflow has one that fits.",
+							message: `QREtools can't use the list of question versions in the \`${u.alias}\` release: ${m.reason}`,
+							hint: `Until it can, this instrument's DDI gives every \`${u.alias}\` question version 1. A release made by the bank's release workflow has a list that fits.`,
 						},
 					];
 		},
@@ -149,6 +149,12 @@ export function instrumentOf(
 	};
 }
 
+/** Names as a reader lists them: "a", "a and b", "a, b and c". */
+const andList = (xs: readonly string[]): string =>
+	xs.length <= 1
+		? xs.join("")
+		: `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+
 /**
  * One finding per identity two different items would share; the codings of select all
  * that apply (a code list and its two categories) from workspaces under one agency are
@@ -168,7 +174,7 @@ function clashFindings(
 				code: "name-clash",
 				severity: "error",
 				path: "",
-				message: `\`${c.urn}\` would name two different items, from ${c.keys.join(", ")}.`,
+				message: `Two different things would be published under one DDI name, \`${c.urn}\`: from ${andList(c.keys.map((k) => `\`${k}\``))}.`,
 			});
 			continue;
 		}

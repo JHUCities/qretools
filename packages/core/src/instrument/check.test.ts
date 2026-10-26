@@ -185,6 +185,43 @@ describe("checking an instrument's flow", () => {
 		);
 	});
 
+	it("says what to do about a branch never taken, a stop for all, and a check with no severity", () => {
+		const hints = (flow: string) =>
+			((parsed) =>
+				[...parsed.findings, ...checkInstrument(parsed)].map(
+					(f) => `${f.code}: ${f.hint ?? "(none)"}`,
+				))(
+				parseInstrument(`name: x\nuses:\n  bas: here\nflow:\n${flow}`, {
+					bas: BAS,
+				}),
+			);
+		expect(
+			hints(
+				'  - ask: bas.consent\n  - if: bas.consent = "1" or true\n    then: []\n    else:\n      - ask: bas.why\n',
+			),
+		).toContain("unreachable: Change the condition above, or remove `else`.");
+		expect(
+			hints(
+				"  - ask: bas.consent\n  - if: 1 = 2\n    then:\n      - ask: bas.why\n",
+			),
+		).toContain("unreachable: Change the condition, or remove the branch.");
+		expect(hints("  - stop: true\n")).toContain(
+			"unreachable: Change the condition so it stops only some respondents.",
+		);
+		expect(
+			hints(
+				'  - ask: bas.tenure\n    checks:\n      - ensure: bas.tenure = "1"\n        message: Owners only.\n',
+			),
+		).toContain(
+			"hole: `blocking` asks the question again until the check passes; `warning` and `info` show the message and go on.",
+		);
+		expect(
+			hints(
+				'  - ask: bas.consent\n  - roster: people\n    count: 2\n    more: bas.consent = "1"\n    max: 5\n    flow:\n      - ask: bas.why\n',
+			),
+		).toContain("unknown-key: Keep `count` or `more`, and remove the other.");
+	});
+
 	it("allows one question in exclusive branches, not twice on one path", () => {
 		const branches = `  - ask: bas.consent
   - if: bas.consent = "1"
