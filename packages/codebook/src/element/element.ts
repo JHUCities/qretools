@@ -18,9 +18,9 @@
  *   type, name }`); cancelled, the browser doesn't follow the link. A click with a
  *   modifier key opens it as the browser does.
  *
- * It writes itself only when what it shows changes. Its sections' ids start `ddi-`
- * (`ddi-contents`, …), so they don't collide with a host page's, but are fixed: one
- * codebook per page.
+ * It writes itself only when what it shows changes. Its sections' ids and its classes
+ * start `ddi-` (`ddi-contents`, `ddi-group`, …), so they don't collide with a host
+ * page's; the ids are fixed: one codebook per page.
  */
 
 import type { DdiIndex } from "@qretools/core";

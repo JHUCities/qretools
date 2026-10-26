@@ -154,7 +154,7 @@ const sentence = (s: string): string =>
 
 /** A command as written, its program language after it. */
 const commandHtml = (c: Command): string =>
-	`<code>${escapeHtml(c.command)}</code>${c.language === undefined ? "" : ` <span class="language">(${escapeHtml(c.language)})</span>`}`;
+	`<code>${escapeHtml(c.command)}</code>${c.language === undefined ? "" : ` <span class="ddi-language">(${escapeHtml(c.language)})</span>`}`;
 
 /** One place a question is asked, as a phrase: its conditions, loops and orders. */
 function askingHtml(a: Asking, cx: Context): string {
@@ -222,7 +222,7 @@ function tableHtml(rows: readonly Row[], from: string, cx: Context): string {
 	const valid = rows.filter((r) => !r.missing);
 	const missing = rows.filter((r) => r.missing);
 	if (rows.length === 0) return "";
-	const caption = `${valid.length === 0 ? "Missing values" : "Values"}${from === "" ? "" : ` <span class="from">from ${from}</span>`}`;
+	const caption = `${valid.length === 0 ? "Missing values" : "Values"}${from === "" ? "" : ` <span class="ddi-from">from ${from}</span>`}`;
 	const body = (rs: readonly Row[]) => rs.map((r) => rowHtml(r, cx)).join("");
 	return `<table><caption${cx.en}>${caption}</caption><thead${cx.en}><tr><th scope="col">Code</th><th scope="col">Label</th></tr></thead>${
 		valid.length === 0
@@ -230,7 +230,7 @@ function tableHtml(rows: readonly Row[], from: string, cx: Context): string {
 			: `<tbody>${body(valid)}</tbody>${
 					missing.length === 0
 						? ""
-						: `<tbody class="missing"><tr><th scope="rowgroup" colspan="2"${cx.en}>Missing values</th></tr>${body(missing)}</tbody>`
+						: `<tbody class="ddi-missing"><tr><th scope="rowgroup" colspan="2"${cx.en}>Missing values</th></tr>${body(missing)}</tbody>`
 				}`
 	}</table>`;
 }
@@ -252,7 +252,7 @@ const titleHtml = (
 		label === undefined ? "" : inlineHtml(label, cx),
 	]
 		.filter((s) => s !== "")
-		.join(" ") || `<span class="urn">${escapeHtml(urn)}</span>`;
+		.join(" ") || `<span class="ddi-urn">${escapeHtml(urn)}</span>`;
 
 /**
  * An item's heading, then a link to it to copy and share, as a markdown heading has;
@@ -269,13 +269,13 @@ function headingHtml(
 	const anchor = anchorOf(urn);
 	return anchor === undefined
 		? heading
-		: `<div class="heading">${heading}<a class="anchor" href="${hrefOf(anchor)}"><span aria-hidden="true">#</span><span class="visually-hidden">${english("Link to", cx)} ${titleHtml(name, label, urn, { ...cx, inLink: true })}</span></a></div>`;
+		: `<div class="ddi-heading">${heading}<a class="ddi-anchor" href="${hrefOf(anchor)}"><span aria-hidden="true">#</span><span class="ddi-visually-hidden">${english("Link to", cx)} ${titleHtml(name, label, urn, { ...cx, inLink: true })}</span></a></div>`;
 }
 
 /** A question's words: its text as quoted, then what the interviewer is told. */
 const questionHtml = (q: NonNullable<Entry["question"]>, cx: Context): string =>
 	`${q.text === undefined ? "" : `<blockquote>${blockHtml(q.text, cx)}</blockquote>`}${q.instructions
-		.map((i) => `<div class="instruction">${blockHtml(i, cx)}</div>`)
+		.map((i) => `<div class="ddi-instruction">${blockHtml(i, cx)}</div>`)
 		.join("")}`;
 
 /** A variable's entry, or a question's no variable records. */
@@ -365,7 +365,7 @@ function entryHtml(e: Entry, level: 3 | 4, cx: Context): string {
 				: [
 						...e.provenance.ids.map(
 							(i) =>
-								`<code>${escapeHtml(i.value)}</code>${i.type === undefined ? "" : ` <span class="language">(${escapeHtml(i.type)})</span>`}`,
+								`<code>${escapeHtml(i.value)}</code>${i.type === undefined ? "" : ` <span class="ddi-language">(${escapeHtml(i.type)})</span>`}`,
 						),
 						...e.provenance.attributes.map(
 							(a) =>
@@ -379,7 +379,7 @@ function entryHtml(e: Entry, level: 3 | 4, cx: Context): string {
 	const option =
 		e.group === undefined
 			? ""
-			: `<p class="option">${english("Option", cx)} <code>${escapeHtml(e.group.option.code)}</code>${e.group.option.label === undefined ? "" : ` ${inlineHtml(e.group.option.label, cx)}`}</p>`;
+			: `<p class="ddi-option">${english("Option", cx)} <code>${escapeHtml(e.group.option.code)}</code>${e.group.option.label === undefined ? "" : ` ${inlineHtml(e.group.option.label, cx)}`}</p>`;
 	const question =
 		e.question === undefined || e.group !== undefined
 			? ""
@@ -429,7 +429,7 @@ export function blocksOf(entries: readonly Entry[]): Block[] {
 function blockOfHtml(b: Block, cx: Context): string {
 	if (b.kind === "entry") return entryHtml(b.entry, 3, cx);
 	const q = b.question;
-	return `<section${idAttr(q.urn)} class="group">${headingHtml(3, q.name, undefined, q.urn, cx)}${questionHtml(q, cx)}<p class="answers"${cx.en}>Select all that apply, each option a variable of its own</p>${b.options.map((o) => entryHtml(o, 4, cx)).join("")}</section>`;
+	return `<section${idAttr(q.urn)} class="ddi-group">${headingHtml(3, q.name, undefined, q.urn, cx)}${questionHtml(q, cx)}<p class="ddi-answers"${cx.en}>Select all that apply, each option a variable of its own</p>${b.options.map((o) => entryHtml(o, 4, cx)).join("")}</section>`;
 }
 
 /** A shared item: its name and label, its description or its codes. */
@@ -571,7 +571,7 @@ export function pageOf(cb: Codebook): string {
 <style>${STYLE}${PAGE_STYLE}</style>
 </head>
 <body>
-<header><h1>${escapeHtml(title)}</h1><p class="count"${english ? "" : ' lang="en"'}>${counted}</p></header>
+<header><h1>${escapeHtml(title)}</h1><p class="ddi-count"${english ? "" : ' lang="en"'}>${counted}</p></header>
 <main>
 ${codebookHtml(cb)}
 </main>
@@ -595,7 +595,7 @@ body {
 	background: var(--bgColor-default);
 }
 h1 { font-size: 2rem; font-weight: 600; line-height: 1.25; margin: 0 0 0.25rem; }
-.count { color: var(--fgColor-muted); }
+.ddi-count { color: var(--fgColor-muted); }
 @media print {
 	:root { color-scheme: light; }
 	body { max-inline-size: none; padding: 0; }
@@ -634,14 +634,14 @@ h2 { font-size: 1.25rem; font-weight: 600; margin: 2.5rem 0 1rem; padding-block-
 h3 { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem; }
 h4 { font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem; }
 p { margin: 0 0 0.5rem; }
-.heading { display: flex; align-items: baseline; gap: 0.5rem; margin: 0 0 0.5rem; }
-.heading > :is(h3, h4) { margin: 0; }
+.ddi-heading { display: flex; align-items: baseline; gap: 0.5rem; margin: 0 0 0.5rem; }
+.ddi-heading > :is(h3, h4) { margin: 0; }
 /* Shown where it can be used: on hover or focus, and always where nothing hovers. A lone "#", not words in a line, so no underline. */
-.anchor { color: var(--fgColor-muted); text-decoration: none; opacity: 0; }
-.heading:is(:hover, :focus-within) .anchor { opacity: 1; }
-@media (hover: none) { .anchor { opacity: 1; } }
-.visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.from, .language, .urn, dt { color: var(--fgColor-muted); }
+.ddi-anchor { color: var(--fgColor-muted); text-decoration: none; opacity: 0; }
+.ddi-heading:is(:hover, :focus-within) .ddi-anchor { opacity: 1; }
+@media (hover: none) { .ddi-anchor { opacity: 1; } }
+.ddi-visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ddi-from, .ddi-language, .ddi-urn, dt { color: var(--fgColor-muted); }
 /* Underlined always, not only on hover as the app does: colour alone doesn't tell a link (WCAG 1.4.1). */
 a { color: var(--fgColor-accent); text-decoration: underline; text-underline-position: under; }
 :focus-visible { outline: 2px solid var(--borderColor-accent-emphasis); outline-offset: 2px; border-radius: var(--borderRadius-small); }
@@ -653,13 +653,13 @@ a[data-urn] { color: var(--fgColor-shared); }
 nav ol, nav ul { margin: 0; padding-inline-start: 1.25rem; }
 nav > ul { list-style: none; padding-inline-start: 0; margin-block-start: 0.5rem; }
 nav li { margin-block: 0.125rem; }
-article, .group { padding-block: 1rem; border-block-start: 1px solid var(--borderColor-muted); scroll-margin-block-start: 1rem; }
+article, .ddi-group { padding-block: 1rem; border-block-start: 1px solid var(--borderColor-muted); scroll-margin-block-start: 1rem; }
 section > h3 + article { border-block-start: 0; }
-.group > article { padding-inline-start: 1rem; border-inline-start: 2px solid var(--borderColor-muted); }
+.ddi-group > article { padding-inline-start: 1rem; border-inline-start: 2px solid var(--borderColor-muted); }
 /* The highlight reaches past the text by an outline of its own colour, so nothing moves. */
 :target { background: var(--bgColor-accent-muted); outline: 0.5rem solid var(--bgColor-accent-muted); }
 blockquote { margin: 0 0 0.5rem; padding-inline-start: 1rem; border-inline-start: 0.25em solid var(--borderColor-default); font-size: 1rem; }
-.instruction, .answers, .option { color: var(--fgColor-muted); }
+.ddi-instruction, .ddi-answers, .ddi-option { color: var(--fgColor-muted); }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.75rem 0; }
 dt { font-weight: 600; }
 dd { margin: 0; }
@@ -667,16 +667,16 @@ dd p:last-child, dd ul { margin: 0; }
 dd ul { padding-inline-start: 1.25rem; }
 table { border-collapse: collapse; margin: 0.75rem 0; }
 caption { text-align: start; font-weight: 600; padding-block-end: 0.25rem; }
-caption .from { font-weight: 400; }
+caption .ddi-from { font-weight: 400; }
 th, td { text-align: start; vertical-align: top; padding: 0.25rem 1rem 0.25rem 0; border-block-end: 1px solid var(--borderColor-muted); }
 thead th { color: var(--fgColor-muted); font-weight: 600; }
 tbody th { font-weight: 400; }
-.missing th[scope="rowgroup"] { padding-block-start: 0.75rem; color: var(--fgColor-muted); font-weight: 600; }
+.ddi-missing th[scope="rowgroup"] { padding-block-start: 0.75rem; color: var(--fgColor-muted); font-weight: 600; }
 footer dl { color: var(--fgColor-muted); }
 @media print {
 	nav { display: none; }
-	.anchor { display: none; }
-	h2, h3, h4, .heading { break-after: avoid; }
+	.ddi-anchor { display: none; }
+	h2, h3, h4, .ddi-heading { break-after: avoid; }
 	article { break-inside: avoid; }
 	:target { background: none; outline: none; }
 	a { color: inherit; }

@@ -67,6 +67,8 @@ The same codebook in any page, as a custom element: import
 - It writes itself only when what it shows changes.
 - Show one codebook per page: its sections' ids (`ddi-contents`, `ddi-variables`,
   `ddi-shared`, …) are fixed, prefixed so they don't collide with the host page's.
+- Its classes start `ddi-` too (`ddi-group`, `ddi-anchor`, …), so the host page's
+  styles don't match them by accident.
 
 Private while the app's codebook pane and a `qretools codebook` command try it out.
 
