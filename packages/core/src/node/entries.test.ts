@@ -109,6 +109,7 @@ describe("the entry points", () => {
 			    "plainText",
 			    "printCondition",
 			    "questionItems",
+			    "readInstruments",
 			    "readsInWorkspace",
 			    "refUrn",
 			    "refusalReason",
