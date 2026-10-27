@@ -2,17 +2,15 @@
  * Conditions in words, three-valued as VTL is: what an else is taken on includes "not
  * answered", but never for an input; codes are matched as written.
  */
+import {
+	type Condition,
+	DDI_FUNCTIONS,
+	parseCondition,
+	type Source,
+} from "@qretools/core";
 import { describe, expect, it } from "vitest";
-import { commandOf } from "./flow.ts";
-import type { Ref } from "./text.ts";
 import { conditionsWords, type Known, type Mode } from "./words.ts";
 
-const ref = (name: string): Ref => ({
-	kind: "ref",
-	type: "Variable",
-	urn: `urn:ddi:a:${name}:1`,
-	name,
-});
 const yesNo = [
 	{ code: "1", label: [[{ kind: "text", text: "Yes" }] as const] },
 	{ code: "2", label: [[{ kind: "text", text: "No" }] as const] },
@@ -30,43 +28,40 @@ const KNOWN: Record<string, Known> = {
 	county: { nullable: false, codes: yesNo },
 };
 
-/** A command as a DDI document writes it, each name bound to its variable. */
-const command = (text: string, language: string | undefined = "VTL") => {
-	const names = [...text.matchAll(/[a-z_]+/g)]
-		.map((m) => m[0])
-		.filter((n) => n in KNOWN);
-	const c = commandOf(
-		{
-			Command: [
-				{
-					CommandContent: text,
-					...(language !== undefined && {
-						ProgramLanguage: { StringValue: language },
-					}),
-					InParameter: names.map((n) => ({
-						URN: `urn:ddi:a:in-${n}:1`,
-						Alias: n,
-					})),
-					Binding: names.map((n) => ({
-						SourceParameterReference: { URN: `urn:ddi:a:out-${n}:1` },
-						TargetParameterReference: { URN: `urn:ddi:a:in-${n}:1` },
-					})),
-				},
-			],
-		},
-		(p) => {
-			const urn = (p as { URN: string }).URN;
-			return ref(urn.replace(/^urn:ddi:a:out-|:1$/g, ""));
-		},
+/** A condition as the core reads it, each name bound to its variable; another language kept as written. */
+const command = (text: string, language = "VTL"): Condition => {
+	const parsed = parseCondition(text, DDI_FUNCTIONS);
+	if (language !== "VTL" || parsed.problems.length > 0)
+		return { kind: "verbatim", command: { text, language } };
+	const sources = new Map<string, Source>(
+		[...text.matchAll(/[a-z_]+/g)]
+			.map((m) => m[0])
+			.filter((n) => n in KNOWN)
+			.map((n) => [n, { kind: "input", urn: `urn:ddi:a:${n}:1`, variable: n }]),
 	);
-	if (c === undefined) throw new Error("no command");
-	return c;
+	return {
+		kind: "parsed",
+		command: { text, language },
+		expr: parsed.expr,
+		sources,
+	};
 };
 
 const say = (text: string, mode: Mode = "true", language = "VTL") => {
 	const said = conditionsWords(
-		[{ command: command(text, language), mode }],
-		(r) => KNOWN[r.name ?? ""],
+		[{ cond: command(text, language), mode }],
+		(source) => {
+			const known = KNOWN[source.variable ?? ""];
+			return {
+				ref: {
+					kind: "ref",
+					type: "Variable",
+					urn: source.urn,
+					name: source.variable ?? "",
+				},
+				...(known !== undefined && { known }),
+			};
+		},
 	);
 	return said?.map((s) => ("text" in s ? s.text : s.name)).join("");
 };

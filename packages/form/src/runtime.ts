@@ -323,9 +323,11 @@ export function runtime(
 							}
 						: {
 								type: "text",
-								...(d.maxLength !== undefined && {
-									maxlength: String(d.maxLength),
-								}),
+								// A domain the reader doesn't read is answered as text.
+								...(d.kind === "text" &&
+									d.maxLength !== undefined && {
+										maxlength: String(d.maxLength),
+									}),
 							};
 				fs.append(
 					h(

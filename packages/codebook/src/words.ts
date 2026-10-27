@@ -10,9 +10,8 @@
  * never "not answered". Codes are strings, matched as written: `1` isn't `"01"`.
  */
 
-import type { Expr } from "@qretools/core";
-import { printCondition } from "@qretools/core";
-import type { Command } from "./flow.ts";
+import type { Condition, Expr, Source } from "@qretools/core";
+import { holesOf, printCondition } from "@qretools/core";
 import type { Para, Ref, Span, Text } from "./text.ts";
 
 /** What a page knows of what a name reads: its valid codes, and whether it may be unanswered. */
@@ -20,6 +19,12 @@ export interface Known {
 	readonly codes?: readonly { readonly code: string; readonly label?: Text }[];
 	readonly nullable: boolean;
 }
+
+/** What a page makes of what a name reads: a reference to link, and what it knows of it. */
+export type Lookup = (source: Source) => {
+	readonly ref: Ref;
+	readonly known?: Known;
+};
 
 /** When the words hold: the condition is true, false, or not true (false or null). */
 export type Mode = "true" | "false" | "notTrue";
@@ -52,19 +57,19 @@ function join(parts: readonly Phrase[], op: "and" | "or"): Phrase {
  * on it (`notTrue`). Undefined when any of them can't be read (not VTL, or not parsed).
  */
 export function conditionsWords(
-	parts: readonly { readonly command: Command; readonly mode: Mode }[],
-	lookup: (ref: Ref) => Known | undefined,
+	parts: readonly { readonly cond: Condition; readonly mode: Mode }[],
+	lookup: Lookup,
 ): Para | undefined {
-	const phrases = parts.map((p) => phrase(p.command, p.mode, lookup));
+	const phrases = parts.map((p) => phrase(p.cond, p.mode, lookup));
 	return phrases.every((p) => p !== undefined) && phrases.length > 0
 		? join(phrases, "and").spans
 		: undefined;
 }
 
 /** Whether a command reads as a condition (true or false), not a value. */
-export const isCondition = (c: Command): boolean => {
+export const isCondition = (c: Condition): boolean => {
+	if (c.kind !== "parsed") return false;
 	const e = c.expr;
-	if (e === undefined) return false;
 	switch (e.kind) {
 		case "binary":
 			return !["+", "-", "*", "/"].includes(e.op);
@@ -81,19 +86,19 @@ export const isCondition = (c: Command): boolean => {
 };
 
 function phrase(
-	command: Command,
+	cond: Condition,
 	mode: Mode,
-	lookup: (ref: Ref) => Known | undefined,
+	lookup: Lookup,
 ): Phrase | undefined {
-	if (command.expr === undefined) return undefined;
-	const refOf = (e: Expr): Ref | undefined =>
-		e.kind === "name" ? command.reads?.get(e.name) : undefined;
-	const knownOf = (e: Expr): Known | undefined => {
-		const r = refOf(e);
-		return r === undefined ? undefined : lookup(r);
+	// A hole is text the parser couldn't read: it isn't phrased.
+	if (cond.kind !== "parsed" || holesOf(cond.expr).length > 0) return undefined;
+	const about = (e: Expr) => {
+		const source = e.kind === "name" ? cond.sources.get(e.name) : undefined;
+		return source === undefined ? undefined : lookup(source);
 	};
+	const knownOf = (e: Expr): Known | undefined => about(e)?.known;
 	const nameOf = (e: Expr & { kind: "name" }): Span => {
-		const r = refOf(e);
+		const r = about(e)?.ref;
 		// The name as the command writes it: the reference may be named otherwise, or not at all.
 		return r === undefined ? code(e.name) : { ...r, name: e.name };
 	};
@@ -272,5 +277,5 @@ function phrase(
 			? words(written)
 			: words(written, text(m === "false" ? " is false" : " isn't true"));
 	};
-	return go(command.expr, mode);
+	return go(cond.expr, mode);
 }

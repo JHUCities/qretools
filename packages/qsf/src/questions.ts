@@ -213,7 +213,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 					},
 				},
 			};
-		if (domain.maxLength !== undefined)
+		if (domain.kind === "text" && domain.maxLength !== undefined)
 			ctx.note(
 				"qsf-note",
 				"info",

@@ -56,7 +56,9 @@ export type Domain =
 			readonly max?: number;
 			readonly decimals: number;
 	  }
-	| { readonly kind: "text"; readonly maxLength?: number };
+	| { readonly kind: "text"; readonly maxLength?: number }
+	/** A domain this doesn't read (a date, say): the question is still asked. */
+	| { readonly kind: "other" };
 
 /** A bank question, as its asks show it. */
 export interface Question {
@@ -67,10 +69,12 @@ export interface Question {
 	readonly domain: Domain;
 }
 
-/** What a name in a condition or a text stands for. */
+/** What a name in a condition or a text stands for, and the URN of the item that holds it. */
 export type Source =
 	| {
 			readonly kind: "answer";
+			/** The Variable's URN. */
+			readonly urn: string;
 			/** The variable it is recorded as (the data's column). */
 			readonly variable: string;
 			/** The asks that record it, by DDI ID: more than one in exclusive branches. */
@@ -85,12 +89,23 @@ export type Source =
 	  }
 	| {
 			readonly kind: "input";
+			readonly urn: string;
 			readonly variable: string;
 			readonly domain?: Domain;
 	  }
-	| { readonly kind: "compute"; readonly variable: string }
-	/** The row number of a loop (a roster's `index`), by the loop's DDI ID. */
-	| { readonly kind: "row"; readonly loop: string };
+	/** `urn` is the ComputationItem's. */
+	| {
+			readonly kind: "compute";
+			readonly urn: string;
+			readonly variable: string;
+	  }
+	/** The row number of a loop (a roster's `index`), by the loop's DDI ID; `urn` is the loop's, `variable` its counter's name. */
+	| {
+			readonly kind: "row";
+			readonly loop: string;
+			readonly urn: string;
+			readonly variable?: string;
+	  };
 
 /** A condition parsed, each of its names bound to what it stands for. */
 export interface Parsed {
@@ -175,6 +190,8 @@ export type Step =
 			/** Its `ConstructName`, if it has one (a roster's name). */
 			readonly name?: string;
 			readonly count: Parsed;
+			/** The row's name (a roster's `index`), where the loop names it. */
+			readonly row?: string;
 			readonly max?: number;
 			readonly flow: readonly Step[];
 	  })
@@ -303,11 +320,9 @@ export function readInstruments(
 			if (key !== "")
 				outputs.set(key, value === undefined ? {} : { code: value });
 		}
-		const domain = domainOf(asObj(q.item.ResponseDomain));
-		if (domain === undefined) {
-			unread(idOf(q), "How this question is answered can't be read.");
-			continue;
-		}
+		const domain = domainOf(asObj(q.item.ResponseDomain)) ?? {
+			kind: "other" as const,
+		};
 		questions.set(q.urn, {
 			id: idOf(q),
 			urn: q.urn,
@@ -345,6 +360,7 @@ export function readInstruments(
 			const domain = domainOf(asObj(out?.ValueRepresentation));
 			const input = {
 				kind: "input" as const,
+				urn: v.urn,
 				variable,
 				...(domain !== undefined && { domain }),
 			};
@@ -362,6 +378,7 @@ export function readInstruments(
 				: undefined;
 		params.set(key, {
 			kind: "answer",
+			urn: v.urn,
 			variable,
 			asks: asks.map((a) => a.ask),
 			question,
@@ -374,11 +391,21 @@ export function readInstruments(
 		const key = keyOf(assigned);
 		const variable = said(assigned?.ParameterName) ?? str(assigned?.Alias);
 		if (key !== "" && variable !== undefined && !params.has(key))
-			params.set(key, { kind: "compute", variable });
+			params.set(key, { kind: "compute", urn: c.urn, variable });
 	}
+	const row = (loop: Indexed, counter: unknown): Source => {
+		const variable =
+			said(asObj(counter)?.ParameterName) ?? str(asObj(counter)?.Alias);
+		return {
+			kind: "row",
+			loop: idOf(loop),
+			urn: loop.urn,
+			...(variable !== undefined && { variable }),
+		};
+	};
 	for (const l of ofType("Loop")) {
 		const key = keyOf(l.item.LoopVariableReference);
-		if (key !== "") params.set(key, { kind: "row", loop: idOf(l) });
+		if (key !== "") params.set(key, row(l, l.item.LoopVariableReference));
 	}
 	// A roster by `more` counts its rows in the first step of its body: that is its row.
 	const counterOf = (r: Indexed): Indexed | undefined => {
@@ -392,8 +419,9 @@ export function readInstruments(
 		return first?.type === "ComputationItem" ? first : undefined;
 	};
 	for (const r of ofType("RepeatUntil")) {
-		const key = keyOf(counterOf(r)?.item.AssignedVariableReference);
-		if (key !== "") params.set(key, { kind: "row", loop: idOf(r) });
+		const assigned = counterOf(r)?.item.AssignedVariableReference;
+		const key = keyOf(assigned);
+		if (key !== "") params.set(key, row(r, assigned));
 	}
 
 	/** A command, parsed with each name resolved through its bindings, or kept as written. */
@@ -498,22 +526,34 @@ export function readInstruments(
 		return source === undefined ? undefined : { kind: "value", source };
 	};
 
-	/** Displayed text: words and piped values. */
+	/** Displayed text, the one written for `lang` else the first: words and piped values. */
 	const textOf = (
 		dynamic: unknown,
 		piped: (key: string) => Part | undefined,
 		at: string,
-	): readonly Part[] =>
-		asList(asObj(asList(dynamic)[0])?.TextContent).flatMap((t): Part[] => {
+	): readonly Part[] => {
+		const all = asList(dynamic);
+		const chosen =
+			all.find((d) => lang !== undefined && d.AudienceLanguage === lang) ??
+			all[0];
+		return asList(chosen?.TextContent).flatMap((t): Part[] => {
 			const literal = said(asObj(t.Text));
 			if (literal !== undefined) return [{ kind: "text", text: literal }];
 			const part = piped(keyOf(t.SourceParameterReference));
 			if (part === undefined) {
 				unread(at, "What a value in this text refers to can't be told.");
-				return [];
+				// Kept as its name, so the text isn't missing a word.
+				const p = asObj(t.SourceParameterReference);
+				return [
+					{
+						kind: "text",
+						text: `[${said(p?.ParameterName) ?? str(p?.Alias) ?? "?"}]`,
+					},
+				];
 			}
 			return [part];
 		});
+	};
 
 	type Path = ReadonlySet<Indexed>;
 	/** Whether a step can be read inside `path`: not one it is already within, nor nested too deep. */
@@ -543,7 +583,7 @@ export function readInstruments(
 			deref(index, c.QuestionReference)?.urn ?? "",
 		);
 		if (question === undefined) {
-			unread(id, "The question asked here isn't in the DDI, or can't be read.");
+			unread(id, "The question asked here isn't in the DDI.");
 			return [];
 		}
 		const fills = new Map<string, Part>();
@@ -789,6 +829,8 @@ export function readInstruments(
 				urn: it.urn,
 				...named,
 				count: { ...parsed, expr: limited.count },
+				...(row?.kind === "row" &&
+					row.variable !== undefined && { row: row.variable }),
 				...(max !== undefined && { max }),
 				flow,
 			},

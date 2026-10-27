@@ -3,10 +3,10 @@
  * instrument reaches isn't asked, a pinned version is the one followed, a question is
  * asked whichever of its versions a variable names, and the nearest sequence's order holds.
  */
+import type { Condition, FlowStep } from "@qretools/core";
 import { describe, expect, it } from "vitest";
-import type { Command, LinkedAsk, Step } from "./flow.ts";
-import { codebookOf, parse } from "./model.ts";
-import { asking, plain } from "./testing.ts";
+import { type Codebook, codebookOf, parse } from "./model.ts";
+import { asking } from "./testing.ts";
 
 const urn = (id: string, version = "1") => `urn:ddi:org.other:${id}:${version}`;
 const id = (ID: string, Version = "1") => ({
@@ -106,37 +106,51 @@ describe("the flow", () => {
 });
 
 /** A tree of steps as indented lines: what each is, and the entry an ask links to. */
-const lines = (steps: readonly Step<LinkedAsk>[], indent = ""): string[] =>
+const lines = (
+	cb: Codebook,
+	steps: readonly FlowStep[],
+	indent = "",
+): string[] =>
 	steps.flatMap((s): string[] => {
-		const cmd = (c?: Command) => (c === undefined ? "?" : c.command);
+		const cmd = (c: Condition) => c.command.text;
+		const under = (flow: readonly FlowStep[]) => lines(cb, flow, `${indent}  `);
 		switch (s.kind) {
 			case "ask":
-				return [`${indent}ask ${s.entry?.name ?? s.question}`];
+				return [`${indent}ask ${cb.asks.get(s.urn)?.name ?? s.question.name}`];
 			case "say":
-				return [`${indent}say ${plain(s.text)}`];
+				return [
+					`${indent}say ${s.text.map((p) => (p.kind === "text" ? p.text : "")).join("")}`,
+				];
 			case "compute":
+				return [`${indent}compute ${s.variable} = ${cmd(s.value)}`];
+			case "if":
 				return [
-					`${indent}compute ${s.assigns.map((r) => r.name).join(",")} = ${cmd(s.command)}`,
-				];
-			case "branch":
-				return [
-					...s.arms.flatMap((a, i) => [
-						`${indent}${i === 0 ? "if" : "else if"} ${cmd(a.command)}${i === 0 && s.type ? ` (${s.type})` : ""}`,
-						...lines(a.steps, `${indent}  `),
+					...s.branches.flatMap((b, i) => [
+						`${indent}${i === 0 ? "if" : "else if"} ${cmd(b.cond)}${i === 0 && s.type ? ` (${s.type})` : ""}`,
+						...under(b.then),
 					]),
-					...(s.otherwise === undefined
-						? []
-						: [`${indent}else`, ...lines(s.otherwise, `${indent}  `)]),
+					...(s.else === undefined ? [] : [`${indent}else`, ...under(s.else)]),
 				];
+			case "stop":
+				return [
+					`${indent}stop ${cmd(s.cond)}`,
+					...under(s.say),
+					`${indent}else`,
+					...under(s.else),
+				];
+			case "count":
+				return [`${indent}count ${cmd(s.count)}`, ...under(s.flow)];
+			case "repeat":
+				return [`${indent}repeat ${cmd(s.more)}`, ...under(s.flow)];
 			case "loop":
 				return [
-					`${indent}${s.loop} ${s.ref.name ?? ""} ${cmd(s.command)}`,
-					...lines(s.steps, `${indent}  `),
+					`${indent}${s.construct} ${cb.loops.get(s.urn)?.name ?? ""} ${cmd(s.cond)}`,
+					...under(s.flow),
 				];
 			case "section":
 				return [
 					`${indent}section ${s.name ?? ""}${s.order ? ` ${s.order}` : ""}`,
-					...lines(s.steps, `${indent}  `),
+					...under(s.flow),
 				];
 			default:
 				return s satisfies never;
@@ -230,7 +244,7 @@ describe("the instrument's map", () => {
 
 	it("is the instrument's tree, unnamed sequences spliced, each ask linked to its entry", () => {
 		expect(cb.instruments.map((i) => i.name)).toEqual(["survey"]);
-		expect(lines(cb.instruments[0]?.steps ?? [])).toEqual([
+		expect(lines(cb, cb.instruments[0]?.flow ?? [])).toEqual([
 			"say Hello.",
 			"ask va",
 			"if x = 1 (routing)",

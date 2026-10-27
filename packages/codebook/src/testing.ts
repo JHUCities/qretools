@@ -23,7 +23,7 @@ const row = (r: Row) => `${r.code}${r.missing ? "!" : ""}=${plain(r.label)}`;
 
 /** One place a question is asked, on one line. */
 export const asking = (a: Asking): string =>
-	`${a.conditions.map((c) => `${c.negated ? "not " : ""}(${c.command})`).join(" and ") || "always"}${a.loops.length > 0 ? ` in ${a.loops.length} loop` : ""}${a.order ? ` order ${a.order}` : ""}${a.responseOrder ? ` options ${a.responseOrder}` : ""}`;
+	`${a.conditions.map((c) => `${c.negated ? "not " : ""}(${c.cond.command.text})`).join(" and ") || "always"}${a.loops.length > 0 ? ` in ${a.loops.length} loop` : ""}${a.order ? ` order ${a.order}` : ""}${a.responseOrder ? ` options ${a.responseOrder}` : ""}`;
 
 export const outline = (cb: Codebook): string[] => [
 	...(cb.title === undefined ? [] : [`title ${cb.title}`]),
@@ -48,7 +48,7 @@ export const outline = (cb: Codebook): string[] => [
 			: []),
 		...(e.derivation
 			? [
-					`  derived ${e.derivation.commands.map((c) => `${c.language ?? ""}:${c.command}`).join("; ")}${e.derivation.from.length > 0 ? ` from ${e.derivation.from.map((f) => f.name).join(", ")}` : ""} ${plain(e.derivation.text)}`.trimEnd(),
+					`  derived ${e.derivation.commands.map((c) => `${c.language ?? ""}:${c.text}`).join("; ")}${e.derivation.from.length > 0 ? ` from ${e.derivation.from.map((f) => f.name).join(", ")}` : ""} ${plain(e.derivation.text)}`.trimEnd(),
 				]
 			: []),
 		...(e.notes ? [`  notes ${plain(e.notes)}`] : []),
