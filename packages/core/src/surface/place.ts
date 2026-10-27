@@ -82,21 +82,38 @@ export function placeAt(source: string, offset: number): Place | undefined {
  */
 export function textLines(source: string): ReadonlySet<number> {
 	const lines = new Set<number>();
+	const starts = lineStarts(source);
 	visit(parseDocument(source, { prettyErrors: false }), {
 		Scalar(_, node) {
 			if (node.range == null) return;
 			// A block's range takes its trailing newline, so its last line holds end - 1.
-			const last = lineNumber(source, node.range[1] - 1);
-			for (let n = lineNumber(source, node.range[0]) + 1; n <= last; n++)
+			const last = lineNumber(starts, node.range[1] - 1);
+			for (let n = lineNumber(starts, node.range[0]) + 1; n <= last; n++)
 				lines.add(n);
 		},
 	});
 	return lines;
 }
 
-/** The number (from 1) of the line holding `at`. */
-const lineNumber = (source: string, at: number): number =>
-	source.slice(0, at).split("\n").length;
+/** Where each line starts, in order. */
+function lineStarts(source: string): readonly number[] {
+	const starts = [0];
+	for (let i = source.indexOf("\n"); i !== -1; i = source.indexOf("\n", i + 1))
+		starts.push(i + 1);
+	return starts;
+}
+
+/** The number (from 1) of the line holding `at`, by binary search over its starts. */
+function lineNumber(starts: readonly number[], at: number): number {
+	let lo = 0;
+	let hi = starts.length - 1;
+	while (lo < hi) {
+		const mid = (lo + hi + 1) >> 1;
+		if ((starts[mid] ?? 0) <= at) lo = mid;
+		else hi = mid - 1;
+	}
+	return lo + 1;
+}
 
 /** Where the line holding `at` starts. */
 const lineOf = (source: string, at: number): number =>
