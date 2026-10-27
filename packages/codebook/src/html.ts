@@ -4,15 +4,17 @@
  * custom element alike.
  */
 
-import { itemKeyOf } from "@qretools/core";
 import {
-	type Asking,
-	allStepsOf,
 	type Command,
-	type LinkedAsk,
-	type Outline,
-	type Step,
-} from "./flow.ts";
+	type Condition,
+	type FlowCheck,
+	type FlowInstrument,
+	type FlowStep,
+	itemKeyOf,
+	type Part,
+	type Source,
+} from "@qretools/core";
+import { type Asking, allStepsOf, type Linked } from "./flow.ts";
 import type {
 	Codebook,
 	Described,
@@ -21,13 +23,23 @@ import type {
 	Listed,
 	Row,
 } from "./model.ts";
-import type { Ref, Span, Text } from "./text.ts";
-import {
-	conditionsWords,
-	isCondition,
-	type Known,
-	type Mode,
-} from "./words.ts";
+import { paragraphs, type Ref, type Span, type Text, textOf } from "./text.ts";
+import { conditionsWords, isCondition, type Mode } from "./words.ts";
+
+type AskStep = Extract<FlowStep, { kind: "ask" }>;
+
+/** What a name in a condition or a text reads, as a reference to its entry or loop. */
+const sourceRef = (s: Source): Ref => ({
+	kind: "ref",
+	type:
+		s.kind === "compute"
+			? "ComputationItem"
+			: s.kind === "row"
+				? "Loop"
+				: "Variable",
+	urn: s.urn,
+	...(s.variable !== undefined && { name: s.variable }),
+});
 
 const ENTITIES: Readonly<Record<string, string>> = {
 	"&": "&amp;",
@@ -85,8 +97,10 @@ interface Context extends Options {
 	readonly options?: ReadonlyMap<string, readonly Entry[]>;
 	/** The URNs of the variables that come with each case, which no question asks. */
 	readonly inputs?: ReadonlySet<string>;
-	/** At an ask: what each of its question's fills shows there, by the fill's parameter URN. */
-	readonly fills?: ReadonlyMap<string, Ref>;
+	/** Each ask to the entry recording its question, by its construct's URN. */
+	readonly asks?: ReadonlyMap<string, Linked>;
+	/** Each loop the map draws, by its URN, as a reference (named where it has a name). */
+	readonly loops?: ReadonlyMap<string, Ref>;
 }
 
 interface Place {
@@ -106,17 +120,7 @@ export interface Options {
 
 function spanHtml(span: Span, cx: Context): string {
 	const { anchors, inLink, href } = cx;
-	// A fill at an ask shows what the ask binds into it: the variable, not the question's own parameter.
-	const bound =
-		span.kind === "ref" && span.fill ? cx.fills?.get(span.urn) : undefined;
-	const s: Span =
-		bound === undefined || span.kind !== "ref"
-			? span
-			: {
-					...bound,
-					...(span.name !== undefined && { name: span.name }),
-					fill: true,
-				};
+	const s = span;
 	switch (s.kind) {
 		case "text":
 			return escapeHtml(s.text);
@@ -199,29 +203,33 @@ const sentence = (s: string): string =>
 
 /** A command as written, its program language after it. */
 const commandHtml = (c: Command): string =>
-	`<code>${escapeHtml(c.command)}</code>${c.language === undefined ? "" : ` <span class="ddi-language">(${escapeHtml(c.language)})</span>`}`;
+	`<code>${escapeHtml(c.text)}</code>${c.language === undefined ? "" : ` <span class="ddi-language">(${escapeHtml(c.language)})</span>`}`;
 
 /** What a name in a condition reads, as far as the page knows it. */
-function knownOf(ref: Ref, cx: Context): Known | undefined {
-	// shortcut: a RepeatUntil's row is counted by a ComputationItem, so it reads as possibly
-	// unanswered; tell it from a computed value if an else on one shows "or not answered".
-	if (ref.type === "ComputationItem") return { nullable: true };
-	if (ref.type === "Loop") return { nullable: false };
-	const e = cx.entries?.get(ref.urn);
-	if (e === undefined) return undefined;
+const lookupOf = (cx: Context) => (source: Source) => {
+	const ref = sourceRef(source);
+	if (source.kind !== "answer" && source.kind !== "input")
+		// A row is never unanswered; a computed value may be.
+		return { ref, known: { nullable: source.kind === "compute" } };
+	const e = cx.entries?.get(source.urn);
 	return {
-		// An input, with no question, is set before the interview.
-		nullable: e.question !== undefined,
-		codes: (e.responses?.rows ?? []).filter((r) => !r.missing),
+		ref,
+		...(e !== undefined && {
+			known: {
+				// An input, with no question, is set before the interview.
+				nullable: e.question !== undefined,
+				codes: (e.responses?.rows ?? []).filter((r) => !r.missing),
+			},
+		}),
 	};
-}
+};
 
 /** Conditions in words, or undefined where any can't be read (not VTL, say). */
 const wordsHtml = (
-	parts: readonly { readonly command: Command; readonly mode: Mode }[],
+	parts: readonly { readonly cond: Condition; readonly mode: Mode }[],
 	cx: Context,
 ): string | undefined => {
-	const said = conditionsWords(parts, (r) => knownOf(r, cx));
+	const said = conditionsWords(parts, lookupOf(cx));
 	return said === undefined ? undefined : inlineHtml([said], cx);
 };
 
@@ -229,7 +237,7 @@ const wordsHtml = (
 function askingHtml(a: Asking, cx: Context): string {
 	const said = wordsHtml(
 		a.conditions.map((c) => ({
-			command: c,
+			cond: c.cond,
 			mode: c.negated ? "notTrue" : "true",
 		})),
 		cx,
@@ -238,7 +246,8 @@ function askingHtml(a: Asking, cx: Context): string {
 		said !== undefined
 			? [`if ${said}`]
 			: a.conditions.map(
-					(c) => `${c.negated ? "unless" : "if"} ${commandHtml(c)}`,
+					(c) =>
+						`${c.negated ? "unless" : "if"} ${commandHtml(c.cond.command)}`,
 				);
 	const parts = [
 		conditions.join(" and "),
@@ -610,8 +619,10 @@ const anchorsOf = (cb: Codebook, blocks: readonly Block[]): Set<string> =>
 			...cb.instruments.map((i) => i.urn),
 			// A loop, so a fill of its counter can link to it.
 			...cb.instruments.flatMap((i) =>
-				allStepsOf(i.steps).flatMap((s) =>
-					s.kind === "loop" ? [s.construct] : [],
+				allStepsOf(i.flow).flatMap((s) =>
+					s.kind === "count" || s.kind === "repeat" || s.kind === "loop"
+						? [s.urn]
+						: [],
 				),
 			),
 		].flatMap((urn) => {
@@ -621,24 +632,24 @@ const anchorsOf = (cb: Codebook, blocks: readonly Block[]): Set<string> =>
 	);
 
 /** The asks in a tree of steps, in order. */
-const asksOf = (steps: readonly Step<LinkedAsk>[]): LinkedAsk[] =>
-	allStepsOf(steps).filter((s): s is LinkedAsk => s.kind === "ask");
+const asksOf = (steps: readonly FlowStep[]): AskStep[] =>
+	allStepsOf(steps).filter((s): s is AskStep => s.kind === "ask");
 
 /**
  * Each ask's place in the map: its construct's anchor, on the first place it appears only
  * (a construct reached by two paths is drawn twice, and an id is once a page).
  */
 function placesOf(
-	instruments: readonly Outline<LinkedAsk>[],
+	instruments: readonly FlowInstrument[],
 	en: string,
 ): Map<string, Place> {
 	const places = new Map<string, Place>();
 	const words = (s: string) => (en === "" ? s : `<span${en}>${s}</span>`);
 	for (const i of instruments)
-		for (const ask of asksOf(i.steps)) {
-			const anchor = anchorOf(ask.construct);
-			if (anchor === undefined || places.has(ask.construct)) continue;
-			places.set(ask.construct, {
+		for (const ask of asksOf(i.flow)) {
+			const anchor = anchorOf(ask.urn);
+			if (anchor === undefined || places.has(ask.urn)) continue;
+			places.set(ask.urn, {
 				anchor,
 				words:
 					instruments.length === 1 || i.name === undefined
@@ -657,7 +668,7 @@ interface Drawing {
 
 /** Steps as a list; nothing for none. */
 const flowHtml = (
-	steps: readonly Step<LinkedAsk>[],
+	steps: readonly FlowStep[],
 	cx: Context,
 	at: Drawing,
 	depth: number,
@@ -667,17 +678,38 @@ const flowHtml = (
 		: // role: a list styled without markers stays a list to VoiceOver.
 			`<ol class="ddi-flow" role="list">${steps.map((s) => stepHtml(s, cx, at, depth)).join("")}</ol>`;
 
-/** A command and its program language, or that there is none. */
-const conditionHtml = (c: Command | undefined, cx: Context): string =>
-	c === undefined ? english("(no condition written)", cx) : commandHtml(c);
+/** A condition as written, its program language after it. */
+const conditionHtml = (c: Condition): string => commandHtml(c.command);
+
+/** A value (a roster's count): the name it reads, else as written. */
+const valueHtml = (c: Condition, cx: Context): string => {
+	const source =
+		c.kind === "parsed" && c.expr.kind === "name"
+			? c.sources.get(c.expr.name)
+			: undefined;
+	return source === undefined
+		? conditionHtml(c)
+		: inlineHtml([[sourceRef(source)]], cx);
+};
 
 /** The page's word for a step, and its words: `<strong>`, as a paper questionnaire's. */
 const lead = (word: string, cx: Context): string =>
 	`<strong${cx.en}>${word}</strong>`;
 
+/** Displayed text as the reader gives it: words, and each value piped in as a fill. */
+const partsText = (parts: readonly Part[]): Text =>
+	paragraphs(
+		parts.map(
+			(p): Span =>
+				p.kind === "text"
+					? { kind: "text", text: p.text }
+					: { ...sourceRef(p.source), fill: true },
+		),
+	);
+
 /** How an ask is answered: its options and their codes (missing ones left out), or its format. */
-function answersHtml(s: LinkedAsk, cx: Context): string {
-	const key = s.entry?.urn;
+function answersHtml(s: AskStep, cx: Context): string {
+	const key = cx.asks?.get(s.urn)?.urn;
 	const options = key === undefined ? undefined : cx.options?.get(key);
 	const entry = key === undefined ? undefined : cx.entries?.get(key);
 	const rows: readonly { code: string; label?: Text }[] =
@@ -697,9 +729,16 @@ function answersHtml(s: LinkedAsk, cx: Context): string {
 	}${entry?.format === undefined ? "" : `<p class="ddi-answers"${cx.en}>${escapeHtml(formatWords(entry.format))}</p>`}`;
 }
 
-/** A branch's arms, each under "Ask if" and its condition in words: an else-if's and an else's say the earlier arms didn't hold. */
+/** An if's branches, each under "Ask if" and its condition in words: an else-if's and an else's say the earlier branches didn't hold. */
 function branchHtml(
-	s: Extract<Step<LinkedAsk>, { kind: "branch" }>,
+	s: {
+		readonly type?: string;
+		readonly branches: readonly {
+			readonly cond: Condition;
+			readonly then: readonly FlowStep[];
+		}[];
+		readonly else?: readonly FlowStep[];
+	},
 	cx: Context,
 	at: Drawing,
 	depth: number,
@@ -708,19 +747,13 @@ function branchHtml(
 		s.type === undefined
 			? ""
 			: ` <span class="ddi-language">(${escapeHtml(s.type)})</span>`;
-	const before = (n: number): { command: Command; mode: Mode }[] =>
-		s.arms
-			.slice(0, n)
-			.flatMap((a) =>
-				a.command === undefined
-					? []
-					: [{ command: a.command, mode: "notTrue" }],
-			);
+	const before = (n: number): { cond: Condition; mode: Mode }[] =>
+		s.branches.slice(0, n).map((b) => ({ cond: b.cond, mode: "notTrue" }));
 	// "Show if" over text alone: nothing there is asked.
-	const verb = (steps: readonly Step<LinkedAsk>[]) =>
+	const verb = (steps: readonly FlowStep[]) =>
 		steps.every((x) => x.kind === "say") ? "Show if" : "Ask if";
 	const arm = (
-		steps: readonly Step<LinkedAsk>[],
+		steps: readonly FlowStep[],
 		said: string | undefined,
 		written: string,
 		first = false,
@@ -728,118 +761,178 @@ function branchHtml(
 		`<div class="ddi-arm"><p class="ddi-if">${
 			said === undefined ? written : `${lead(verb(steps), cx)} ${said}`
 		}${first ? type : ""}</p>${flowHtml(steps, cx, at, depth)}</div>`;
-	const arms = s.arms.map((a, i) =>
+	const arms = s.branches.map((b, i) =>
 		arm(
-			a.steps,
-			a.command === undefined
-				? undefined
-				: wordsHtml([...before(i), { command: a.command, mode: "true" }], cx),
-			`${english(i === 0 ? "If" : "Else if", cx)} ${conditionHtml(a.command, cx)}`,
+			b.then,
+			wordsHtml([...before(i), { cond: b.cond, mode: "true" }], cx),
+			`${english(i === 0 ? "If" : "Else if", cx)} ${conditionHtml(b.cond)}`,
 			i === 0,
 		),
 	);
 	const otherwise =
-		s.otherwise === undefined
+		s.else === undefined
 			? ""
 			: arm(
-					s.otherwise,
-					wordsHtml(before(s.arms.length), cx),
+					s.else,
+					wordsHtml(before(s.branches.length), cx),
 					english("Else", cx),
 				);
 	return `<li>${arms.join("")}${otherwise}</li>`;
 }
 
+/** A check after its ask: when its message shows, and the message. */
+const checkHtml = (c: FlowCheck, cx: Context): string => {
+	const said = wordsHtml([{ cond: c.ensure, mode: "false" }], cx);
+	return `<div class="ddi-arm"><p class="ddi-if">${
+		said === undefined
+			? `${english("Unless", cx)} ${conditionHtml(c.ensure)}`
+			: `${lead("Show if", cx)} ${said}`
+	} <span class="ddi-language">(${escapeHtml(c.severity)})</span></p>${
+		c.message === undefined
+			? ""
+			: `<ol class="ddi-flow" role="list"><li><blockquote>${blockHtml(partsText(c.message), cx)}</blockquote></li></ol>`
+	}</div>`;
+};
+
+/** A loop's or a roster's line, with its id once (a loop reached by two paths is drawn twice). */
+const loopHtml = (
+	s: Extract<FlowStep, { kind: "count" | "repeat" | "loop" }>,
+	how: string,
+	cx: Context,
+	at: Drawing,
+	depth: number,
+): string => {
+	const it = cx.loops?.get(s.urn);
+	// An unnamed loop isn't named by its URN: "Repeated while …" says enough.
+	const named = it?.name === undefined ? "" : ` ${inlineHtml([[it]], cx)}`;
+	const id = at.drawn.has(s.urn) ? "" : idAttr(s.urn);
+	at.drawn.add(s.urn);
+	return `<li${id}><p>${lead("Repeated", cx)}${named}${how}</p>${flowHtml(s.flow, cx, at, depth)}</li>`;
+};
+
 /** One step as a list item. */
 function stepHtml(
-	s: Step<LinkedAsk>,
+	s: FlowStep,
 	cx: Context,
 	at: Drawing,
 	depth: number,
 ): string {
 	switch (s.kind) {
 		case "ask": {
-			const place = cx.places?.get(s.construct);
+			const place = cx.places?.get(s.urn);
 			const id =
-				place === undefined || at.drawn.has(s.construct)
+				place === undefined || at.drawn.has(s.urn)
 					? ""
 					: ` id="${escapeHtml(place.anchor)}"`;
-			at.drawn.add(s.construct);
+			at.drawn.add(s.urn);
 			// Numbered at each place it's asked: a construct reached twice is asked twice.
 			at.asked++;
-			const to = s.entry === undefined ? undefined : anchorOf(s.entry.urn);
+			const entry = cx.asks?.get(s.urn);
+			const to = entry === undefined ? undefined : anchorOf(entry.urn);
 			const name =
-				s.entry === undefined
-					? `<span class="ddi-urn">${escapeHtml(s.question)}</span>`
+				entry === undefined
+					? escapeHtml(s.question.name)
 					: to !== undefined && cx.anchors.has(to)
-						? contentsLink(s.entry.urn, s.entry.name, undefined, cx)
-						: titleHtml(s.entry.name, undefined, s.entry.urn, cx);
+						? contentsLink(entry.urn, entry.name, undefined, cx)
+						: titleHtml(entry.name, undefined, entry.urn, cx);
 			const question =
-				s.entry === undefined
+				entry === undefined
 					? undefined
-					: (cx.entries?.get(s.entry.urn)?.question ??
-						cx.options?.get(s.entry.urn)?.[0]?.question);
+					: (cx.entries?.get(entry.urn)?.question ??
+						cx.options?.get(entry.urn)?.[0]?.question);
 			const order =
 				s.responseOrder === undefined
 					? ""
 					: `<p class="ddi-answers"><span${cx.en}>Options in order:</span> ${escapeHtml(s.responseOrder)}</p>`;
-			return `<li${id} class="ddi-ask"><p class="ddi-ask-name"><span class="ddi-number">${at.asked}.</span> ${name}</p>${
-				question === undefined
-					? ""
-					: questionHtml(
-							question,
-							s.fills === undefined ? cx : { ...cx, fills: s.fills },
-						)
-			}${order}${answersHtml(s, cx)}</li>`;
+			const text = partsText(s.text);
+			return `<li${id} class="ddi-ask"><p class="ddi-ask-name"><span class="ddi-number">${at.asked}.</span> ${name}</p>${questionHtml(
+				{
+					urn: s.question.urn,
+					...(text.length > 0 && { text }),
+					instructions: question?.instructions ?? [],
+				},
+				cx,
+			)}${order}${answersHtml(s, cx)}${s.checks.map((c) => checkHtml(c, cx)).join("")}</li>`;
 		}
-		case "say":
+		case "say": {
+			const text = partsText(s.text);
 			return `<li>${
-				s.text === undefined
+				text.length === 0
 					? english("A statement with no text", cx)
-					: `<blockquote>${blockHtml(s.text, cx)}</blockquote>`
+					: `<blockquote>${blockHtml(text, cx)}</blockquote>`
 			}</li>`;
+		}
 		case "compute": {
-			const assigns =
-				s.assigns.length === 0 ? "" : `${refsHtml(s.assigns, cx)} `;
+			const assigns = inlineHtml(
+				[
+					[
+						{
+							kind: "ref",
+							type: "ComputationItem",
+							urn: s.urn,
+							name: s.variable,
+						},
+					],
+				],
+				cx,
+			);
 			// A condition: "x is true when …"; a value: "x is set to `…`".
-			const said =
-				s.command === undefined || !isCondition(s.command)
-					? undefined
-					: wordsHtml([{ command: s.command, mode: "true" }], cx);
-			return `<li><p>${lead("Computed", cx)} ${
+			const said = isCondition(s.value)
+				? wordsHtml([{ cond: s.value, mode: "true" }], cx)
+				: undefined;
+			return `<li><p>${lead("Computed", cx)} ${assigns} ${
 				said === undefined
-					? `${assigns}${english(s.assigns.length === 0 ? "" : "is set to ", cx)}${conditionHtml(s.command, cx)}`
-					: `${assigns}${english("is true when", cx)} ${said}`
+					? `${english("is set to", cx)} ${conditionHtml(s.value)}`
+					: `${english("is true when", cx)} ${said}`
 			}</p></li>`;
 		}
-		case "branch":
+		case "if":
 			return branchHtml(s, cx, at, depth);
+		case "stop":
+			return branchHtml(
+				{
+					type: "stop",
+					// biome-ignore lint/suspicious/noThenProperty: the reader's field, never awaited
+					branches: [{ cond: s.cond, then: s.say }],
+					else: s.else,
+				},
+				cx,
+				at,
+				depth,
+			);
+		case "count":
+			return loopHtml(
+				s,
+				`${s.row === undefined ? "" : ` ${english("for", cx)} <code>${escapeHtml(s.row)}</code> = 1, 2, 3 …`} ${english("up to", cx)} ${valueHtml(s.count, cx)}${s.max === undefined ? "" : english(`, at most ${s.max}`, cx)}`,
+				cx,
+				at,
+				depth,
+			);
+		case "repeat": {
+			const said = wordsHtml([{ cond: s.more, mode: "true" }], cx);
+			return loopHtml(
+				s,
+				` ${english("while", cx)} ${said ?? conditionHtml(s.more)}${english(`, at most ${s.max} times`, cx)}`,
+				cx,
+				at,
+				depth,
+			);
+		}
 		case "loop": {
-			const said =
-				s.command === undefined
-					? undefined
-					: wordsHtml([{ command: s.command, mode: "true" }], cx);
-			const how =
-				s.command === undefined
-					? ""
-					: ` ${english(s.loop === "RepeatUntil" ? "until" : "while", cx)} ${said ?? commandHtml(s.command)}`;
-			const c = s.counter;
-			const counted =
-				c === undefined
-					? ""
-					: ` ${english("for", cx)} <code>${escapeHtml(c.name)}</code> = ${[0, 1, 2].map((k) => c.from + k).join(", ")} …`;
-			// An unnamed loop isn't named by its URN: "Repeated while …" says enough.
-			const named =
-				s.ref.name === undefined ? "" : ` ${inlineHtml([[s.ref]], cx)}`;
-			// Its id once, as an ask's: a loop reached by two paths is drawn twice.
-			const id = at.drawn.has(s.construct) ? "" : idAttr(s.construct);
-			at.drawn.add(s.construct);
-			return `<li${id}><p>${lead("Repeated", cx)}${named}${counted}${how}</p>${flowHtml(s.steps, cx, at, depth)}</li>`;
+			const said = wordsHtml([{ cond: s.cond, mode: "true" }], cx);
+			return loopHtml(
+				s,
+				` ${english(s.construct === "RepeatUntil" ? "until" : "while", cx)} ${said ?? conditionHtml(s.cond)}`,
+				cx,
+				at,
+				depth,
+			);
 		}
 		case "section": {
 			// A section's name is its title (QREtools writes it there), so words, not code.
 			const title =
 				s.label !== undefined
-					? inlineHtml(s.label, cx)
+					? escapeHtml(s.label)
 					: s.name !== undefined
 						? escapeHtml(s.name)
 						: english("Section", cx);
@@ -849,7 +942,7 @@ function stepHtml(
 					: ` <span class="ddi-language">(${escapeHtml(s.order)})</span>`;
 			// Under the instrument's h3: h4, then deeper, as far as HTML goes.
 			const h = `h${Math.min(4 + depth, 6)}`;
-			return `<li><${h} class="ddi-section">${title}${order}</${h}>${flowHtml(s.steps, cx, at, depth + 1)}</li>`;
+			return `<li><${h} class="ddi-section">${title}${order}</${h}>${flowHtml(s.flow, cx, at, depth + 1)}</li>`;
 		}
 		default:
 			return s satisfies never;
@@ -880,9 +973,11 @@ function instrumentsHtml(cb: Codebook, cx: Context): string {
 	return `<section aria-labelledby="ddi-instrument"><h2 id="ddi-instrument"${cx.en}>${cb.instruments.length === 1 ? "Instrument" : "Instruments"}</h2>${cb.instruments
 		.map(
 			(i) =>
-				`<article${idAttr(i.urn)}>${headingHtml(3, i.name, i.label, i.urn, cx)}${
-					i.description === undefined ? "" : blockHtml(i.description, cx)
-				}${inputsHtml(i.inputs, cx)}${flowHtml(i.steps, cx, { drawn, asked: 0 }, 0)}</article>`,
+				`<article${idAttr(i.urn)}>${headingHtml(3, i.name, textOf(i.label), i.urn, cx)}${
+					i.description === undefined
+						? ""
+						: blockHtml(textOf(i.description) ?? [], cx)
+				}${inputsHtml(i.inputs, cx)}${flowHtml(i.flow, cx, { drawn, asked: 0 }, 0)}</article>`,
 		)
 		.join("")}</section>`;
 }
@@ -929,6 +1024,8 @@ export function codebookHtml(cb: Codebook, options: Options = {}): string {
 		anchors: anchorsOf(cb, blocks),
 		en,
 		places: placesOf(cb.instruments, en),
+		asks: cb.asks,
+		loops: cb.loops,
 		entries: entriesOf(cb.entries),
 		options: optionsOf(cb.entries),
 		inputs: new Set(cb.instruments.flatMap((i) => i.inputs.map((e) => e.urn))),

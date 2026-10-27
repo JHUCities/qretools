@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** A codebook's page read back by a real parser: its structure, its anchors and its links. */
+import type { Condition, FlowStep } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { anchorOf, codebookHtml, hrefOf, pageOf } from "../html.ts";
 import type { Codebook, Entry } from "../model.ts";
@@ -26,6 +27,25 @@ const option = (id: string, code: string): Entry =>
 		group: { question: urn("pets"), option: { code, label: t(id) } },
 		responses: { many: false, rows: [], from: [] },
 	});
+
+const verbatim = (text: string, language?: string): Condition => ({
+	kind: "verbatim",
+	command: { text, ...(language !== undefined && { language }) },
+});
+const at = (id: string) => ({ id, urn: urn(id) });
+const ask = (id: string, question: string): FlowStep => ({
+	kind: "ask",
+	...at(id),
+	question: {
+		id: question,
+		urn: urn(question),
+		name: question,
+		domain: { kind: "other" },
+	},
+	records: [],
+	text: [],
+	checks: [],
+});
 
 /** Options of one question apart, a reference to an older version, a number with only missing values. */
 const CODEBOOK: Codebook = {
@@ -58,8 +78,8 @@ const CODEBOOK: Codebook = {
 				{
 					construct: urn("ask-age"),
 					conditions: [
-						{ command: "consent = 2", language: "VTL", negated: true },
-						{ command: "adult", negated: false },
+						{ cond: verbatim("consent = 2", "VTL"), negated: true },
+						{ cond: verbatim("adult"), negated: false },
 					],
 					loops: [
 						{ kind: "ref", type: "Loop", urn: urn("people"), name: "people" },
@@ -86,87 +106,69 @@ const CODEBOOK: Codebook = {
 	],
 	instruments: [
 		{
+			id: "survey",
 			urn: urn("survey"),
 			name: "survey",
-			label: t("Pets & people"),
+			label: "Pets & people",
 			inputs: [],
-			steps: [
-				{ kind: "say", construct: urn("hello"), text: t("Hello.") },
+			flow: [
+				{
+					kind: "say",
+					...at("hello"),
+					text: [{ kind: "text", text: "Hello." }],
+				},
 				{
 					kind: "section",
-					construct: urn("about"),
-					label: t("About you"),
+					...at("about"),
+					label: "About you",
 					order: "Random",
-					steps: [
+					flow: [
 						{
-							kind: "branch",
-							construct: urn("if-adult"),
+							kind: "if",
+							...at("if-adult"),
 							type: "warning",
-							arms: [
+							branches: [
 								{
-									command: { command: "adult", language: "VTL" },
-									steps: [
+									cond: verbatim("adult", "VTL"),
+									// biome-ignore lint/suspicious/noThenProperty: the reader's field, never awaited
+									then: [
 										{
 											kind: "loop",
-											construct: urn("people"),
-											ref: {
-												kind: "ref",
-												type: "Loop",
-												urn: urn("people"),
-												name: "people",
-											},
-											loop: "Loop",
-											command: { command: "i <= n" },
-											steps: [
-												{
-													kind: "ask",
-													construct: urn("ask-age"),
-													question: urn("age-q"),
-													entry: {
-														urn: urn("age"),
-														name: "age",
-														label: t("Age"),
-													},
-												},
-											],
+											...at("people"),
+											construct: "Loop",
+											cond: verbatim("i <= n"),
+											flow: [ask("ask-age", "age-q")],
 										},
 									],
 								},
 							],
-							otherwise: [
+							else: [
 								{
 									kind: "compute",
-									construct: urn("set-x"),
-									command: { command: "x := 1" },
-									assigns: [
-										{
-											kind: "ref",
-											type: "Parameter",
-											urn: urn("x"),
-											name: "x",
-										},
-									],
+									...at("set-x"),
+									variable: "x",
+									value: verbatim("x := 1"),
 								},
 							],
 						},
 					],
 				},
-				{
-					kind: "ask",
-					construct: urn("ask-pets"),
-					question: urn("pets"),
-					entry: { urn: urn("pets"), name: "pets" },
-				},
+				ask("ask-pets", "pets"),
 				// The same construct again: drawn twice, its id once.
-				{
-					kind: "ask",
-					construct: urn("ask-age"),
-					question: urn("age-q"),
-					entry: { urn: urn("age"), name: "age", label: t("Age") },
-				},
+				ask("ask-age", "age-q"),
 			],
 		},
 	],
+	asks: new Map([
+		[urn("ask-age"), { urn: urn("age"), name: "age", label: t("Age") }],
+		[urn("ask-pets"), { urn: urn("pets"), name: "pets" }],
+	]),
+	loops: new Map([
+		[
+			urn("people"),
+			{ kind: "ref", type: "Loop", urn: urn("people"), name: "people" },
+		],
+	]),
 	shared: {
 		concepts: [],
 		universes: [

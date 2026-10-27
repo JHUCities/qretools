@@ -52,7 +52,7 @@ export function linked(text: string): Span[] {
 }
 
 /** Spans in reading order as paragraphs: a blank line in a text span starts a new one. */
-function paragraphs(spans: readonly Span[]): Text {
+export function paragraphs(spans: readonly Span[]): Text {
 	const paras: Span[][] = [[]];
 	for (const s of spans) {
 		if (s.kind !== "text") {

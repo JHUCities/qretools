@@ -12,6 +12,7 @@
 import {
 	asList,
 	asObj,
+	type Command,
 	type Finding as CoreFinding,
 	DDI_DEPTH,
 	type DdiIndex,
@@ -19,6 +20,7 @@ import {
 	ddiIndexOf,
 	deref,
 	err,
+	type FlowInstrument,
 	type Indexed,
 	itemKeyOf,
 	latestOf as latestIn,
@@ -30,14 +32,11 @@ import {
 } from "@qretools/core";
 import {
 	type Asking,
-	type Command,
-	commandOf,
+	allStepsOf,
 	flowOf,
 	type Linked,
-	type LinkedAsk,
-	type Outline,
+	newestOf,
 	readsOf,
-	type Step,
 } from "./flow.ts";
 import {
 	dynamicTextOf,
@@ -154,11 +153,15 @@ export interface Codebook {
 	readonly title?: string;
 	/** In the instruments' order where there are any, the rest in document order. */
 	readonly entries: readonly Entry[];
-	/** Each instrument as a map, each question in it linked to its entry; none without one. */
-	readonly instruments: readonly (Outline<LinkedAsk> & {
+	/** Each instrument as the core reads it; none without one. */
+	readonly instruments: readonly (FlowInstrument & {
 		/** The variables it reads that come with each case: no question asks them, nothing computes them. */
 		readonly inputs: readonly Entry[];
 	})[];
+	/** Each ask (by its QuestionConstruct's URN) to the entry recording its question. */
+	readonly asks: ReadonlyMap<string, Linked>;
+	/** Each loop and roster in the instruments, by its URN, as a reference (named where it has a name). */
+	readonly loops: ReadonlyMap<string, Ref>;
 	/** What the entries refer to, each once, in the order first referred to. */
 	readonly shared: {
 		readonly concepts: readonly Described[];
@@ -196,6 +199,17 @@ const num = (j: unknown): number | undefined =>
 const codeValue = (code: Record<string, unknown>): string | undefined => {
 	const value = asObj(code.Value)?.StringValue ?? code.Value;
 	return str(value) ?? (typeof value === "number" ? String(value) : undefined);
+};
+
+/** A CommandCode's first command, as written. */
+// shortcut: a CommandCode may hold the same command in several languages; the first is shown.
+const commandOf = (code: unknown): Command | undefined => {
+	const c = asList(asObj(code)?.Command)[0];
+	const text = str(c?.CommandContent);
+	const language = str(asObj(c?.ProgramLanguage)?.StringValue);
+	return text === undefined
+		? undefined
+		: { text, ...(language !== undefined && { language }) };
 };
 
 /** Each reference to an item the document doesn't have, once per object it's written in. */
@@ -631,29 +645,6 @@ export function codebookOf(
 					},
 		);
 	}
-	const linked = (steps: readonly Step[]): Step<LinkedAsk>[] =>
-		steps.map((s): Step<LinkedAsk> => {
-			switch (s.kind) {
-				case "ask": {
-					const entry = recordedIn.get(s.question);
-					return entry === undefined ? s : { ...s, entry };
-				}
-				case "branch":
-					return {
-						...s,
-						arms: s.arms.map((a) => ({ ...a, steps: linked(a.steps) })),
-						...(s.otherwise !== undefined && {
-							otherwise: linked(s.otherwise),
-						}),
-					};
-				case "loop":
-				case "section":
-					return { ...s, steps: linked(s.steps) };
-				default:
-					return s;
-			}
-		});
-
 	const instrument = items.find((it) => it.type === "Instrument");
 	const title =
 		instrument === undefined
@@ -666,11 +657,10 @@ export function codebookOf(
 		entries: entries.map((e) => e.entry),
 		instruments: flow.instruments.map((i) => {
 			const read = new Set(
-				readsOf(i.steps).map((r) => itemKeyOf(r.urn) ?? r.urn),
+				readsOf(i.flow).map((r) => itemKeyOf(r.urn) ?? r.urn),
 			);
 			return {
 				...i,
-				steps: linked(i.steps),
 				inputs: entries
 					.map((e) => e.entry)
 					.filter(
@@ -682,6 +672,32 @@ export function codebookOf(
 					),
 			};
 		}),
+		asks: new Map(
+			flow.instruments.flatMap((i) =>
+				allStepsOf(i.flow).flatMap((s): [string, Linked][] => {
+					const entry =
+						s.kind === "ask"
+							? recordedIn.get(newestOf(index, s.question.urn))
+							: undefined;
+					return s.kind === "ask" && entry !== undefined
+						? [[s.urn, entry]]
+						: [];
+				}),
+			),
+		),
+		loops: new Map(
+			flow.instruments.flatMap((i) =>
+				allStepsOf(i.flow).flatMap((s): [string, Ref][] => {
+					const it = index.byUrn.get(s.urn);
+					return (s.kind === "count" ||
+						s.kind === "repeat" ||
+						s.kind === "loop") &&
+						it !== undefined
+						? [[s.urn, refOf(it, lang)]]
+						: [];
+				}),
+			),
+		),
 		shared: {
 			concepts: [...concepts.values()],
 			universes: [...universes.values()],

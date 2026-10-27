@@ -196,6 +196,10 @@ export function readInstrument(ddi: DdiDocument): {
 		const { id } = s;
 		switch (s.kind) {
 			case "ask": {
+				if (s.question.domain.kind === "other") {
+					unread(s.question.id, "How this question is answered can't be read.");
+					return [];
+				}
 				// One ask in two places would record its variable twice, unchecked.
 				if (placed.has(id))
 					inexpressible(id, "This step is in the flow more than once.");

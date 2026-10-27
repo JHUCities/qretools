@@ -171,6 +171,43 @@ flow:
 		);
 	});
 
+	it("asks a question whose domain it doesn't read, its domain `other`", () => {
+		const { value, findings } = read(
+			changed("QuestionItem", "rent", (q) => ({
+				...q,
+				ResponseDomain: { $type: "DateTimeDomain" },
+			})),
+		);
+		expect(findings).toEqual([]);
+		const rent = all(value.instruments[0]?.flow ?? []).find(
+			(s) => s.kind === "ask" && s.question.name === "rent",
+		);
+		expect(rent?.kind === "ask" && rent.question.domain).toEqual({
+			kind: "other",
+		});
+	});
+
+	it("shows a text in the language asked for, else the first", () => {
+		const said = (lang?: string) => {
+			const two = changed("StatementItem", "say-1", (st) => {
+				const [en] = st.DisplayText as JsonObject[];
+				const words = (v: string) => ({
+					...en,
+					AudienceLanguage: v,
+					TextContent: [
+						{ Text: { MultilingualStringValue: { LanguageTag: v, Value: v } } },
+					],
+				});
+				return { ...st, DisplayText: [words("en"), words("es")] };
+			});
+			const first = readInstruments(ddiIndexOf(two), lang).value.instruments[0]
+				?.flow[0];
+			return first?.kind === "say" ? first.text : undefined;
+		};
+		expect(said("es")).toEqual([{ kind: "text", text: "es" }]);
+		expect(said("fr")).toEqual([{ kind: "text", text: "en" }]);
+	});
+
 	it("reads a loop that isn't a roster as a loop", () => {
 		const { value } = read(
 			changed("Loop", ".roster-members", (l) => {
