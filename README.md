@@ -68,13 +68,16 @@ Three to look at:
   instruments in the browser.
 - **The command-line package** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)
   as `qretools`). Run `check`, `export`, `codebook` or `build` on a workspace, and
-  `instrument check` or `instrument export` on an instrument.
+  `instrument check` or `instrument export` on an instrument, and `form` on an instrument's
+  DDI.
 - **The core package** (`packages/core/`). Reads questions and instruments, checks them,
   and turns them into DDI. Every other package uses it.
 - **The codebook package** (`packages/codebook/`). Turns a DDI-Lifecycle 4.0 document into an
   HTML codebook. It also works as a `<ddi-codebook>` element on any web page.
 - **The Qualtrics package** (`packages/qsf/`). Turns an instrument into a Qualtrics survey.
   Use "Download QSF" in the app, or `qretools instrument export --qsf`.
+- **The form package** (`packages/form/`). Turns an instrument's DDI into a test form: one
+  HTML page you click through to try its routing. Run `qretools form`.
 - **The editor package** (`packages/editor/`). The web app's YAML editor, built on
   CodeMirror.
 - **The shell package** (`packages/shell/`). The web app's GitHub sign-in, saving, links
