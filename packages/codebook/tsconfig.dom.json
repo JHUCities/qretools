@@ -1,0 +1,11 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		// `?raw` imports: a page written by a test, read back here.
+		"types": ["vite/client"]
+	},
+	// The custom element, and tests that parse the page with a real HTML parser.
+	"include": ["src/dom", "src/element"],
+	"exclude": []
+}

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import demRace from "../../examples/dem_race.yaml?raw";
 import { lint } from "../lint.ts";
-import { codebookView } from "../render.ts";
 import { optionVariable } from "./draft.ts";
 import { EMPTY_ENV } from "./env.ts";
 import { parseSurface } from "./parse.ts";
@@ -47,15 +46,6 @@ describe("select-many options", () => {
 		expect(
 			optionVariable(undefined, { code: "wh", label: "White" }),
 		).toBeUndefined();
-	});
-
-	it("the codebook lists one variable per option", () => {
-		const v = codebookView(parseSurface(demRace, EMPTY_ENV).draft, EMPTY_ENV);
-		expect(v.values).toMatchObject({ kind: "lines" });
-		expect(v.values.kind === "lines" && v.values.lines[0]).toBe(
-			"dem_race_wh: Race selected -- White",
-		);
-		expect(v.notes[0]).toMatch(/each option is its own variable/);
 	});
 
 	const table: Array<[title: string, source: string, expected: string[]]> = [

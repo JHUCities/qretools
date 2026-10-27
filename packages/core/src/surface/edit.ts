@@ -3,10 +3,10 @@
  * names a place) and applied against the text as it is now. A quick fix, "create and
  * use", and renaming a shared file are all lists of these. Pure.
  *
- * An edit replaces the whole `key: value` pair at its path with `key: value`: a
- * path's range runs from its key to the end of its value (a block value takes its
- * trailing newline, which is kept), and replacing only the value would leave a block
- * map's name on a line of its own.
+ * An edit replaces the whole `key: value` pair at its path. A path's range runs from
+ * its key to the end of its value (a value on the lines below takes its trailing
+ * newline, which is kept); replacing only the value would leave the key of a block on
+ * a line of its own.
  */
 import {
 	isMap,
@@ -24,12 +24,18 @@ import { KNOWN_KEYS } from "./schema.ts";
 
 export type { Edit, Fix } from "../findings.ts";
 
-/** A value as YAML writes it on one line, quoted only when it must be. */
-export const scalar = (value: string): string =>
-	stringify(value, { lineWidth: 0 }).trimEnd();
+/**
+ * A value as YAML writes it, quoted only when it must be: on one line, or, over several
+ * lines, a `|-` block indented under a key at `column`.
+ */
+export const scalar = (value: string, column = 0): string =>
+	stringify(value, { lineWidth: 0 })
+		.trimEnd()
+		// Blank lines in the block stay empty.
+		.replace(/\n(?=.)/g, `\n${" ".repeat(column + 2)}`);
 
 /**
- * The text with every edit applied, or undefined when a path is not in the text (it
+ * The text with every edit applied, or undefined when a path isn't in the text (it
  * changed since the fix was offered): a no-op, never a throw.
  */
 export function applyEdits(
@@ -45,12 +51,13 @@ export function applyEdits(
 		const range = ranges[edit.path];
 		if (range === undefined || edit.path === "") return undefined;
 		const [from, end] = range;
-		// A block value's span takes its trailing newline and indentation: keep them.
+		// A value on the lines below takes its trailing newline and indent: keep them.
 		const to = from + source.slice(from, end).trimEnd().length;
 		// The key as written, from the text: a path's last dotted segment would split a
 		// dotted code (`responses.1.5`).
 		const key = source.slice(from, to).split(":")[0] ?? "";
-		spans.push({ from, to, text: `${key}: ${scalar(edit.value)}` });
+		const column = from - (source.lastIndexOf("\n", from - 1) + 1);
+		spans.push({ from, to, text: `${key}: ${scalar(edit.value, column)}` });
 	}
 	// From the end, so earlier offsets still hold.
 	return spans
@@ -103,8 +110,8 @@ export function addSpace(
  * Whether text typed at `pos` belongs after a space: the caret is straight after a key's
  * colon (a field, a response code, or a list item's key such as an instrument's
  * `- ask:`), with nothing after it on the line, and the text starts with something other
- * than a space. A key, not words in a block scalar ("Time:"): the parse must have a key
- * starting there. Not covered: a dotted code (`1.5:`); the `missing-space` finding
+ * than a space. A real key, not words in a block of text ("Time:"): the parse must have
+ * a key starting there. Not covered: a dotted code (`1.5:`); the `missing-space` finding
  * catches it.
  */
 export function spaceBefore(
@@ -243,11 +250,11 @@ const placeFor = ({ written, base }: TopFields, key: string): number =>
 
 /**
  * The text naming question `name` under `variant_of`, with an empty reason where the
- * caret goes (a hole: why the two differ is the author's to write), or why it can't be:
- * `name` is named there already, or `variant_of` (or the text) isn't written as lines a
- * line can be added to (a flow map, a word), which the author edits by hand. Added where
- * the field order puts `variant_of`, at the indent its entries already have, after its
- * last entry; written empty, under its key, any comment after the colon kept on its line.
+ * caret goes (a hole: the author says why the two differ), or why it can't be: `name`
+ * is there already, or `variant_of` (or the text) isn't lines a line can be added to
+ * (a `{…}` map, a word), so the author edits it by hand. Added where the field order
+ * puts `variant_of`, at its entries' indent, after the last one; if it's empty, under
+ * its key, keeping any comment after the colon on its line.
  */
 export function addVariant(
 	source: string,
@@ -307,10 +314,10 @@ export function addVariant(
 }
 
 /**
- * A shared scale's text from a question's options written inline, copied as written (its
- * codes as spelled, its order, its comments) under `labels:`, or undefined when they
- * aren't options a scale can hold as they stand: a block of plain `code: label` lines.
- * An option written as a map (`{label: …, title: …}`) carries what is the question's own.
+ * A shared scale's text from the options written in a question, copied as written (codes
+ * as spelled, order, comments) under `labels:`. Undefined unless they're plain
+ * `code: label` lines, one per line: an option with its own fields (`label:`, `title:`…)
+ * holds things that belong to the question.
  */
 export function sharedScaleSource(source: string): string | undefined {
 	const top = parseDocument(source, { prettyErrors: false }).contents;
@@ -330,7 +337,7 @@ export function sharedScaleSource(source: string): string | undefined {
 		)
 	)
 		return undefined;
-	// Every key is a scalar (checked above), and there is at least one.
+	// Every key is a scalar (checked above), and there's at least one.
 	const first = (options.items[0]?.key as Scalar | undefined)?.range?.[0] ?? 0;
 	const from = source.lastIndexOf("\n", first - 1) + 1;
 	const indent = first - from;

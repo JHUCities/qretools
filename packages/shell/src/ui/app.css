@@ -264,7 +264,7 @@ code,
 }
 /*
  * The name takes the row's spare room and the status follows it. On narrow screens the
- * status takes a row of its own, kept even when empty.
+ * status takes a row of its own, only while it says something (below).
  */
 /* A zero basis: a wrapping row breaks at natural widths, so the brand never asks for any. */
 .topbar .brand {
@@ -689,29 +689,37 @@ button.hole {
 	padding: var(--base-size-6);
 }
 
-/* The codebook entry, in the BAS codebook's own style (its uppercase titles included). */
+/*
+ * The question as the codebook of its DDI lists it (the codebook package's page, drawn
+ * here): each variable's name and label, the question quoted, its particulars as terms,
+ * its codes in a table, missing ones last under a heading of their own.
+ */
 .codebook {
 	font-size: var(--text-body-size-medium);
 }
-.cb-title {
-	margin: 0 0 var(--base-size-4);
+.codebook p {
+	margin: 0;
+}
+.codebook p + p {
+	margin-top: var(--base-size-8);
+}
+.cb-entry + .cb-entry {
+	margin-top: var(--base-size-16);
+	padding-top: var(--base-size-16);
+	border-top: var(--borderWidth-thin) solid var(--borderColor-muted);
+}
+.cb-entry > h4 {
+	margin: 0 0 var(--base-size-8);
+	font-size: var(--text-body-size-medium);
 	font-weight: var(--base-text-weight-semibold);
-	text-transform: uppercase;
 }
-.cb-var {
-	font-weight: var(--base-text-weight-normal);
-	color: var(--fgColor-muted);
-	font-family: var(--fontStack-monospace);
-	font-size: var(--text-codeBlock-size);
-	margin-left: var(--base-size-6);
-}
-.cb-title .cb-var,
-.cb-title .hole {
-	text-transform: none;
+.cb-entry > .quiet {
+	margin-bottom: var(--base-size-8);
 }
 .cb-text {
 	margin: 0 0 var(--base-size-8);
-	font-style: italic;
+	padding-left: var(--base-size-12);
+	border-left: var(--borderWidth-thick) solid var(--borderColor-default);
 }
 .cb-values {
 	list-style: none;
@@ -732,18 +740,51 @@ button.hole {
 	font-style: normal;
 }
 .cb-meta {
-	margin: var(--base-size-8) 0 0;
+	margin: var(--base-size-8) 0;
 	display: grid;
 	grid-template-columns: auto 1fr;
-	gap: var(--base-size-2) var(--base-size-8);
-	color: var(--fgColor-muted);
-	font-size: var(--text-body-size-small);
+	gap: var(--base-size-4) var(--base-size-16);
 }
 .cb-meta dt {
+	color: var(--fgColor-muted);
 	font-weight: var(--base-text-weight-semibold);
 }
 .cb-meta dd {
 	margin: 0;
+}
+/* The pane's width, so a caption naming its lists reads on one line. */
+.cb-table {
+	width: 100%;
+	margin: var(--base-size-8) 0;
+	border-collapse: collapse;
+}
+.cb-table caption {
+	text-align: start;
+	font-weight: var(--base-text-weight-semibold);
+	padding-bottom: var(--base-size-4);
+}
+.cb-table th,
+.cb-table td {
+	text-align: start;
+	vertical-align: top;
+	padding: var(--base-size-4) var(--base-size-16) var(--base-size-4) 0;
+	border-bottom: var(--borderWidth-thin) solid var(--borderColor-muted);
+}
+.cb-table thead th,
+.cb-table th[scope="rowgroup"] {
+	color: var(--fgColor-muted);
+	font-weight: var(--base-text-weight-semibold);
+}
+.cb-table tbody th {
+	font-weight: var(--base-text-weight-normal);
+}
+/* The code column as wide as its widest code, the label column the rest. */
+.cb-table th:is([scope="row"], [scope="col"]:first-child) {
+	width: 0;
+	white-space: nowrap;
+}
+.cb-table th[scope="rowgroup"] {
+	padding-top: var(--base-size-12);
 }
 
 /*

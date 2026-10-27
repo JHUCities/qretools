@@ -1,8 +1,8 @@
 /**
- * Fills: a question's text may leave a named, typed gap that an instrument fills when it
- * asks the question ("You said you pay {{rent}} a month."). The question declares each
- * fill and its type under `fills:`; what fills it is the instrument's to say. A `{{…}}`
- * whose inside isn't a name, or names no declared fill, is the author's words.
+ * Fills: a question's text can leave a named, typed gap that an instrument fills when it
+ * asks the question ("You said you pay {{rent}} a month."). The question lists each fill
+ * and its type under `fills:`; the instrument says what goes in it. A `{{…}}` that holds
+ * no name, or a name not under `fills:`, is the author's words.
  */
 import { type Document, isMap, isScalar, type Scalar } from "yaml";
 import { compact } from "../compact.ts";
@@ -25,12 +25,12 @@ export type Piece =
 	| { readonly kind: "words"; readonly text: string }
 	| { readonly kind: "fill"; readonly name: string; readonly type?: FillType };
 
-/** `{{name}}`, spaces inside allowed; the one definition of a placeholder. */
+/** `{{name}}`, spaces inside allowed: the one definition of a placeholder. */
 const PLACEHOLDER = /\{\{\s*([^{}]*?)\s*\}\}/g;
 
 /**
- * Every `{{…}}` in a text, whatever is inside, with where it is: an instrument's
- * placeholders name qualified things (`bas.hou_rent`), which a bank's fill names can't be.
+ * Every `{{…}}` in a text, whatever is inside, and where it is: an instrument's
+ * placeholders name things with an alias (`bank.hou_rent`), which a fill name can't have.
  */
 export function placeholderSpans(
 	text: string,
@@ -41,7 +41,7 @@ export function placeholderSpans(
 	}));
 }
 
-/** Every well-named placeholder in `text`: its name and where it is, `[from, to)`. */
+/** Every placeholder in `text` that holds a valid name: the name and where it is, `[from, to)`. */
 export function placeholders(
 	text: string,
 ): readonly { readonly name: string; readonly range: Range }[] {
@@ -57,8 +57,8 @@ export const withoutFills = (text: string): string =>
 	text.replace(PLACEHOLDER, "");
 
 /**
- * The text in pieces: each declared fill where it is written, words between. A
- * placeholder naming no declared fill stays words (the parser reports it).
+ * The text in pieces: each listed fill where it's written, and the words between. A
+ * placeholder whose name isn't under `fills:` stays words (the parser reports it).
  */
 export function piecesOf(
 	text: string,
@@ -79,7 +79,7 @@ export function piecesOf(
 	return pieces;
 }
 
-/** Whether the text has a fill to show as one: otherwise it is words only. */
+/** Whether the text has a fill to show as one; otherwise it's words only. */
 export const hasFill = (pieces: readonly Piece[]): boolean =>
 	pieces.some((p) => p.kind === "fill");
 
@@ -100,7 +100,7 @@ export function readFills(doc: Document): Read<readonly Fill[]> {
 			error(
 				"wrong-type",
 				"fills",
-				"`fills` is a list of `name: type` lines.",
+				"Write `fills` as `name: type` lines, one per fill.",
 				`Types: ${FILL_TYPES.join(", ")}.`,
 			),
 		);
@@ -110,10 +110,15 @@ export function readFills(doc: Document): Read<readonly Fill[]> {
 		if (!isScalar(pair.key)) continue;
 		const name = String((pair.key as Scalar).value);
 		const at = `fills.${name}`;
-		// The first of a repeated name stands: two parameters can't share an ID.
+		// The first of a repeated name wins: two DDI parameters can't share an ID.
 		if (fills.some((f) => f.name === name)) {
 			findings.push(
-				error("fill-name", at, `The fill \`${name}\` is declared twice.`),
+				error(
+					"fill-name",
+					at,
+					`The fill \`${name}\` is listed twice.`,
+					`Only the first \`${name}\` is used. Remove or rename the other.`,
+				),
 			);
 			continue;
 		}
@@ -159,10 +164,10 @@ export function readFills(doc: Document): Read<readonly Fill[]> {
 }
 
 /**
- * What the text and the declarations say about each other: a placeholder naming no
- * declared fill is a hole where it's written; a declared fill the text never uses is
- * advice. `textRange` is where `text` is in the source; placeholders are found there,
- * so their ranges are the source's, quoted or folded alike.
+ * What the text and `fills:` say about each other. A placeholder whose name isn't under
+ * `fills:` is a hole where it's written; a fill the text never uses is advice.
+ * `textRange` is where `text` is in the source; placeholders are found there, so their
+ * ranges are the source's, quoted or folded alike.
  */
 export function fillFindings(
 	source: string,
@@ -181,8 +186,8 @@ export function fillFindings(
 				findings.push({
 					...hole(
 						"text",
-						`\`${name}\` isn't a declared fill.`,
-						`Declare it under \`fills:\`, such as \`${name}: number\`.`,
+						`\`${name}\` isn't listed under \`fills:\`.`,
+						`Add \`${name}\` under \`fills:\`, such as \`${name}: number\`.`,
 					),
 					range: [textRange[0] + range[0], textRange[0] + range[1]],
 				});
@@ -194,12 +199,12 @@ export function fillFindings(
 				severity: "warning",
 				path: `fills.${f.name}`,
 				message: `The fill \`${f.name}\` isn't used in the text.`,
-				hint: `Write \`{{${f.name}}}\` where it goes, or remove it.`,
+				hint: `Write \`{{${f.name}}}\` in the text where it goes, or remove \`${f.name}\` from \`fills:\`.`,
 			});
 	return findings;
 }
 
-/** What the editor colours as a fill: each declared fill in the text, and each name under `fills:`. */
+/** What the editor colours as a fill: each listed fill in the text, and each name under `fills:`. */
 export function fillMarks(
 	doc: Document,
 	source: string,
@@ -231,9 +236,9 @@ export function fillMarks(
 }
 
 /**
- * Text that starts with a fill, unquoted, reads to YAML as a map (`{` opens one): say
- * so. No quick fix: YAML's range for the broken value ends mid-line, so an edit at the
- * path would rewrite part of it. Undefined for anything else.
+ * Unquoted text that starts with a fill reads to YAML as a map (`{` opens one): say
+ * so. No quick fix: YAML's range for the broken value ends mid-line, so an edit there
+ * would rewrite only part of it. Undefined for anything else.
  */
 export function leadingFill(
 	source: string,
@@ -250,6 +255,6 @@ export function leadingFill(
 		severity: "error",
 		path: "text",
 		message: "Text that starts with a fill needs quotes.",
-		hint: `YAML reads a \`{\` at the start of a value as a map. Write it as text: ${JSON.stringify(written)}`,
+		hint: `Without quotes, a \`{\` at the start isn't read as text. Put it in quotes: ${JSON.stringify(written)}.`,
 	};
 }

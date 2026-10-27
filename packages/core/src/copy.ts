@@ -28,7 +28,7 @@ export const SCHEME_SINGULAR: Readonly<Record<SchemeKind, string>> = {
 	universe: "universe",
 	instruction: "instruction",
 	missing: "missing values",
-	select_all: "select-all-that-apply values",
+	select_all: "select all that apply values",
 	workspace: WORKSPACE_DETAILS,
 };
 
@@ -52,7 +52,7 @@ export const SCHEME_NAME: Readonly<Record<SchemeKind, string>> = {
 	universe: "shared universe",
 	instruction: "shared instruction",
 	missing: "missing values",
-	select_all: "select-all-that-apply values",
+	select_all: "select all that apply values",
 	workspace: WORKSPACE_DETAILS,
 };
 

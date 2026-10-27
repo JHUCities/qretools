@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		// No DOM: the core is pure, so a browser API used here is a compile error.
+		"lib": ["ES2023"],
+		// Node runs the core as written, stripping types: only syntax it can strip.
+		"erasableSyntaxOnly": true
+	},
+	"include": ["src"],
+	// Tests that read fixtures from disk, or parse HTML, and the custom element (the
+	// browser's shell around the codebook) have their own configs.
+	"exclude": ["src/node", "src/dom", "src/element"]
+}

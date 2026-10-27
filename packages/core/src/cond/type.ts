@@ -91,8 +91,8 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 				const exists = code.codes.some((c) => c.code === otherX.text);
 				say(
 					exists
-						? `A code is text: write \`"${otherX.text}"\`.`
-						: `\`${otherX.text}\` isn't one of this answer's codes, which are text.`,
+						? `Codes go in quotes: write \`"${otherX.text}"\`.`
+						: `\`${otherX.text}\` isn't one of this answer's codes.`,
 					otherX.range,
 					`Codes: ${listCodes(code)}.`,
 					exists ? `"${otherX.text}"` : undefined,
@@ -152,7 +152,7 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 						say(
 							"`not` applies to a condition.",
 							x.range,
-							'`not` binds tighter than `=`: write `not(bas.x = "1")`.',
+							'Put the comparison in brackets: `not(bank.x = "1")`.',
 						);
 					return BOOLEAN;
 				}
@@ -188,7 +188,7 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 						if (other !== undefined) {
 							const fixed = `${x.op === "<>" ? "not " : ""}isnull(${printCondition(other)})`;
 							say(
-								`\`${x.op} null\` is never true; write \`${fixed}\`.`,
+								`\`${x.op} null\` is never true. Write \`${fixed}\`.`,
 								x.range,
 								undefined,
 								fixed,
@@ -208,7 +208,7 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 								say(
 									"Codes are text, so they don't order as numbers.",
 									side.range,
-									'Use `in`: `bas.x in {"4", "5"}`.',
+									'Use `in`: `bank.x in {"4", "5"}`.',
 								);
 						if (l.kind !== "code" && r.kind !== "code")
 							comparable(l, r, x.left, x.right);
@@ -254,7 +254,7 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 	return { type: go(e), problems };
 }
 
-/** A condition: typed, and true or false as a whole (`bas.x` alone is an answer, not a condition). */
+/** A condition: typed, and true or false as a whole (`bank.x` alone is an answer, not a condition). */
 export function typeCondition(e: Expr, scope: Scope): Typed {
 	const typed = typeOf(e, scope);
 	const { type } = typed;
@@ -266,7 +266,7 @@ export function typeCondition(e: Expr, scope: Scope): Typed {
 			{
 				kind: "type",
 				message: `This is ${describe(type)}, not a condition.`,
-				hint: 'Compare it: `bas.x = "1"`, `bas.n >= 18`.',
+				hint: 'Compare an answer with a value: `bank.x = "1"`, `bank.n >= 18`.',
 				range: e.range,
 			},
 		],

@@ -1,9 +1,9 @@
 /**
  * The cursor inspector, after Hazel's: what is at the caret, in the document's own
- * terms. A field says what it is for; a reference field also lists the names in scope; a name written there says what it names, or that nothing
- * by that name exists. What is wrong is the Findings panel's and the editor's to say, not
- * this. Pure: the shell adds what needs the bank (who uses a name,
- * which file to open) around it.
+ * terms. A field says what it is for. A field that names a shared entry also lists the
+ * names in scope, and a name written there says what it names, or that nothing has it.
+ * Problems are for the Findings panel and the editor to say, not this. Pure: the shell
+ * adds what needs the bank (who uses a name, which file to open).
  */
 import type { Evaluation } from "./evaluate.ts";
 import { pathAt, type Range } from "./findings.ts";
@@ -47,12 +47,10 @@ const SCHEME_AT: ReadonlyMap<string, NamedScheme> = new Map(
 );
 
 /**
- * What is at `offset` in the evaluated text; undefined only inside a key the surface
- * does not know. Between top-level fields and at the end is the document itself (the
- * question's description); on an indented line under a block map (a new code under
- * `responses`), it is that map.
- * Clamped.
- * `source` is the text `ev` was evaluated from.
+ * What is at `offset` (clamped) in `source`, the text `ev` was evaluated from.
+ * Undefined only inside a field the language doesn't know. Between top-level fields and
+ * at the end, it's the question itself. On an indented line under a field (a new code
+ * under `responses`), it's that field.
  */
 export function inspect(
 	ev: Evaluation,

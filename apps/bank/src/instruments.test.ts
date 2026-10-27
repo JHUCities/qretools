@@ -184,8 +184,22 @@ describe("saving an instrument", () => {
 		expect(refused.activity[at(m, HOUSEHOLDS).id]).toMatchObject({
 			kind: "failed",
 			failure: {
-				message:
-					"The question `tenure` this instrument asks changed on GitHub since you started.",
+				message: "`tenure` was changed both here and on GitHub.",
+				hint: "Open `tenure`, copy your changes somewhere, reload it from GitHub, then save again.",
+			},
+		});
+		// Deleted there: nothing to copy, and it can be dropped from the instrument instead.
+		const gone: Model = {
+			...m,
+			remote: { ...m.remote, questions: { ...m.remote.questions } },
+		};
+		delete (gone.remote.questions as Record<string, unknown>)[TENURE];
+		const [deleted] = save(gone, HOUSEHOLDS);
+		expect(deleted.activity[at(m, HOUSEHOLDS).id]).toMatchObject({
+			kind: "failed",
+			failure: {
+				message: "`tenure` was deleted on GitHub.",
+				hint: "Open `tenure` and reload it, or stop using it here, then save again.",
 			},
 		});
 	});
@@ -222,7 +236,7 @@ describe("saving an instrument", () => {
 		});
 		expect(commitOf(cmds)).toBeUndefined();
 		expect(refused.activity[m.nextId]).toMatchObject({
-			failure: { message: "`instruments/households.yaml` already exists." },
+			failure: { message: "`instruments/households.yaml` is already used." },
 		});
 	});
 
@@ -1209,7 +1223,9 @@ describe("adding a bank", () => {
 				/from the list/,
 			);
 		expect(bankAddProblem({ text: "o/r", use })).toMatch(/no version/);
-		expect(bankAddProblem({ text: " ", use })).toBe("Give its address.");
+		expect(bankAddProblem({ text: " ", use })).toBe(
+			"Write the bank's address.",
+		);
 		// Refused while it can't be added: the dialog stays, and nothing is written.
 		expect(confirmed(typed(m, "o/r"))[0].browser.addingBank).toBeDefined();
 		const [next, cmds] = confirmed(typed(m, "Owner/Bank@v2"));

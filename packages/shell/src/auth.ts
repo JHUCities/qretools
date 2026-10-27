@@ -100,14 +100,14 @@ export function callbackOf(
 	if (pending === undefined || params.get("state") !== pending.state)
 		return refused(
 			"This sign-in didn't start here, or has already been used.",
-			"Sign in again.",
+			"If you aren't signed in, sign in again.",
 		);
 	if (error !== null)
 		return refused(
 			error === "access_denied"
 				? "Sign-in was canceled on GitHub."
 				: "GitHub didn't sign you in.",
-			undefined,
+			error === "access_denied" ? undefined : "Try signing in again.",
 			error === "access_denied" ? undefined : error,
 		);
 	if (now - pending.at > CODE_LIFETIME)
@@ -197,7 +197,11 @@ async function redeem(
 					message:
 						code === "misconfigured"
 							? "The sign-in service isn't set up correctly."
-							: `The sign-in service answered ${response.status}.`,
+							: `The sign-in service had a problem (${response.status}).`,
+					hint:
+						code === "misconfigured"
+							? "Tell whoever runs this site."
+							: "Try again in a minute.",
 				});
 	}
 	const credentials = credentialsOf(json, now());

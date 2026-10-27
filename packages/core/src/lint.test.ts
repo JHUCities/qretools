@@ -19,6 +19,20 @@ describe("lint", () => {
 		expect(lintOf(nhdNyrs)).toEqual(["warning:concept-prose@concept"]);
 	});
 
+	it("says duplicate labels can't be told apart, true for select all that apply too", () => {
+		const parsed = parseSurface(
+			`${base}select: many\nresponses:\n  1: Bus\n  2: bus\n`,
+			EMPTY_ENV,
+		);
+		expect(
+			lint(parsed.draft, EMPTY_ENV, parsed.findings).find(
+				(f) => f.code === "duplicate-label",
+			)?.hint,
+		).toBe(
+			"Two options with the same label can't be told apart. Reword one, or remove it.",
+		);
+	});
+
 	const table: Array<[title: string, source: string, expected: string[]]> = [
 		[
 			"duplicate labels, ignoring case and spacing",
@@ -199,7 +213,7 @@ describe("an inline list and a shared scale", () => {
 			env,
 		).filter((x) => x.code === "matches-scale");
 		expect(f?.message).toBe(
-			"These responses match the shared scale `often3` (apart from codes).",
+			"These options match the shared scale `often3` (apart from codes).",
 		);
 	});
 });

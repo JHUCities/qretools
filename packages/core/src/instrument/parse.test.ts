@@ -153,7 +153,7 @@ describe("reading an instrument", () => {
 				written,
 				f?.message,
 				f?.range && source.slice(...f.range),
-			]).toEqual([written, 'A code is text: write `"1"`.', "1"]);
+			]).toEqual([written, 'Codes go in quotes: write `"1"`.', "1"]);
 		}
 	});
 

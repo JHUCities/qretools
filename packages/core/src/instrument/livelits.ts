@@ -172,7 +172,7 @@ export function instrumentLivelits(
 												: value.name,
 										detail:
 											value.presentation === "label"
-												? "coded response label"
+												? "the answer's label"
 												: value.type.kind === "string"
 													? "text"
 													: value.type.kind,

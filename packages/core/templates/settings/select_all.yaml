@@ -1,7 +1,6 @@
-# How a select-all-that-apply answer is stored. Each option of such a question
-# is its own variable in the data, holding one of two values: one when the
-# respondent chose the option, one when they didn't. Without this file they
-# are 1 for Yes and 0 for No. To store them another way, write your two
-# values here, each with its label.
+# How answers to select all that apply questions are stored. Each option is
+# its own variable. It holds one value if the person chose the option, and
+# another if they didn't. Without this file, the values are 1 for Yes and 0 for
+# No. To use other values, write them here, each with its label.
 not_chosen: { "0": No }
 chosen: { "1": Yes }

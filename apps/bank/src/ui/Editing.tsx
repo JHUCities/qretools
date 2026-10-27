@@ -14,7 +14,9 @@ import {
 	PageHeader,
 } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
+import { codebookOf, parse as parseDdi } from "@qretools/codebook";
 import {
+	type DdiDocument,
 	DEFAULT_SELECT_ALL,
 	documentOf,
 	type Evaluation,
@@ -31,6 +33,7 @@ import {
 	isRoot,
 	kindAt,
 	type Mark,
+	ok,
 	othersOf,
 	placeFindings,
 	questionItems,
@@ -121,7 +124,12 @@ import {
 import { EditorPane } from "./EditorPane.js";
 import { FileHeader } from "./FileHeader.js";
 import { FileSkeleton, Panes } from "./FileSkeleton.js";
-import { AgencyNotice, Codebook, Respondent } from "./Previews.js";
+import {
+	AgencyNotice,
+	CodebookPane,
+	type Follow,
+	Respondent,
+} from "./Previews.js";
 
 /**
  * How long typing must pause before the findings list catches up with the text. The
@@ -212,6 +220,23 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 	const ddi = useMemo(
 		() => documentOf(questionItems(ev.draft, { env, agency })),
 		[ev.draft, env, agency],
+	);
+	const codebook = useMemo(() => codebookOfDdi(ddi), [ddi]);
+	// A shared name in the codebook is a link to its file's address, which opens it here
+	// with history; a draft's, which has no address yet, a button that opens it.
+	const follow = useCallback<Follow>(
+		(shared, chip) => {
+			const f = schemeFileNamed(local.schemes, shared.kind, shared.name);
+			return f === undefined ? undefined : (
+				<FileLink
+					id={f.id}
+					onOpen={() => dispatch({ kind: "fileOpened", id: f.id })}
+				>
+					{chip}
+				</FileLink>
+			);
+		},
+		[local.schemes, dispatch],
 	);
 	// The instruments here that use it (none before its first save: no path yet).
 	const instruments = instrumentsUsing(useInstrumentUses(), claimOf(q));
@@ -312,7 +337,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 							) : pane === "respondent" ? (
 								<Respondent view={ev.respondent} onTarget={onTarget} />
 							) : pane === "codebook" ? (
-								<Codebook view={ev.codebook} onTarget={onTarget} />
+								<CodebookPane read={codebook} follow={follow} />
 							) : pane === "usedBy" ? (
 								<InstrumentsUsing uses={instruments} />
 							) : null
@@ -524,7 +549,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 							layout="compact"
 							actionsLayout="inline"
 							title="New here?"
-							description="Explore an example instrument, which asks this workspace's example questions."
+							description="Try an example instrument that asks the example questions."
 							primaryAction={
 								<Banner.PrimaryAction
 									onClick={() =>
@@ -629,9 +654,9 @@ const SINGULAR = SCHEME_SINGULAR;
 const ROOT_USERS: Readonly<Record<RootKind, string>> = {
 	missing: "Every variable in the workspace uses the missing values.",
 	select_all:
-		"Every option of a select-all-that-apply question is stored as one of these two values.",
+		"Each option of a select all that apply question is stored as one of these two values.",
 	workspace:
-		"Every question, shared file and instrument in the workspace is read with these details.",
+		"These details apply to every question, shared file and instrument in the workspace.",
 };
 
 function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
@@ -758,9 +783,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									<SchemeValueView value={ev.value} />
 									{unsaved && (
 										<p className="quiet">
-											Questions in this browser already use this version. The
-											bank gets it when you save to your branch and your pull
-											request is merged.
+											Your questions here already use this version. The bank
+											gets it once you save to your branch and your pull request
+											is merged.
 										</p>
 									)}
 								</>
@@ -769,12 +794,12 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									{users === undefined ? (
 										<p className="quiet">{ROOT_USERS[e.kind as RootKind]}</p>
 									) : users.length === 0 && instrumentUsers.length === 0 ? (
-										<p className="quiet">No question or instrument names it.</p>
+										<p className="quiet">No question or instrument uses it.</p>
 									) : !inEffect ? (
 										<p className="fg-attention">
-											This can't be read yet, so each of these shows a field to
-											fill in where it names{" "}
-											<code className="code">{e.name}</code>.
+											<code className="code">{e.name}</code> can't be read yet,
+											so each of these shows a field to fill in where it uses
+											it.
 										</p>
 									) : null}
 									{users !== undefined && users.length > 0 && (
@@ -830,7 +855,7 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 	if (value.kind === "coding")
 		return (
 			<p>
-				A select-all-that-apply option is stored as{" "}
+				Each option of a select all that apply question is stored as{" "}
 				{selectAllText(value.selectAll)}.
 			</p>
 		);
@@ -1000,9 +1025,7 @@ function Inspector({
 	if (at === undefined)
 		return (
 			<InspectorBox>
-				<p className="quiet">
-					Put the cursor in a field to see what it is for.
-				</p>
+				<p className="quiet">Put the cursor in a field to see what it's for.</p>
 			</InspectorBox>
 		);
 	const m = at.mention;
@@ -1129,6 +1152,12 @@ export function InspectorBox({ children }: { children?: ReactNode }) {
 	);
 }
 
+/** A DDI document's codebook, or why it can't be read. */
+function codebookOfDdi(ddi: DdiDocument) {
+	const read = parseDdi(ddi);
+	return read.ok ? ok(codebookOf(read.value)) : read;
+}
+
 /** One empty list, so an editor with nothing to mark is not re-synced for a new one. */
 const NO_MARKS: readonly Mark[] = [];
 
@@ -1175,6 +1204,18 @@ export function ForeignView({
 				? undefined
 				: evaluate(file.text, placed),
 		[file, kind, placed],
+	);
+	// Their question's codebook, of its DDI under this workspace's agency (not checked
+	// against their branch's). Its shared names aren't followed: read only.
+	const agency = useAgency();
+	const codebook = useMemo(
+		() =>
+			ev === undefined
+				? undefined
+				: codebookOfDdi(
+						documentOf(questionItems(ev.draft, { env: placed, agency })),
+					),
+		[ev, placed, agency],
 	);
 	const scheme = useMemo(
 		() =>
@@ -1260,8 +1301,8 @@ export function ForeignView({
 									<Findings findings={findings} />
 								) : pane === "respondent" && ev ? (
 									<Respondent view={ev.respondent} />
-								) : pane === "codebook" && ev ? (
-									<Codebook view={ev.codebook} />
+								) : pane === "codebook" && codebook ? (
+									<CodebookPane read={codebook} />
 								) : pane === "value" ? (
 									<SchemeValueView value={scheme?.value} />
 								) : null

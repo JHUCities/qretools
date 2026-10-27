@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
 import {
 	addVariant,
 	applyEdits,
@@ -71,6 +72,23 @@ describe("applying edits", () => {
 				{ path: "instruction", value: "one" },
 			]),
 		).toBe("universe: all\ninstruction: one\n");
+	});
+
+	it("writes a value over several lines as a block under its key", () => {
+		const out = applyEdits("name: q\nask:\n  intent: x\ntext: t\n", [
+			{ path: "ask.intent", value: "p1\n\np2" },
+		]);
+		expect(out).toBe(
+			"name: q\nask:\n  intent: |-\n    p1\n\n    p2\ntext: t\n",
+		);
+		expect(parseDocument(out ?? "").toJS().ask.intent).toBe("p1\n\np2");
+	});
+
+	it("leaves a block beside the edit as written", () => {
+		const block = "note: |\n  Title: A\n\n  # not a comment\n";
+		expect(
+			applyEdits(`${block}name: q\n`, [{ path: "name", value: "r" }]),
+		).toBe(`${block}name: r\n`);
 	});
 });
 

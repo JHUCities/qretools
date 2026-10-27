@@ -21,9 +21,9 @@ export interface HeaderActions {
 	readonly save: () => void;
 	readonly reload: () => void;
 	readonly remove: () => void;
-	/** Absent for a file that cannot move: a draft, or a scheme file (named by its path). */
+	/** Absent for a file that can't move: a draft, or a scheme file (its path is its name). */
 	readonly move?: () => void;
-	/** Only for a shared file never saved: its name is not yet anyone else's. Local, so never blocked. */
+	/** Only for a shared file never saved: no one else uses its name yet. Local, so never blocked. */
 	readonly rename?: () => void;
 	/** Back to the bank: shown on narrow screens, where the tree and the file are separate views. */
 	readonly close?: () => void;
@@ -44,7 +44,7 @@ export function FileHeader({
 	q: Entry;
 	activity: Activity | undefined;
 	name: string | undefined;
-	/** What the file is, when it is not a question: "scale", "universe", … */
+	/** What the file is, when it isn't a question: "scale", "universe", … */
 	kind?: string;
 	unsaved: boolean;
 	/** Why nothing can be written now (`writeBlocked`), or undefined. */
@@ -52,9 +52,8 @@ export function FileHeader({
 	/** Unsaved shared files this save takes along (`alsoSaves`). */
 	also?: readonly string[];
 	/**
-	 * GitHub changed this file since the author started (a conflict, or deleted there):
-	 * "Reload from GitHub" belongs here, decided by the file's own state, never by which
-	 * file a refused save happened to report on.
+	 * GitHub changed or deleted this file since the author started. "Reload from GitHub"
+	 * follows the file's own state, never which file a refused save reported on.
 	 */
 	stale?: boolean;
 	/** Something offered about this file, after its own banners: in the header's row. */
@@ -71,12 +70,10 @@ export function FileHeader({
 	const saving = activity?.kind === "saving" || activity?.kind === "waiting";
 	const nothing = !unsaved && also.length === 0;
 	const alsoText = `Also saves ${also.join(", ")}.`;
-	// Why a write cannot happen now is the session's, and the top bar says it in full.
-	// At the button it is said on demand: a reason that stands is the button's tooltip,
-	// and a press opens its notice (why, and what to do); a brief one (loading, saving)
-	// passes by itself, so the button only names the top bar's line as its description.
-	// The header says of its own only which unsaved shared files a save takes along.
-	// Nothing to save needs no explanation.
+	// Why nothing can be saved now belongs to the session; the top bar says it in full.
+	// A lasting reason is the button's tooltip, and a press opens its notice. A brief one
+	// (loading, saving) passes by itself, so the button just points at the top bar's line.
+	// The header itself only says which unsaved shared files a save takes along.
 	const { standing, tried } = useBlocked();
 	const why = canWrite || standing ? undefined : SESSION_STATUS;
 	/** An inactive button, with its standing reason as a tooltip (Primer's, a description). */
@@ -215,8 +212,8 @@ export function FileHeader({
 			{stale && activity?.kind !== "failed" && (
 				<Banner
 					variant="warning"
-					title="This changed on GitHub since you started."
-					description="Copy your version somewhere first if you want to keep it, then reload from GitHub."
+					title="This was changed or deleted on GitHub since you started."
+					description="To keep your changes, copy them somewhere first. Then reload from GitHub."
 					primaryAction={reload}
 				/>
 			)}

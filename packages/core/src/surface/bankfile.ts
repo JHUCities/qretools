@@ -1,9 +1,9 @@
 /**
- * The workspace's settings file, `workspace.yaml`: what the workspace says about itself,
- * so that whoever reads or imports it reads the same. The DDI agency everything in it
- * is published under (questions, shared files and instruments alike), and the fields it
- * requires of every question, or of those in one folder. `select_all.yaml` is read here too: moving its reader
- * beside `SelectAll` would close an import cycle (env.ts reads the usual coding).
+ * The workspace details, `workspace.yaml`: what the workspace says about itself, so
+ * everyone who reads or imports it reads the same. It holds the DDI agency for
+ * everything in the workspace, and the fields every question (or every question in
+ * one folder) must have. `select_all.yaml` is read here too: moving its reader beside
+ * `SelectAll` would make an import cycle (env.ts reads the usual coding).
  */
 import { isMap, isScalar, parseDocument } from "yaml";
 import { addressOf } from "../address.ts";
@@ -24,9 +24,9 @@ import {
 } from "./schema.ts";
 
 /**
- * A DDI agency: a registered code with optional sub-agencies after dots, as the DDI
- * schema describes it. Anchored here: the schema's own pattern is not, so validating
- * the DDI would accept anything containing one valid character.
+ * A DDI agency: a registered code, with optional sub-agencies after dots, as the DDI
+ * schema describes it. Anchored here because the schema's own pattern isn't: checking
+ * the DDI would accept anything with one valid character in it.
  */
 export const AGENCY_PATTERN = /^[a-zA-Z0-9-]{1,63}(\.[a-zA-Z0-9-]{1,63})*$/;
 
@@ -34,16 +34,16 @@ export const AGENCY_RULE_TEXT =
 	"Letters, digits and hyphens, up to 63 at a time, in parts joined by dots, such as `org.example`.";
 
 export interface ParsedSettingsFile {
-	/** Absent until the file gives a valid one. */
+	/** Absent until the file has a valid one. */
 	readonly agency?: string;
 	/** The fields the workspace also requires of its questions. */
 	readonly required: readonly RequirableKey[];
 	/**
-	 * The fields a folder of questions also requires (`required_in`), by the folder's path
-	 * in the workspace, in author order. Only ever more than `required`: see `envAt`.
+	 * The fields a folder's questions must also have (`required_in`), by folder, in the
+	 * author's order. Only ever adds to `required`: see `envAt`.
 	 */
 	readonly requiredIn: RequiredIn;
-	/** The commit each tag its instruments use was locked at (`locked`): only valid entries. */
+	/** The commit each tag its instruments use was locked at (`locked`), valid entries only. */
 	readonly locked: Locks;
 	readonly findings: readonly Finding[];
 }
@@ -57,7 +57,7 @@ const FIELDS: readonly string[] = [
 	"locked",
 ];
 
-/** `workspace.yaml`, read. Total: an empty or broken file is findings, never a throw. */
+/** Reads `workspace.yaml`. An empty or broken file gives findings, never a throw. */
 export function parseSettingsFile(source: string): ParsedSettingsFile {
 	const doc = parseDocument(source, { prettyErrors: false });
 	const syntax: Finding[] = yamlErrors(doc.errors, source.length);
@@ -82,7 +82,11 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 			locked: {},
 			findings: [
 				...syntax,
-				error("not-a-map", "", "This file is fields, such as `agency:`."),
+				error(
+					"not-a-map",
+					"",
+					"Workspace details are `field: value` lines, such as `agency: org.example`.",
+				),
 			],
 		};
 	const unknown = Object.keys(js)
@@ -92,7 +96,7 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 				"unknown-key",
 				k,
 				`\`${k}\` isn't a field here.`,
-				`The fields are ${FIELDS.map((f) => `\`${f}\``).join(", ")}.`,
+				`Only ${FIELDS.map((f) => `\`${f}\``).join(", ")} are used here.`,
 			),
 		);
 	const required =
@@ -121,16 +125,16 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 }
 
 const SELECT_ALL_EXAMPLE =
-	'Write the two values a select-all-that-apply option is stored as, each with its label: `chosen: { "1": Yes }` and `not_chosen: { "0": No }`.';
-/** Said with every problem: the bank is never left with half a coding. */
-const UNTIL_IT_READS = `Until it reads, the usual coding is used: ${selectAllText(DEFAULT_SELECT_ALL)}.`;
+	'Write the two values an option is stored as, each with its label: `chosen: { "1": Yes }` and `not_chosen: { "0": No }`.';
+/** Said with every problem: the bank never uses half a coding. */
+const UNTIL_IT_READS = `Until this is fixed, options are stored as ${selectAllText(DEFAULT_SELECT_ALL)}.`;
 
 /**
- * `select_all.yaml`, the two values a select-all option's variable holds: `chosen` and
- * `not_chosen`, each one `code: label`, the code kept as the bank spelled it. Read from
- * the YAML as written. Anything short of both, whole and different, is a finding at its
- * place and the usual coding stays in effect (`DEFAULT_SELECT_ALL`, by reference), never
- * half. Total: an empty or broken file is findings, never a throw.
+ * `select_all.yaml`: the two values a select-all-that-apply option's variable holds,
+ * `chosen` and `not_chosen`, each one `code: label`, the code spelled as written.
+ * Unless both are there, whole and different, each problem is a finding and the usual
+ * coding stays (`DEFAULT_SELECT_ALL`, by reference), never half. An empty or broken
+ * file gives findings, never a throw.
  */
 export function parseSelectAllFile(source: string): {
 	readonly value: SelectAll;
@@ -151,13 +155,19 @@ export function parseSelectAllFile(source: string): {
 		node === null ||
 		(isScalar(node) && (node.value === null || node.value === ""))
 	)
-		return usual(hole("", "This file is empty.", SELECT_ALL_EXAMPLE));
+		return usual(
+			hole(
+				"",
+				"The select all that apply values are empty.",
+				SELECT_ALL_EXAMPLE,
+			),
+		);
 	if (!isMap(node) || node.flow)
 		return usual(
 			error(
 				"not-a-map",
 				"",
-				"This file has two parts, `chosen` and `not_chosen`, each on its own line.",
+				"The select all that apply values are two lines, `chosen` and `not_chosen`.",
 				SELECT_ALL_EXAMPLE,
 			),
 		);
@@ -171,7 +181,7 @@ export function parseSelectAllFile(source: string): {
 				"unknown-key",
 				k,
 				`\`${k}\` isn't a field here.`,
-				"The fields are `chosen` and `not_chosen`.",
+				"Only `chosen` and `not_chosen` are used here.",
 			),
 		);
 	const part = (key: "chosen" | "not_chosen"): Code | undefined => {
@@ -200,7 +210,7 @@ export function parseSelectAllFile(source: string): {
 				error(
 					"wrong-type",
 					key,
-					`\`${key}\` is one value and its label.`,
+					`\`${key}\` must be one value with its label.`,
 					SELECT_ALL_EXAMPLE,
 				),
 			);
@@ -226,7 +236,7 @@ export function parseSelectAllFile(source: string): {
 				"duplicate-code",
 				"not_chosen",
 				`\`chosen\` and \`not_chosen\` are both \`${chosen.code}\`.`,
-				"Give each its own value, or the data can't tell them apart.",
+				"Give each its own value, or the data can't tell chosen from not chosen.",
 			),
 		);
 	if (
@@ -250,9 +260,9 @@ export function parseSelectAllFile(source: string): {
 }
 
 /**
- * The agency `workspace.yaml` writes, valid or not; absent when it writes none. What an
- * instrument is given, so its own findings say `invalid-agency` where the file's is
- * wrong (as the CLI's `--agency`), rather than that none was given.
+ * The agency `workspace.yaml` writes, valid or not; absent when there's none. An
+ * instrument is given this, so a wrong agency shows as `invalid-agency` (as with the
+ * CLI's `--agency`), not as a missing one.
  */
 export function agencyWritten(source: string): string | undefined {
 	const written = agencyAsWritten(
@@ -263,7 +273,7 @@ export function agencyWritten(source: string): string | undefined {
 		: undefined;
 }
 
-/** As written: a number-like agency (`2024`) keeps its spelling, as codes do. */
+/** As written: an agency that looks like a number (`2024`) keeps its spelling, as codes do. */
 function agencyAsWritten(doc: ReturnType<typeof parseDocument>): unknown {
 	const node = doc.get("agency", true);
 	return isScalar(node) && typeof node.value === "number"
@@ -281,12 +291,15 @@ function readAgency(doc: ReturnType<typeof parseDocument>): {
 			findings: [
 				hole(
 					"agency",
-					"Add an `agency:` line: the DDI agency this workspace's questions, shared files and instruments are published under.",
+					"Add an `agency:` line: the DDI agency for everything in this workspace.",
+					AGENCY_RULE_TEXT,
 				),
 			],
 		};
 	if (agency === null || (typeof agency === "string" && agency.trim() === ""))
-		return { findings: [hole("agency", "`agency` is empty.")] };
+		return {
+			findings: [hole("agency", "`agency` is empty.", AGENCY_RULE_TEXT)],
+		};
 	if (typeof agency !== "string" || !AGENCY_PATTERN.test(agency))
 		return {
 			findings: [
@@ -304,10 +317,10 @@ function readAgency(doc: ReturnType<typeof parseDocument>): {
 const REQUIRABLE_TEXT = REQUIRABLE_KEYS.map((k) => `\`${k}\``).join(", ");
 
 /**
- * A list of question fields, at `at` (`required`, or a folder's under `required_in`).
- * Each a field a workspace may require; one already required (always, or by `everywhere`,
- * the workspace's own `required`), or listed twice, is advice; anything else is an error
- * at its place.
+ * A list of question fields at `at` (`required`, or a folder's under `required_in`).
+ * Each must be a field a workspace can require. One already required (always, or by
+ * `everywhere`, the workspace's own `required`), or listed twice, is advice; anything
+ * else is an error at its place.
  */
 function readRequired(
 	value: unknown,
@@ -326,7 +339,7 @@ function readRequired(
 					at === "required"
 						? "`required` is empty."
 						: `\`${at.slice(at.indexOf(".") + 1)}\` lists no fields.`,
-					`List fields, one per line as \`- title\`, from ${REQUIRABLE_TEXT}; or remove the line.`,
+					`List fields from ${REQUIRABLE_TEXT}, one per line as \`- title\`. Or remove the line.`,
 				),
 			],
 		};
@@ -337,8 +350,8 @@ function readRequired(
 				error(
 					"wrong-type",
 					at,
-					`\`${at}\` is a list of fields.`,
-					`Write each on its own line as \`- title\`, from ${REQUIRABLE_TEXT}.`,
+					`\`${at}\` must be a list of fields.`,
+					`Write each on its own line as \`- title\`. A workspace can require ${REQUIRABLE_TEXT}.`,
 				),
 			],
 		};
@@ -358,7 +371,7 @@ function readRequired(
 			ignored(
 				path,
 				`\`${String(item)}\` is always required.`,
-				"Every question has `name`, `text` and `intent`; remove the line.",
+				"Every question needs `name`, `text` and `intent` anyway. Remove the line.",
 			);
 		else if (!(REQUIRABLE_KEYS as readonly unknown[]).includes(item))
 			findings.push(
@@ -367,17 +380,21 @@ function readRequired(
 					path,
 					typeof item === "string"
 						? `\`${item}\` isn't a field a workspace can require.`
-						: "Each entry is a field's name.",
+						: "Write a field's name here, such as `- title`.",
 					`A workspace can require ${REQUIRABLE_TEXT}.`,
 				),
 			);
 		else if (keys.includes(item as RequirableKey))
-			ignored(path, `\`${item}\` is listed twice.`, "Remove one.");
+			ignored(
+				path,
+				`\`${item}\` is listed twice.`,
+				`Remove one \`${item}\` line.`,
+			);
 		else if (everywhere.includes(item as RequirableKey))
 			ignored(
 				path,
 				`\`${item}\` is already required of every question.`,
-				"`required` lists it; remove the line.",
+				`\`required\` already lists \`${item}\`. Remove this line.`,
 			);
 		else keys.push(item as RequirableKey);
 	});
@@ -386,18 +403,18 @@ function readRequired(
 
 /**
  * A folder of questions, as `required_in` names one: its path in the workspace. Deeper
- * than one folder reads too (the file tree may go deeper later); whether a folder is
- * there is the workspace's to say (`unknownFolders`), never this file's own parse.
+ * folders read too (the tree may go deeper later). Whether the folder exists is for the
+ * workspace to say (`unknownFolders`), not this parse.
  */
 const QUESTION_FOLDER = /^questions(\/[^/\s]+)+$/;
 
 const REQUIRED_IN_EXAMPLE =
-	"Write a folder of questions and the fields its questions must have: `questions/health:` and, under it, `- universe`.";
+	"Write a folder, then the fields its questions must have: `questions/health:` and, under it, `- universe`.";
 
 /**
- * `required_in:`, a map from a folder of questions to the fields its questions must
- * also have. A key that isn't a folder's path is an error at the key and counts for
- * nothing; each list is read as `required` is.
+ * `required_in:`: each folder of questions with the fields its questions must also
+ * have. A key that isn't a folder is an error there and counts for nothing; each list
+ * is read as `required` is.
  */
 function readRequiredIn(
 	value: unknown,
@@ -421,7 +438,7 @@ function readRequiredIn(
 				error(
 					"wrong-type",
 					"required_in",
-					"`required_in` is folders, each with a list of fields.",
+					"`required_in` must be folders, each with a list of fields.",
 					REQUIRED_IN_EXAMPLE,
 				),
 			],
@@ -436,7 +453,7 @@ function readRequiredIn(
 					"wrong-type",
 					at,
 					`\`${folder}\` isn't a folder of questions.`,
-					"Write the folder's path in the workspace, with no `/` at the end, such as `questions/health`.",
+					"Write the folder as `questions/health`, with no `/` at the end.",
 				),
 			);
 			continue;
@@ -449,12 +466,12 @@ function readRequiredIn(
 }
 
 const LOCKED_EXAMPLE =
-	"Saving or exporting an instrument writes it: each tag it reads, with the commit it named, such as `owner/repo@v1: <the commit's full sha>`.";
+	"Saving or exporting an instrument fills in `locked`: each tag it uses, with its commit, such as `owner/repo@v1: <the commit's full sha>`.";
 
 /**
- * `locked:`, a map from a tag an instrument uses (`owner/repo@v1`) to the commit it was
- * locked at. An entry that isn't one is an error at its key and locks nothing. Keys are
- * read as addresses, so one bank has one entry however it's capitalised.
+ * `locked:`: each tag an instrument uses (`owner/repo@v1`) with the commit it was
+ * locked at. A bad entry is an error at its key and locks nothing. Keys are read as
+ * addresses, so one bank has one entry whatever its capitals.
  */
 function readLocked(value: unknown): {
 	value: Locks;
@@ -478,7 +495,7 @@ function readLocked(value: unknown): {
 				error(
 					"wrong-type",
 					"locked",
-					"`locked` is tags, each with the commit it was locked at.",
+					"`locked` must be tags, each with the commit it was locked at.",
 					LOCKED_EXAMPLE,
 				),
 			],
@@ -494,7 +511,7 @@ function readLocked(value: unknown): {
 					"wrong-type",
 					at,
 					`\`${written}\` isn't a tag in another repository.`,
-					"Write it as the instrument's `uses` does, such as `owner/repo@v1`.",
+					"Write it as in the instrument's `uses`, such as `owner/repo@v1`.",
 				),
 			);
 		else if (typeof commit !== "string" || !COMMIT_PATTERN.test(commit))
@@ -502,7 +519,7 @@ function readLocked(value: unknown): {
 				error(
 					"wrong-type",
 					at,
-					`\`${String(commit)}\` isn't a commit: a lock is the commit's full sha.`,
+					`\`${String(commit)}\` isn't a commit's full sha.`,
 					LOCKED_EXAMPLE,
 				),
 			);
@@ -517,9 +534,9 @@ export const locksWritten = (source: string): Locks =>
 
 /**
  * `workspace.yaml` with these tags locked (`locksFor`), as saving or exporting an
- * instrument locks them: every other entry, valid or not, and the file's comments as
- * written; `locked:` a block map (the template's `locked: {}` becomes one). Never drops an
- * entry. Undefined for a file that isn't fields, or whose `locked` isn't a map, to write into.
+ * instrument does. Every other entry, valid or not, and the comments stay as written;
+ * `locked:` becomes a block map (the template's `locked: {}` too). Never drops an entry.
+ * Undefined when the file isn't fields, or `locked` isn't a map, so there's nowhere to write.
  */
 export function withLocks(source: string, locks: Locks): string | undefined {
 	const doc = parseDocument(source);
@@ -529,11 +546,11 @@ export function withLocks(source: string, locks: Locks): string | undefined {
 	const locked = doc.get("locked", true);
 	if (locked === undefined || (isScalar(locked) && locked.value === null)) {
 		doc.set("locked", doc.createNode({ ...locks }));
-		return doc.toString();
+		return doc.toString({ lineWidth: 0 });
 	}
 	if (!isMap(locked)) return undefined;
 	for (const [key, commit] of Object.entries(locks)) {
-		// One bank, one entry: a key written with other capitals is the same tag's.
+		// One bank, one entry: a key with other capitals is the same tag.
 		const written = locked.items.find((pair) => {
 			const k = isScalar(pair.key) ? String(pair.key.value) : undefined;
 			const a = k === undefined ? undefined : addressOf(k);
@@ -543,5 +560,6 @@ export function withLocks(source: string, locks: Locks): string | undefined {
 		else locked.set(key, commit);
 	}
 	locked.flow = false;
-	return doc.toString();
+	// No line width: YAML would otherwise fold every long line at 80 characters.
+	return doc.toString({ lineWidth: 0 });
 }

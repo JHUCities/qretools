@@ -1,9 +1,9 @@
 /**
  * An instrument's DDI as a Qualtrics survey: the DDI read back, then written as QSF. The
- * DDI is the record of the survey; the QSF is made from it, never from the instrument's
- * source. Anything Qualtrics can't run as the DDI says is a finding at its DDI item, and
- * any error refuses the survey: a survey asking something other than the
- * DDI says would be fielded silently.
+ * DDI is the record of the survey, so the QSF is made from it, never from the instrument's
+ * YAML. Anything Qualtrics can't run as the DDI says is a finding at its DDI item. Any
+ * error stops the export: otherwise a survey that differs from its DDI would be fielded
+ * without a word.
  */
 import type { DdiDocument } from "@qretools/core";
 import type { Finding } from "./findings.ts";
@@ -50,7 +50,7 @@ export function qsfOf(
 
 /** Why the survey isn't exported, as the CLI and the app both say it. */
 export const qsfRefusalReason = (errors: number): string =>
-	`${errors === 1 ? "1 thing" : `${errors} things`} in this instrument can't be run in Qualtrics as its DDI says.`;
+	`${errors === 1 ? "1 thing" : `${errors} things`} in this instrument can't be run in Qualtrics.`;
 
 /** A time as Qualtrics' survey header has it, `YYYY-MM-DD hh:mm:ss`, in UTC. */
 export const qsfTime = (at: Date): string =>

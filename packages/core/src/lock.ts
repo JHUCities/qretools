@@ -1,10 +1,10 @@
 /**
- * Locks: the commit each tag a workspace's instruments use named when it was locked,
- * written in `workspace.yaml` under `locked:`. A tag can be moved and a commit can't, so
- * a lock shows when a tag names another commit than it did. Saving or exporting an
- * instrument locks the tags it reads at the commits read, as a build writes its lockfile
- * (Cargo, npm): a tag that moved is a warning until then, and its new lock is a change
- * to `workspace.yaml` that review sees. Git's own guarantee, so it holds on any forge. Pure.
+ * Locks: the commit each tag pointed to when it was locked, kept in `workspace.yaml`
+ * under `locked:`. A tag can move and a commit can't, so a lock shows when a tag moved.
+ * Saving or exporting an instrument locks the tags it reads, as a build writes its
+ * lockfile (Cargo, npm). A moved tag is a warning until then, and the new lock is a
+ * change to `workspace.yaml` that review sees. Relies only on git, so it works on any
+ * forge. Pure.
  */
 import type { AddressKey } from "./address.ts";
 import type { Finding } from "./findings.ts";
@@ -60,8 +60,8 @@ export function movedTags(
 						code: "moved-tag",
 						severity: "warning",
 						path: `uses.${alias}`,
-						message: `\`${key}\` names commit \`${shortCommit(commit)}\` now, but this workspace locked it at \`${shortCommit(locked)}\`: the tag was moved, so its questions may have changed.`,
-						hint: "Saving or exporting the instrument locks it at the new commit, under `locked:` in `workspace.yaml`, for review to see.",
+						message: `\`${key}\` has moved to a new version, so its questions may have changed.`,
+						hint: "Check what changed, then save the instrument (or run `qretools instrument export`) to record it.",
 					},
 				];
 	});
@@ -86,8 +86,8 @@ export function unlockedTags(
 						code: "unlocked-tag",
 						severity: "warning",
 						path: `uses.${alias}`,
-						message: `\`${key}\` isn't locked to the commit it names, so if the tag were moved its questions would change unnoticed.`,
-						hint: "Saving the instrument in QREtools, or `qretools instrument export`, locks it under `locked:` in `workspace.yaml`.",
+						message: `This workspace hasn't recorded which version of \`${key}\` it uses.`,
+						hint: "Save the instrument, or run `qretools instrument export`, to record it.",
 					},
 				],
 	);

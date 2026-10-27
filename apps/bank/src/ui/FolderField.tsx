@@ -1,13 +1,12 @@
 /**
- * The folder a question goes in. Choosing and creating are separate: a native
- * select (Primer's `Select`) of the bank's folders, whose last option, "New folder…",
- * reveals a field for the new name. A new folder is rare and every author sees it,
- * so it is a deliberate second step, never a typo one arrow key from a real folder
- * (a creatable combobox suits cheap things like labels, not structure).
+ * The folder a question goes in. Choosing and creating are separate: a native select
+ * (Primer's `Select`) of the bank's folders, whose last option, "New folder…", shows a
+ * field for the new name. Every author sees a new folder, so making one is a second,
+ * deliberate step, never a typo one arrow key from a real folder. (A creatable combobox
+ * suits cheap things like labels, not structure.)
  *
- * The value is the Model's (the dialog dispatches it); whether it can be used is
- * decided outside (`problem`). Which of the two controls is showing is
- * transient input, so it is component state.
+ * The value is the Model's (the dialog dispatches it); `problem` says whether it can be
+ * used. Which control shows is passing input, so it is component state.
  */
 import { FormControl, Select, Stack, TextInput } from "@primer/react";
 import { inlineCode } from "@qretools/shell/ui";
@@ -35,18 +34,18 @@ export function FolderField({
 	const [creating, setCreating] = useState(
 		folders.length === 0 || (folder !== "" && !folders.includes(folder)),
 	);
-	// A usable folder the bank does not have yet: this creates it.
+	// A usable folder the bank doesn't have yet: saving creates it.
 	const isNew =
 		problem === undefined && folder !== "" && !folders.includes(folder);
-	// Nothing chosen yet (empty, or where it is now) is not a mistake to point at;
-	// the dialog's button stays inactive regardless.
+	// Nothing chosen yet (empty, or where it is now) isn't a mistake to point at; the
+	// dialog's button stays inactive anyway.
 	const shown = folder === "" || folder === current ? undefined : problem;
 	const message = (
 		<>
 			<FormControl.Caption>
 				{folders.length === 0 && "The bank has no folders yet. "}
 				{caption}
-				{isNew && " A new folder: this creates it."}
+				{isNew && " This creates a new folder."}
 			</FormControl.Caption>
 			{shown !== undefined && (
 				<FormControl.Validation variant="error">

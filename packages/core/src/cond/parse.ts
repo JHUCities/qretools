@@ -68,7 +68,7 @@ export function parseCondition(
 		if (own !== undefined)
 			problems.push({
 				kind: "syntax",
-				message: `Conditions write \`${own}\`, not \`${t.text}\`.`,
+				message: `Write \`${own}\`, not \`${t.text}\`.`,
 				range: t.range,
 				replace: own === "not" ? "not " : own,
 			});
@@ -141,7 +141,7 @@ export function parseCondition(
 					problems.push({
 						kind: "syntax",
 						message: "This text has no closing quote.",
-						hint: 'Codes and text are written in double quotes: "1".',
+						hint: 'Put codes and text in double quotes: "1".',
 						range: t.range,
 					});
 				return { kind: "string", value: t.text, range: t.range };
@@ -195,7 +195,7 @@ export function parseCondition(
 				problems.push({
 					kind: "syntax",
 					message: `\`${t.text}\` isn't part of a condition.`,
-					hint: 'Conditions compare answers: `bas.x = "1"`, `bas.n >= 18`, `x in {"1", "2"}`.',
+					hint: 'Conditions compare answers: `bank.x = "1"`, `bank.n >= 18`, `bank.x in {"1", "2"}`.',
 					range: t.range,
 				});
 				return { kind: "hole", range: t.range };
@@ -229,7 +229,7 @@ export function parseCondition(
 		if (!(functions as readonly string[]).includes(name.text)) {
 			problems.push({
 				kind: "syntax",
-				message: `\`${name.text}\` isn't a function conditions can use.`,
+				message: `\`${name.text}\` isn't a function you can use here.`,
 				hint: `Functions: ${functions.join(", ")}.`,
 				range: name.range,
 			});
@@ -245,12 +245,12 @@ export function parseCondition(
 				kind: "syntax",
 				message:
 					fn === "isnull"
-						? "`isnull` takes one value: `isnull(bas.x)`."
+						? "`isnull` takes one value: `isnull(bank.x)`."
 						: fn === "label"
-							? "`label` takes one coded answer: `label(selected_neighborhood)`."
+							? "`label` takes one coded answer: `label(bank.x)`."
 							: fn === "nvl"
-								? "`nvl` takes a value and what to use when it's null."
-								: "`between` takes a value and two bounds: `between(bas.n, 18, 64)`.",
+								? "`nvl` takes an answer and what to use when it's empty: `nvl(bank.n, 0)`."
+								: "`between` takes a value and two bounds: `between(bank.n, 18, 64)`.",
 				range,
 			});
 		return { kind: "call", fn, args, range };
@@ -263,7 +263,7 @@ export function parseCondition(
 			problems.push({
 				kind: "syntax",
 				message: "`in` takes a set of values in braces.",
-				hint: 'For example `bas.x in {"1", "2"}`.',
+				hint: 'For example `bank.x in {"1", "2"}`.',
 				range: point(),
 			});
 			return { items: [{ kind: "hole", range: point() }], range: point() };
@@ -304,13 +304,13 @@ export function parseCondition(
 		problems.push({
 			kind: "syntax",
 			message: `\`${rest.text}\` isn't part of a condition.`,
-			hint: 'Conditions compare answers: `bas.x = "1"`, `bas.n >= 18`, `x in {"1", "2"}`.',
+			hint: 'Conditions compare answers: `bank.x = "1"`, `bank.n >= 18`, `bank.x in {"1", "2"}`.',
 			range: rest.range,
 		});
 	else if (rest.kind !== "end")
 		problems.push({
 			kind: "syntax",
-			message: `\`${text.slice(rest.range[0], text.length).trim().split(/\s/)[0]}\` doesn't follow from what's before it.`,
+			message: `\`${text.slice(rest.range[0], text.length).trim().split(/\s/)[0]}\` can't follow what comes before it.`,
 			hint: "Join conditions with `and` or `or`.",
 			range: [rest.range[0], text.length],
 		});

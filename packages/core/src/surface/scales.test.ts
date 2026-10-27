@@ -74,7 +74,9 @@ describe("named scales in a question", () => {
 
 	it("with no scales loaded, the hint says to write options inline", () => {
 		const { findings } = parseSurface(`${base}responses: agree4\n`, EMPTY_ENV);
-		expect(findings[0]?.hint).toMatch(/inline/);
+		expect(findings[0]?.hint).toBe(
+			"The bank has no shared scales yet. Write the options here instead.",
+		);
 	});
 });
 

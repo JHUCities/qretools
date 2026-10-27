@@ -39,10 +39,11 @@ export const isLogical = (
 
 /**
  * What a computed name is where it's read. A number is a field. A true-or-false value is
- * inlined, which is exact only when it holds the value it had when computed: it is
- * computed once, on every path, before its reader; every answer it reads was asked before
- * it and outside a roster; every number it reads was computed only before it; and the same
- * holds, from its own place, for every true-or-false value it reads.
+ * inlined. That is exact only when it still holds the value it had when computed:
+ * - it is computed once, on every route, before its reader;
+ * - every answer it reads was asked before it, outside a roster;
+ * - every number it reads was computed only before it;
+ * - the same holds, from its own place, for every true-or-false value it reads.
  */
 export const computedAt = (
 	ctx: Ctx,
@@ -61,17 +62,17 @@ export const computedAt = (
 	if (cs.length > 1) return refuse("is computed more than once");
 	if (seen.has(variable)) return refuse("is computed from itself");
 	if (!c.everyPath)
-		return refuse("is computed only on some paths through the survey");
+		return refuse("is computed only on some routes through the survey");
 	const at = ctx.placeOf(c.step.id);
-	if (at > reader) return refuse("is read before it's computed");
+	if (at > reader) return refuse("is used before it's computed");
 	const reads = new Set(namesOf(c.step.value.expr).map((n) => n.name));
 	for (const name of reads) {
 		const s = c.step.value.sources.get(name);
 		if (s === undefined) continue;
 		if (s.kind === "answer" && s.row === undefined && s.asks.some(ctx.outside))
-			return refuse("reads a roster's rows");
+			return refuse("uses answers from a roster");
 		if (s.kind === "answer" && s.asks.some((a) => ctx.placeOf(a) > at))
-			return refuse("reads an answer asked after it");
+			return refuse("uses an answer asked after it");
 		if (s.kind !== "compute") continue;
 		const inner = computedAt(ctx, s.variable, at, new Set([...seen, variable]));
 		if (inner.kind === "refused") return inner;
@@ -81,7 +82,7 @@ export const computedAt = (
 				(n) => ctx.placeOf(n.step.id) > at,
 			)
 		)
-			return refuse(`reads \`${s.variable}\`, computed after it`);
+			return refuse(`uses \`${s.variable}\`, which is computed after it`);
 	}
 	return { kind: "inline", value: c.step.value };
 };
@@ -132,7 +133,7 @@ export const arithmetic = (
 			"qsf-inexpressible",
 			"error",
 			at,
-			"Qualtrics computes with numbers typed in one question, inputs and computed values: this reads something else.",
+			"Qualtrics can only compute with a number question's answer, an input or a computed value. This uses something else.",
 		);
 	return written;
 };

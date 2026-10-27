@@ -1,11 +1,11 @@
-# Publishes the CLI to npm as `qretools` when a tag `cli-v<version>` is pushed, the version being
-# packages/cli/package.json's. npm trusts this workflow (trusted publishing, OIDC), so
-# no token is stored, and the package carries provenance linking it to this commit.
-# The trust allows staging only: the release waits, not public, until a maintainer
-# approves it with 2FA (`npm stage list qretools`, then `npm stage approve <id>`).
-# Every version goes to the dist-tag `latest`, prereleases included, so `npx qretools` runs
-# the newest: there is no stable line yet for an alpha to stay off. (npm requires the tag
-# to be named for a prerelease.)
+# Publishes the CLI to npm as `qretools` when a tag `cli-v<version>` is pushed. The
+# version must be packages/cli/package.json's. npm trusts this workflow (trusted
+# publishing, OIDC), so no token is stored, and the package's provenance links it to
+# this commit. The trust allows staging only: the release stays private until a
+# maintainer approves it with 2FA (`npm stage list qretools`, then
+# `npm stage approve <id>`). Every version, prereleases too, goes to the dist-tag
+# `latest`, so `npx qretools` runs the newest: there is no stable line yet. (npm needs
+# the tag named for a prerelease.)
 name: Release CLI
 
 on:
@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # Node and pnpm as mise.toml pins them.
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - name: The tag names the package's version
@@ -33,7 +33,7 @@ jobs:
             exit 1
           }
           echo "version=$version" >> "$GITHUB_ENV"
-      # `pnpm pack` bundles (prepack) and writes the workspace's own versions in place of workspace:*.
+      # `pnpm pack` bundles the command (prepack) and replaces workspace:* with real versions.
       - run: pnpm --dir packages/cli pack --pack-destination "$RUNNER_TEMP/release"
       - name: The packed command runs where it's installed
         run: |

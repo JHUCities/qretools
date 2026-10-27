@@ -1,8 +1,8 @@
 # @qretools/qsf
 
-An instrument's DDI-Lifecycle 4.0, read back and written as a Qualtrics survey (QSF). It
-reads only DDI, never the instrument, so the DDI stays the record of the survey that was
-fielded; and it knows Qualtrics, so the core doesn't.
+Turns an instrument's DDI-Lifecycle 4.0 into a Qualtrics survey (QSF). It reads only the
+DDI, never the instrument, so the DDI stays the record of the survey that was fielded.
+Only this package knows Qualtrics; the core doesn't.
 
 ```ts
 import { placeFindings } from "@qretools/core";
@@ -13,10 +13,10 @@ const made = qsfOf(instrument.ddi, { name: "households", created: qsfTime(new Da
 placeFindings(made.findings, instrument.places); // each finding at its step in the YAML
 ```
 
-Anything Qualtrics can't run as the DDI says is a finding, and any error refuses the
-survey. How Qualtrics behaves was measured in a Qualtrics account before the export relied
-on it; `fixtures/households.qsf` is the golden file, a survey Qualtrics imported and ran
-as written (2026-10-18), and a test compares the export with it. Change it only after
-importing the new survey. One exception, the owner's call: after that import the households
-rent warning was reworded without its pipe (the shape the import had measured), and the
-golden file was regenerated without importing it again.
+Anything Qualtrics can't run as the DDI says is a finding, and any error stops the
+export. Each Qualtrics behaviour the export relies on was first tested in a Qualtrics
+account. `fixtures/households.qsf` is the golden file: a survey Qualtrics imported and ran
+as written (2026-10-18). A test compares the export with it. Change it only after
+importing the new survey. One exception, the owner's call: after that import, the
+households rent warning was reworded to drop its pipe (the import had tested it with the
+pipe), and the golden file was regenerated without importing it again.

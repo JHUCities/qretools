@@ -68,12 +68,12 @@ export const SHAPE: Readonly<Record<SchemeKind, Shape>> = {
 	workspace: "settings",
 };
 
-/** What a bank path holds, or undefined for a file the tool does not read. */
 /** What a bank reads a file as: a question, or a shared file of a kind, named by its filename. */
 export type BankFile =
 	| { readonly kind: "question" }
 	| { readonly kind: SchemeKind; readonly name: string };
 
+/** What a bank path holds, or undefined for a file the tool doesn't read. */
 export function kindAt(path: string): BankFile | undefined {
 	if (!path.endsWith(".yaml")) return undefined;
 	const root = (Object.keys(ROOT) as RootKind[]).find((k) => ROOT[k] === path);
@@ -307,7 +307,7 @@ export const bankEnv = (files: Readonly<Record<string, string>>): Env =>
 	schemeEnv(schemeFilesIn(files));
 
 /**
- * The agency items are published under while the bank declares none: `.invalid` is
+ * The agency the DDI shows while the bank declares none (a preview, never an export): `.invalid` is
  * reserved (RFC 6761) and never a real name, so the DDI stays valid and anyone reading
  * it sees at once that the agency is missing.
  */
@@ -325,8 +325,8 @@ export const absentRoot = (kind: RootKind): readonly Finding[] =>
 		? [
 				hole(
 					"agency",
-					"This workspace declares no DDI agency: add `workspace.yaml` with an `agency:` line.",
-					`Until then its items are published under \`${UNDECLARED_AGENCY}\`.`,
+					"This workspace has no DDI agency yet.",
+					"Add an `agency:` line to `workspace.yaml`. Until then the DDI can't be exported.",
 				),
 			]
 		: [];
@@ -357,8 +357,8 @@ export function unknownFolders(
 			message: `No questions are saved in \`${folder}\`.`,
 			hint:
 				there.length === 0
-					? "No folder holds a saved question yet. Until one does, this requires nothing."
-					: `The folders with saved questions are ${there.map((f) => `\`${f}\``).join(", ")}. Until this is one of them, it requires nothing.`,
+					? `Until \`${folder}\` holds a saved question, this line has no effect.`
+					: `Until \`${folder}\` holds a saved question, this line has no effect. Folders with saved questions: ${there.map((f) => `\`${f}\``).join(", ")}.`,
 		}));
 }
 

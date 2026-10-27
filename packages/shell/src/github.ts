@@ -319,7 +319,7 @@ export const makeGitHubStore = (
 				failure: {
 					kind: "stale",
 					message: `Changed on GitHub since you started: ${stale.map((c) => `\`${c.path}\``).join(", ")}.`,
-					hint: "Copy your version somewhere first if you want to keep it, then reload from GitHub.",
+					hint: "Copy your changes somewhere, reload from GitHub, then save again.",
 				},
 				seen: Object.fromEntries(paths.map((p) => [p, files[p] ?? null])),
 			});
@@ -485,8 +485,8 @@ export const makeGitHubStore = (
 			return err({
 				kind: "unreadable",
 				message:
-					"This workspace is too large for GitHub to list at once (over 100,000 files or 7 MB of tree).",
-				hint: "Keep the workspace in a smaller folder of the repository.",
+					"This workspace has too many files for GitHub to list at once.",
+				hint: "Move the workspace into a smaller folder of the repository.",
 			});
 		const blobs = listed.value.data.tree.flatMap((e) =>
 			e.type === "blob" &&
@@ -652,7 +652,7 @@ export const makeGitHubStore = (
 				return err({
 					kind: "unreadable",
 					message: `GitHub has no folder \`${folder}\` in ${owner}/${repo}.`,
-					hint: "Check the workspace's folder, as it is on the repository's default branch.",
+					hint: "Check the folder's name on the repository's default branch.",
 				});
 			if (!installed.ok) return installed;
 			return ok({
@@ -733,8 +733,8 @@ export const makeGitHubStore = (
 				: err({
 						failure: {
 							kind: "stale",
-							message: "Your branch kept changing while saving.",
-							hint: "Reload from GitHub, then save again.",
+							message: "Your branch kept changing while this was saving.",
+							hint: "Save again.",
 						},
 					});
 		},
@@ -792,8 +792,8 @@ function failureOf(e: unknown): Failure {
 		return {
 			kind: "notInstalled",
 			status: 403,
-			message: "The app can't write to this repository.",
-			hint: "Install the app on the repository, or allow it to write there (or ask an owner to).",
+			message: "The QREtools app can't write to this repository.",
+			hint: "Install the app on this repository and let it write there, or ask an owner to.",
 		};
 	// Anything but Octokit's own error is a bug here, not an outage: say so.
 	if (!(e instanceof RequestError))
@@ -816,7 +816,7 @@ function failureOf(e: unknown): Failure {
 			kind: "auth",
 			status,
 			message: "GitHub didn't accept your sign-in.",
-			hint: "It may have ended. Sign in again.",
+			hint: "Your sign-in may have ended. Sign in again.",
 		};
 	const headers = error.response.headers ?? {};
 	// The primary limit says so in its headers; a secondary one sends retry-after.
@@ -826,15 +826,31 @@ function failureOf(e: unknown): Failure {
 			headers["retry-after"] !== undefined ||
 			/secondary rate limit/i.test(message))
 	) {
+		// The client has already waited once (the throttling plugin), so it's "still" limited.
 		const reset = Number(headers["x-ratelimit-reset"]);
-		const when = Number.isFinite(reset)
-			? new Date(reset * 1000).toLocaleTimeString()
-			: "later";
+		if (String(headers["x-ratelimit-remaining"]) === "0")
+			return {
+				kind: "rateLimited",
+				status,
+				...(Number.isFinite(reset)
+					? {
+							message: `GitHub's rate limit is used up until ${new Date(reset * 1000).toLocaleTimeString()}.`,
+							hint: "Try again then.",
+						}
+					: {
+							message: "GitHub's rate limit is used up for now.",
+							hint: "Try again later.",
+						}),
+			};
+		// A secondary limit lasts seconds, not until the primary limit's reset.
+		const wait = Number(headers["retry-after"]);
 		return {
 			kind: "rateLimited",
 			status,
-			message: `GitHub's rate limit is used up until ${when}.`,
-			hint: "Try again then.",
+			message: "GitHub is limiting requests for a moment.",
+			hint: Number.isFinite(wait)
+				? `Wait ${wait} seconds, then try again.`
+				: "Wait a minute, then try again.",
 		};
 	}
 	if (status === 404)
@@ -842,12 +858,13 @@ function failureOf(e: unknown): Failure {
 			kind: "http",
 			status,
 			message: "GitHub found nothing at that address.",
-			hint: "Check the repository, branch and path, and that you can open the repository on GitHub.",
+			hint: "Check the address, and that you can open the repository on GitHub.",
 		};
 	return {
 		kind: "http",
 		status,
 		message: `GitHub refused the request (${status}).`,
+		hint: "Try again. If it keeps happening, check GitHub's status page.",
 		detail: message,
 	};
 }

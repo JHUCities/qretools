@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import nhdNyrs from "../examples/nhd_nyrs.yaml?raw";
 import nhdSat from "../examples/nhd_sat.yaml?raw";
-import { codebookView, respondentView } from "./render.ts";
+import { respondentView } from "./render.ts";
 import { EMPTY_ENV } from "./surface/env.ts";
 import { parseSurface } from "./surface/parse.ts";
 
@@ -37,178 +37,25 @@ describe("respondentView", () => {
 		});
 	});
 
-	it("evaluates around holes", () => {
-		const v = respondentView(draftOf(""));
-		expect(v.text.kind).toBe("hole");
-		expect(v.input).toMatchObject({ kind: "hole", path: "" });
-		expect(v.instruction).toBeUndefined();
-	});
-});
-
-describe("codebookView", () => {
-	it("says what the question measures: a shared concept's label and name, or the words written", () => {
-		const env = {
-			...WITH_UNITS,
-			concepts: {
-				nhd_satisfaction: {
-					label: "Neighborhood satisfaction",
-					definition: "How content…",
-				},
-			},
-		};
-		const shared = parseSurface(
-			"name: q\nconcept: nhd_satisfaction\n",
-			env,
-		).draft;
-		expect(codebookView(shared, env).concept).toEqual({
-			text: "Neighborhood satisfaction",
-			ref: "nhd_satisfaction",
-		});
-		const prose = parseSurface(
-			"name: q\nconcept: neighborhood satisfaction\n",
-			env,
-		).draft;
-		expect(codebookView(prose, env).concept).toEqual({
-			text: "neighborhood satisfaction",
-		});
-		// A name nothing has is a hole, not a concept: no line.
-		const unknown = parseSurface(
-			"name: q\nconcept: nobody_has_this\n",
-			env,
-		).draft;
-		expect(codebookView(unknown, env).concept).toBeUndefined();
-	});
-
-	it("formats a code list the way the codebook does", () => {
-		const v = codebookView(draftOf(nhdSat), EMPTY_ENV);
-		expect(v.title).toEqual({
-			kind: "filled",
-			text: "neighborhood satisfaction",
-		});
-		expect(v.variable).toEqual({ kind: "filled", text: "nhd_sat" });
-		expect(v.values).toEqual({
-			kind: "lines",
-			lines: [
-				"1 = Very satisfied",
-				"2 = Somewhat satisfied",
-				"3 = Neither satisfied nor dissatisfied",
-				"4 = Somewhat dissatisfied",
-				"5 = Very dissatisfied",
-			],
-		});
-		expect(v.universe).toEqual({ text: "All respondents" });
-		expect(v.source).toBe("DCAS 2018 Q6");
-		expect(v.notes).toEqual([]);
-	});
-
-	it("formats number and open domains, and notes select-all", () => {
-		expect(codebookView(draftOf(nhdNyrs), WITH_UNITS).values).toEqual({
-			kind: "lines",
-			lines: ["Range: 0–100 years"],
-		});
-		expect(
-			codebookView(draftOf("number:\n  min: 18\n"), EMPTY_ENV).values,
-		).toEqual({
-			kind: "lines",
-			lines: ["Minimum: 18"],
-		});
-		expect(
-			codebookView(draftOf("open:\n  max_length: 200\n"), EMPTY_ENV).values,
-		).toEqual({
-			kind: "lines",
-			lines: ["Free text, up to 200 characters"],
-		});
-		expect(
-			codebookView(draftOf("select: many\nresponses:\n  1: a\n"), EMPTY_ENV)
-				.notes,
-		).toHaveLength(1);
-	});
-
-	it("falls back to the name for the title, then to a hole", () => {
-		expect(codebookView(draftOf("name: q1\n"), EMPTY_ENV).title).toEqual({
-			kind: "filled",
-			text: "q1",
-		});
-		expect(codebookView(draftOf(""), EMPTY_ENV).title.kind).toBe("hole");
-		expect(codebookView(draftOf(""), EMPTY_ENV).values.kind).toBe("hole");
-	});
-});
-
-describe("scheme references in the previews", () => {
-	it("shows the resolved text with the name kept, and the bank's missing-value line", async () => {
-		const { EMPTY_ENV } = await import("./surface/env.ts");
-		const { parseScale } = await import("./surface/scales.ts");
+	it("shows a shared instruction's text, with its name", () => {
 		const env = {
 			...EMPTY_ENV,
-			universes: { renters: { text: "Renters only" } },
 			instructions: { select_one: { text: "Select one" } },
-			missing:
-				parseScale('labels:\n  "-8": Item non-response\n').scale?.codes ?? [],
 		};
 		const d = parseSurface(
-			"name: q\ntext: Q?\nintent: i\nuniverse: renters\ninstruction: select_one\nopen: {}\n",
+			"name: q\ntext: Q?\nintent: i\ninstruction: select_one\nopen: {}\n",
 			env,
 		).draft;
 		expect(respondentView(d).instruction).toEqual({
 			text: "Select one",
 			ref: "select_one",
 		});
-		const cb = codebookView(d, env);
-		expect(cb.universe).toEqual({ text: "Renters only", ref: "renters" });
-		expect(cb.missing).toBe("-8 (Item non-response)");
-		const prose = parseSurface(
-			"name: q\ntext: Q?\nintent: i\nuniverse: Everyone here\nopen: {}\n",
-			EMPTY_ENV,
-		).draft;
-		expect(codebookView(prose, EMPTY_ENV).universe).toEqual({
-			text: "Everyone here",
-		});
-		expect(codebookView(prose, EMPTY_ENV).missing).toBeUndefined();
 	});
-});
 
-describe("the codebook title from a concept", () => {
-	it("is a shared concept's label, or the prose written", () => {
-		const env = {
-			...EMPTY_ENV,
-			concepts: { trust: { label: "Trust in government" } },
-		};
-		const titleOf = (text: string) =>
-			codebookView(parseSurface(text, env).draft, env).title;
-		expect(titleOf("name: q\nconcept: trust\n")).toEqual({
-			kind: "filled",
-			text: "Trust in government",
-		});
-		expect(titleOf("name: q\nconcept: racial identification\n")).toEqual({
-			kind: "filled",
-			text: "racial identification",
-		});
-	});
-});
-
-describe("the codebook's note on a select-all question", () => {
-	const MANY =
-		'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n  "b": B\n';
-	const note = (env: typeof EMPTY_ENV) =>
-		codebookView(parseSurface(MANY, env).draft, env).notes.find((n) =>
-			n.startsWith("Select all that apply"),
-		);
-
-	it("says how the bank stores each option, the usual way or its own", () => {
-		expect(note(EMPTY_ENV)).toBe(
-			"Select all that apply: each option is its own variable, coded 0 = No, 1 = Yes.",
-		);
-		expect(
-			note({
-				...EMPTY_ENV,
-				selectAll: {
-					chosen: { code: "1", label: "Selected" },
-					notChosen: { code: "2", label: "Not selected" },
-					first: "chosen",
-				},
-			}),
-		).toBe(
-			"Select all that apply: each option is its own variable, coded 1 = Selected, 2 = Not selected.",
-		);
+	it("evaluates around holes", () => {
+		const v = respondentView(draftOf(""));
+		expect(v.text.kind).toBe("hole");
+		expect(v.input).toMatchObject({ kind: "hole", path: "" });
+		expect(v.instruction).toBeUndefined();
 	});
 });

@@ -1854,7 +1854,7 @@ describe("moving a question", () => {
 		]);
 		expect(
 			moveProblem(clash, clash.local.questions[1] as Question, "svy"),
-		).toMatch(/taken/);
+		).toMatch(/A question is already at/);
 		const moved: Model = {
 			...m,
 			remote: {
@@ -2080,13 +2080,13 @@ describe("why writing is blocked, and what to do", () => {
 		expect(blockage(base())).toBeUndefined();
 		expect(blockage(notInstalled(base()))).toMatchObject({
 			kind: "standing",
-			hint: "Install it there, then try again.",
+			hint: "Install the QREtools app on this repository, then try again.",
 			fix: "install",
 		});
 		expect(blockage(connected(fresh(), false))).toEqual({
 			kind: "standing",
 			reason:
-				"You have read access only to this repository, so this workspace can't be changed",
+				"You can only read this repository, so you can't change this workspace",
 			hint: "Ask its owner for write access, then try again.",
 			fix: "recheck",
 		});
@@ -2364,7 +2364,7 @@ describe("a refused return from GitHub", () => {
 	});
 });
 
-describe("the author's own branch", () => {
+describe("the author's branch name", () => {
 	it("is named from the login, and read back from the name", () => {
 		expect(branchOwner(ownBranch("iain"))).toBe("iain");
 		expect(branchOwner("qretools-a-b")).toBe("a-b");

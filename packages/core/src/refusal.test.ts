@@ -54,6 +54,8 @@ describe("when an export is refused", () => {
 			[],
 		);
 		expect(r).toEqual({ kind: "invalidAgency", findings: [invalid] });
-		expect(r && refusalReason(r)).toBe("Every item needs a real DDI agency.");
+		expect(r && refusalReason(r)).toBe(
+			"A DDI agency is missing or wrong. See Findings.",
+		);
 	});
 });

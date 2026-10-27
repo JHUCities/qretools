@@ -1,15 +1,14 @@
 /**
- * Livelits (Omar et al., "Filling Typed Holes with Live GUIs", PLDI 2021), as a text
- * editor can have them: a control persistent at a field, whether it's still empty or
- * already holds a value, which opens a picker of what can go there. The text stays the
- * only truth: choosing rewrites the field's value. No splices. Pure: where the pickers
- * go comes from the parse, what can be chosen from the environment (or the app, for what
- * only it holds), and the text a choice writes from `applyLivelit`.
+ * Livelits (Omar et al., "Filling Typed Holes with Live GUIs", PLDI 2021), as far as a
+ * text editor can have them: a control that stays at a field, empty or not, and opens a
+ * picker of what can go there. The text stays the only truth: choosing rewrites the
+ * field's value. No splices. Pure: the parse says where pickers go, the environment (or
+ * the app, for what only it holds) says what can be chosen, and `applyLivelit` writes it.
  *
- * A choice names its livelit by `id` (its place), never by offsets: `update` finds the
- * livelit again in the text as it is now and writes there. (A finding's fix keeps its
- * path edits instead: the Findings list shows settled, older findings, so a fix must
- * outlive the text it was offered for; a picker closes on any edit.)
+ * A choice names its livelit by `id` (its place), never by offsets: `update` finds it
+ * again in the text as it is now and writes there. (A finding's fix keeps path edits
+ * instead: the Findings list shows settled, older findings, so a fix must outlive the
+ * text it was offered for; a picker closes on any edit.)
  */
 import { SCHEME_NAME } from "../copy.ts";
 import type { Fix, Range } from "../findings.ts";
@@ -25,7 +24,7 @@ import {
 } from "./env.ts";
 import { describe, REQUIRABLE_KEYS, scaleSummary } from "./schema.ts";
 
-/** The kinds of shared entry a field can be picked for: every field that names one. */
+/** The kinds of shared file a picker can choose: one per field that names one. */
 export const LIVELIT_KINDS: readonly NamedScheme[] = [
 	"concept",
 	"universe",
@@ -45,20 +44,20 @@ export interface Choice {
 
 /**
  * Where a picker's choices come from: the core's environment, the livelit itself, or the
- * app: an instrument's banks' questions (`questionChoices`), the banks it can use
- * (`bankChoices`).
+ * app (an instrument's banks' questions, `questionChoices`; the banks it can use,
+ * `bankChoices`).
  */
 export type Source =
 	| { readonly kind: "scheme"; readonly scheme: NamedScheme }
 	| { readonly kind: "enum"; readonly values: readonly Choice[] }
 	| { readonly kind: "questions" }
 	| { readonly kind: "banks" }
-	/** The codes of the coded answer a condition names (`codeChoices`). */
+	/** The codes of the answer a condition names (`codeChoices`). */
 	| { readonly kind: "codes"; readonly name: string };
 
 /**
- * What a picker opened on: its choices, or why there are none to offer (a condition's
- * name that has no codes), which it says instead.
+ * What a picker opens on: its choices, or the reason there are none (a condition's name
+ * with no codes), which it shows instead.
  */
 export type Offered = readonly Choice[] | { readonly reason: string };
 
@@ -67,13 +66,13 @@ export type Picker =
 			/** One value: choosing it writes it. */
 			readonly kind: "one";
 			readonly source: Source;
-			/** What is written there now, whether or not it is one of the choices. */
+			/** What's written there now, whether or not it's one of the choices. */
 			readonly current?: string;
 	  }
 	| {
 			/**
-			 * Nothing to choose, only things to do with what is written (its actions), as an
-			 * editor's code actions: inline options offer to become a shared scale.
+			 * Nothing to choose, only things to do with what's written (its actions), like an
+			 * editor's code actions: options written here offer to become a shared scale.
 			 */
 			readonly kind: "actions";
 	  }
@@ -83,35 +82,35 @@ export type Picker =
 			readonly source: Source;
 			/** What the list holds now. */
 			readonly chosen: readonly string[];
-			/** The fewest that may be applied, when fewer would be wrong (a set needs one). */
+			/** The fewest that can be applied, when fewer would be wrong (a set needs one). */
 			readonly min?: number;
 	  };
 
 export interface Livelit {
-	/** Its place, as findings name places: what a choice names it by. */
+	/** Its place, named as findings name places: a choice refers to it by this. */
 	readonly id: string;
 	/** What the button and the picker are called: "Choose a shared scale". */
 	readonly label: string;
-	/** Where the button is drawn: just after the value, or at the empty value's point. */
+	/** Where the button is drawn: just after the value, or where the empty value starts. */
 	readonly at: number;
-	/** The field as written, key to value: the caret anywhere on it opens the picker. */
+	/** The field as written, key to value: the caret anywhere in it opens the picker. */
 	readonly field: Range;
-	/** The text a choice replaces: the value, or the empty value's point. */
+	/** The text a choice replaces: the value, or the point where an empty one starts. */
 	readonly span: Range;
 	readonly picker: Picker;
 	/** What else it offers, below the choices: "New shared scale…". */
 	readonly actions: readonly Fix[];
 	/**
-	 * A set of codes inside a condition (`x in {"1", "2"}`): written as the condition
-	 * language writes one, raw, escaped for the YAML scalar holding it.
+	 * A set of codes inside a condition (`x in {"1", "2"}`): written as a condition writes
+	 * one, escaped for the quotes around it.
 	 */
 	readonly set?: "plain" | "double" | "single";
 }
 
 /**
  * A field's value as text: from after the colon and its spaces to the value's last
- * character. A block value (a list on the lines below) starts at its newline, so writing
- * there replaces the whole block.
+ * character. A list on the lines below starts at its newline, so writing there replaces
+ * the whole list.
  */
 export function valueSpan(source: string, field: Range): Range {
 	const text = source.slice(field[0], field[1]);
@@ -125,9 +124,9 @@ export function valueSpan(source: string, field: Range): Range {
 /** A value a fixed-choice picker can replace: nothing yet, or one plain word. */
 const WORD = /^[A-Za-z_][\w-]*$/;
 
-/** The fixed choices of a question's own fields: how many may be chosen, a fill's type. */
+/** The fixed choices of a question's own fields: how many can be picked, and a fill's type. */
 const SELECT: readonly Choice[] = [
-	{ name: "one", detail: "The respondent picks one response" },
+	{ name: "one", detail: "Respondents pick one option" },
 	{ name: "many", detail: "Select all that apply" },
 ];
 const FILL_TYPE: readonly Choice[] = [
@@ -135,7 +134,7 @@ const FILL_TYPE: readonly Choice[] = [
 	{ name: "text", detail: "Words" },
 ];
 
-/** A picker of fixed values at a field written empty or as one word; none elsewhere. */
+/** A picker of fixed values at a field that's empty or one word; none elsewhere. */
 export function enumAt(
 	source: string,
 	parsed: {
@@ -180,9 +179,9 @@ export function enumAt(
 }
 
 /**
- * The pickers of a question: each field that names a shared entry (`FIELD_OF`), written
- * either empty or as a bare name. Not prose, and not a scale's options written inline:
- * those are the author's own words, which a picker would replace.
+ * A question's pickers: each field that names a shared file (`FIELD_OF`), when it's
+ * empty or a bare name. Not words, and not options written out in the question: those
+ * are the author's own, which a picker would replace.
  */
 export function livelitsOf(
 	source: string,
@@ -192,7 +191,7 @@ export function livelitsOf(
 		readonly mentions: readonly Mention[];
 		readonly draft: Draft;
 	},
-	/** What it was read against: options a shared scale already has aren't offered to share. */
+	/** What it was read against: options a shared scale already has aren't offered for sharing. */
 	env: Env,
 ): readonly Livelit[] {
 	const fills = Object.keys(parsed.ranges).filter((p) =>
@@ -205,7 +204,7 @@ export function livelitsOf(
 			source,
 			parsed,
 			"select",
-			"Choose how many may be chosen",
+			"Choose how many respondents can pick",
 			SELECT,
 		),
 		...fills.flatMap((id) =>
@@ -215,9 +214,9 @@ export function livelitsOf(
 }
 
 /**
- * At options written inline, an offer to make them a shared scale, when that loses
- * nothing (plain `code: label` lines, `sharedScaleSource`) and no shared scale already has
- * these labels: then `matches-scale` offers its name instead, and only that is offered.
+ * At options written in the question, an offer to make them a shared scale, when that
+ * loses nothing (plain `code: label` lines, `sharedScaleSource`) and no shared scale has
+ * these labels yet (if one does, `matches-scale` offers its name instead).
  */
 function shareLivelit(
 	source: string,
@@ -239,7 +238,7 @@ function shareLivelit(
 	const key = labelsKey(domain.codes);
 	if (Object.values(env.scales).some((s) => labelsKey(s.codes) === key))
 		return [];
-	// The button after the field's key, on its own line: the options are below it.
+	// The button goes after the key, on its line: the options are below it.
 	const keyEnd = field[0] + "responses:".length;
 	return [
 		{
@@ -312,7 +311,7 @@ function namedLivelits(
 /**
  * What the environment offers for a kind, in the bank's order, each with its words: a
  * scale's labels (and codes), a concept's or unit's label, a universe's or instruction's
- * text. One branch per kind, so a change to an entry's shape is the compiler's to catch.
+ * text. One branch per kind, so the compiler catches a change to a file's shape.
  */
 export function choicesOf(env: Env, kind: NamedScheme): readonly Choice[] {
 	switch (kind) {
@@ -339,40 +338,40 @@ export function choicesOf(env: Env, kind: NamedScheme): readonly Choice[] {
 	}
 }
 
-/** The choices a source holds itself, or undefined for one the environment or app resolves. */
+/** The choices a source holds itself, or undefined when the environment or app supplies them. */
 export const ownChoices = (source: Source): readonly Choice[] | undefined =>
 	source.kind === "enum" ? source.values : undefined;
 
 /**
- * The text with `value` written at the livelit (found again in this very text, so its
- * span is current), and where the caret goes: after what was written. Undefined when
- * there is nothing to write.
+ * The text with `value` written at the livelit (found again in this text, so its span
+ * is current), and where the caret goes: after what was written. Undefined when there's
+ * nothing to write.
  */
 export function applyLivelit(
 	source: string,
 	livelit: Livelit,
 	value: string | readonly string[],
 ): { readonly text: string; readonly caret: number } | undefined {
-	// An actions picker has nothing to choose: nothing is ever written through it.
+	// An actions picker has nothing to choose, so nothing is written through it.
 	if (value === "" || livelit.picker.kind === "actions") return undefined;
 	const [from, to] = livelit.span;
 	// Quoted only where YAML needs it (`010`, `yes: no`), as a fix writes a value. A list
-	// keeps the author's form: a block list stays a block at its indent (a comment on an
-	// item is lost with it), anything else is written on one line, `[title, concept]`.
-	// Straight after the colon (an empty value) it takes the space it needs.
+	// keeps the author's form: one on lines below stays there at its indent (a comment on
+	// an item is lost), anything else goes on one line, `[title, concept]`. Straight
+	// after the colon (an empty value) it adds the space it needs.
 	const block = /^\n([ \t]*)-/.exec(source.slice(from, to));
 	const text =
 		livelit.set !== undefined
 			? setText(typeof value === "string" ? [value] : value, livelit.set)
 			: typeof value === "string"
-				? scalar(value)
+				? scalar(value, keyColumn(source, from))
 				: block !== null && value.length > 0
 					? value.map((v) => `\n${block[1]}- ${scalar(v)}`).join("")
-					: `[${value.map(scalar).join(", ")}]`;
+					: `[${value.map((v) => scalar(v)).join(", ")}]`;
 	if (text === undefined) return undefined;
 	const written =
 		source[from - 1] === ":" && !text.startsWith("\n") ? ` ${text}` : text;
-	// Nothing changes (an Apply with the same ticks): nothing is written, no undo step.
+	// Nothing changes (Apply with the same ticks): nothing is written, and no undo step.
 	if (written === source.slice(from, to)) return undefined;
 	return {
 		text: source.slice(0, from) + written + source.slice(to),
@@ -380,10 +379,16 @@ export function applyLivelit(
 	};
 }
 
+/** The column of the key on the line holding `at`: past its indent and any `- `. */
+const keyColumn = (source: string, at: number): number => {
+	const line = source.slice(source.lastIndexOf("\n", at - 1) + 1, at);
+	return /^ *(?:- +)*/.exec(line)?.[0].length ?? 0;
+};
+
 /**
- * A set of codes as a condition writes it, `{"1", "2"}`, for the scalar holding it: inside
- * double quotes each `"` is `\"`. Undefined for a code that can't be written there (one
- * holding a quote or a backslash, which codes never do), never a guess at escaping.
+ * A set of codes as a condition writes it, `{"1", "2"}`, escaped for the quotes around
+ * it: inside double quotes each `"` is `\"`. Undefined for a code holding a quote or a
+ * backslash (codes never do), rather than a guess at escaping.
  */
 function setText(
 	codes: readonly string[],
@@ -395,8 +400,8 @@ function setText(
 }
 
 /**
- * The picker of the workspace's details (`workspace.yaml`): which fields every question must also
- * have, chosen together as a checklist, where `required` is written (empty or a list).
+ * The workspace details' picker (`workspace.yaml`): the fields every question must also
+ * have, ticked together as a checklist, where `required` is written (empty or a list).
  */
 export function settingsLivelits(
 	source: string,
@@ -435,7 +440,7 @@ export function settingsLivelits(
 	];
 }
 
-/** A new shared entry of this kind, named in its dialog, then written at `path`. */
+/** A new shared file of this kind, named in its dialog, then written at `path`. */
 export const createFor = (kind: NamedScheme, path: string): Fix => ({
 	kind: "create",
 	label: `New ${SCHEME_NAME[kind]}…`,

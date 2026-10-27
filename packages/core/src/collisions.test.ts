@@ -95,7 +95,7 @@ describe("one identity, one item", () => {
 		]);
 	});
 
-	it("a scale named yesno01 is only a scale: select-all options are coded as the bank's own file says", () => {
+	it("a scale named yesno01 is only a scale: select all that apply options are coded as the bank's own file says", () => {
 		const bank = bankOf({
 			...BANK,
 			"scales/yesno01.yaml": 'labels:\n  "0": no\n  "1": yes\n  "2": maybe\n',
@@ -105,7 +105,7 @@ describe("one identity, one item", () => {
 		expect(collisions(itemsOf(bank))).toEqual([]);
 	});
 
-	it("a select-all value that is also a missing-value code is said in `select_all.yaml`, at that value", () => {
+	it("a select all that apply value that is also a missing value is said in `select_all.yaml`, at that value", () => {
 		const bank = bankOf({
 			...BANK,
 			"select_all.yaml": 'chosen: { "1": Yes }\nnot_chosen: { "-8": No }\n',
@@ -133,7 +133,7 @@ describe("one identity, one item", () => {
 			[
 				"missing-code",
 				"labels.1",
-				"Pick another missing-value code, or write the two values in `select_all.yaml`.",
+				"Pick another missing value, or set other select all that apply values in `select_all.yaml`.",
 			],
 		]);
 	});

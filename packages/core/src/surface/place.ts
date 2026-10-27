@@ -1,15 +1,21 @@
 /**
  * Where the caret is in a question's structure, for completion: at a value (whose key
  * is `segments`), or at a key under `segments` beside the keys already written there.
- * Read from the YAML the core parses, tolerant of holes and half-typed text, never from
- * indentation guessed line by line. Pure; knows YAML, not surveys.
+ * Read from the YAML the core parses, which copes with holes and half-typed text, never
+ * from indentation guessed line by line. Pure; knows YAML, not surveys.
  *
- * Only the caret's own line is read as text: its indent and the word being typed are
- * the author's, and a half-written word is not structure yet. CodeMirror's own YAML
- * tree was tried first and could not answer after trailing spaces or at the end of the
- * text (AGENTS.md).
+ * Only the caret's own line is read as text: its indent and the word being typed, since
+ * a half-written word isn't structure yet. CodeMirror's own YAML tree was tried first
+ * and couldn't answer after trailing spaces or at the end of the text (AGENTS.md).
  */
-import { isMap, isScalar, type Pair, parseDocument, type YAMLMap } from "yaml";
+import {
+	isMap,
+	isScalar,
+	type Pair,
+	parseDocument,
+	visit,
+	type YAMLMap,
+} from "yaml";
 import { keyText } from "./codes.ts";
 
 export type Place =
@@ -17,7 +23,7 @@ export type Place =
 			readonly kind: "value";
 			readonly segments: readonly string[];
 			readonly typed: string;
-			/** The caret is straight after the colon: what is inserted brings its own space. */
+			/** The caret is straight after the colon, so what's inserted brings its own space. */
 			readonly spaced: boolean;
 	  }
 	| {
@@ -69,16 +75,56 @@ export function placeAt(source: string, offset: number): Place | undefined {
 	};
 }
 
+/**
+ * The lines (numbered from 1) that continue a value begun on a line above: a `|` or
+ * `>` block, or a plain or quoted value written over several lines. They hold the
+ * author's words, so a colon or a `#` there is neither a key nor a comment.
+ */
+export function textLines(source: string): ReadonlySet<number> {
+	const lines = new Set<number>();
+	const starts = lineStarts(source);
+	visit(parseDocument(source, { prettyErrors: false }), {
+		Scalar(_, node) {
+			if (node.range == null) return;
+			// A block's range takes its trailing newline, so its last line holds end - 1.
+			const last = lineNumber(starts, node.range[1] - 1);
+			for (let n = lineNumber(starts, node.range[0]) + 1; n <= last; n++)
+				lines.add(n);
+		},
+	});
+	return lines;
+}
+
+/** Where each line starts, in order. */
+function lineStarts(source: string): readonly number[] {
+	const starts = [0];
+	for (let i = source.indexOf("\n"); i !== -1; i = source.indexOf("\n", i + 1))
+		starts.push(i + 1);
+	return starts;
+}
+
+/** The number (from 1) of the line holding `at`, by binary search over its starts. */
+function lineNumber(starts: readonly number[], at: number): number {
+	let lo = 0;
+	let hi = starts.length - 1;
+	while (lo < hi) {
+		const mid = (lo + hi + 1) >> 1;
+		if ((starts[mid] ?? 0) <= at) lo = mid;
+		else hi = mid - 1;
+	}
+	return lo + 1;
+}
+
 /** Where the line holding `at` starts. */
 const lineOf = (source: string, at: number): number =>
 	source.lastIndexOf("\n", at - 1) + 1;
 
 /**
  * The block map a key at `indent` on the line starting at `lineStart` belongs to, and
- * the keys leading to it. Descends while the last key written before that line sits
- * left of the indent; an empty value (or one that starts on the caret's line, which is
- * the author typing its first key) has no map yet. Undefined for places completion
- * does not serve: under a written scalar, inside a flow map, indented with no parent.
+ * the keys leading to it. Goes down while the last key before that line sits left of
+ * the indent; an empty value (or one starting on the caret's line: the author typing its
+ * first key) has no map yet. Undefined where completion doesn't help: under a written
+ * value, inside a `{…}` map, or indented with no parent.
  */
 function scopeAt(
 	source: string,

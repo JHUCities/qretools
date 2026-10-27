@@ -301,12 +301,12 @@ describe("conditions as Qualtrics logic", () => {
 	});
 
 	it("says what Qualtrics can't test, and what the DDI shouldn't say", () => {
-		expect(compiled("n + 1 > 5")).toMatch(/compares an answer/);
-		expect(compiled("n > m")).toMatch(/compares an answer/);
-		expect(compiled('c > "1"')).toMatch(/`=` and `<>`/);
+		expect(compiled("n + 1 > 5")).toMatch(/compare an answer/);
+		expect(compiled("n > m")).toMatch(/compare an answer/);
+		expect(compiled('c > "1"')).toMatch(/`=` or `<>`/);
 		expect(compiled("c = 1")).toMatch(/code in quotes/);
 		expect(compiled('n = "5"')).toMatch(/with a number/);
-		expect(compiled('i > "1"')).toMatch(/ordering of text/);
+		expect(compiled('i > "1"')).toMatch(/orders text/);
 		expect(compiled("i = 1")).toMatch(/no type/);
 		expect(compiled('r = "5"')).toMatch(/with a number/);
 		expect((compiled("r >= 5") as Forms).t).toEqual([

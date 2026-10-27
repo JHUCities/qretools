@@ -1,7 +1,7 @@
 /**
- * The environment a question is read against: the bank's schemes. Every name a
- * question mentions is a binding in one of these; an unbound name is a hole.
- * Filenames are names. `missing` is one bank-level list, not a namespace.
+ * What a question is read against: the bank's shared files. Every name a question
+ * uses must be one of these; a name that isn't is a hole. A file's name is its
+ * filename. `missing` is one list for the whole bank, not a set of names.
  */
 
 import { isMap, parseDocument } from "yaml";
@@ -29,8 +29,8 @@ export interface TextEntry {
 }
 
 /**
- * A shared concept, as DDI's Concept (after ISO/IEC 11179): a short label people say,
- * and what it means. Its name is its filename.
+ * A shared concept, as DDI's Concept (after ISO/IEC 11179): a short label, and what
+ * it means. Its name is its filename.
  */
 export interface LabelledEntry {
 	readonly label: string;
@@ -39,30 +39,30 @@ export interface LabelledEntry {
 
 export interface Env {
 	readonly concepts: Scheme<LabelledEntry>;
-	/** A vocabulary of measurement units: DDI's MeasurementUnit is a term from one. */
+	/** The bank's units: DDI's MeasurementUnit is a term from such a list. */
 	readonly units: Scheme<LabelledEntry>;
 	readonly scales: Scheme<Scale>;
 	readonly universes: Scheme<TextEntry>;
 	readonly instructions: Scheme<TextEntry>;
-	/** The bank's missing-value codes, in author order; empty when the bank declares none. */
+	/** The bank's missing values, in the author's order; empty when the bank has none. */
 	readonly missing: readonly Code[];
 	/** The fields the bank also requires of its questions (`workspace.yaml`'s `required`). */
 	readonly required: readonly RequirableKey[];
 	/**
 	 * The fields a folder's questions must also have (`workspace.yaml`'s `required_in`), by
-	 * the folder's path. Never read for a question directly: `envAt` gives its `required`.
+	 * folder. Not read for a question directly: `envAt` folds it into `required`.
 	 */
 	readonly requiredIn: Readonly<Record<string, readonly RequirableKey[]>>;
 	/**
-	 * The folder that asks for each field `envAt` added to `required`, so a question is
-	 * told who requires it. Absent where no folder added any.
+	 * The folder behind each field `envAt` added to `required`, so the hole can name it.
+	 * Absent when no folder added any.
 	 */
 	readonly requiredBy?: Readonly<Record<string, string>>;
-	/** How the bank stores a select-all option's answer (its `select_all.yaml`). */
+	/** How the bank stores the answer to a select-all-that-apply option (`select_all.yaml`). */
 	readonly selectAll: SelectAll;
 }
 
-/** A scheme a question can name. `missing` is not one: it is a list, never named. */
+/** A kind of shared file a question can name. Not `missing`: it's a list, never named. */
 export type NamedScheme =
 	| "concept"
 	| "scale"
@@ -71,8 +71,8 @@ export type NamedScheme =
 	| "instruction";
 
 /**
- * Where a question names each kind: the one table of reference positions. The parser's
- * mentions, the inspector, completion and the name dialog all read it.
+ * The field where a question names each kind: the one table of them. The parser,
+ * the inspector, completion and the name dialog all read it.
  */
 export const FIELD_OF: Readonly<Record<NamedScheme, string>> = {
 	concept: "concept",
@@ -83,9 +83,9 @@ export const FIELD_OF: Readonly<Record<NamedScheme, string>> = {
 };
 
 /**
- * A name a question writes in a reference position, whether or not it resolves.
- * An unresolved name is absent from the Draft; "used by" must still count it, or a
- * broken scale would look unused exactly when deleting it matters.
+ * A name a question writes where a shared file is named, found or not. A name not
+ * found is left out of the Draft, but "used by" must still count it, or a broken
+ * scale would look unused just when deleting it matters.
  */
 export interface Mention {
 	readonly scheme: NamedScheme;
@@ -93,7 +93,7 @@ export interface Mention {
 	readonly path: string;
 }
 
-/** What each named scheme holds. */
+/** What each kind of shared file holds. */
 export interface SchemeEntries {
 	readonly concept: LabelledEntry;
 	readonly unit: LabelledEntry;
@@ -102,7 +102,7 @@ export interface SchemeEntries {
 	readonly instruction: TextEntry;
 }
 
-/** The names in scope for a scheme: the one place a name is looked up. */
+/** The names of one kind: the one place a name is looked up. */
 export const inScope = <S extends NamedScheme>(
 	env: Env,
 	scheme: S,
@@ -130,16 +130,15 @@ export const EMPTY_ENV: Env = {
 };
 
 /**
- * The environment the question at `path` (in the workspace) is read against: `env`, with
- * the fields its folder also requires added to `required`. A folder only adds, so a topic
- * can be stricter, never looser. `env` itself, by reference, when there is no path (a
- * draft not saved yet) or its folder adds nothing: callers memoise on the reference, and
- * `selectAll` is compared by identity, so the rest is never rebuilt.
+ * What the question at `path` is read against: `env`, plus the fields its folder also
+ * requires. A folder only adds, so it can be stricter, never looser. Returns `env`
+ * itself when there's no path (a draft) or the folder adds nothing: callers memoise on
+ * the reference, and `selectAll` is compared by reference, so nothing is rebuilt.
  */
 export function envAt(env: Env, path?: string): Env {
 	if (path === undefined) return env;
-	// Whole segments: `questions/nh` isn't above `questions/nhd/x.yaml`. Questions sit one
-	// folder deep today, so at most one key matches; every folder above would, if deeper.
+	// Whole segments: `questions/nh` isn't above `questions/nhd/x.yaml`. Questions are one
+	// folder deep today, so at most one folder matches; deeper, every folder above would.
 	const by: Record<string, string> = {};
 	const added: RequirableKey[] = [];
 	for (const [folder, fields] of Object.entries(env.requiredIn))
@@ -174,12 +173,16 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 			],
 		};
 	}
-	// An empty file is an unwritten one: its `text` is a hole, as in an empty question.
+	// An empty file is unwritten: its `text` is a hole, as in an empty question.
 	if ((doc.contents !== null && !isMap(doc.contents)) || !isPlainObject(js))
 		return {
 			findings: [
 				...syntax,
-				error("not-a-map", "", "This is one `text:` line."),
+				error(
+					"not-a-map",
+					"",
+					"A shared universe or instruction is one `text:` line.",
+				),
 			],
 		};
 	const unknown = Object.keys(js)
@@ -189,17 +192,25 @@ export function parseTextEntry(source: string): ParsedTextEntry {
 				"unknown-key",
 				k,
 				`\`${k}\` isn't a field here.`,
-				"The only field is `text`.",
+				"Only `text` is used here.",
 			),
 		);
 	const text = js.text;
 	if (text === undefined)
 		return {
-			findings: [...syntax, ...unknown, hole("text", "Add a `text:` line.")],
+			findings: [
+				...syntax,
+				...unknown,
+				hole("text", "Add a `text:` line.", "For example: `text: All adults`."),
+			],
 		};
 	if (text === null || (typeof text === "string" && text.trim() === ""))
 		return {
-			findings: [...syntax, ...unknown, hole("text", "`text` is empty.")],
+			findings: [
+				...syntax,
+				...unknown,
+				hole("text", "`text` is empty.", "Write the words after `text:`."),
+			],
 		};
 	if (typeof text !== "string")
 		return {
@@ -218,8 +229,8 @@ export interface ParsedLabelled {
 }
 
 /**
- * A labelled file (a concept, a unit): `label:` (required) and `definition:`
- * (optional). `what` names the kind in messages.
+ * A concept or unit file: `label:` (required) and `definition:` (optional).
+ * `what` names the kind in messages.
  */
 export function parseLabelled(source: string, what: string): ParsedLabelled {
 	const doc = parseDocument(source, { prettyErrors: false });
@@ -242,7 +253,7 @@ export function parseLabelled(source: string, what: string): ParsedLabelled {
 				error(
 					"not-a-map",
 					"",
-					`A ${what} is a \`label:\` line, and a \`definition:\` if you like.`,
+					`A ${what} is a \`label:\` line, with a \`definition:\` if you want one.`,
 				),
 			],
 		};
@@ -253,7 +264,7 @@ export function parseLabelled(source: string, what: string): ParsedLabelled {
 				"unknown-key",
 				k,
 				`\`${k}\` isn't a field here.`,
-				"The fields are `label` and `definition`.",
+				"Only `label` and `definition` are used here.",
 			),
 		);
 	const text = (key: "label" | "definition"): Read<string> => {
@@ -300,7 +311,7 @@ export function parseLabelled(source: string, what: string): ParsedLabelled {
 			};
 }
 
-/** The hint under an unresolved name: what exists, and that a sentence is also fine. */
+/** The hint under a name not found: the names there are, and that words also work. */
 export function listNames(
 	what: string,
 	names: readonly string[],
@@ -308,9 +319,7 @@ export function listNames(
 ): string {
 	const shown =
 		names.length === 0
-			? `No ${what}s are defined.`
-			: `${capital(what)}s: ${names.slice(0, 12).join(", ")}${names.length > 12 ? ", …" : ""}.`;
-	return proseAllowed ? `${shown} Or write it as a sentence.` : shown;
+			? `The bank has no shared ${what}s yet.`
+			: `Shared ${what}s: ${names.slice(0, 12).join(", ")}${names.length > 12 ? ", …" : ""}.`;
+	return proseAllowed ? `${shown} Or write it out in words.` : shown;
 }
-
-const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

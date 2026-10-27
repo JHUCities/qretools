@@ -51,6 +51,42 @@ export interface InstrumentCheck {
 	readonly fills: Readonly<Record<string, readonly FillSource[]>>;
 }
 
+/** Where a name is read, which decides what an unasked (empty) answer does there. */
+type Use = "branch" | "stop" | "more" | "check" | "value" | "count" | "text";
+
+/**
+ * What a missing answer does where it's read, and what the author can do about it. Each
+ * hint names the answer, so it reads on its own, without its message.
+ */
+function emptyHint(name: string, use: Use, computed: boolean): string {
+	const n = `\`${name}\``;
+	const people = computed
+		? `People with no value for ${n}`
+		: `People with no answer to ${n}`;
+	const ask = computed ? "Compute" : "Ask";
+	const asks = computed ? "computes" : "asks";
+	const add = `add \`or isnull(${name})\``;
+	// "May": a condition can still be true without this answer (`a = "1" or x = "2"`).
+	switch (use) {
+		case "branch":
+			return `${people} may skip this branch. To include them, ${add}.`;
+		case "stop":
+			return `${people} may not be stopped here. To stop them too, ${add}.`;
+		case "more":
+			return `${people} may get no more rows. To keep asking them, ${add}.`;
+		case "check":
+			return `${people} may pass this check. To check them too, add a check on \`isnull(${name})\`.`;
+		case "value":
+			return `${people} get no value here. To give them one, compute it in a branch on \`isnull(${name})\`.`;
+		case "count":
+			return `${people} get no rows. ${ask} ${n} on every route to here.`;
+		case "text":
+			return `${people} see a blank here. ${ask} ${n} on every route to here, or move this text into the branch that ${asks} it.`;
+		default:
+			return use satisfies never;
+	}
+}
+
 const NONE: Seen = {
 	definite: new Set(),
 	possible: new Set(),
@@ -120,11 +156,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 	};
 
 	/** A value read here: what it means must be asked or computed by now. */
-	const read = (cond: Cond | undefined, path: string, seen: Seen) => {
+	const read = (cond: Cond | undefined, path: string, seen: Seen, use: Use) => {
 		if (cond === undefined) return;
 		const guarded = isnullArgs(cond.expr);
 		for (const { name, range } of namesOf(cond.expr))
-			readName(name, range, path, seen, guarded.has(name));
+			readName(name, range, path, seen, guarded.has(name), use);
 	};
 	const readName = (
 		name: string,
@@ -132,6 +168,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 		path: string,
 		seen: Seen,
 		guarded: boolean,
+		use: Use,
 	) => {
 		const named = names.get(name);
 		if (named === undefined || named.kind === "input" || named.kind === "index")
@@ -143,22 +180,25 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "misplaced",
 				severity: "error",
 				path,
-				message: `\`${name}\` is answered once for each row of \`${row}\`, so it's read inside \`${row}\` or an \`each\` over it.`,
+				message: `\`${name}\` has a value for each row of \`${row}\`, so it can only be used inside \`${row}\`.`,
+				hint: `Move this step into \`${row}\`, or into an \`each: ${row}\` step.`,
 				...(range !== undefined && { range }),
 			});
 			return;
 		}
-		const what = named.kind === "compute" ? "computed" : "asked";
 		if (!seen.possible.has(key))
 			say({
 				code: "order",
 				severity: "error",
 				path,
-				message: `\`${name}\` is read here before it's ${what}.`,
+				message:
+					named.kind === "compute"
+						? `\`${name}\` is used here, but no route computes it before this point.`
+						: `\`${name}\` is used here, but no route asks it before this point.`,
 				hint:
 					named.kind === "compute"
-						? "Compute it earlier in the flow."
-						: "Ask it earlier, on every path that reaches here.",
+						? `Compute \`${name}\` earlier.`
+						: `Ask \`${name}\` earlier, on every route to here.`,
 				...(range !== undefined && { range }),
 			});
 		else if (!seen.definite.has(key) && !guarded)
@@ -166,8 +206,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "order",
 				severity: "info",
 				path,
-				message: `\`${name}\` may not be ${what} on every path here.`,
-				hint: `Where it isn't, it reads as null, so the condition isn't true. Say what then with \`isnull(${name})\`.`,
+				message:
+					named.kind === "compute"
+						? `\`${name}\` may not have been computed for some respondents yet.`
+						: `Some respondents may not have been asked \`${name}\` yet.`,
+				hint: emptyHint(name, use, named.kind === "compute"),
 				...(range !== undefined && { range }),
 			});
 	};
@@ -177,7 +220,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 		path: string,
 		seen: Seen,
 	) => {
-		for (const p of reads) readName(p.name, p.range, path, seen, false);
+		for (const p of reads) readName(p.name, p.range, path, seen, false, "text");
 	};
 
 	/** A condition that comes out the same whatever is answered: a branch that's never, or always, taken. */
@@ -226,7 +269,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 							: [];
 					});
 				}
-				for (const fill of node.fills) read(fill.source, fill.path, seen);
+				for (const fill of node.fills)
+					read(fill.source, fill.path, seen, "text");
 				// Unresolved, it still records its `as`: the hole already says what's wrong.
 				if (q === undefined)
 					return node.as === undefined ? seen : add(seen, [node.as]);
@@ -236,16 +280,20 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 						code: "name-clash",
 						severity: "error",
 						path: `${node.path}.as`,
-						message: `\`${node.as}\` is already recorded on ${seen.definite.has(node.as) ? "this" : "a"} path here.`,
-						hint: "Asked again on one path, the answer needs a name of its own.",
+						message: seen.definite.has(node.as)
+							? `\`${node.as}\` is already used as a name.`
+							: `\`${node.as}\` may already be used as a name.`,
+						hint: "Use another name with `as:`.",
 					});
 				if (node.as === undefined && seen.possible.has(key))
 					say({
 						code: "name-clash",
 						severity: "error",
 						path: `${node.path}.ask`,
-						message: `\`${q.alias}.${q.name}\` is already asked on ${seen.definite.has(key) ? "this" : "a"} path here, so its answer would be recorded twice.`,
-						hint: "To ask it again, give the second answer its own name with `as:`.",
+						message: seen.definite.has(key)
+							? `\`${q.alias}.${q.name}\` is already asked earlier.`
+							: `\`${q.alias}.${q.name}\` may already be asked earlier.`,
+						hint: "To ask it again, name this answer with `as:`.",
 					});
 				universe(node, conditional);
 				fillTypes(node);
@@ -260,7 +308,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				);
 				// A check reads the answer just given, and what came before.
 				for (const check of node.checks) {
-					read(check.ensure, `${check.path}.ensure`, after);
+					read(check.ensure, `${check.path}.ensure`, after, "check");
 					readPlaceholders(check.messageReads, `${check.path}.message`, after);
 				}
 				return after;
@@ -274,7 +322,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				const ends: Seen[] = [];
 				let decided = false;
 				for (const branch of node.branches) {
-					read(branch.cond, `${branch.path}.if`, seen);
+					read(branch.cond, `${branch.path}.if`, seen, "branch");
 					const value = constant(branch.cond);
 					if (decided || value === false)
 						say({
@@ -284,6 +332,9 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 							message: decided
 								? "An earlier condition is always true, so this branch is never taken."
 								: "This condition is never true, so its branch is never taken.",
+							hint: decided
+								? "Change the earlier condition, or remove this branch."
+								: "Change the condition, or remove the branch.",
 						});
 					ends.push(flow(branch.then, seen, true));
 					if (value === true) decided = true;
@@ -296,13 +347,14 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 							path: `${node.path}.else`,
 							message:
 								"A condition above is always true, so `else` is never taken.",
+							hint: "Change the condition above, or remove `else`.",
 						});
 					ends.push(flow(node.else, seen, true));
 				} else ends.push(seen);
 				return merge(ends);
 			}
 			case "stop":
-				read(node.cond, `${node.path}.stop`, seen);
+				read(node.cond, `${node.path}.stop`, seen, "stop");
 				readPlaceholders(node.sayReads, `${node.path}.say`, seen);
 				if (constant(node.cond) === true)
 					say({
@@ -311,10 +363,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 						path: `${node.path}.stop`,
 						message:
 							"This condition is always true, so nothing after it is ever asked.",
+						hint: "Change the condition so it stops only some respondents.",
 					});
 				return seen;
 			case "compute": {
-				read(node.value, `${node.path}.value`, seen);
+				read(node.value, `${node.path}.value`, seen, "value");
 				if (node.name === undefined) return seen;
 				const named = parsed.scope.get(node.name);
 				const row = rows.at(-1);
@@ -330,11 +383,11 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 			case "roster": {
 				// `count` is read before the rows; `more` at the end of each.
 				if (node.end?.kind === "count")
-					read(node.end.value, `${node.path}.count`, seen);
+					read(node.end.value, `${node.path}.count`, seen, "count");
 				const end = inRows(node.name, () => {
 					const body = flow(node.flow, seen, true);
 					if (node.end?.kind === "more")
-						read(node.end.cond, `${node.path}.more`, body);
+						read(node.end.cond, `${node.path}.more`, body, "more");
 					return body;
 				});
 				if (node.name !== undefined)
@@ -397,8 +450,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "universe",
 				severity: "info",
 				path: at,
-				message: `Everyone is asked this, but its universe is ${effective.said}.`,
-				hint: "Ask it under the condition that picks out its universe, or widen the universe.",
+				message: `Everyone here is asked this, but its universe is ${effective.said}.`,
+				hint: `Ask it inside an \`if:\` that picks out ${effective.said}, or change its \`universe:\`.`,
 			});
 		if (
 			conditional &&
@@ -409,8 +462,10 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				severity: "info",
 				path: at,
 				message:
-					"Only some respondents reach this question, but its universe says everyone.",
-				hint: "Say whom it's asked of with `universe:`.",
+					effective === undefined
+						? "Not everyone reaches this question, but it has no universe."
+						: "Not everyone reaches this question, but its universe is everyone's.",
+				hint: "Say who is asked with `universe:`.",
 			});
 	};
 
@@ -432,7 +487,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					code: "type",
 					severity: "error",
 					path: fill.path,
-					message: `\`${fill.name}\` is a number fill, so it needs a number to fill it.`,
+					message: `The fill \`${fill.name}\` needs a number.`,
+					hint: `Fill \`${fill.name}\` with a number question's answer, a computed number, or a number such as \`3\`.`,
 					range: value.range,
 				});
 			if (
@@ -444,7 +500,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					code: "type",
 					severity: "error",
 					path: fill.path,
-					message: `\`${fill.name}\` is text, so a coded answer needs its respondent-facing label.`,
+					message: `The fill \`${fill.name}\` is text, so it needs the answer's label.`,
 					hint: `Write \`label(${printCondition(value)})\`.`,
 					range: value.range,
 				});

@@ -17,8 +17,8 @@ export const HERE = "../";
  */
 export const notHere = (path: string): string =>
 	/^\.\.\/[^./]/.test(path)
-		? `\`${path}\` isn't valid. To use the questions in this instrument's own workspace, \`${HERE}\` is enough.`
-		: `\`${path}\`: an instrument uses its own workspace as \`${HERE}\`, and another workspace as \`owner/repo@v1\`.`;
+		? `\`${path}\` isn't valid. For this workspace's questions, write \`${HERE}\`.`
+		: `\`${path}\` isn't valid. Write \`${HERE}\` for this workspace, or \`owner/repo@v1\` for another.`;
 
 export type Address =
 	/** A folder relative to the instrument's own, `/`-separated, as written. */
@@ -62,7 +62,7 @@ const badRef = (ref: string): boolean =>
 	ref.endsWith(".lock");
 
 const EXAMPLE =
-	"Write this instrument's own workspace (`../`), or a repository and version (`owner/repo@v1`).";
+	"Write `../` for this workspace, or a repository and version, such as `owner/repo@v1`.";
 
 /**
  * `text` as an address, or why it isn't one. The version follows the last `@`, so a
@@ -74,28 +74,26 @@ export function addressOf(text: string): Address {
 		return t.includes("@")
 			? {
 					kind: "invalid",
-					reason: `\`${t}\`: this instrument's own workspace has no version; it's read with the instrument. Write \`${t.slice(0, t.indexOf("@"))}\`.`,
+					reason: `\`${t}\`: this workspace has no version. Write \`${t.slice(0, t.indexOf("@"))}\`.`,
 				}
 			: { kind: "local", path: t };
 	const at = t.lastIndexOf("@");
 	if (at === -1)
 		return {
 			kind: "invalid",
-			reason: `\`${t}\` has no version: a bank in another repository is read at one, such as \`${t}@v1\`. This instrument's own workspace is \`../\`.`,
+			reason: `\`${t}\` has no version. Add one, such as \`${t}@v1\`, or write \`../\` for this workspace.`,
 		};
 	const place = t.slice(0, at).replace(/\/+$/, "");
 	const ref = t.slice(at + 1);
 	const [owner = "", repo = "", ...folders] = place.split("/");
 	const invalid = (reason: string): Address => ({ kind: "invalid", reason });
 	if (!OWNER.test(owner) || !REPO.test(repo) || repo === "." || repo === "..")
-		return invalid(`\`${t}\` names no repository. ${EXAMPLE}`);
+		return invalid(`\`${t}\` isn't a repository. ${EXAMPLE}`);
 	if (folders.some((f) => f === "" || f === "." || f === ".."))
-		return invalid(
-			`\`${t}\` has an empty, \`.\` or \`..\` folder in its path. ${EXAMPLE}`,
-		);
+		return invalid(`\`${t}\` has an empty, \`.\` or \`..\` folder. ${EXAMPLE}`);
 	if (badRef(ref))
 		return invalid(
-			`\`${t}\` has no version after \`@\` that git would accept. ${EXAMPLE}`,
+			`The version after \`@\` in \`${t}\` isn't valid. ${EXAMPLE}`,
 		);
 	const path = folders.join("/");
 	return {

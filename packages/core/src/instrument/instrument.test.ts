@@ -35,12 +35,12 @@ describe("two workspaces under one agency", () => {
 			[
 				"",
 				expect.stringMatching(
-					/^`urn:ddi:org\.a:scale-agree\.cat-0:1` would name/,
+					/ would share one DDI name, `urn:ddi:org\.a:scale-agree\.cat-0:1`\.$/,
 				),
 			],
 			[
 				"uses.a",
-				"`a` and `b` both publish as `org.a` but don't agree on how a select-all-that-apply option is stored.",
+				"`a` and `b` both publish as `org.a` but store select all that apply options differently.",
 			],
 		]);
 		// The refusal itself is unchanged: every identity is still a collision.

@@ -141,6 +141,6 @@ export const context = (numbering: Numbering, note: Note): Ctx => ({
 			"qsf-inexpressible",
 			"error",
 			path,
-			`${what} isn't exported to Qualtrics yet: it's left out.`,
+			`${what} can't be exported to Qualtrics yet, so it's left out.`,
 		),
 });

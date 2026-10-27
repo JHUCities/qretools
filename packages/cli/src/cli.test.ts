@@ -137,7 +137,7 @@ describe("qretools check", () => {
 		await cp(here("../../core/fixtures/households"), ws, { recursive: true });
 		await writeFile(join(ws, "stray.yaml"), "x: 1\n");
 		await writeFile(join(ws, "a-stray.yaml"), "x: 1\n");
-		// Settings anywhere but the root are read as nothing.
+		// Settings anywhere but the root are ignored.
 		await mkdir(join(ws, "banks/x"), { recursive: true });
 		await writeFile(
 			join(ws, "banks/x/workspace.yaml"),
@@ -156,14 +156,14 @@ describe("qretools check", () => {
 		);
 		// Noted in its place among the others, by path, as compilers report per file.
 		expect(lines[0]).toBe(
-			`${join(ws, "a-stray.yaml")}:1:1: note: This file is read as nothing: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]`,
+			`${join(ws, "a-stray.yaml")}:1:1: note: QREtools ignores this file: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]`,
 		);
 		expect(lines.at(-1)).toMatch(/stray\.yaml:1:1: note: .* \[ignored\]$/);
 		expect(
 			lines.filter((l) => l.includes("banks/x/workspace.yaml:1:1: note:")),
 		).toHaveLength(1);
 		// 16 questions and shared files (`workspace.yaml` among them), 2 instruments; the
-		// three notes of files read as nothing aren't findings.
+		// three notes of ignored files aren't findings.
 		const found = lines.filter((l) => !l.endsWith("[ignored]")).length;
 		expect(lines.length - found).toBe(3);
 		expect(r.err.startsWith(`18 files, ${found} findings: `)).toBe(true);
@@ -323,7 +323,7 @@ describe("qretools build", () => {
 		await writeFile(join(ws, "scales/yes_no.yaml"), SCALE("Uncommitted"));
 		const r = await run("build", ws, "-o", join(ws, "out"));
 		expect(r.code).toBe(0);
-		expect(r.err).toMatch(/uncommitted changes: they aren't built/);
+		expect(r.err).toMatch(/uncommitted changes\. They aren't built/);
 		const ddi = r.written[join(ws, "out", "ddi.json")] ?? "";
 		expect(ddi).toContain("Nope");
 		expect(ddi).not.toContain("Uncommitted");
@@ -384,6 +384,120 @@ describe("qretools export", () => {
 	});
 });
 
+describe("qretools codebook", () => {
+	it("writes the codebook of the DDI export writes: an entry per variable, each with its anchor", async () => {
+		const ddi = JSON.parse((await run("export", SAMPLE)).out);
+		const r = await run("codebook", SAMPLE, "-o", "codebook.html");
+		expect(r).toMatchObject({ code: 0, out: "", err: "" });
+		const page = r.written["codebook.html"] ?? "";
+		expect(page).toMatch(/^<!doctype html>/);
+		const variables = Object.values<{ ID: string }>(ddi.Variable);
+		expect(page.match(/<article id="[^"]*:variable-/g)).toHaveLength(
+			variables.length,
+		);
+		for (const v of variables)
+			expect(page).toContain(`id="org.example:${v.ID}"`);
+		expect((await run("codebook", SAMPLE)).out).toBe(page);
+	});
+
+	it("is refused as the export is, and takes only its options", async () => {
+		const ws = await mkdtemp(join(tmpdir(), "qretools-cb-"));
+		await cp(SAMPLE, ws, { recursive: true });
+		await writeFile(join(ws, "workspace.yaml"), "# No agency.\n");
+		const r = await run("codebook", ws, "-o", "codebook.html");
+		expect(r.code).toBe(1);
+		expect(r.err).toMatch(/has no DDI agency/);
+		expect(r.written).toEqual({});
+		const s = await run("codebook", SAMPLE, "--qsf");
+		expect(s.err).toMatch(/`--qsf` isn't an option of `codebook`/);
+	});
+
+	/** A DDI document written to a file of its own, for `codebook` to read. */
+	const fileOf = async (text: string): Promise<string> => {
+		const file = join(
+			await mkdtemp(join(tmpdir(), "qretools-cb-")),
+			"ddi.json",
+		);
+		await writeFile(file, text);
+		return file;
+	};
+	const idsOf = (page: string) =>
+		[...page.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]).sort();
+
+	it("reads any DDI document from a file, as it reads the workspace's", async () => {
+		const file = await fileOf((await run("export", SAMPLE)).out);
+		const r = await run("codebook", file);
+		expect(r).toMatchObject({ code: 0, err: "" });
+		expect(r.out).toBe((await run("codebook", SAMPLE)).out);
+	});
+
+	it("keeps every anchor when every version changes", async () => {
+		const ddi: unknown = JSON.parse((await run("export", SAMPLE)).out);
+		// Every version 1 made 2: Version fields, URNs and the schema's reference values.
+		const bump = (j: unknown, key?: string): unknown =>
+			typeof j === "string"
+				? key === "Version" && j === "1"
+					? "2"
+					: j.replace(/^(urn:ddi:[^:]+:[^:]+):1$/i, "$1:2")
+				: Array.isArray(j)
+					? j.map((x, i) =>
+							key === "value" && i === 2 && x === "1" ? "2" : bump(x),
+						)
+					: j !== null && typeof j === "object"
+						? Object.fromEntries(
+								Object.entries(j).map(([k, v]) => [k, bump(v, k)]),
+							)
+						: j;
+		const text = JSON.stringify(bump(ddi));
+		// (A bucket's keys, "agency:id:1", are labels, not versions: left as they are.)
+		const one = /"urn:ddi:[^"]*:1"|"Version":"1"|,"1"\]/;
+		expect(JSON.stringify(ddi)).toMatch(one);
+		expect(text).not.toMatch(one);
+		const before = await run("codebook", await fileOf(JSON.stringify(ddi)));
+		const after = await run("codebook", await fileOf(text));
+		expect(after).toMatchObject({ code: 0, err: "" });
+		expect(idsOf(after.out)).toEqual(idsOf(before.out));
+		expect(idsOf(after.out).length).toBeGreaterThan(10);
+	});
+
+	it("says a reference that leads nowhere as check says a finding, and fails on it only when strict", async () => {
+		const file = await fileOf(
+			JSON.stringify({
+				Variable: {
+					v: { URN: "urn:ddi:a:v:1", QuestionReference: ["urn:ddi:a:gone:1"] },
+				},
+			}),
+		);
+		const line = `${file}: error: urn:ddi:a:v:1: \`urn:ddi:a:gone:1\` isn't in the document. [codebook-dangling]\n`;
+		const r = await run("codebook", file);
+		expect(r).toMatchObject({ code: 0, err: line });
+		expect(r.out).toMatch(/^<!doctype html>/);
+		const strict = await run("codebook", file, "--strict", "-o", "cb.html");
+		expect(strict).toMatchObject({ code: 1, err: line });
+		expect(strict.written["cb.html"]).toMatch(/^<!doctype html>/);
+	});
+
+	it("writes nothing for a file that isn't a DDI document, or isn't there", async () => {
+		for (const [text, said] of [
+			[
+				"[1, 2]",
+				/Not written: This isn't a DDI document.*\[codebook-unreadable\]/,
+			],
+			["{", /Not written: this isn't JSON.*\[codebook-unreadable\]/],
+		] as const) {
+			const r = await run("codebook", await fileOf(text), "-o", "cb.html");
+			expect(r).toMatchObject({ code: 1, out: "", written: {} });
+			expect(r.err).toMatch(said);
+		}
+		const gone = await run(
+			"codebook",
+			join(tmpdir(), "qretools-no-such-file.json"),
+		);
+		expect(gone).toMatchObject({ code: 2, out: "" });
+		expect(gone.err).toMatch(/^Can't read/);
+	});
+});
+
 describe("the command under real Node", () => {
 	it("runs from source with no build or loader", async () => {
 		const exec = promisify(execFile);
@@ -397,7 +511,10 @@ describe("the command under real Node", () => {
 		expect(stderr).toMatch(/^26 files/);
 		const exported = await exec(process.execPath, [bin, "export", SAMPLE]);
 		expect(JSON.parse(exported.stdout).QuestionItem).toBeDefined();
-		// The export package too, reached through the workspace's link to its source.
+		// The codebook package too.
+		const codebook = await exec(process.execPath, [bin, "codebook", SAMPLE]);
+		expect(codebook.stdout).toMatch(/^<!doctype html>/);
+		// The Qualtrics export package too, reached through the workspace's link to its source.
 		const qsf = await exec(process.execPath, [
 			bin,
 			"instrument",
@@ -406,14 +523,19 @@ describe("the command under real Node", () => {
 			"--qsf",
 		]);
 		expect(JSON.parse(qsf.stdout).SurveyEntry.SurveyName).toBe("households");
-		// Three real Node processes, each loading the core from source: slower than the
+		// Four real Node processes, each loading the core from source: slower than the
 		// default 5s on a CI runner, where it timed out.
 	}, 30_000);
 
 	it("imports the core's own modules by their .ts names, which Node can find", async () => {
 		const stale: string[] = [];
 		// The command runs the packages it uses from their source too.
-		for (const root of ["../../core/src", "../../qsf/src", "."])
+		for (const root of [
+			"../../core/src",
+			"../../qsf/src",
+			"../../codebook/src",
+			".",
+		])
 			for await (const file of glob("**/*.ts", { cwd: here(root) }))
 				if (
 					/from\s+"\.{1,2}\/[^"]*\.js"/.test(
@@ -484,7 +606,9 @@ describe("a tag locked to the commit it named", () => {
 		);
 		const checked = await runWith(at(B), "check", dir);
 		expect(checked.code).toBe(0);
-		expect(checked.out).toMatch(/warning: .*the tag was moved.*\[moved-tag\]/);
+		expect(checked.out).toMatch(
+			/warning: .*has moved to a new version.*\[moved-tag\]/,
+		);
 		expect((await runWith(at(B), "check", dir, "--strict")).code).toBe(1);
 		const exported = await exportIn(dir, B);
 		expect(exported.code).toBe(0);
@@ -497,7 +621,9 @@ describe("a tag locked to the commit it named", () => {
 	it("is asked for in check when a tag has none", async () => {
 		const dir = await workspace("agency: org.example\n");
 		const r = await runWith(at(A), "check", dir);
-		expect(r.out).toMatch(/warning: .*isn't locked.*\[unlocked-tag\]/);
+		expect(r.out).toMatch(
+			/warning: .*hasn't recorded which version.*\[unlocked-tag\]/,
+		);
 		expect(r.written).toEqual({});
 	});
 
@@ -511,7 +637,9 @@ describe("a tag locked to the commit it named", () => {
 		const r = await exportIn(dir, A);
 		expect(r.code).toBe(0);
 		expect(r.written).toEqual({});
-		expect(r.err).toMatch(/Not locked: .* has no readable workspace\.yaml/);
+		expect(r.err).toMatch(
+			/Not locked: .* has no workspace\.yaml that QREtools can read/,
+		);
 	});
 
 	it("isn't written for an instrument outside a workspace, which still exports", async () => {

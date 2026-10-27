@@ -1,11 +1,10 @@
 /**
- * Tolerant parse: any text a student typed becomes a Draft plus Findings.
- * Never throws. The `yaml` Document is created and dropped in here; only plain
- * values (draft, findings, an index of offsets by path) cross the boundary.
+ * A tolerant parse: any text an author typed becomes a Draft plus Findings.
+ * It never throws. The `yaml` Document lives only in here; only plain values
+ * (draft, findings, offsets by path) leave.
  *
- * Every reader returns `Read<T>`: its value (if any) and its findings. Data
- * flow is visible in signatures; nothing is threaded through a mutable
- * accumulator.
+ * Every reader returns `Read<T>`: its value (if any) and its findings, so the
+ * data flow shows in the signatures.
  */
 import { type Document, isMap, isNode, isScalar, parseDocument } from "yaml";
 import type { ZodError } from "zod";
@@ -66,9 +65,9 @@ export interface Parsed {
 	readonly ranges: Readonly<Record<string, Range>>;
 	/** Every scheme name written, resolved or not. */
 	readonly mentions: readonly Mention[];
-	/** The questions this one says it deliberately resembles (`variant_of`); resolved by the bank index. */
+	/** The questions this one is a deliberate variant of (`variant_of`); the bank index checks them. */
 	readonly variants: readonly Variant[];
-	/** Where each value written as nothing at all starts, by path: the points holes are drawn at. */
+	/** Where each empty value starts, by path: where holes are drawn. */
 	readonly empties: Readonly<Record<string, number>>;
 	/** What the editor colours by meaning: resolved names, codes, `legacy`, holes. */
 	readonly marks: readonly Mark[];
@@ -147,7 +146,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		...(scale === undefined
 			? []
 			: [{ scheme: "scale", name: scale, path: "responses" } as const]),
-		// Every other kind, at its place in the table: a name written there, resolved or not.
+		// Every other kind, at its field in the table: a name written there, found or not.
 		...(Object.entries(FIELD_OF) as [NamedScheme, string][]).flatMap(
 			([scheme, path]) => {
 				if (scheme === "scale") return [];
@@ -202,7 +201,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	};
 }
 
-/** `toJS` can itself throw (e.g. an alias before its anchor); that is a syntax finding, not a crash. */
+/** `toJS` can throw (e.g. an alias before its anchor): that's a syntax finding, not a crash. */
 function toJs(doc: Document): Read<unknown> {
 	try {
 		return { value: doc.toJS() ?? {}, findings: [] };
@@ -215,9 +214,10 @@ function toJs(doc: Document): Read<unknown> {
 }
 
 /**
- * A one-line field. Required by the language (`name`, `text`, `intent`), by the workspace
- * (`workspace.yaml`'s `required`) or by the question's folder (`required_in`, which the
- * hole names), missing or empty it's a hole whose hint says what the field is for; optional and empty, the hint also offers removing the line.
+ * A one-line field. A required one (by the language: `name`, `text`, `intent`; by
+ * `workspace.yaml`'s `required`; or by the folder's `required_in`, which the hole names)
+ * is a hole when missing or empty, and the hint says what it's for. An optional one
+ * written empty is a hole whose hint offers removing the line.
  */
 function readText(
 	key: TextKey,
@@ -241,7 +241,7 @@ function readText(
 			: fail();
 	}
 	if (value === null || (typeof value === "string" && value.trim() === "")) {
-		// Written but empty: a hole whether the field is required or not. The author opened it.
+		// Written but empty: a hole, required or not. The author opened it.
 		return fail(
 			hole(key, `\`${key}\` is empty.`, required ? describe(key) : EMPTY_HINT),
 		);
@@ -250,10 +250,10 @@ function readText(
 	if (!result.success) {
 		// Only `name` has a pattern; everything else fails by not being text.
 		const hint = isPlainObject(value)
-			? 'A `: ` inside the text starts a nested field. Quote the whole value: "..."'
+			? 'A colon followed by a space starts a new field. Put the whole value in quotes: "…".'
 			: typeof value === "string"
 				? NAME_RULE_TEXT
-				: "Quote the value so it is read as text.";
+				: "Put the value in quotes so it's read as text.";
 		const message =
 			typeof value === "string"
 				? `\`${key}\` isn't a valid name.`
@@ -263,11 +263,10 @@ function readText(
 	return result.data === undefined ? fail() : ok(result.data);
 }
 
-/** Legacy values are never read; only the field names are kept, so a lint can say they are there. */
 /**
- * `variant_of`: other questions by name, each with why the two differ. Written empty,
- * or with an empty reason, it is a hole like any opened key; whether a name exists is
- * the bank index's to say, since the parser sees one file.
+ * `variant_of`: other questions by name, each with why they differ. Empty, or with an
+ * empty reason, it's a hole like any opened key. Whether a name exists is for the bank
+ * index to say: the parser sees one file.
  */
 function readVariants(value: unknown): Read<readonly Variant[]> {
 	if (value === undefined) return fail();
@@ -278,7 +277,7 @@ function readVariants(value: unknown): Read<readonly Variant[]> {
 			error(
 				"wrong-type",
 				"variant_of",
-				"`variant_of` must be a map of `question: why they differ` lines.",
+				"Write `variant_of` as `question: why they differ` lines.",
 			),
 		);
 	const variants: Variant[] = [];
@@ -298,17 +297,24 @@ function readVariants(value: unknown): Read<readonly Variant[]> {
 			findings.push(
 				hole(
 					path,
-					"Say why the two differ.",
+					`Say why this question differs from \`${name}\`.`,
 					"For example: split ballot, lower range.",
 				),
 			);
 		else if (typeof why !== "string")
-			findings.push(error("wrong-type", path, "The reason must be text."));
+			findings.push(
+				error(
+					"wrong-type",
+					path,
+					`Say in words why this question differs from \`${name}\`.`,
+				),
+			);
 		else variants.push({ name, path, why });
 	}
 	return { value: variants, findings };
 }
 
+/** Legacy values are never read; only the field names are kept, so a lint can say they're there. */
 function readLegacy(value: unknown): Read<readonly string[]> {
 	if (value === undefined || value === null) return fail();
 	if (!isPlainObject(value))
@@ -316,7 +322,7 @@ function readLegacy(value: unknown): Read<readonly string[]> {
 			error(
 				"wrong-type",
 				"legacy",
-				"`legacy` must be a map of the fields kept from the older format.",
+				"Write `legacy` as `field: value` lines kept from the older format.",
 			),
 		);
 	const keys = Object.keys(value);
@@ -324,9 +330,9 @@ function readLegacy(value: unknown): Read<readonly string[]> {
 }
 
 /**
- * A field that names a shared entry, or says it in words: a bare identifier is a name,
- * which must resolve (else a hole, offering to create it); anything else is prose. A
- * concept is always meant to be shared, so its prose is lint's advice, not the parse's.
+ * A field that names a shared entry or says it in words. A bare identifier is a name,
+ * which must exist (else a hole, with a fix that creates it); anything else is words.
+ * Words for a concept are advice from lint, not the parse.
  */
 function refOrProse<K extends "universe" | "instruction" | "concept" | "unit">(
 	key: K,
@@ -343,7 +349,7 @@ function refOrProse<K extends "universe" | "instruction" | "concept" | "unit">(
 		return fail({
 			...hole(
 				path,
-				`No ${SCHEME_SINGULAR[key]} named \`${name}\`.`,
+				`No ${SCHEME_NAME[key]} is named \`${name}\`.`,
 				listNames(
 					SCHEME_SINGULAR[key],
 					Object.keys(scheme),
@@ -360,8 +366,8 @@ function refOrProse<K extends "universe" | "instruction" | "concept" | "unit">(
 }
 
 /**
- * A unit name that differs from one shared unit only by case or singular and plural
- * (`day` for `days`): use that one, rather than create a near-twin.
+ * A unit name that differs from one shared unit only by case or by singular and plural
+ * (`day` for `days`): use that one rather than create a near-copy.
  */
 function nearUnit(key: string, name: string, env: Env): Fix | undefined {
 	if (key !== "unit") return undefined;
@@ -383,7 +389,7 @@ function nearUnit(key: string, name: string, env: Env): Fix | undefined {
 const nameIn = (text: string | undefined): string | undefined =>
 	text !== undefined && NAME_PATTERN.test(text) ? text : undefined;
 
-/** The one rule for responses: a plain string, rather than a map, names a scale. */
+/** The one rule for responses: plain text, not a map, names a scale. */
 function scaleName(doc: Document): string | undefined {
 	const node = isMap(doc.contents)
 		? doc.contents.get("responses", true)
@@ -409,7 +415,7 @@ function readDomain(
 		return fail(
 			hole(
 				"",
-				"Say how it's answered: `responses` (options to pick from), `number`, or `open` (free text).",
+				"Say how it's answered: `responses` (options), `number`, or `open` (free text).",
 				EXAMPLE,
 			),
 		);
@@ -418,7 +424,7 @@ function readDomain(
 		error(
 			"too-many-domains",
 			key,
-			`A question is answered one way only; \`${first}\` is already set.`,
+			`A question is answered one way only, and \`${first}\` is already here.`,
 			`Remove \`${key}\` or \`${first}\`.`,
 		),
 	);
@@ -429,14 +435,15 @@ function readDomain(
 						code: "ignored-key",
 						severity: "warning",
 						path: "select",
-						message: `\`select\` only applies to \`responses\`; it is ignored for \`${first}\`.`,
+						message: `\`select\` only works with \`responses\`, so it's ignored here.`,
+						hint: "Remove the `select` line.",
 					},
 				]
 			: [];
 	const select =
 		first === "responses" ? readSelect(data.select) : fail<"one" | "many">();
 	const value = data[first];
-	// Written but empty: a hole, as for any key (see `opened`), never an empty domain.
+	// Written but empty: a hole, as for any key (see `opened`).
 	const read =
 		value === null || value === ""
 			? fail<Domain>(hole(first, `\`${first}\` is empty.`, EMPTY_DOMAIN[first]))
@@ -458,8 +465,9 @@ function readDomain(
 
 const EMPTY_DOMAIN: Readonly<Record<(typeof DOMAIN_KEYS)[number], string>> = {
 	responses: EXAMPLE,
-	number: "Add `min:`, `max:`… under it, or write `number: {}` for any number.",
-	open: "Add `max_length:` under it, or write `open: {}` for any text.",
+	number:
+		"Add `min:` or `max:` under `number`, or write `number: {}` for any number.",
+	open: "Add `max_length:` under `open`, or write `open: {}` for any text.",
 };
 
 function readResponses(
@@ -487,10 +495,10 @@ function readScaleName(
 		const names = Object.keys(scales);
 		const hint =
 			names.length === 0
-				? "No shared scales are loaded; write the options inline."
+				? "The bank has no shared scales yet. Write the options here instead."
 				: listNames("scale", names, false);
 		return fail({
-			...hole("responses", `No scale named \`${name}\`.`, hint),
+			...hole("responses", `No shared scale is named \`${name}\`.`, hint),
 			fix: {
 				kind: "create",
 				label: `New ${SCHEME_NAME.scale} \`${name}\``,
@@ -508,8 +516,8 @@ function readInlineOptions(
 ): Read<Domain> {
 	const codes = readCodeMap(doc, node, "responses", true);
 	if (codes.value === undefined) return fail(...codes.findings);
-	// Per-option titles and variables describe a select-many option's own variable; on
-	// a single select they mean nothing, and saying so is kinder than dropping them.
+	// An option's title and variable describe its own variable in select all that apply.
+	// With one choice they mean nothing; saying so is kinder than dropping them quietly.
 	const ignored: Finding[] =
 		select === "one"
 			? codes.value
@@ -519,7 +527,8 @@ function readInlineOptions(
 						severity: "warning",
 						path: `responses.${c.code}`,
 						message:
-							"`title` and `variable` on an option only apply to `select: many`.",
+							"`title` and `variable` on an option are only used in select all that apply.",
+						hint: "Remove them, or add `select: many` if respondents can pick several.",
 					}))
 			: [];
 	return ok(
@@ -540,7 +549,7 @@ function readSelect(value: unknown): Read<"one" | "many"> {
 	return result.data === undefined ? fail() : ok(result.data);
 }
 
-/** The text written at a dotted path (a field, or a field inside one), if it is text. */
+/** The text at a dotted path (a field, or a field inside one), if it's text. */
 function textAt(
 	data: Record<string, unknown>,
 	path: string,
@@ -567,7 +576,7 @@ export function readNumber(value: unknown, env: Env): Read<Domain> {
 				"bad-range",
 				"number",
 				`\`min\` (${min}) is greater than \`max\` (${max}).`,
-				"Swap them, or remove one.",
+				"Swap `min` and `max`, or remove one.",
 			),
 			...holes,
 			...unit.findings,
@@ -619,7 +628,7 @@ function issueFindings(kind: "number" | "open", zodError: ZodError): Finding[] {
 	});
 }
 
-/** Where each path is in a text. Depends on nothing but the YAML, so any file kind can use it. */
+/** Where each path is in a text. It reads only the YAML, so any kind of file can use it. */
 export const rangesOf = (text: string): Readonly<Record<string, Range>> =>
 	indexDocument(parseDocument(text, { prettyErrors: false }), text.length)
 		.ranges;
@@ -628,17 +637,16 @@ export interface DocumentIndex {
 	/** Source range of every `key` and nested `key.subkey`, plus `""` for the whole text. */
 	readonly ranges: Readonly<Record<string, Range>>;
 	/**
-	 * Where each value written as nothing at all (`key:` and the line ends) starts,
-	 * just after the colon. A hole finding at one of these paths is drawn there.
+	 * Where each empty value (`key:` and the line ends) starts, just after the colon.
+	 * A hole at one of these paths is drawn there.
 	 */
 	readonly empties: Readonly<Record<string, number>>;
 }
 
 /**
- * A hole at a key written with nothing after it is a point where its value starts, just
- * after the colon: where the author types, and one marker in the editor (CodeMirror
- * draws a zero-width finding as a point, and merges those at one place). Any other
- * finding, and a hole with a range of its own, is unchanged.
+ * A hole at an empty key becomes a point just after the colon: where the author types,
+ * and one marker in the editor (CodeMirror draws a zero-width finding as a point and
+ * merges those at one place). Other findings, and holes with their own range, are unchanged.
  */
 export const pointAt =
 	(empties: Readonly<Record<string, number>>) =>
@@ -649,7 +657,7 @@ export const pointAt =
 			: f;
 	};
 
-/** One walk over the YAML AST, by path. Any file kind can use it. */
+/** One walk over the YAML AST, by path. Any kind of file can use it. */
 export function indexDocument(doc: Document, length: number): DocumentIndex {
 	const ranges: Record<string, Range> = { "": [0, length] };
 	const empties: Record<string, number> = {};

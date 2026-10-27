@@ -1,11 +1,10 @@
 /**
- * Where a new question goes in the bank: the author chooses the folder, and none is
- * chosen when the dialog opens (nothing is read into the question's name). Git
- * creates any missing path, so a new folder should be deliberate and visible, not a
- * side effect of a typo.
+ * Where a new question goes in the bank. The author chooses the folder; none is chosen
+ * when the dialog opens (the name says nothing about it). Git creates any missing
+ * folder, so a new one should be chosen on purpose, not made by a typo.
  *
- * A native form: Enter submits, the primary button is its submit button, and what is
- * wrong is Primer's validation message, tied to the input.
+ * A native form: Enter submits, and a problem is Primer's validation message on the
+ * input.
  */
 
 import { Dialog } from "@primer/react";
@@ -37,7 +36,7 @@ export function SaveDialog({
 	const problem = !where.ok
 		? where.error.message
 		: path !== undefined && taken(path)
-			? "A question already exists there. Choose another folder, or open that question to change it."
+			? "That folder already has a question with this name. Choose another folder."
 			: undefined;
 	const close = () => dispatch({ kind: "saveCancelled" });
 	return (

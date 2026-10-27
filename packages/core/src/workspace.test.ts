@@ -255,7 +255,7 @@ describe("a tag locked to a commit in workspace.yaml", () => {
 				code: "moved-tag",
 				severity: "warning",
 				path: "uses.b",
-				message: expect.stringContaining("the tag was moved"),
+				message: expect.stringContaining("has moved to a new version"),
 			}),
 		]);
 	});

@@ -131,7 +131,7 @@ describe("elaborate", () => {
 		]);
 	});
 
-	it("select many allows as many responses as there are codes", () => {
+	it("select all that apply allows as many answers as there are codes", () => {
 		const { draft } = parseSurface(
 			"name: q\nselect: many\nresponses:\n  1: a\n  2: b\n  3: c\n",
 			EMPTY_ENV,
@@ -191,7 +191,7 @@ describe("elaborate", () => {
 	});
 });
 
-describe("shared scales and select-many", () => {
+describe("shared scales and select all that apply", () => {
 	const agree4 = parseScale(agree4Text).scale;
 	const env = { ...EMPTY_ENV, scales: agree4 ? { agree4 } : {} };
 
@@ -217,7 +217,7 @@ describe("shared scales and select-many", () => {
 		]);
 	});
 
-	it("codes a select-all option's variable on the bank's own two values, in its order", () => {
+	it("codes a select all that apply option's variable on the bank's own two values, in its order", () => {
 		const draft = parseSurface(
 			'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n  "b": B\n',
 			EMPTY_ENV,
@@ -295,7 +295,7 @@ describe("shared scales and select-many", () => {
 		]);
 	});
 
-	it("says which of the select-all values is a tick, whichever the bank writes first", () => {
+	it("says which of the select all that apply values is a tick, whichever the bank writes first", () => {
 		const draft = parseSurface(
 			'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n',
 			EMPTY_ENV,
@@ -330,7 +330,7 @@ describe("shared scales and select-many", () => {
 		]);
 	});
 
-	it("select-many yields one yes/no Variable per option, referencing the question", () => {
+	it("select all that apply yields one yes/no Variable per option, referencing the question", () => {
 		const { draft, findings } = parseSurface(demRace, EMPTY_ENV);
 		expect(findings).toEqual([]);
 		const doc = elaborate(draft, AGENCY, []);
@@ -503,7 +503,7 @@ describe("schemes", () => {
 		});
 	});
 
-	it("select-many option variables reference the bank's missing values", () => {
+	it("select all that apply option variables reference the bank's missing values", () => {
 		const doc = elaborate(
 			parseSurface(demRace, EMPTY_ENV).draft,
 			AGENCY,

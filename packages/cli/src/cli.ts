@@ -1,13 +1,15 @@
 /**
  * The `qretools` command: `check` a workspace directory's findings (its questions',
  * shared files' and instruments'), as compilers report them, `export` its questions' DDI,
+ * write their `codebook` (an HTML page of that DDI, or of any DDI document),
  * or `build` it: the DDI of its last commit, each item at the version its history gives. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
 	type Address,
 	addressOf,
@@ -72,6 +74,9 @@ type RemoteAddress = Extract<Address, { kind: "remote" }>;
 const USAGE = `Usage:
   qretools check [dir] [--strict]   Report a workspace's findings; fail on anything to fill in or fix
   qretools export [dir] [-o file]   Write its questions' DDI-Lifecycle 4.0 JSON
+  qretools codebook [dir | file.json] [-o file] [--strict]
+                                    Write a codebook, one HTML page: of its questions' DDI, or of
+                                    any DDI-Lifecycle 4.0 JSON file
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
@@ -80,18 +85,19 @@ const USAGE = `Usage:
 dir is the workspace's folder (default: the current directory): workspace.yaml,
 questions/<folder>/, the shared folders (scales/ and so on), missing.yaml,
 select_all.yaml and instruments/.
-An instrument reads its own workspace (\`../\` in its \`uses\`) and other workspaces at
-a tag (\`owner/repo@v1\`, with git). A tag can be moved: \`instrument export\` locks
-each tag it reads at the commit read, under \`locked:\` in its workspace.yaml, and a
-tag that names another commit than its lock is a warning until the next export locks it.
+An instrument reads its own workspace as \`../\` in its \`uses\`, and other workspaces at
+a tag, such as \`owner/repo@v1\` (this needs git). A tag can move, so \`instrument export\`
+records the commit each tag points to, under \`locked:\` in workspace.yaml. If a tag
+moves after that, check warns until the next export records it again.
 --bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
---strict  also fail on warnings.
---tag-message  also write the message a release's annotated tag carries: each file's
-          version, so a workspace that uses this one at the tag reads them.
---agency  the DDI agency the instrument is published under, when it isn't its
-          workspace's (workspace.yaml), as for a file outside a workspace's instruments/.
---qsf     write the instrument as a Qualtrics survey (QSF, made from its DDI) instead of
-          its DDI; refused when anything in it can't be run in Qualtrics as the DDI says.`;
+--strict  also fail on warnings; for codebook, also fail when the DDI refers to
+          something it doesn't contain (the page is written either way).
+--tag-message  also write the text for a release's tag: each file's version, so
+          workspaces that use this release can read them.
+--agency  the instrument's DDI agency, in place of its workspace's (workspace.yaml).
+          Needed for a file outside a workspace's instruments/.
+--qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
+          if any part of it can't work in Qualtrics as the DDI says.`;
 
 /** What to say when a directory holds nothing the tool reads: the wrong folder, most likely. */
 const nothingIn = (dir: string): string =>
@@ -120,7 +126,12 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		(args.values.help ? io.out : io.err)(`${USAGE}\n`);
 		return args.values.help ? OK : USAGE_ERROR;
 	}
-	if (command !== "check" && command !== "export" && command !== "build") {
+	if (
+		command !== "check" &&
+		command !== "export" &&
+		command !== "build" &&
+		command !== "codebook"
+	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
@@ -136,7 +147,9 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 						? "--tag-message"
 						: command === "check"
 							? args.values.output !== undefined && "--output"
-							: args.values.strict === true && "--strict";
+							: command !== "codebook" &&
+								args.values.strict === true &&
+								"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -150,6 +163,30 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values["tag-message"],
 			io,
 		);
+	const strict = args.values.strict === true;
+	// A file is a DDI document, any producer's; a directory is a workspace.
+	if (
+		command === "codebook" &&
+		(await stat(dir).then(
+			(s) => s.isFile(),
+			() => false,
+		))
+	) {
+		let text: string;
+		try {
+			text = await readFile(dir, "utf8");
+		} catch (e) {
+			io.err(
+				`Can't read ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return USAGE_ERROR;
+		}
+		return emit(
+			renderCodebook(jsonOf(text), dir, strict),
+			args.values.output,
+			io,
+		);
+	}
 	let files: Readonly<Record<string, string>>;
 	try {
 		files = await readWorkspace(dir);
@@ -169,7 +206,87 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	return exportBank(bank, args.values.output, io);
+	return exportBank(
+		bank,
+		args.values.output,
+		io,
+		command === "codebook"
+			? (document) => renderCodebook({ ok: true, value: document }, dir, strict)
+			: asJson,
+	);
+}
+
+/** What a command writes: the text, if any, and lines to say on stderr; `problems` fails it. */
+interface Rendered {
+	readonly text?: string;
+	readonly lines: readonly string[];
+	readonly problems: boolean;
+}
+
+/** Writes what was rendered: its lines on stderr, its text to the file or stdout. */
+async function emit(
+	r: Rendered,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	for (const line of r.lines) io.err(`${line}\n`);
+	if (r.text !== undefined)
+		if (output === undefined) io.out(r.text);
+		else await io.writeFile(output, r.text);
+	return r.problems ? PROBLEMS : OK;
+}
+
+/** The DDI as `export` writes it. */
+const asJson = (document: DdiDocument): Rendered => ({
+	text: `${JSON.stringify(document, null, 2)}\n`,
+	lines: [],
+	problems: false,
+});
+
+type Json =
+	| { readonly ok: true; readonly value: unknown }
+	| { readonly ok: false; readonly detail: string };
+
+/** A file's text as JSON, or why it isn't. */
+const jsonOf = (text: string): Json => {
+	try {
+		return { ok: true, value: JSON.parse(text) };
+	} catch (e) {
+		return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+	}
+};
+
+/**
+ * A DDI document as its codebook: one HTML page, and a line in `check`'s form for each
+ * reference to an item the document doesn't have, since CI never reads the page. Not
+ * written when it isn't a DDI document. `strict` fails on a broken reference; the page
+ * is written either way. `input` names what was read: the file, or the workspace.
+ */
+function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
+	if (!json.ok)
+		return {
+			lines: [
+				`${input}: error: Not written: this isn't JSON (${json.detail}). [codebook-unreadable]`,
+			],
+			problems: true,
+		};
+	const read = readDdi(json.value);
+	if (!read.ok)
+		return {
+			lines: read.error.map(
+				(f) => `${input}: error: Not written: ${f.message} [${f.code}]`,
+			),
+			problems: true,
+		};
+	const codebook = codebookOf(read.value);
+	return {
+		text: pageOf(codebook),
+		lines: codebook.findings.map(
+			(f) =>
+				`${input}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]`,
+		),
+		problems: strict && codebook.findings.length > 0,
+	};
 }
 
 function parse(argv: readonly string[]) {
@@ -290,7 +407,7 @@ async function checkWorkspace(
 		// finding in a file, so it isn't counted among them.
 		if (ignored) {
 			io.out(
-				`${join(dir, path)}:1:1: note: This file is read as nothing: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]\n`,
+				`${join(dir, path)}:1:1: note: QREtools ignores this file: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]\n`,
 			);
 			continue;
 		}
@@ -314,12 +431,15 @@ async function checkWorkspace(
  * The workspace's questions' DDI: every question's items, keyed once. Refused, with reasons and nothing
  * written, when it would be wrong: no declared agency, two items under one identity, or
  * a document the official schema rejects. Holes don't refuse it: they leave elements out.
- * Shared items no question uses aren't in it.
+ * Shared items no question uses aren't in it. Written as `write` makes it: JSON, or its
+ * codebook.
  */
 async function exportBank(
 	bank: Bank,
 	output: string | undefined,
 	io: Io,
+	/** How the document is written: as JSON, or as a codebook. */
+	write: (document: DdiDocument) => Rendered,
 ): Promise<number> {
 	// Each question's items, made as an instrument brings them.
 	const sources = Object.keys(bank.questions)
@@ -341,7 +461,7 @@ async function exportBank(
 	);
 	if (refusal?.kind === "noAgency") {
 		io.err(
-			"Not exported: the workspace declares no DDI agency (workspace.yaml, agency:).\n",
+			"Not exported: the workspace has no DDI agency. Add an `agency:` line to workspace.yaml.\n",
 		);
 		return PROBLEMS;
 	}
@@ -350,13 +470,10 @@ async function exportBank(
 	).length;
 	if (incomplete > 0)
 		io.err(
-			`${incomplete} files have something to fill in or fix; what they lack is left out of the DDI (\`qretools check\` lists it).\n`,
+			`${incomplete} files have something to fill in or fix. The DDI leaves out what's missing; \`qretools check\` lists it.\n`,
 		);
 	if (refusal !== undefined) return refused(refusal, io);
-	const text = `${JSON.stringify(document, null, 2)}\n`;
-	if (output === undefined) io.out(text);
-	else await io.writeFile(output, text);
-	return OK;
+	return emit(write(document), output, io);
 }
 
 /**
@@ -377,7 +494,7 @@ async function build(
 	}
 	if (read.uncommitted)
 		io.err(
-			`${dir} has uncommitted changes: they aren't built, as they have no version yet.\n`,
+			`${dir} has uncommitted changes. They aren't built, as they have no version yet.\n`,
 		);
 	const versions = versionsOf(read.history);
 	const bank = bankOf(
@@ -390,7 +507,7 @@ async function build(
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
-	const code = await exportBank(bank, join(out, "ddi.json"), io);
+	const code = await exportBank(bank, join(out, "ddi.json"), io, asJson);
 	// Only for a build that exported: a refused one is no release.
 	if (code === OK && message !== undefined)
 		await io.writeFile(message, tagMessage(versions, pkg.version));
@@ -406,17 +523,17 @@ function refused(r: Refusal, io: Io): number {
 		case "noAgency":
 			// The instrument's words: the workspace's export says its own before it gets here.
 			io.err(
-				"Not exported: the instrument has no DDI agency. It isn't in a workspace that declares one (workspace.yaml, agency:), and none is given with --agency.\n",
+				"Not exported: the instrument has no DDI agency. Add an `agency:` line to its workspace.yaml, or use --agency.\n",
 			);
 			break;
 		case "invalidAgency":
 			for (const f of r.findings) io.err(`${f.message}\n`);
-			io.err("Not exported: every item needs a real DDI agency.\n");
+			io.err("Not exported: a DDI agency is missing or wrong.\n");
 			break;
 		case "collisions":
 			for (const c of r.collisions)
-				io.err(`${c.urn} names different items in ${c.keys.join(", ")}\n`);
-			io.err("Not exported: items would share an identity.\n");
+				io.err(`${c.keys.join(" and ")} would share one DDI name, ${c.urn}.\n`);
+			io.err("Not exported: two things would share one DDI name.\n");
 			break;
 		// The CLI always runs the schema first, so `unchecked` can't arrive; were it to,
 		// it isn't exported for the schema's sake.
@@ -486,7 +603,7 @@ async function instrument(
 		const eq = b.indexOf("=");
 		if (eq <= 0 || eq === b.length - 1) {
 			io.err(
-				`\`--bank ${b}\` gives an alias its directory as alias=<dir>, such as --bank bas=../bas.\n`,
+				`\`--bank ${b}\` gives an alias its directory as alias=<dir>, such as --bank bank=../bank.\n`,
 			);
 			return USAGE_ERROR;
 		}
@@ -528,7 +645,7 @@ async function instrument(
 					: address.path !== HERE
 						? notHere(address.path)
 						: offline !== undefined
-							? `it's this instrument's own workspace (\`${HERE}\`), read from the folder above it; \`--bank\` is for one written as \`owner/repo@v1\`.`
+							? `it's this instrument's own workspace (\`${HERE}\`), read from the folder above. \`--bank\` is only for \`owner/repo@v1\` addresses.`
 							: // The folder above is read whole, so it must be a workspace's: the app's rule too.
 								basename(dirname(resolve(file))) !== WORKSPACE.instruments
 								? `\`${HERE}\` is this instrument's own workspace, and ${file} isn't in a workspace's \`${WORKSPACE.instruments}/\` folder.`
@@ -598,7 +715,7 @@ async function instrument(
 	if (refusal !== undefined) return refused(refusal, io);
 	if (status(result.findings).kind === "incomplete")
 		io.err(
-			"The instrument has something to fill in or fix; what it lacks is left out of the DDI (`qretools instrument check` lists it).\n",
+			"The instrument has something to fill in or fix. The DDI leaves out what's missing; `qretools instrument check` lists it.\n",
 		);
 	for (const f of moved)
 		io.err(`${findingLine(file, source, result.ranges, f)}\n`);
@@ -622,14 +739,14 @@ async function instrument(
 	}
 	if (settings === undefined) {
 		io.err(
-			`Not locked: ${dirname(settingsPath)} has no readable workspace.yaml (a workspace needs one for its agency).\n`,
+			`Not locked: ${dirname(settingsPath)} has no workspace.yaml that QREtools can read.\n`,
 		);
 		return OK;
 	}
 	const locked = withLocks(settings, next);
 	if (locked === undefined) {
 		io.err(
-			`Not locked: ${settingsPath} can't be read as fields (\`qretools check\` says why).\n`,
+			`Not locked: ${settingsPath} can't be read (\`qretools check\` says why).\n`,
 		);
 		return OK;
 	}

@@ -11,12 +11,7 @@ import type { Versions } from "./ddi/version.ts";
 import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
 import { ROOT } from "./kinds.ts";
 import { lint } from "./lint.ts";
-import {
-	type CodebookView,
-	codebookView,
-	type RespondentView,
-	respondentView,
-} from "./render.ts";
+import { type RespondentView, respondentView } from "./render.ts";
 import {
 	absentRoot,
 	bankAgency,
@@ -53,7 +48,6 @@ export interface Evaluation {
 	/** The fields a picker of shared entries can fill (see livelits.ts). */
 	readonly livelits: readonly Livelit[];
 	readonly respondent: RespondentView;
-	readonly codebook: CodebookView;
 	/** What the question defines and names, for the bank index. */
 	readonly symbols: Symbols;
 }
@@ -77,7 +71,6 @@ export function evaluate(source: string, env: Env): Evaluation {
 		marks: parsed.marks,
 		livelits: livelitsOf(source, parsed, env),
 		respondent: respondentView(draft),
-		codebook: codebookView(draft, env),
 		symbols: symbolsOf(parsed),
 	};
 }

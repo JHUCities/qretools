@@ -99,7 +99,7 @@ export function WorkspaceNotice({
 			<InlineMessage variant="warning">
 				<span>
 					This workspace has no <code className="code">{ROOT.workspace}</code>,
-					so there's no DDI agency to publish its instruments under.
+					so its instruments have no DDI agency.
 				</span>
 			</InlineMessage>
 		);

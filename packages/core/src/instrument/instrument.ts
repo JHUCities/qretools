@@ -31,7 +31,8 @@ export interface InstrumentContext {
 	readonly unresolved?: Readonly<Record<string, Unread>>;
 	/**
 	 * The DDI agency the instrument is published under: its maker's, not necessarily its
-	 * banks'. Absent, it is published under `invalid`, and a finding says so.
+	 * banks'. Absent, its DDI shows `invalid` in its place and can't be exported, and a
+	 * finding says so.
 	 */
 	readonly agency?: string;
 	/** Its DDI version; "1" when nothing is known of its history. */
@@ -84,13 +85,13 @@ export function instrumentOf(
 							code: "hole",
 							severity: "hole",
 							path: "",
-							message: "No DDI agency is given for this instrument.",
-							hint: `Until one is, its DDI is published under \`${UNDECLARED_AGENCY}\`.`,
+							message: "This instrument has no DDI agency yet.",
+							hint: "Add an `agency:` line to `workspace.yaml`. Until then the DDI can't be exported.",
 						},
 					]
 				: [];
 	const clashes = clashFindings(collisions, parsed.draft.uses);
-	// A bank with no agency would publish its questions under `invalid`: say so where it's
+	// A bank with no agency stops the instrument's export: say so where it's
 	// used. Not for the instrument's own workspace (`../`): its agency is the instrument's,
 	// and the finding above already says it is missing or wrong.
 	const banksWithout: Finding[] = parsed.draft.uses.flatMap((u): Finding[] =>
@@ -102,8 +103,8 @@ export function instrumentOf(
 						code: "invalid-agency",
 						severity: "error",
 						path: `uses.${u.alias}`,
-						message: `\`${u.alias}\` declares no DDI agency, so its questions would be published under \`${UNDECLARED_AGENCY}\`.`,
-						hint: "A workspace gives its agency in its `workspace.yaml`.",
+						message: `\`${u.alias}\` has no DDI agency, so this instrument's DDI can't be exported.`,
+						hint: `Add an \`agency:\` line to the \`workspace.yaml\` of \`${u.alias}\`.`,
 					},
 				]
 			: [],
@@ -119,8 +120,8 @@ export function instrumentOf(
 							code: "manifest",
 							severity: "warning",
 							path: `uses.${u.alias}`,
-							message: `\`${u.alias}\`'s tag has a manifest of versions, but ${m.reason}`,
-							hint: "So its questions are published at version 1. A release made by the workspace's release workflow has one that fits.",
+							message: `QREtools can't read the version list in the \`${u.alias}\` release. ${m.reason}`,
+							hint: `Until it can, every \`${u.alias}\` question is version 1.`,
 						},
 					];
 		},
@@ -148,6 +149,12 @@ export function instrumentOf(
 	};
 }
 
+/** Names as a reader lists them: "a", "a and b", "a, b and c". */
+const andList = (xs: readonly string[]): string =>
+	xs.length <= 1
+		? xs.join("")
+		: `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+
 /**
  * One finding per identity two different items would share; the codings of select all
  * that apply (a code list and its two categories) from workspaces under one agency are
@@ -167,7 +174,7 @@ function clashFindings(
 				code: "name-clash",
 				severity: "error",
 				path: "",
-				message: `\`${c.urn}\` would name two different items, from ${c.keys.join(", ")}.`,
+				message: `${andList(c.keys.map((k) => `\`${k}\``))} would share one DDI name, \`${c.urn}\`.`,
 			});
 			continue;
 		}
@@ -187,7 +194,7 @@ function clashFindings(
 			code: "name-clash",
 			severity: "error",
 			path: last === undefined ? "" : `uses.${last}`,
-			message: `${who} publish as \`${agency}\` but don't agree on how a select-all-that-apply option is stored.`,
+			message: `${who} publish as \`${agency}\` but store select all that apply options differently.`,
 			hint: `Make their \`select_all.yaml\` files agree. A workspace without one stores ${selectAllText(DEFAULT_SELECT_ALL)}.`,
 		};
 	});
