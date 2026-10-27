@@ -360,7 +360,7 @@ describe("a workspace's instruments", () => {
 		);
 	});
 
-	it("run as a test form beside the source, or say why they can't", async () => {
+	it("open as a test form in a tab of their own, or say why they can't", async () => {
 		renderWorkspace([
 			...FILES,
 			file(
@@ -371,17 +371,30 @@ describe("a workspace's instruments", () => {
 		await act(async () => {});
 		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
 		await act(async () => {});
-		expect(screen.getByRole("heading", { name: /^Test form/ })).toBeTruthy();
-		const frame = screen.getByTitle("Test form for wave1");
+		// A tab of its own: a page with no script, holding the form in a sandboxed frame.
+		const tab = document.implementation.createHTMLDocument("");
+		const open = vi
+			.spyOn(window, "open")
+			.mockReturnValue({ document: tab, opener: window } as unknown as Window);
+		fireEvent.click(screen.getByRole("button", { name: /^Test form/ }));
+		expect(open).toHaveBeenCalledWith("", "_blank");
+		expect(tab.title).toBe("Test form for wave1");
+		expect(tab.querySelector("script")).toBeNull();
+		const frame = tab.querySelector("iframe");
 		// Scripts and its own forms only: never this page's origin.
-		expect(frame.getAttribute("sandbox")).toBe("allow-scripts allow-forms");
-		expect(frame.getAttribute("srcdoc")).toMatch(/<h1>wave1<\/h1>/);
+		expect(frame?.getAttribute("sandbox")).toBe("allow-scripts allow-forms");
+		expect(frame?.getAttribute("srcdoc")).toMatch(/<h1>wave1<\/h1>/);
+		open.mockClear();
 		fireEvent.click(screen.getByRole("treeitem", { name: /^wave2\b/ }));
 		await act(async () => {});
-		expect(screen.queryByTitle(/^Test form for/)).toBeNull();
+		const held = screen.getByRole("button", { name: /^Test form/ });
+		fireEvent.click(held);
+		expect(open).not.toHaveBeenCalled();
+		open.mockRestore();
 		expect(
-			screen.getByText(/test form needs everything in Findings/),
-		).toBeTruthy();
+			document.getElementById(held.getAttribute("aria-describedby") ?? "")
+				?.textContent,
+		).toMatch(/test form needs everything in Findings/);
 	});
 
 	it("are made from New, named first", async () => {

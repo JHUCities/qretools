@@ -4,7 +4,7 @@
  * twice) come from the index and are shown on the file like any other finding.
  */
 
-import { ArrowLeftIcon } from "@primer/octicons-react";
+import { ArrowLeftIcon, PlayIcon } from "@primer/octicons-react";
 import {
 	Banner,
 	Button,
@@ -12,6 +12,7 @@ import {
 	Label,
 	Link,
 	PageHeader,
+	VisuallyHidden,
 } from "@primer/react";
 import { ScrollableRegion } from "@primer/react/experimental";
 import { codebookOf, parse as parseDdi } from "@qretools/codebook";
@@ -428,32 +429,10 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const [listed, flushFindings] = useSettled(findings, SETTLE_MS, e.id);
 	const outline = useMemo(() => outlineOf(draft), [draft]);
 	const [outlined, flushOutline] = useSettled(outline, SETTLE_MS, e.id);
-	// The test form is made from the DDI once typing pauses: each new page reloads the
-	// frame and starts the walk again. Not while the instrument has fields to fill in.
-	const [formDdi, flushForm] = useSettled(
-		status(findings).kind === "incomplete" ? undefined : ddi,
-		SETTLE_MS,
-		e.id,
-	);
-	// As `qretools form` writes it: a page whenever an instrument can be read from the DDI.
-	// What the reader can't read isn't listed here: in DDI this app made, that's our bug,
-	// not the author's (the form's tests read the households DDI with no findings).
-	// In the app's theme: a frame's prefers-color-scheme follows the system's, not the
-	// app's toggle, even with `color-scheme` set on the iframe (tried, Chromium). Choosing
-	// a theme makes a new page, which reloads the frame and starts the walk again.
-	const theme = useModel((m) => m.theme);
-	const form = useMemo(() => {
-		if (formDdi === undefined) return undefined;
-		const read = readInstruments(ddiIndexOf(formDdi)).value;
-		return read.instruments.length === 0
-			? undefined
-			: formOf(read, theme === "system" ? undefined : theme);
-	}, [formDdi, theme]);
 	const flush = () => {
 		flushFindings();
 		flushOutline();
 		flushQsf();
-		flushForm();
 	};
 	const also = useMemo(
 		() =>
@@ -502,6 +481,22 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const [qsfListed, flushQsf] = useSettled(qsfPlaced, SETTLE_MS, e.id);
 	const reasonId = useId();
 	const qsfReasonId = useId();
+	const formReasonId = useId();
+	// Not while the instrument has anything to fill in or fix; never held back for the
+	// export's reasons (no agency, the schema loading), which don't stop a test run.
+	const formAllowed = status(findings).kind !== "incomplete";
+	const theme = useModel((m) => m.theme);
+	const openForm = useCallback(() => {
+		// As `qretools form` writes it, from the DDI as it is now: each click a fresh tab.
+		// The reader's own findings aren't listed: in DDI this app made, they'd be our bug.
+		const read = readInstruments(ddiIndexOf(ddi)).value;
+		// shortcut: a complete instrument always reads as one, so none opens nothing; say why if it ever happens.
+		if (read.instruments.length === 0) return;
+		// A frame follows the system's colours, not the app's toggle (`color-scheme` on
+		// the iframe was tried, Chromium), so the page is told the app's theme.
+		const fixed = theme === "system" ? undefined : theme;
+		openTestForm(formOf(read, fixed), `Test form for ${e.name}`, fixed);
+	}, [ddi, theme, e.name]);
 	const notice = useMemo(
 		() => (
 			<>
@@ -515,6 +510,14 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 						qsf?.kind === "refused"
 							? `${qsfRefusalReason(qsf.errors)} See Qualtrics below.`
 							: undefined
+					}
+				/>
+				<DownloadReason
+					id={formReasonId}
+					reason={
+						formAllowed
+							? undefined
+							: "The test form needs everything in Findings filled in or fixed."
 					}
 				/>
 				<WorkspaceNotice findings={own} />
@@ -531,7 +534,18 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 				)}
 			</>
 		),
-		[reasonId, qsfReasonId, refusal, qsf, qsfListed, flushQsf, own, onTarget],
+		[
+			reasonId,
+			qsfReasonId,
+			formReasonId,
+			formAllowed,
+			refusal,
+			qsf,
+			qsfListed,
+			flushQsf,
+			own,
+			onTarget,
+		],
 	);
 	const action = useMemo(
 		() => (
@@ -551,9 +565,29 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 					// While the DDI is held back, so is the survey made from it, for that reason.
 					reason={qsf === undefined ? reasonId : qsfReasonId}
 				/>
+				<Button
+					size="small"
+					leadingVisual={PlayIcon}
+					inactive={!formAllowed}
+					aria-describedby={formAllowed ? undefined : formReasonId}
+					onClick={formAllowed ? openForm : undefined}
+				>
+					Test form
+					<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+				</Button>
 			</>
 		),
-		[e.name, ddi, refusal, reasonId, qsf, qsfReasonId],
+		[
+			e.name,
+			ddi,
+			refusal,
+			reasonId,
+			qsf,
+			qsfReasonId,
+			formAllowed,
+			formReasonId,
+			openForm,
+		],
 	);
 	return (
 		<>
@@ -657,23 +691,6 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 										/>
 									)}
 								</div>
-							) : pane === "test" ? (
-								// Reloaded before a click lands in it, never during one.
-								<div className="test-form" onPointerEnter={flush}>
-									{form === undefined ? (
-										<p className="quiet">
-											The test form needs everything in Findings filled in or
-											fixed.
-										</p>
-									) : (
-										// Its own origin (no allow-same-origin): the page runs only its own walk.
-										<iframe
-											title={`Test form for ${e.name}`}
-											sandbox="allow-scripts allow-forms"
-											srcDoc={form}
-										/>
-									)}
-								</div>
 							) : null
 						}
 					/>
@@ -688,6 +705,35 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 			</div>
 		</>
 	);
+}
+
+/**
+ * A test form in a tab of its own. The tab is about:blank, which shares this page's
+ * origin, so it holds no script of its own: only a sandboxed frame (scripts and forms,
+ * never same-origin), where the form runs in an opaque origin, away from the sign-in
+ * this origin keeps. Built with the DOM, so nothing is escaped by hand and there is no
+ * blob URL to let go. Cut off from this tab (no opener). Reloading it shows a blank page.
+ */
+function openTestForm(
+	page: string,
+	title: string,
+	theme: "light" | "dark" | undefined,
+): void {
+	const tab = window.open("", "_blank");
+	if (tab === null) return; // a blocked pop-up: the browser says so itself
+	tab.opener = null;
+	const doc = tab.document;
+	doc.title = title;
+	doc.documentElement.lang = "en";
+	const style = doc.createElement("style");
+	// The tab's own canvas in the form's colours, so no white flash before it paints.
+	style.textContent = `html { color-scheme: ${theme ?? "light dark"}; } html, body { margin: 0; height: 100%; } iframe { display: block; border: 0; width: 100%; height: 100%; }`;
+	const frame = doc.createElement("iframe");
+	frame.title = title;
+	frame.setAttribute("sandbox", "allow-scripts allow-forms");
+	frame.srcdoc = page;
+	doc.head.append(style);
+	doc.body.append(frame);
 }
 
 const SINGULAR = SCHEME_SINGULAR;

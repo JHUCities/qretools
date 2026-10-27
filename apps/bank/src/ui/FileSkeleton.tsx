@@ -21,8 +21,7 @@ export type PaneId =
 	| "codebook"
 	| "value"
 	| "usedBy"
-	| "outline"
-	| "test";
+	| "outline";
 
 /**
  * The preview panes a file shows, in order. Another author's version (read only) has
@@ -44,7 +43,6 @@ export function panesOf(
 		return [
 			{ id: "findings", title: "Findings" },
 			{ id: "outline", title: "Outline" },
-			{ id: "test", title: "Test form" },
 		];
 	return [
 		{ id: "findings", title: "Findings" },
