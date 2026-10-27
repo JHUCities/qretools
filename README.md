@@ -52,13 +52,21 @@ one, when it isn't.
 
 - **The web app** (`apps/bank/`, [qretools.com](https://qretools.com/)). Write questions and
   instruments, checked as you type, and save them to your branch.
-- **The `qretools` command** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)).
-  Run `check`, `export`, `codebook` or `build` on a workspace, and `instrument check` or
-  `instrument export` on an instrument.
+- **The command-line package** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)
+  as `qretools`). Run `check`, `export`, `codebook` or `build` on a workspace, and
+  `instrument check` or `instrument export` on an instrument.
+- **The core package** (`packages/core/`). Reads questions and instruments, checks them,
+  and turns them into DDI. Every other package uses it.
 - **The codebook package** (`packages/codebook/`). Turns a DDI-Lifecycle 4.0 document into an
   HTML codebook. It also works as a `<ddi-codebook>` element on any web page.
-- **The Qualtrics export** (`packages/qsf/`). Turns an instrument into a Qualtrics survey.
+- **The Qualtrics package** (`packages/qsf/`). Turns an instrument into a Qualtrics survey.
   Use "Download QSF" in the app, or `qretools instrument export --qsf`.
+- **The editor package** (`packages/editor/`). The web app's YAML editor, built on
+  CodeMirror.
+- **The shell package** (`packages/shell/`). The web app's GitHub sign-in, saving, links
+  and look.
+- **The sign-in worker** (`worker/`). A small Cloudflare Worker that swaps GitHub's
+  sign-in code for a token. It's the only part that runs on a server.
 
 ## Start a workspace
 
@@ -92,8 +100,7 @@ system, with CodeMirror 6 for the editor, Zod for the question schema and ajv fo
 validation, built with Vite and tested with Vitest. It runs entirely in the browser. It
 has a functional core (`packages/core/`, `@qretools/core`: parse, check, turn into DDI,
 render) and an imperative shell in the Elm style (`apps/bank/`: one Model, one `update`,
-effects described as data). `packages/editor/` is the CodeMirror editor and
-`packages/shell/` what the apps share at their edge (sign-in, storage, links, the look).
+effects described as data).
 
 Signing in with GitHub needs a GitHub App and one small Cloudflare Worker (`worker/`)
 that swaps the sign-in code for a token. It's the only part that runs on a server.
