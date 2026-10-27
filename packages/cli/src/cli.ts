@@ -1,7 +1,8 @@
 /**
  * The `qretools` command: `check` a workspace directory's findings (its questions',
  * shared files' and instruments'), as compilers report them, `export` its questions' DDI,
- * write their `codebook` (an HTML page of that DDI, or of any DDI document),
+ * write their `codebook` (an HTML page of that DDI, or of any DDI document), write an
+ * instrument's test `form` (an HTML page that runs its routing, from its DDI),
  * or `build` it: the DDI of its last commit, each item at the version its history gives. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
@@ -19,6 +20,7 @@ import {
 	bankOf,
 	collisions,
 	type DdiDocument,
+	ddiIndexOf,
 	documentOf,
 	exportRefusal,
 	type Finding,
@@ -40,6 +42,7 @@ import {
 	type Refusal,
 	type RemoteBank,
 	ROOT,
+	readInstruments,
 	remoteScope,
 	remotesOf,
 	type Severity,
@@ -54,6 +57,7 @@ import {
 	workspaceOf,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
+import { pageOf as formOf } from "@qretools/form";
 import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
 import pkg from "../package.json" with { type: "json" };
 import type { HistoryRead } from "./history.ts";
@@ -77,6 +81,9 @@ const USAGE = `Usage:
   qretools codebook [dir | file.json] [-o file] [--strict]
                                     Write a codebook, one HTML page: of its questions' DDI, or of
                                     any DDI-Lifecycle 4.0 JSON file
+  qretools form <file.json> [-o file]
+                                    Write a test form, one HTML page that follows an instrument's
+                                    routing, from its DDI (as \`instrument export\` writes it)
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
@@ -130,7 +137,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "check" &&
 		command !== "export" &&
 		command !== "build" &&
-		command !== "codebook"
+		command !== "codebook" &&
+		command !== "form"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -163,6 +171,14 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values["tag-message"],
 			io,
 		);
+	if (command === "form") {
+		// A file, always: there's no workspace default to fall back on.
+		if (args.positionals[1] === undefined) {
+			io.err(`${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return writeForm(dir, args.values.output, io);
+	}
 	const strict = args.values.strict === true;
 	// A file is a DDI document, any producer's; a directory is a workspace.
 	if (
@@ -287,6 +303,57 @@ function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
 		),
 		problems: strict && codebook.findings.length > 0,
 	};
+}
+
+/**
+ * A DDI file's instruments as a test form: one HTML page, and a line in `check`'s form
+ * for each part of the DDI it can't read. Not written when the file isn't DDI or holds
+ * no instrument.
+ */
+async function writeForm(
+	file: string,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	let text: string;
+	try {
+		text = await readFile(file, "utf8");
+	} catch (e) {
+		io.err(
+			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const json = jsonOf(text);
+	if (!json.ok)
+		return emit(
+			{
+				lines: [
+					`${file}: error: Not written: this isn't JSON (${json.detail}). [form-unreadable]`,
+				],
+				problems: true,
+			},
+			output,
+			io,
+		);
+	const read = readInstruments(ddiIndexOf(json.value));
+	const lines = read.findings.map(
+		(f) =>
+			`${file}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]`,
+	);
+	if (read.value.instruments.length === 0)
+		return emit(
+			{
+				lines: [
+					...lines,
+					`${file}: error: Not written: there's no instrument in this DDI. [form-unreadable]`,
+				],
+				problems: true,
+			},
+			output,
+			io,
+		);
+	return emit({ text: formOf(read.value), lines, problems: false }, output, io);
 }
 
 function parse(argv: readonly string[]) {
