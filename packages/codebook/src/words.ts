@@ -208,7 +208,8 @@ function phrase(
 				// Against a number, or another name: `n <= size` reads "n is at most size".
 				const right =
 					lit !== undefined
-						? text(lit)
+						? // The document's value, not the page's words.
+							({ kind: "text", text: lit } as const)
 						: e.right.kind === "name"
 							? nameOf(e.right)
 							: undefined;

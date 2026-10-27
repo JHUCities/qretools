@@ -736,7 +736,10 @@ function answersHtml(s: AskStep, cx: Context): string {
 							`<li><code>${escapeHtml(r.code)}</code><span>${r.label === undefined ? "" : inlineHtml(r.label, cx)}</span></li>`,
 					)
 					.join("")}</ul>`
-	}${entry?.format === undefined ? "" : `<p class="ddi-answers"${cx.en}>${escapeHtml(formatWords(entry.format))}</p>`}${aboutHtml(entry ?? options?.[0], cx)}`;
+	}${entry?.format === undefined ? "" : `<p class="ddi-answers"${cx.en}>${escapeHtml(formatWords(entry.format))}</p>`}${
+		// A select-all question's options share its universe and missing codes: its first says them.
+		aboutHtml(entry ?? options?.[0], cx)
+	}`;
 }
 
 /** Text's words on one line, for a link's name. */
