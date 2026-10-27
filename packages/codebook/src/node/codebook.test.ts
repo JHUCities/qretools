@@ -361,7 +361,7 @@ flow:
 			expect(ids).toContain(decodeURIComponent(to ?? ""));
 	});
 
-	it("links each fill to what it shows", async () => {
+	it("links each fill to what it shows, and says an input isn't asked", async () => {
 		const root = fixture("households");
 		const page = pageOf(
 			codebook(
@@ -379,6 +379,12 @@ flow:
 			"rent → org.example:instrument-households.var-rent",
 			"members_index → org.example:instrument-households.each-members",
 		]);
+		const county = page.slice(
+			page.indexOf('id="org.example:instrument-households.var-county"'),
+		);
+		expect(county).toContain(
+			"<dt>Asked</dt><dd>Not asked: comes with each case</dd>",
+		);
 	});
 
 	it("lists a select-all question's options under it", async () => {

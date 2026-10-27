@@ -83,6 +83,8 @@ interface Context extends Options {
 	/** Each entry by its URN, and each select-all question's options by the question's. */
 	readonly entries?: ReadonlyMap<string, Entry>;
 	readonly options?: ReadonlyMap<string, readonly Entry[]>;
+	/** The URNs of the variables that come with each case, which no question asks. */
+	readonly inputs?: ReadonlySet<string>;
 	/** At an ask: what each of its question's fills shows there, by the fill's parameter URN. */
 	readonly fills?: ReadonlyMap<string, Ref>;
 }
@@ -389,7 +391,14 @@ function entryHtml(e: Entry, level: 3 | 4, cx: Context): string {
 			"Universe",
 			e.universes.length > 0 ? refsHtml(e.universes, cx) : undefined,
 		),
-		pair(cx, "Asked", askedHtml(e.asked, cx), true),
+		pair(
+			cx,
+			"Asked",
+			cx.inputs?.has(e.urn)
+				? "Not asked: comes with each case"
+				: askedHtml(e.asked, cx),
+			true,
+		),
 		pair(
 			cx,
 			"Intent",
@@ -922,6 +931,7 @@ export function codebookHtml(cb: Codebook, options: Options = {}): string {
 		places: placesOf(cb.instruments, en),
 		entries: entriesOf(cb.entries),
 		options: optionsOf(cb.entries),
+		inputs: new Set(cb.instruments.flatMap((i) => i.inputs.map((e) => e.urn))),
 	};
 	const shared = SHARED.filter((s) => cb.shared[s.key].length > 0)
 		.map(
