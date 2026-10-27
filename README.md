@@ -55,7 +55,7 @@ one, when it isn't.
 - **The `qretools` command** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)).
   Run `check`, `export`, `codebook` or `build` on a workspace, and `instrument check` or
   `instrument export` on an instrument.
-- **The codebook** (`packages/codebook/`). Turns a DDI-Lifecycle 4.0 document into an
+- **The codebook package** (`packages/codebook/`). Turns a DDI-Lifecycle 4.0 document into an
   HTML codebook. It also works as a `<ddi-codebook>` element on any web page.
 - **The Qualtrics export** (`packages/qsf/`). Turns an instrument into a Qualtrics survey.
   Use "Download QSF" in the app, or `qretools instrument export --qsf`.
