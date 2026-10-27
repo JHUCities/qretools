@@ -1,0 +1,5 @@
+# Its own workspace, outside the repository's. Both postinstalls only fetch a binary
+# that pnpm already installs as a platform optional dependency.
+allowBuilds:
+  esbuild: false
+  workerd: false

@@ -31,7 +31,7 @@ jobs:
         uses: actions/configure-pages@v6
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
-      - run: pnpm --dir worker install --frozen-lockfile --ignore-workspace
+      - run: pnpm --dir worker install --frozen-lockfile
       - run: pnpm run check:worker
       # The path Pages serves from: "/" under the custom domain, "/<repo>/" on github.io.
       - run: echo "base=[$BASE_PATH]" && pnpm run build

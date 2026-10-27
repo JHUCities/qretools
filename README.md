@@ -105,7 +105,7 @@ effects described as data).
 Signing in with GitHub needs a GitHub App and one small Cloudflare Worker (`worker/`)
 that swaps the sign-in code for a token. It's the only part that runs on a server.
 `apps/bank/.env` names both. The Worker keeps its own lockfile outside the workspace:
-install it with `pnpm --dir worker --ignore-workspace install`. The site deploys to
+install it with `pnpm --dir worker install`. The site deploys to
 GitHub Pages from `main` (`.github/workflows/pages.yml`).
 
 [`AGENTS.md`](AGENTS.md) records every design decision and why. Read it before

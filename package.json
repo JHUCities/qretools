@@ -12,7 +12,7 @@
 		"lint": "biome check .",
 		"format": "biome format --write .",
 		"check": "biome check . && pnpm -r run check",
-		"check:worker": "pnpm --dir worker --ignore-workspace check",
+		"check:worker": "pnpm --dir worker check",
 		"qretools": "node packages/cli/bin/qretools.ts"
 	},
 	"devDependencies": {
