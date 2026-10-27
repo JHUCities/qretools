@@ -12,22 +12,27 @@
  */
 import type { Expr } from "./ast.ts";
 
-/** The value of a hole: what it will be isn't written yet. */
-export const UNKNOWN: unique symbol = Symbol("unknown");
+/** The value of a hole: what it will be isn't written yet. A registered symbol, so a copy of the evaluator in a page has the same one. */
+export const UNKNOWN: unique symbol = Symbol.for("qretools.unknown");
 
 export type Value = number | string | boolean | null | typeof UNKNOWN;
 
-const same = (a: Value, b: Value): boolean =>
-	typeof a === typeof b && (typeof a === "number" || typeof a === "string");
-
+/**
+ * Self-contained, so a page can run it as written (`evaluateCondition.toString()`): it
+ * names nothing outside itself, which a bundler could rename.
+ */
 export function evaluateCondition(
 	e: Expr,
 	lookup: (name: string) => Value,
 ): Value {
+	// The same symbol as UNKNOWN: the type names it, the code doesn't.
+	const hole: typeof UNKNOWN = Symbol.for("qretools.unknown") as typeof UNKNOWN;
+	const same = (a: Value, b: Value): boolean =>
+		typeof a === typeof b && (typeof a === "number" || typeof a === "string");
 	const go = (x: Expr): Value => {
 		switch (x.kind) {
 			case "hole":
-				return UNKNOWN;
+				return hole;
 			case "null":
 				return null;
 			case "name":
@@ -38,7 +43,7 @@ export function evaluateCondition(
 				return x.value;
 			case "unary": {
 				const v = go(x.operand);
-				if (v === UNKNOWN || v === null) return v;
+				if (v === hole || v === null) return v;
 				if (x.op === "not") return typeof v === "boolean" ? !v : null;
 				return typeof v === "number" ? (x.op === "-" ? -v : v) : null;
 			}
@@ -46,26 +51,26 @@ export function evaluateCondition(
 				const l = go(x.left);
 				const r = go(x.right);
 				const logical = (v: Value) =>
-					v === UNKNOWN || v === null || typeof v === "boolean";
+					v === hole || v === null || typeof v === "boolean";
 				switch (x.op) {
 					case "and":
 						if (!logical(l) || !logical(r)) return null;
 						if (l === false || r === false) return false;
-						if (l === UNKNOWN || r === UNKNOWN) return UNKNOWN;
+						if (l === hole || r === hole) return hole;
 						return l === null || r === null ? null : true;
 					case "or":
 						if (!logical(l) || !logical(r)) return null;
 						if (l === true || r === true) return true;
-						if (l === UNKNOWN || r === UNKNOWN) return UNKNOWN;
+						if (l === hole || r === hole) return hole;
 						return l === null || r === null ? null : false;
 					case "xor":
 						if (!logical(l) || !logical(r)) return null;
-						if (l === UNKNOWN || r === UNKNOWN) return UNKNOWN;
+						if (l === hole || r === hole) return hole;
 						return l === null || r === null ? null : l !== r;
 					default:
 						break;
 				}
-				if (l === UNKNOWN || r === UNKNOWN) return UNKNOWN;
+				if (l === hole || r === hole) return hole;
 				if (l === null || r === null) return null;
 				switch (x.op) {
 					case "=":
@@ -95,20 +100,20 @@ export function evaluateCondition(
 			}
 			case "member": {
 				const v = go(x.operand);
-				if (v === UNKNOWN || v === null) return v;
+				if (v === hole || v === null) return v;
 				const values = x.set.map(go);
 				if (values.some((s) => s === v)) return !x.negated;
-				if (values.includes(UNKNOWN)) return UNKNOWN;
+				if (values.includes(hole)) return hole;
 				return x.negated;
 			}
 			case "call": {
 				// A code's words are its bank's, which a condition's evaluation isn't given.
-				if (x.fn === "label") return UNKNOWN;
+				if (x.fn === "label") return hole;
 				const args = x.args.map(go);
 				// The value, or the default when the value is null (a hole stays undecided).
 				if (x.fn === "nvl")
 					return args[0] === null ? (args[1] ?? null) : (args[0] ?? null);
-				if (args.includes(UNKNOWN)) return UNKNOWN;
+				if (args.includes(hole)) return hole;
 				switch (x.fn) {
 					case "isnull":
 						return args[0] === null;
