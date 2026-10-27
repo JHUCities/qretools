@@ -546,7 +546,7 @@ export function withLocks(source: string, locks: Locks): string | undefined {
 	const locked = doc.get("locked", true);
 	if (locked === undefined || (isScalar(locked) && locked.value === null)) {
 		doc.set("locked", doc.createNode({ ...locks }));
-		return doc.toString();
+		return doc.toString({ lineWidth: 0 });
 	}
 	if (!isMap(locked)) return undefined;
 	for (const [key, commit] of Object.entries(locks)) {
@@ -560,5 +560,6 @@ export function withLocks(source: string, locks: Locks): string | undefined {
 		else locked.set(key, commit);
 	}
 	locked.flow = false;
-	return doc.toString();
+	// No line width: YAML would otherwise fold every long line at 80 characters.
+	return doc.toString({ lineWidth: 0 });
 }

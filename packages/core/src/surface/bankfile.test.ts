@@ -476,6 +476,16 @@ describe("the locks in the workspace's settings file", () => {
 		);
 	});
 
+	it("leave a long line on one line", () => {
+		const long = `note: ${"word ".repeat(30).trim()}\n`;
+		expect(withLocks(long, { "o/a@v1": A })).toBe(
+			`${long}locked:\n  o/a@v1: ${A}\n`,
+		);
+		expect(withLocks(`${long}locked: {}\n`, { "o/a@v1": A })).toBe(
+			`${long}locked:\n  o/a@v1: ${A}\n`,
+		);
+	});
+
 	it("write nothing into a file they can't read", () => {
 		expect(withLocks("locked: x\n", { "o/c@v1": B })).toBeUndefined();
 		expect(withLocks("- a list\n", { "o/c@v1": B })).toBeUndefined();
