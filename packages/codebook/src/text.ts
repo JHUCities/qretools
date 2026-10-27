@@ -73,14 +73,16 @@ export function textOf(s: string | undefined): Text | undefined {
 
 /**
  * An item's name, from its own name field (`VariableName`, `UniverseName`; a control
- * construct's `ConstructName`; a parameter's `ParameterName`, else its `Alias`), if it
- * has one. Never from its ID.
+ * construct's `ConstructName`; a parameter's `ParameterName`, whatever field holds it, as a
+ * loop's `LoopVariableReference` does; else its `Alias`), if it has one. Never from its ID.
  */
 export const nameOf = (it: Indexed, lang?: string): string | undefined =>
 	words(
 		it.item[
 			it.type.endsWith("Parameter") ? "ParameterName" : `${it.type}Name`
-		] ?? it.item.ConstructName,
+		] ??
+			it.item.ConstructName ??
+			it.item.ParameterName,
 		lang,
 	) ?? str(it.item.Alias);
 
