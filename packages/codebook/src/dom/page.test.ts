@@ -355,9 +355,9 @@ describe("a codebook's page", () => {
 		const words = (map?.textContent ?? "").replace(/\s+/g, " ");
 		for (const said of [
 			"Hello.",
-			"About you (Random)",
+			"About you (in random order)",
 			"If adult (VTL) (warning)",
-			"Repeated people while i <= n",
+			"Repeated for each of people while i <= n",
 			"Else",
 			"Computed x is set to x := 1",
 		])
@@ -445,7 +445,7 @@ describe("a codebook's page", () => {
 		expect(terms).toEqual({
 			Universe: "adults",
 			Asked:
-				"Unless consent = 2 (VTL) and if adult; repeated in people; section order: Random; in the instrument",
+				"Unless consent = 2 (VTL) and if adult; repeated in people; section in random order; in the instrument",
 			Format: "Number from 0 to 120, in </dd><b>years",
 		});
 		// The one plain string written into a particular: still escaped.

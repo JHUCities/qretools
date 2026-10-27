@@ -31,6 +31,8 @@ export interface Asking {
 	readonly conditions: readonly Asked[];
 	/** The loops it is repeated in, nearest first. */
 	readonly loops: readonly Ref[];
+	/** It comes after a screen-out, which says its condition once. */
+	readonly afterStop?: true;
 	/** The nearest enclosing section's `ItemSequenceType` (`Random`, `Rotate`), verbatim. */
 	readonly order?: string;
 	/** The ask's own `ResponseSequence.ItemSequenceType`: the order its options are shown in. */
@@ -78,6 +80,7 @@ export interface Flow {
 interface Context {
 	readonly conditions: readonly Asked[];
 	readonly loops: readonly Ref[];
+	readonly afterStop?: true;
 	readonly order?: string;
 }
 
@@ -114,6 +117,7 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 							construct: s.urn,
 							conditions: at.conditions,
 							loops: at.loops,
+							...(at.afterStop && { afterStop: true }),
 							...(at.order !== undefined && { order: at.order }),
 							...(s.responseOrder !== undefined && {
 								responseOrder: s.responseOrder,
@@ -150,10 +154,8 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 						...at,
 						conditions: [...at.conditions, { cond: s.cond, negated: false }],
 					});
-					visit(s.else, {
-						...at,
-						conditions: [...at.conditions, { cond: s.cond, negated: true }],
-					});
+					// What follows a stop is the rest of the interview: the stop says its condition once.
+					visit(s.else, { ...at, afterStop: true });
 					break;
 				case "count":
 				case "repeat":

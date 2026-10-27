@@ -35,7 +35,7 @@ interface Phrase {
 	readonly top?: "and" | "or";
 }
 
-const text = (t: string): Span => ({ kind: "text", text: t });
+const text = (t: string): Span => ({ kind: "text", text: t, own: true });
 const code = (t: string): Span => ({ kind: "code", text: t });
 const words = (...spans: Span[]): Phrase => ({ spans });
 
