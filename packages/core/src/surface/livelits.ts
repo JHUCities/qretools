@@ -364,10 +364,10 @@ export function applyLivelit(
 		livelit.set !== undefined
 			? setText(typeof value === "string" ? [value] : value, livelit.set)
 			: typeof value === "string"
-				? scalar(value)
+				? scalar(value, keyColumn(source, from))
 				: block !== null && value.length > 0
 					? value.map((v) => `\n${block[1]}- ${scalar(v)}`).join("")
-					: `[${value.map(scalar).join(", ")}]`;
+					: `[${value.map((v) => scalar(v)).join(", ")}]`;
 	if (text === undefined) return undefined;
 	const written =
 		source[from - 1] === ":" && !text.startsWith("\n") ? ` ${text}` : text;
@@ -378,6 +378,12 @@ export function applyLivelit(
 		caret: from + written.length,
 	};
 }
+
+/** The column of the key on the line holding `at`: past its indent and any `- `. */
+const keyColumn = (source: string, at: number): number => {
+	const line = source.slice(source.lastIndexOf("\n", at - 1) + 1, at);
+	return /^ *(?:- +)*/.exec(line)?.[0].length ?? 0;
+};
 
 /**
  * A set of codes as a condition writes it, `{"1", "2"}`, escaped for the quotes around

@@ -24,9 +24,15 @@ import { KNOWN_KEYS } from "./schema.ts";
 
 export type { Edit, Fix } from "../findings.ts";
 
-/** A value as YAML writes it on one line, quoted only when it must be. */
-export const scalar = (value: string): string =>
-	stringify(value, { lineWidth: 0 }).trimEnd();
+/**
+ * A value as YAML writes it, quoted only when it must be: on one line, or, over several
+ * lines, a `|-` block indented under a key at `column`.
+ */
+export const scalar = (value: string, column = 0): string =>
+	stringify(value, { lineWidth: 0 })
+		.trimEnd()
+		// Blank lines in the block stay empty.
+		.replace(/\n(?=.)/g, `\n${" ".repeat(column + 2)}`);
 
 /**
  * The text with every edit applied, or undefined when a path isn't in the text (it
@@ -50,7 +56,8 @@ export function applyEdits(
 		// The key as written, from the text: a path's last dotted segment would split a
 		// dotted code (`responses.1.5`).
 		const key = source.slice(from, to).split(":")[0] ?? "";
-		spans.push({ from, to, text: `${key}: ${scalar(edit.value)}` });
+		const column = from - (source.lastIndexOf("\n", from - 1) + 1);
+		spans.push({ from, to, text: `${key}: ${scalar(edit.value, column)}` });
 	}
 	// From the end, so earlier offsets still hold.
 	return spans

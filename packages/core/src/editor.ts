@@ -51,7 +51,7 @@ export {
 } from "./surface/livelits.ts";
 export { marksOf } from "./surface/marks.ts";
 export { rangesOf } from "./surface/parse.ts";
-export { type Place, placeAt } from "./surface/place.ts";
+export { type Place, placeAt, textLines } from "./surface/place.ts";
 export {
 	labelledJsonSchema,
 	labelsJsonSchema,
