@@ -22,7 +22,7 @@ jobs:
       - uses: jdx/mise-action@v5
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
-      - run: pnpm --dir worker install --frozen-lockfile --ignore-workspace
+      - run: pnpm --dir worker install --frozen-lockfile
       - run: pnpm run check:worker
       - run: pnpm run build
       # What `pnpm pack` runs before a release: the command, bundled.
