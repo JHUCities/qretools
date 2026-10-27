@@ -15,6 +15,12 @@ import type {
 	Row,
 } from "./model.ts";
 import type { Ref, Span, Text } from "./text.ts";
+import {
+	conditionsWords,
+	isCondition,
+	type Known,
+	type Mode,
+} from "./words.ts";
 
 const ENTITIES: Readonly<Record<string, string>> = {
 	"&": "&amp;",
@@ -67,6 +73,9 @@ interface Context extends Options {
 	 * several). None where there's no map.
 	 */
 	readonly places?: ReadonlyMap<string, Place>;
+	/** Each entry by its URN, and each select-all question's options by the question's. */
+	readonly entries?: ReadonlyMap<string, Entry>;
+	readonly options?: ReadonlyMap<string, readonly Entry[]>;
 }
 
 interface Place {
@@ -167,11 +176,45 @@ const sentence = (s: string): string =>
 const commandHtml = (c: Command): string =>
 	`<code>${escapeHtml(c.command)}</code>${c.language === undefined ? "" : ` <span class="ddi-language">(${escapeHtml(c.language)})</span>`}`;
 
+/** What a name in a condition reads, as far as the page knows it. */
+function knownOf(ref: Ref, cx: Context): Known | undefined {
+	// shortcut: a RepeatUntil's row is counted by a ComputationItem, so it reads as possibly
+	// unanswered; tell it from a computed value if an else on one shows "or not answered".
+	if (ref.type === "ComputationItem") return { nullable: true };
+	if (ref.type === "Loop") return { nullable: false };
+	const e = cx.entries?.get(ref.urn);
+	if (e === undefined) return undefined;
+	return {
+		// An input, with no question, is set before the interview.
+		nullable: e.question !== undefined,
+		codes: (e.responses?.rows ?? []).filter((r) => !r.missing),
+	};
+}
+
+/** Conditions in words, or undefined where any can't be read (not VTL, say). */
+const wordsHtml = (
+	parts: readonly { readonly command: Command; readonly mode: Mode }[],
+	cx: Context,
+): string | undefined => {
+	const said = conditionsWords(parts, (r) => knownOf(r, cx));
+	return said === undefined ? undefined : inlineHtml([said], cx);
+};
+
 /** One place a question is asked, as a phrase: its conditions, loops and orders. */
 function askingHtml(a: Asking, cx: Context): string {
-	const conditions = a.conditions.map(
-		(c) => `${c.negated ? "unless" : "if"} ${commandHtml(c)}`,
+	const said = wordsHtml(
+		a.conditions.map((c) => ({
+			command: c,
+			mode: c.negated ? "notTrue" : "true",
+		})),
+		cx,
 	);
+	const conditions =
+		said !== undefined
+			? [`if ${said}`]
+			: a.conditions.map(
+					(c) => `${c.negated ? "unless" : "if"} ${commandHtml(c)}`,
+				);
 	const parts = [
 		conditions.join(" and "),
 		...a.loops.map((l) =>
@@ -200,7 +243,14 @@ function placeHtml(a: Asking, cx: Context): string {
  * asked once, with no condition, loop or order, and no map to link to.
  */
 function askedHtml(asked: readonly Asking[], cx: Context): string | undefined {
-	const places = asked.map((a) => `${askingHtml(a, cx)}${placeHtml(a, cx)}`);
+	// After a condition, a semicolon: "or not answered in the instrument" would change its meaning.
+	const places = asked.map((a) => {
+		const said = askingHtml(a, cx);
+		const place = placeHtml(a, cx);
+		return said === "Always" || place === ""
+			? `${said}${place}`
+			: `${said};${place}`;
+	});
 	if (places.length === 0 || (places.length === 1 && places[0] === "Always"))
 		return undefined;
 	return places.length === 1
@@ -577,39 +627,142 @@ function placesOf(
 	return places;
 }
 
+/** How far a drawing has got: the constructs that have their id, and the asks numbered. */
+interface Drawing {
+	readonly drawn: Set<string>;
+	asked: number;
+}
+
 /** Steps as a list; nothing for none. */
 const flowHtml = (
 	steps: readonly Step<LinkedAsk>[],
 	cx: Context,
-	drawn: Set<string>,
+	at: Drawing,
+	depth: number,
 ): string =>
 	steps.length === 0
 		? ""
 		: // role: a list styled without markers stays a list to VoiceOver.
-			`<ol class="ddi-flow" role="list">${steps.map((s) => stepHtml(s, cx, drawn)).join("")}</ol>`;
+			`<ol class="ddi-flow" role="list">${steps.map((s) => stepHtml(s, cx, at, depth)).join("")}</ol>`;
 
 /** A command and its program language, or that there is none. */
 const conditionHtml = (c: Command | undefined, cx: Context): string =>
 	c === undefined ? english("(no condition written)", cx) : commandHtml(c);
 
-/** One step as a list item; `drawn` holds the constructs that already have their id. */
-function stepHtml(s: Step<LinkedAsk>, cx: Context, drawn: Set<string>): string {
+/** The page's word for a step, and its words: `<strong>`, as a paper questionnaire's. */
+const lead = (word: string, cx: Context): string =>
+	`<strong${cx.en}>${word}</strong>`;
+
+/** How an ask is answered: its options and their codes (missing ones left out), or its format. */
+function answersHtml(s: LinkedAsk, cx: Context): string {
+	const key = s.entry?.urn;
+	const options = key === undefined ? undefined : cx.options?.get(key);
+	const entry = key === undefined ? undefined : cx.entries?.get(key);
+	const rows: readonly { code: string; label?: Text }[] =
+		options !== undefined
+			? options.flatMap((o) => (o.group === undefined ? [] : [o.group.option]))
+			: (entry?.responses?.rows ?? []).filter((r) => !r.missing);
+	const many = options !== undefined || entry?.responses?.many === true;
+	return `${many ? `<p class="ddi-answers"${cx.en}>Select all that apply</p>` : ""}${
+		rows.length === 0
+			? ""
+			: `<ul class="ddi-options" role="list">${rows
+					.map(
+						(r) =>
+							`<li><code>${escapeHtml(r.code)}</code><span>${r.label === undefined ? "" : inlineHtml(r.label, cx)}</span></li>`,
+					)
+					.join("")}</ul>`
+	}${entry?.format === undefined ? "" : `<p class="ddi-answers"${cx.en}>${escapeHtml(formatWords(entry.format))}</p>`}`;
+}
+
+/** A branch's arms, each under "Ask if" and its condition in words: an else-if's and an else's say the earlier arms didn't hold. */
+function branchHtml(
+	s: Extract<Step<LinkedAsk>, { kind: "branch" }>,
+	cx: Context,
+	at: Drawing,
+	depth: number,
+): string {
+	const type =
+		s.type === undefined
+			? ""
+			: ` <span class="ddi-language">(${escapeHtml(s.type)})</span>`;
+	const before = (n: number): { command: Command; mode: Mode }[] =>
+		s.arms
+			.slice(0, n)
+			.flatMap((a) =>
+				a.command === undefined
+					? []
+					: [{ command: a.command, mode: "notTrue" }],
+			);
+	// "Show if" over text alone: nothing there is asked.
+	const verb = (steps: readonly Step<LinkedAsk>[]) =>
+		steps.every((x) => x.kind === "say") ? "Show if" : "Ask if";
+	const arm = (
+		steps: readonly Step<LinkedAsk>[],
+		said: string | undefined,
+		written: string,
+		first = false,
+	) =>
+		`<div class="ddi-arm"><p class="ddi-if">${
+			said === undefined ? written : `${lead(verb(steps), cx)} ${said}`
+		}${first ? type : ""}</p>${flowHtml(steps, cx, at, depth)}</div>`;
+	const arms = s.arms.map((a, i) =>
+		arm(
+			a.steps,
+			a.command === undefined
+				? undefined
+				: wordsHtml([...before(i), { command: a.command, mode: "true" }], cx),
+			`${english(i === 0 ? "If" : "Else if", cx)} ${conditionHtml(a.command, cx)}`,
+			i === 0,
+		),
+	);
+	const otherwise =
+		s.otherwise === undefined
+			? ""
+			: arm(
+					s.otherwise,
+					wordsHtml(before(s.arms.length), cx),
+					english("Else", cx),
+				);
+	return `<li>${arms.join("")}${otherwise}</li>`;
+}
+
+/** One step as a list item. */
+function stepHtml(
+	s: Step<LinkedAsk>,
+	cx: Context,
+	at: Drawing,
+	depth: number,
+): string {
 	switch (s.kind) {
 		case "ask": {
 			const place = cx.places?.get(s.construct);
 			const id =
-				place === undefined || drawn.has(s.construct)
+				place === undefined || at.drawn.has(s.construct)
 					? ""
 					: ` id="${escapeHtml(place.anchor)}"`;
-			drawn.add(s.construct);
+			at.drawn.add(s.construct);
+			// Numbered at each place it's asked: a construct reached twice is asked twice.
+			at.asked++;
 			const to = s.entry === undefined ? undefined : anchorOf(s.entry.urn);
-			return `<li${id}>${
+			const name =
 				s.entry === undefined
 					? `<span class="ddi-urn">${escapeHtml(s.question)}</span>`
 					: to !== undefined && cx.anchors.has(to)
-						? contentsLink(s.entry.urn, s.entry.name, s.entry.label, cx)
-						: titleHtml(s.entry.name, s.entry.label, s.entry.urn, cx)
-			}</li>`;
+						? contentsLink(s.entry.urn, s.entry.name, undefined, cx)
+						: titleHtml(s.entry.name, undefined, s.entry.urn, cx);
+			const question =
+				s.entry === undefined
+					? undefined
+					: (cx.entries?.get(s.entry.urn)?.question ??
+						cx.options?.get(s.entry.urn)?.[0]?.question);
+			const order =
+				s.responseOrder === undefined
+					? ""
+					: `<p class="ddi-answers"><span${cx.en}>Options in order:</span> ${escapeHtml(s.responseOrder)}</p>`;
+			return `<li${id} class="ddi-ask"><p class="ddi-ask-name"><span class="ddi-number">${at.asked}.</span> ${name}</p>${
+				question === undefined ? "" : questionHtml(question, cx)
+			}${order}${answersHtml(s, cx)}</li>`;
 		}
 		case "say":
 			return `<li>${
@@ -617,35 +770,35 @@ function stepHtml(s: Step<LinkedAsk>, cx: Context, drawn: Set<string>): string {
 					? english("A statement with no text", cx)
 					: `<blockquote>${blockHtml(s.text, cx)}</blockquote>`
 			}</li>`;
-		case "compute":
-			return `<li><p>${english("Compute", cx)} ${
-				s.assigns.length === 0 ? "" : `${refsHtml(s.assigns, cx)}: `
-			}${conditionHtml(s.command, cx)}</p></li>`;
-		case "branch": {
-			const type =
-				s.type === undefined
-					? ""
-					: ` <span class="ddi-language">(${escapeHtml(s.type)})</span>`;
-			return `<li>${s.arms
-				.map(
-					(a, i) =>
-						`<p>${english(i === 0 ? "If" : "Else if", cx)} ${conditionHtml(a.command, cx)}${i === 0 ? type : ""}</p>${flowHtml(a.steps, cx, drawn)}`,
-				)
-				.join("")}${
-				s.otherwise === undefined
-					? ""
-					: `<p>${english("Else", cx)}</p>${flowHtml(s.otherwise, cx, drawn)}`
-			}</li>`;
+		case "compute": {
+			const assigns =
+				s.assigns.length === 0 ? "" : `${refsHtml(s.assigns, cx)} `;
+			// A condition: "x is true when …"; a value: "x is set to `…`".
+			const said =
+				s.command === undefined || !isCondition(s.command)
+					? undefined
+					: wordsHtml([{ command: s.command, mode: "true" }], cx);
+			return `<li><p>${lead("Computed", cx)} ${
+				said === undefined
+					? `${assigns}${english(s.assigns.length === 0 ? "" : "is set to ", cx)}${conditionHtml(s.command, cx)}`
+					: `${assigns}${english("is true when", cx)} ${said}`
+			}</p></li>`;
 		}
+		case "branch":
+			return branchHtml(s, cx, at, depth);
 		case "loop": {
+			const said =
+				s.command === undefined
+					? undefined
+					: wordsHtml([{ command: s.command, mode: "true" }], cx);
 			const how =
 				s.command === undefined
 					? ""
-					: ` ${english(s.loop === "RepeatUntil" ? "until" : "while", cx)} ${commandHtml(s.command)}`;
+					: ` ${english(s.loop === "RepeatUntil" ? "until" : "while", cx)} ${said ?? commandHtml(s.command)}`;
 			// An unnamed loop isn't named by its URN: "Repeated while …" says enough.
 			const named =
 				s.ref.name === undefined ? "" : ` ${inlineHtml([[s.ref]], cx)}`;
-			return `<li><p>${english("Repeated", cx)}${named}${how}</p>${flowHtml(s.steps, cx, drawn)}</li>`;
+			return `<li><p>${lead("Repeated", cx)}${named}${how}</p>${flowHtml(s.steps, cx, at, depth)}</li>`;
 		}
 		case "section": {
 			// A section's name is its title (QREtools writes it there), so words, not code.
@@ -659,14 +812,20 @@ function stepHtml(s: Step<LinkedAsk>, cx: Context, drawn: Set<string>): string {
 				s.order === undefined
 					? ""
 					: ` <span class="ddi-language">(${escapeHtml(s.order)})</span>`;
-			return `<li><p class="ddi-section">${title}${order}</p>${flowHtml(s.steps, cx, drawn)}</li>`;
+			// Under the instrument's h3: h4, then deeper, as far as HTML goes.
+			const h = `h${Math.min(4 + depth, 6)}`;
+			return `<li><${h} class="ddi-section">${title}${order}</${h}>${flowHtml(s.steps, cx, at, depth + 1)}</li>`;
 		}
 		default:
 			return s satisfies never;
 	}
 }
 
-/** Each instrument as a map: its title, what it is, then its steps. */
+/**
+ * Each instrument as its specification, a paper questionnaire's: its title, what it is,
+ * then its steps in order, each question numbered with its words and its answers, and
+ * each condition in words where it is VTL.
+ */
 function instrumentsHtml(cb: Codebook, cx: Context): string {
 	if (cb.instruments.length === 0) return "";
 	const drawn = new Set<string>();
@@ -675,9 +834,34 @@ function instrumentsHtml(cb: Codebook, cx: Context): string {
 			(i) =>
 				`<article${idAttr(i.urn)}>${headingHtml(3, i.name, i.label, i.urn, cx)}${
 					i.description === undefined ? "" : blockHtml(i.description, cx)
-				}${flowHtml(i.steps, cx, drawn)}</article>`,
+				}${flowHtml(i.steps, cx, { drawn, asked: 0 }, 0)}</article>`,
 		)
 		.join("")}</section>`;
+}
+
+/** Each entry by its URN, and by its question's where a condition's name reads the question. */
+function entriesOf(entries: readonly Entry[]): Map<string, Entry> {
+	const byUrn = new Map(entries.map((e) => [e.urn, e]));
+	for (const e of entries)
+		if (
+			e.question !== undefined &&
+			e.group === undefined &&
+			!byUrn.has(e.question.urn)
+		)
+			byUrn.set(e.question.urn, e);
+	return byUrn;
+}
+
+/** Each select-all question's options, by the question's newest URN, as its asks name it. */
+function optionsOf(entries: readonly Entry[]): Map<string, Entry[]> {
+	const options = new Map<string, Entry[]>();
+	for (const e of entries)
+		if (e.group !== undefined)
+			options.set(e.group.question, [
+				...(options.get(e.group.question) ?? []),
+				e,
+			]);
+	return options;
 }
 
 /**
@@ -697,6 +881,8 @@ export function codebookHtml(cb: Codebook, options: Options = {}): string {
 		anchors: anchorsOf(cb, blocks),
 		en,
 		places: placesOf(cb.instruments, en),
+		entries: entriesOf(cb.entries),
+		options: optionsOf(cb.entries),
 	};
 	const shared = SHARED.filter((s) => cb.shared[s.key].length > 0)
 		.map(
@@ -845,7 +1031,18 @@ blockquote { margin: 0 0 0.5rem; padding-inline-start: 1rem; border-inline-start
 .ddi-flow .ddi-flow { padding-inline-start: 1rem; border-inline-start: 2px solid var(--borderColor-muted); }
 .ddi-flow li { margin-block: 0.25rem; scroll-margin-block-start: 1rem; }
 .ddi-flow p, .ddi-flow blockquote { margin: 0; }
-.ddi-section { font-weight: 600; }
+/* The specification: each question numbered, its words, its answers; a condition over what it decides. */
+.ddi-flow .ddi-ask { margin-block: 0.75rem; break-inside: avoid; }
+.ddi-flow .ddi-ask > :is(p, blockquote, ul) { margin-block-end: 0.25rem; }
+.ddi-ask-name { font-weight: 600; }
+.ddi-number { display: inline-block; min-inline-size: 2em; }
+.ddi-options { list-style: none; margin: 0; padding-inline-start: 2em; display: grid; grid-template-columns: max-content 1fr; gap: 0 0.75rem; }
+/* Each option a row of the list's grid, so every code takes the widest code's room and stays a list item. */
+.ddi-options li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.ddi-options code { justify-self: start; overflow-wrap: anywhere; }
+.ddi-arm { margin-block: 0.5rem; }
+.ddi-if { padding: 0.25rem 0.5rem; border-radius: var(--borderRadius-medium); background: var(--bgColor-accent-muted); }
+.ddi-flow :is(h4, h5, h6) { margin: 1rem 0 0.25rem; }
 /* A long command wraps rather than scrolling the page sideways. */
 :is(.ddi-flow, dd) code { white-space: pre-wrap; overflow-wrap: anywhere; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.75rem 0; }
@@ -864,8 +1061,11 @@ footer dl { color: var(--fgColor-muted); }
 @media print {
 	nav { display: none; }
 	.ddi-anchor { display: none; }
-	h2, h3, h4, .ddi-heading { break-after: avoid; }
+	h2, h3, h4, h5, h6, .ddi-heading, .ddi-if { break-after: avoid; }
 	article { break-inside: avoid; }
+	/* An instrument runs over many pages: only its questions keep together. */
+	section > article:has(.ddi-flow) { break-inside: auto; }
+	.ddi-if { background: none; border: 1px solid; }
 	:target { background: none; outline: none; }
 	a { color: inherit; }
 }

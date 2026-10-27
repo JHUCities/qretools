@@ -63,7 +63,18 @@ blockquote { margin: 0 0 0.5rem; padding-inline-start: 1rem; border-inline-start
 .ddi-flow .ddi-flow { padding-inline-start: 1rem; border-inline-start: 2px solid var(--borderColor-muted); }
 .ddi-flow li { margin-block: 0.25rem; scroll-margin-block-start: 1rem; }
 .ddi-flow p, .ddi-flow blockquote { margin: 0; }
-.ddi-section { font-weight: 600; }
+/* The specification: each question numbered, its words, its answers; a condition over what it decides. */
+.ddi-flow .ddi-ask { margin-block: 0.75rem; break-inside: avoid; }
+.ddi-flow .ddi-ask > :is(p, blockquote, ul) { margin-block-end: 0.25rem; }
+.ddi-ask-name { font-weight: 600; }
+.ddi-number { display: inline-block; min-inline-size: 2em; }
+.ddi-options { list-style: none; margin: 0; padding-inline-start: 2em; display: grid; grid-template-columns: max-content 1fr; gap: 0 0.75rem; }
+/* Each option a row of the list's grid, so every code takes the widest code's room and stays a list item. */
+.ddi-options li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.ddi-options code { justify-self: start; overflow-wrap: anywhere; }
+.ddi-arm { margin-block: 0.5rem; }
+.ddi-if { padding: 0.25rem 0.5rem; border-radius: var(--borderRadius-medium); background: var(--bgColor-accent-muted); }
+.ddi-flow :is(h4, h5, h6) { margin: 1rem 0 0.25rem; }
 /* A long command wraps rather than scrolling the page sideways. */
 :is(.ddi-flow, dd) code { white-space: pre-wrap; overflow-wrap: anywhere; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.75rem 0; }
@@ -82,8 +93,11 @@ footer dl { color: var(--fgColor-muted); }
 @media print {
 	nav { display: none; }
 	.ddi-anchor { display: none; }
-	h2, h3, h4, .ddi-heading { break-after: avoid; }
+	h2, h3, h4, h5, h6, .ddi-heading, .ddi-if { break-after: avoid; }
 	article { break-inside: avoid; }
+	/* An instrument runs over many pages: only its questions keep together. */
+	section > article:has(.ddi-flow) { break-inside: auto; }
+	.ddi-if { background: none; border: 1px solid; }
 	:target { background: none; outline: none; }
 	a { color: inherit; }
 }
