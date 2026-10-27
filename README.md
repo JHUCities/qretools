@@ -50,18 +50,15 @@ one, when it isn't.
 
 ## What's in it
 
-- **The web app** (`apps/bank/`, [qretools.com](https://qretools.com/)): write questions,
-  the scales and other values they share, and instruments, checked as you type, and save
-  them to your branch.
-- **The `qretools` command** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)):
-  `check` a workspace, `export` its questions' DDI, write its `codebook`, `build` its
-  versioned DDI from its git history, and `instrument check` or `instrument export` an instrument.
-- **The codebook** (`packages/codebook/`): a codebook page from any DDI-Lifecycle 4.0
-  document, not only one QREtools made, and the same as a `<ddi-codebook>` element for
-  any web page.
-- **The Qualtrics export** (`packages/qsf/`): an instrument as a Qualtrics survey (QSF),
-  made from its DDI. Download it in the web app, or run
-  `qretools instrument export --qsf`.
+- **The web app** (`apps/bank/`, [qretools.com](https://qretools.com/)). Write questions and
+  instruments, checked as you type, and save them to your branch.
+- **The `qretools` command** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)).
+  Run `check`, `export`, `codebook` or `build` on a workspace, and `instrument check` or
+  `instrument export` on an instrument.
+- **The codebook** (`packages/codebook/`). Turns a DDI-Lifecycle 4.0 document into a
+  codebook page. It also works as a `<ddi-codebook>` element on any web page.
+- **The Qualtrics export** (`packages/qsf/`). Turns an instrument into a Qualtrics survey.
+  Use "Download QSF" in the app, or `qretools instrument export --qsf`.
 
 ## Start a workspace
 
