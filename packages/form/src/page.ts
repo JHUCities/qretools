@@ -8,7 +8,11 @@ import { evaluateCondition, type ReadInstruments } from "@qretools/core";
 import { runtime } from "./runtime.ts";
 import { walk } from "./walk.ts";
 
-export function pageOf(read: ReadInstruments): string {
+/** `theme` fixes the page's colours; without it they follow the system's. */
+export function pageOf(
+	read: ReadInstruments,
+	theme?: "light" | "dark",
+): string {
 	const first = read.instruments[0];
 	const title = first?.label ?? first?.name ?? "Instrument";
 	const json = JSON.stringify(read, (_k, v) =>
@@ -17,7 +21,7 @@ export function pageOf(read: ReadInstruments): string {
 	const revive = `(_k, v) => v !== null && typeof v === "object" && Array.isArray(v.$map) ? new Map(v.$map) : v`;
 	const script = `(${runtime})((${evaluateCondition}), (${walk}), JSON.parse(document.getElementById("form-data").textContent, ${revive}));`;
 	return `<!doctype html>
-<html lang="en">
+<html lang="en"${theme === undefined ? "" : ` data-theme="${theme}"`}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -49,6 +53,9 @@ export function pageOf(read: ReadInstruments): string {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
+const DARK = `--fg: #f0f6fc; --muted: #9198a1; --bg: #0d1117; --inset: #151b23; --border: #3d444d;
+  --accent: #4493f8; --accent-fg: #ffffff; --skip: #d29922;`;
+
 // Primer's colour tokens, light and dark, as plain values: the page loads nothing.
 const CSS = `
 :root {
@@ -58,10 +65,9 @@ const CSS = `
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --fg: #f0f6fc; --muted: #9198a1; --bg: #0d1117; --inset: #151b23; --border: #3d444d;
-    --accent: #4493f8; --accent-fg: #ffffff; --skip: #d29922; }
-}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${DARK} } }
+:root[data-theme="dark"] { ${DARK} color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 14px/1.5 var(--font); color: var(--fg); background: var(--bg); }
 code { font-family: var(--mono); font-size: 12px; }

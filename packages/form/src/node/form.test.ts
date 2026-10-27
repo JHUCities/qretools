@@ -217,4 +217,11 @@ describe("the households page", () => {
 			expect(["The end", "Screened out"]).toContain($("main h2").textContent);
 		}
 	});
+
+	it("takes a theme, or follows the system's", () => {
+		expect(pageOf(read.value, "dark")).toContain(
+			'<html lang="en" data-theme="dark">',
+		);
+		expect(pageOf(read.value)).toContain('<html lang="en">');
+	});
 });
