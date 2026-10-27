@@ -634,6 +634,7 @@ export function elaborateInstrument(
 							"RepeatUntil",
 							id(at),
 							obj({
+								ConstructName: [intl(name)],
 								// DDI tests the condition before each row (RepeatUntil's own
 								// definition), so it holds only once a row has been asked.
 								UntilCondition:
@@ -665,6 +666,7 @@ export function elaborateInstrument(
 		return [
 			loop(
 				at,
+				name,
 				v,
 				param,
 				rosterRows.get(name)?.() ?? { text: "0", reads: [] },
@@ -679,11 +681,12 @@ export function elaborateInstrument(
 		const at = local("each", node.roster);
 		const v = `${node.roster}_index`;
 		const rows = rosterRows.get(node.roster)?.() ?? { text: "0", reads: [] };
-		return [loop(at, v, id(`${at}-out-${v}`), rows, node.flow)];
+		return [loop(at, node.roster, v, id(`${at}-out-${v}`), rows, node.flow)];
 	};
 
 	const loop = (
 		at: string,
+		name: string,
 		v: string,
 		param: Identity,
 		rows: Rows,
@@ -693,6 +696,7 @@ export function elaborateInstrument(
 		const body = withRow(v, param, () => sequence(nodes, `${at}-row`));
 		return emit(
 			item("Loop", id(at), {
+				ConstructName: [intl(name)],
 				LoopVariableReference: { ...param, ParameterName: [intl(v)] },
 				InitialValue: vtl("1", [], `${at}-init`),
 				LoopWhile: vtl(
@@ -954,6 +958,7 @@ function representation(
 	);
 	const list = emit(
 		item("CodeList", id(`input-${name}-codes`), {
+			CodeListName: [intl(name)],
 			Code: codes.map((c, i) => ({
 				...id(`input-${name}-code-${i}`),
 				Value: codeValue(c.code),

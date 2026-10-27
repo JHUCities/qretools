@@ -172,6 +172,8 @@ export type Step =
 	/** A roster by count, or an `each` over one: rows 1 to the count, at most `max`. */
 	| (At & {
 			readonly kind: "count";
+			/** Its `ConstructName`, if it has one (a roster's name). */
+			readonly name?: string;
 			readonly count: Parsed;
 			readonly max?: number;
 			readonly flow: readonly Step[];
@@ -179,6 +181,8 @@ export type Step =
 	/** A roster by `more`: rows while `more` holds after each, at most `max`. */
 	| (At & {
 			readonly kind: "repeat";
+			/** Its `ConstructName`, if it has one (a roster's name). */
+			readonly name?: string;
 			readonly more: Parsed;
 			readonly max: number;
 			readonly flow: readonly Step[];
@@ -186,6 +190,8 @@ export type Step =
 	/** A loop read as DDI says it, not as a roster: its condition is LoopWhile, UntilCondition or WhileCondition. */
 	| (At & {
 			readonly kind: "loop";
+			/** Its `ConstructName`, if it has one (a roster's name). */
+			readonly name?: string;
 			readonly construct: "Loop" | "RepeatUntil" | "RepeatWhile";
 			readonly cond: Condition;
 			readonly flow: readonly Step[];
@@ -738,6 +744,8 @@ export function readInstruments(
 		const id = idOf(it);
 		const cond = conditionOf(it.item.LoopWhile, id);
 		if (cond === undefined) return [];
+		const name = said(it.item.ConstructName);
+		const named = name !== undefined && { name };
 		const flow = under(it.item.ControlConstructReference, id, path);
 		const row = params.get(keyOf(it.item.LoopVariableReference));
 		const parsed = cond.kind === "parsed" ? cond : undefined;
@@ -763,12 +771,23 @@ export function readInstruments(
 			limited.count === undefined ||
 			("max" in limited && max === undefined)
 		)
-			return [{ kind: "loop", id, urn: it.urn, construct: "Loop", cond, flow }];
+			return [
+				{
+					kind: "loop",
+					id,
+					urn: it.urn,
+					...named,
+					construct: "Loop",
+					cond,
+					flow,
+				},
+			];
 		return [
 			{
 				kind: "count",
 				id,
 				urn: it.urn,
+				...named,
 				count: { ...parsed, expr: limited.count },
 				...(max !== undefined && { max }),
 				flow,
@@ -784,6 +803,8 @@ export function readInstruments(
 		const id = idOf(it);
 		const cond = conditionOf(it.item.UntilCondition, id);
 		if (cond === undefined) return [];
+		const name = said(it.item.ConstructName);
+		const named = name !== undefined && { name };
 		const body = deref(index, it.item.UntilConstructReference);
 		const parts = body?.item.ControlConstructReference;
 		const parsed = cond.kind === "parsed" ? cond : undefined;
@@ -791,7 +812,15 @@ export function readInstruments(
 		const unlifted = (
 			flow: readonly Step[] = under(it.item.UntilConstructReference, id, path),
 		): Step[] => [
-			{ kind: "loop", id, urn: it.urn, construct: "RepeatUntil", cond, flow },
+			{
+				kind: "loop",
+				id,
+				urn: it.urn,
+				...named,
+				construct: "RepeatUntil",
+				cond,
+				flow,
+			},
 		];
 		if (body === undefined) return unlifted();
 		const inBody = new Set([...path, body]);
@@ -842,6 +871,7 @@ export function readInstruments(
 				kind: "repeat",
 				id,
 				urn: it.urn,
+				...named,
 				more: { ...parsed, expr: more },
 				max: limit.value,
 				flow: gather(asReferences(parts).slice(1), id, inBody),
