@@ -678,7 +678,7 @@ describe("a write the session can't make", () => {
 			name: "This workspace can't be changed",
 		});
 		expect(dialog.textContent).toContain(
-			`${REASON}. Install it there, then try again.`,
+			`${REASON}. Install the QREtools app on this repository, then try again.`,
 		);
 		expect(
 			within(dialog).getByRole("button", { name: "Try again" }),

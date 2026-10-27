@@ -1,13 +1,12 @@
 /**
  * Where the caret is in a question's structure, for completion: at a value (whose key
  * is `segments`), or at a key under `segments` beside the keys already written there.
- * Read from the YAML the core parses, tolerant of holes and half-typed text, never from
- * indentation guessed line by line. Pure; knows YAML, not surveys.
+ * Read from the YAML the core parses, which copes with holes and half-typed text, never
+ * from indentation guessed line by line. Pure; knows YAML, not surveys.
  *
- * Only the caret's own line is read as text: its indent and the word being typed are
- * the author's, and a half-written word is not structure yet. CodeMirror's own YAML
- * tree was tried first and could not answer after trailing spaces or at the end of the
- * text (AGENTS.md).
+ * Only the caret's own line is read as text: its indent and the word being typed, since
+ * a half-written word isn't structure yet. CodeMirror's own YAML tree was tried first
+ * and couldn't answer after trailing spaces or at the end of the text (AGENTS.md).
  */
 import { isMap, isScalar, type Pair, parseDocument, type YAMLMap } from "yaml";
 import { keyText } from "./codes.ts";
@@ -17,7 +16,7 @@ export type Place =
 			readonly kind: "value";
 			readonly segments: readonly string[];
 			readonly typed: string;
-			/** The caret is straight after the colon: what is inserted brings its own space. */
+			/** The caret is straight after the colon, so what's inserted brings its own space. */
 			readonly spaced: boolean;
 	  }
 	| {
@@ -75,10 +74,10 @@ const lineOf = (source: string, at: number): number =>
 
 /**
  * The block map a key at `indent` on the line starting at `lineStart` belongs to, and
- * the keys leading to it. Descends while the last key written before that line sits
- * left of the indent; an empty value (or one that starts on the caret's line, which is
- * the author typing its first key) has no map yet. Undefined for places completion
- * does not serve: under a written scalar, inside a flow map, indented with no parent.
+ * the keys leading to it. Goes down while the last key before that line sits left of
+ * the indent; an empty value (or one starting on the caret's line: the author typing its
+ * first key) has no map yet. Undefined where completion doesn't help: under a written
+ * value, inside a `{…}` map, or indented with no parent.
  */
 function scopeAt(
 	source: string,

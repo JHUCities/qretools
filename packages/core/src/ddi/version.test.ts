@@ -162,7 +162,7 @@ describe("DDI versions", () => {
 		expect(validate(doc)).toEqual([]);
 	});
 
-	it("the list a select-all option is coded on takes the version of `select_all.yaml`, where it's written", () => {
+	it("the list a select all that apply option is coded on takes the version of `select_all.yaml`, where it's written", () => {
 		const doc = ddi(SELECT_ALL, VERSIONS);
 		expect(validate(doc)).toEqual([]);
 		const binary = only(doc, "CodeList").find(

@@ -196,8 +196,8 @@ function placeHtml(a: Asking, cx: Context): string {
 }
 
 /**
- * Where a question is asked, each place linked to the instrument's map; nothing when it is
- * asked once, always, as it is, with no map to link to.
+ * Where a question is asked, each place linked to the instrument's map. Nothing when it is
+ * asked once, with no condition, loop or order, and no map to link to.
  */
 function askedHtml(asked: readonly Asking[], cx: Context): string | undefined {
 	const places = asked.map((a) => `${askingHtml(a, cx)}${placeHtml(a, cx)}`);
@@ -681,12 +681,12 @@ function instrumentsHtml(cb: Codebook, cx: Context): string {
 }
 
 /**
- * A codebook as HTML to place in a page: the contents, then each entry, then the shared
- * items they refer to, then any reference that leads nowhere, each part headed by an
- * `<h2>`. No landmark but the contents' `<nav>`, no `<h1>`, no style: what holds it
- * (`pageOf`, `<ddi-codebook>`) says what it is part of. The codebook's own text is in
- * the language it was read in, which what holds it says; its own words are English,
- * marked so unless that language is English.
+ * A codebook as HTML to place in a page. In order: the contents, each entry, the shared
+ * items they refer to, and any reference that leads nowhere, each part under an `<h2>`.
+ * No landmark but the contents' `<nav>`, no `<h1>`, no style: what holds it (`pageOf`,
+ * `<ddi-codebook>`) says what it is part of. The document's text is in the language it
+ * was read in, which the holder declares. The codebook's own words are English, marked so
+ * unless that language is English.
  */
 export function codebookHtml(cb: Codebook, options: Options = {}): string {
 	const blocks = blocksOf(cb.entries);

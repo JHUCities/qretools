@@ -70,6 +70,6 @@ describe("references in a question", () => {
 		expect(draft.universe).toBeUndefined();
 		expect(findings.map(brief)).toEqual(["hole:hole@universe"]);
 		expect(findings[0]?.hint).toMatch(/renters/);
-		expect(findings[0]?.hint).toMatch(/sentence/);
+		expect(findings[0]?.hint).toMatch(/Or write it out in words\./);
 	});
 });

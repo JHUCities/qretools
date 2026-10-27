@@ -1,10 +1,11 @@
 /**
- * A read instrument written as a Qualtrics survey (QSF). Two passes, both pure: `number`
- * gives every ask and statement its QID in flow order (rosters included, so later steps
- * never renumber), then `layout` turns the flow into blocks, and `toQsf` serialises them
- * with a neutral skeleton (no account's IDs: Qualtrics assigns its own on import). Every
- * shape written is one the owner's exports showed (context: experiments 1–6b). Anything
- * the export can't write yet, or can't write exactly, is a finding at its DDI ID.
+ * A read instrument written as a Qualtrics survey (QSF), in two pure passes:
+ * - `number` gives every ask and statement its QID in flow order. Rosters are included,
+ *   so later steps never renumber.
+ * - `layout` turns the flow into blocks, and `toQsf` writes them into a neutral skeleton.
+ *   It has no account's IDs: Qualtrics assigns its own on import.
+ * Every shape written is one the owner's exports showed (context: experiments 1–6b).
+ * Anything the export can't write yet, or can't write exactly, is a finding at its DDI ID.
  */
 import type { Expr } from "@qretools/core";
 import { printCondition } from "@qretools/core";
@@ -114,20 +115,20 @@ export function writeQsf(
 			"qsf-inexpressible",
 			"error",
 			path,
-			`This is written to Qualtrics without ${what}: not exported yet.`,
+			`${what} can't be exported to Qualtrics yet.`,
 		);
 	if (instrument.missing)
 		note(
 			"qsf-note",
 			"info",
 			"",
-			"The bank's missing-value codes aren't offered to respondents in Qualtrics.",
+			"Respondents in Qualtrics don't see the missing values as options.",
 		);
 
 	/**
-	 * One of a condition's lists, or undefined with a finding where it can't be written. A
-	 * check reads its answers on the question's own page (`onPage`), where a computed number
-	 * set from that question on hasn't been set yet.
+	 * One of a condition's lists, or undefined with a finding where it can't be written.
+	 * A check reads its answers on the question's own page (`onPage`). There, a number
+	 * computed from that question onward isn't set yet.
 	 */
 	const formOf = (
 		cond: Cond,
@@ -153,7 +154,7 @@ export function writeQsf(
 				"qsf-inexpressible",
 				"error",
 				at,
-				"This reads a roster's answers outside its rows: there's no one row to test.",
+				"This uses an answer from a roster outside the roster, so Qualtrics can't tell which row to use.",
 			);
 			return undefined;
 		}
@@ -167,7 +168,7 @@ export function writeQsf(
 				)
 				? {
 						kind: "refused",
-						why: `\`${v}\` is computed after this question, so on its page it isn't this answer's.`,
+						why: `\`${v}\` is computed after this question, so it isn't set yet on this question's page.`,
 					}
 				: c;
 		});
@@ -181,7 +182,7 @@ export function writeQsf(
 				"qsf-too-large",
 				"error",
 				at,
-				"This condition takes more tests than Qualtrics logic should hold.",
+				"This condition is too long for Qualtrics.",
 			);
 			return undefined;
 		}
@@ -190,12 +191,12 @@ export function writeQsf(
 	const whenTrue = (cond: Cond, at: string) => formOf(cond, at, "t");
 
 	/**
-	 * A question with its blocking checks as custom validation (experiment 4, J): it passes
-	 * while every check's "is not false" list holds, as the DDI's check fails only on false.
-	 * Custom validation replaces a number's own, so its range is folded in; Qualtrics still
-	 * refuses letters there, but no longer extra decimals (test 2). It runs on an empty
-	 * answer too, as the "is not false" lists model a skipped one (measured on text; a
-	 * select-all assumed alike, test 2).
+	 * A question with its blocking checks as custom validation (experiment 4, J). It passes
+	 * while every check's "is not false" list holds, since the DDI's check fails only on false.
+	 * Custom validation replaces a number's own, so its range is folded in. Qualtrics still
+	 * refuses letters there, but no longer extra decimals (test 2). It also runs on an empty
+	 * answer, which the "is not false" lists allow for (measured on text; assumed the same
+	 * for select all that apply, test 2).
 	 */
 	const validated = (
 		s: Extract<Step, { kind: "ask" }>,
@@ -222,7 +223,7 @@ export function writeQsf(
 				"error",
 				s.id,
 				passes === "too-large"
-					? "This question's checks take more tests than Qualtrics logic should hold."
+					? "This question's checks are too long for Qualtrics."
 					: "This question's checks can never pass.",
 			);
 			return q;
@@ -233,7 +234,7 @@ export function writeQsf(
 					"qsf-note",
 					"info",
 					c.id,
-					"Qualtrics shows its own message when this check fails: a custom validation's message comes from a library.",
+					"When this check fails, Qualtrics shows its own message, not this one.",
 				);
 		if (passes.some((g) => g.length === 0)) return q;
 		if (domain.kind === "number")
@@ -241,7 +242,7 @@ export function writeQsf(
 				"qsf-inexpressible",
 				"warning",
 				s.id,
-				`With its checks, Qualtrics no longer refuses an answer here with ${domain.decimals === 0 ? "decimals" : `more than ${domain.decimals} decimal place${domain.decimals === 1 ? "" : "s"}`}.`,
+				`Because of its checks, Qualtrics no longer stops answers here with ${domain.decimals === 0 ? "decimals" : `more than ${domain.decimals} decimal place${domain.decimals === 1 ? "" : "s"}`}.`,
 			);
 		return {
 			...q,
@@ -271,10 +272,10 @@ export function writeQsf(
 	};
 
 	/**
-	 * A question's warning checks: each a statement on its page, shown live while the check
-	 * fails (its "is false" list as in-page display logic, experiment 4), in its own words.
-	 * `guarded`: the question is shown under a condition of a looped roster, which the
-	 * warning can't also carry while it reads more than this answer.
+	 * A question's warning checks. Each is a statement on its page, in its own words, shown
+	 * while the check fails (its "is false" list as in-page display logic, experiment 4).
+	 * `guarded`: the question is under a condition in a looped roster. The warning can't
+	 * carry that condition too while it reads more than this answer.
 	 */
 	const warnings = (
 		s: Extract<Step, { kind: "ask" }>,
@@ -283,7 +284,12 @@ export function writeQsf(
 		s.checks.flatMap((c): QsfObject[] => {
 			if (c.severity === "blocking") return [];
 			if (c.severity === "info")
-				note("qsf-note", "info", c.id, "An info check is shown as a warning.");
+				note(
+					"qsf-note",
+					"info",
+					c.id,
+					"Qualtrics shows an `info` check as a warning.",
+				);
 			const own = (x: Source) => x.kind === "answer" && x.asks.includes(s.id);
 			if (
 				c.message?.some((p) => p.kind === "value" && own(p.source)) === true
@@ -292,7 +298,7 @@ export function writeQsf(
 					"qsf-inexpressible",
 					"error",
 					c.id,
-					"This warning shows the answer it checks, which Qualtrics shows blank on that answer's page. Leave the answer out of the message.",
+					"This warning shows the answer it checks, but Qualtrics shows that answer blank on its own page. Leave the answer out of the message.",
 				);
 				return [];
 			}
@@ -309,7 +315,7 @@ export function writeQsf(
 					"qsf-inexpressible",
 					"error",
 					c.id,
-					"This warning shows a value computed after its question, which isn't set yet on its page.",
+					"This warning shows a value computed after its question, so the value isn't set yet on the question's page.",
 				);
 				return [];
 			}
@@ -319,7 +325,7 @@ export function writeQsf(
 					"qsf-inexpressible",
 					"error",
 					c.id,
-					"This warning reads more than its question's answer, under a condition in a looped roster: Qualtrics can't hold both.",
+					"Qualtrics can't run this warning. It uses more than its question's answer, and the question is under a condition inside a roster.",
 				);
 				return [];
 			}
@@ -350,7 +356,7 @@ export function writeQsf(
 				"qsf-note",
 				"info",
 				at,
-				"This condition never holds, so what it leads to isn't in the survey.",
+				"This condition is never true, so what follows it is left out of the survey.",
 			);
 			return [];
 		}
@@ -370,7 +376,7 @@ export function writeQsf(
 			"qsf-note",
 			"info",
 			at,
-			`Qualtrics records which way this branch went in the field \`${name}\`.`,
+			`Qualtrics saves which way this branch went in the field \`${name}\`.`,
 		);
 		return name;
 	};
@@ -414,7 +420,7 @@ export function writeQsf(
 							"qsf-note",
 							"info",
 							s.id,
-							"Qualtrics' arithmetic decides what dividing by zero gives.",
+							"If this divides by zero, Qualtrics decides the result.",
 						);
 					// Computed again: cleared first, so a skipped guard can't leave the old value.
 					if ((numbering.computes.get(s.variable) ?? []).length > 1)
@@ -461,7 +467,7 @@ export function writeQsf(
 					nodes.push(...looped(s));
 					break;
 				case "repeat":
-					notYet(s.id, "A roster");
+					notYet(s.id, "This roster");
 					break;
 				default:
 					s satisfies never;
@@ -473,9 +479,10 @@ export function writeQsf(
 
 	/**
 	 * A count roster Qualtrics loops (unroll.ts chose it): one Loop & Merge block on its count
-	 * question (experiment 3). Its ifs can't be survey-flow branches, so each question carries
-	 * its arms as display logic on the current round: arm i is its condition and no earlier
-	 * arm's, the else none of them; exact, as unroll.ts checked no arm asks what they read.
+	 * question (experiment 3). Its ifs can't be survey-flow branches. So each question carries
+	 * its arms as display logic on the current round: arm i is its own condition and no
+	 * earlier arm's; the else is none of them. This is exact, because unroll.ts checked that
+	 * no arm asks what the conditions read.
 	 */
 	const looped = (s: Extract<Step, { kind: "loop" }>): Node[] => {
 		const counted = countedBy(s);
@@ -493,7 +500,7 @@ export function writeQsf(
 					"qsf-too-large",
 					"error",
 					at,
-					"The conditions this is shown under take more tests than Qualtrics logic should hold.",
+					"The conditions for showing this are too long for Qualtrics.",
 				);
 				return [];
 			}
@@ -502,7 +509,7 @@ export function writeQsf(
 					"qsf-note",
 					"info",
 					at,
-					"This is under a condition that never holds, so it isn't in the survey.",
+					"This is under a condition that's never true, so it's left out of the survey.",
 				);
 				return [];
 			}
@@ -537,7 +544,7 @@ export function writeQsf(
 					case "say":
 						return shown(statement(x), guard, x.id);
 					case "section":
-						if (x.order !== undefined) without(x.id, "its order");
+						if (x.order !== undefined) without(x.id, "This section's order");
 						return flat(x.flow, guard);
 					case "if": {
 						const arms = x.branches.map((b) => forms(b.cond, x.id));
@@ -564,7 +571,7 @@ export function writeQsf(
 				"qsf-inexpressible",
 				"error",
 				s.id,
-				"Nothing in this roster can be shown, so Qualtrics has no loop to write.",
+				"Nothing in this roster can be shown, so it's left out of the survey.",
 			);
 			return [];
 		}
@@ -621,7 +628,7 @@ export function writeQsf(
 				"qsf-inexpressible",
 				"error",
 				s.id,
-				"Qualtrics shuffles blocks: this section holds more than questions and statements, so it's written in its order.",
+				"Qualtrics can only shuffle a section of questions and statements. This one holds more, so it keeps its order.",
 			);
 			return each?.flat() ?? layout(s.flow, s.title);
 		}
@@ -630,7 +637,7 @@ export function writeQsf(
 				"qsf-inexpressible",
 				"warning",
 				s.id,
-				"Qualtrics can't rotate a section: it's shuffled instead.",
+				"Qualtrics can't rotate a section, so it's shuffled instead.",
 			);
 		return blocks.length === 0
 			? []
@@ -680,7 +687,7 @@ export function writeQsf(
 					"qsf-too-large",
 					"error",
 					s.id,
-					"This condition takes more tests than Qualtrics logic should hold.",
+					"This condition is too long for Qualtrics.",
 				);
 				return [];
 			}

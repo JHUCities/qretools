@@ -356,7 +356,7 @@ describe("qretools instrument", () => {
 			"name: x\nuses:\n  hh: ../households\nflow:\n  - ask: hh.size\n",
 		);
 		const refused =
-			"Can't read `hh`: `../households` isn't valid. To use the questions in this instrument's own workspace, `../` is enough.\n";
+			"Can't read `hh`: `../households` isn't valid. For this workspace's questions, write `../`.\n";
 		expect(await run("instrument", "check", file)).toMatchObject({
 			code: 2,
 			err: refused,

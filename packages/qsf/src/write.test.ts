@@ -264,8 +264,8 @@ describe("writing a survey as QSF", () => {
 			findings.map((f) => `${f.path}: ${f.message}`),
 		).toMatchInlineSnapshot(`
 			[
-			  "c-half: Qualtrics' arithmetic decides what dividing by zero gives.",
-			  "stop-late: \`late\` is computed only on some paths through the survey, so Qualtrics can't test it here.",
+			  "c-half: If this divides by zero, Qualtrics decides the result.",
+			  "stop-late: \`late\` is computed only on some routes through the survey, so Qualtrics can't test it here.",
 			]
 		`);
 	});
@@ -351,7 +351,7 @@ describe("writing a survey as QSF", () => {
 			early.findings.map((f) => `${f.path}: ${f.message}`),
 		).toMatchInlineSnapshot(`
 			[
-			  "stop-a: \`b\` is read before it's computed, so Qualtrics can't test it here.",
+			  "stop-a: \`b\` is used before it's computed, so Qualtrics can't test it here.",
 			]
 		`);
 		// A true-or-false value computed twice has no single value to inline, nor a field to test.
@@ -540,8 +540,8 @@ describe("writing a survey as QSF", () => {
 			findings.map((f) => `${f.severity} ${f.path}: ${f.message}`),
 		).toMatchInlineSnapshot(`
 			[
-			  "info check-1: Qualtrics shows its own message when this check fails: a custom validation's message comes from a library.",
-			  "warning ask-rent: With its checks, Qualtrics no longer refuses an answer here with decimals.",
+			  "info check-1: When this check fails, Qualtrics shows its own message, not this one.",
+			  "warning ask-rent: Because of its checks, Qualtrics no longer stops answers here with decimals.",
 			]
 		`);
 	});

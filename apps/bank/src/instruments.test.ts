@@ -184,9 +184,8 @@ describe("saving an instrument", () => {
 		expect(refused.activity[at(m, HOUSEHOLDS).id]).toMatchObject({
 			kind: "failed",
 			failure: {
-				message:
-					"The question `tenure` this instrument asks changed on GitHub as well as here.",
-				hint: "Open `tenure`, copy your changes to it if you want to keep them, reload it from GitHub, then save again.",
+				message: "`tenure` was changed both here and on GitHub.",
+				hint: "Open `tenure`, copy your changes somewhere, reload it from GitHub, then save again.",
 			},
 		});
 		// Deleted there: nothing to copy, and it can be dropped from the instrument instead.
@@ -199,9 +198,8 @@ describe("saving an instrument", () => {
 		expect(deleted.activity[at(m, HOUSEHOLDS).id]).toMatchObject({
 			kind: "failed",
 			failure: {
-				message:
-					"The question `tenure` this instrument asks was deleted on GitHub.",
-				hint: "Open `tenure` and reload it from GitHub, or stop using it in this instrument, then save again.",
+				message: "`tenure` was deleted on GitHub.",
+				hint: "Open `tenure` and reload it, or stop using it here, then save again.",
 			},
 		});
 	});
@@ -1225,7 +1223,9 @@ describe("adding a bank", () => {
 				/from the list/,
 			);
 		expect(bankAddProblem({ text: "o/r", use })).toMatch(/no version/);
-		expect(bankAddProblem({ text: " ", use })).toBe("Give its address.");
+		expect(bankAddProblem({ text: " ", use })).toBe(
+			"Write the bank's address.",
+		);
 		// Refused while it can't be added: the dialog stays, and nothing is written.
 		expect(confirmed(typed(m, "o/r"))[0].browser.addingBank).toBeDefined();
 		const [next, cmds] = confirmed(typed(m, "Owner/Bank@v2"));

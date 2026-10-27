@@ -1,6 +1,6 @@
 /**
- * Readers return their value (if any) and their findings; nothing is threaded
- * through a mutable accumulator, so data flow is visible in signatures.
+ * Each reader returns its value (if any) and its findings. Nothing is passed
+ * around to be changed, so the data flow shows in the signatures.
  */
 import type { ZodError } from "zod";
 import { compact } from "../compact.ts";
@@ -27,11 +27,11 @@ export const error = (
 	hint?: string,
 ): Finding => compact({ code, severity: "error", path, message, hint });
 
-export const EMPTY_HINT = "Fill it in, or remove the line.";
+export const EMPTY_HINT = "Write a value after the colon, or remove the line.";
 
 /**
- * The YAML parser's complaint, in plain words, its own kept as detail. With a range
- * it is about a line; without one, about the text as a whole.
+ * The YAML parser's complaint in plain words, with its own words kept as detail.
+ * With a range it's about one line; without one, about the whole text.
  */
 export const yamlError = (detail: string, range?: Range): Finding =>
 	compact({
@@ -71,14 +71,14 @@ const EXPECTED: Readonly<Record<string, string>> = {
 	number: "a number",
 	int: "a whole number",
 	boolean: "`true` or `false`",
-	object: "a map of `key: value` lines",
-	record: "a map of `key: value` lines",
+	object: "`field: value` lines",
+	record: "`field: value` lines",
 	array: "a list",
 };
 
 /**
- * A Zod issue about `field` as a plain sentence. Zod's own message is kept as the hint
- * only where the schema wrote it (a name's pattern), since only then is it ours.
+ * A Zod issue about `field` as a plain sentence. Zod's message becomes the hint only
+ * where our schema wrote it (a name's pattern): only then is it our wording.
  */
 export function issueSentence(
 	field: string,
@@ -125,9 +125,9 @@ export const isPlainObject = (
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * Keys written with no value are holes: the author opened them, as typing `?`
- * opens a hole in Hazel. They are never type errors. Anything that is not a map
- * is passed through untouched for the schema to judge.
+ * A key written with no value is a hole: the author opened it, as typing `?`
+ * opens a hole in Hazel. It's never a type error. Anything that isn't a map
+ * passes through untouched for the schema to judge.
  */
 export function opened(
 	value: unknown,

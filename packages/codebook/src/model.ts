@@ -1,11 +1,12 @@
 /**
- * A codebook from a DDI-Lifecycle 4.0 document, as data: one entry per variable, as
- * every codebook lists them, and one per question no variable records. Any producer's
- * document reads, not only the core's: the input is untyped JSON, parsed once
- * (`parse`), and every field is read through DDI's own structures, never from an
- * identifier's spelling. What isn't understood is left out without a word; only a
- * reference to an item the document doesn't have is a finding. No wording: headings and
- * phrasing are the HTML layer's.
+ * A codebook from a DDI-Lifecycle 4.0 document, as data: one entry per variable, as every
+ * codebook lists them, and one per question no variable records.
+ * Any producer's document reads, not only the core's. The input is untyped JSON, parsed
+ * once (`parse`). Every field is read through DDI's own structures, never from how an
+ * identifier is spelled.
+ * What isn't understood is left out without a word. Only a reference to an item the
+ * document doesn't have is a finding.
+ * No wording here: headings and phrasing belong to the HTML layer.
  */
 
 import {

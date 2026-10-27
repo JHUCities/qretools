@@ -1,6 +1,6 @@
-# Checks, builds and deploys the app to GitHub Pages on every push to main. The site's
-# base path comes from Pages itself (a sub-path now, "/" under a custom domain later),
-# so no repository name is written into the code. The Worker is deployed by hand.
+# Checks, builds and deploys the app to GitHub Pages on every push to main. Pages
+# gives the site's base path, so no repository name is in the code. The Worker is
+# deployed by hand.
 name: Pages
 
 on:
@@ -33,11 +33,11 @@ jobs:
       - run: pnpm run check
       - run: pnpm --dir worker install --frozen-lockfile --ignore-workspace
       - run: pnpm run check:worker
-      # The path Pages serves from: "/qretools/" on github.io, "/" under a custom domain.
+      # The path Pages serves from: "/" under the custom domain, "/<repo>/" on github.io.
       - run: echo "base=[$BASE_PATH]" && pnpm run build
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
-      # The app builds into its own package (apps/bank) since the monorepo split.
+      # The app builds into its own package, apps/bank.
       - uses: actions/upload-pages-artifact@v5
         with:
           path: apps/bank/dist

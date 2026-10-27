@@ -137,7 +137,7 @@ describe("qretools check", () => {
 		await cp(here("../../core/fixtures/households"), ws, { recursive: true });
 		await writeFile(join(ws, "stray.yaml"), "x: 1\n");
 		await writeFile(join(ws, "a-stray.yaml"), "x: 1\n");
-		// Settings anywhere but the root are read as nothing.
+		// Settings anywhere but the root are ignored.
 		await mkdir(join(ws, "banks/x"), { recursive: true });
 		await writeFile(
 			join(ws, "banks/x/workspace.yaml"),
@@ -156,14 +156,14 @@ describe("qretools check", () => {
 		);
 		// Noted in its place among the others, by path, as compilers report per file.
 		expect(lines[0]).toBe(
-			`${join(ws, "a-stray.yaml")}:1:1: note: This file is read as nothing: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]`,
+			`${join(ws, "a-stray.yaml")}:1:1: note: QREtools ignores this file: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]`,
 		);
 		expect(lines.at(-1)).toMatch(/stray\.yaml:1:1: note: .* \[ignored\]$/);
 		expect(
 			lines.filter((l) => l.includes("banks/x/workspace.yaml:1:1: note:")),
 		).toHaveLength(1);
 		// 16 questions and shared files (`workspace.yaml` among them), 2 instruments; the
-		// three notes of files read as nothing aren't findings.
+		// three notes of ignored files aren't findings.
 		const found = lines.filter((l) => !l.endsWith("[ignored]")).length;
 		expect(lines.length - found).toBe(3);
 		expect(r.err.startsWith(`18 files, ${found} findings: `)).toBe(true);
@@ -323,7 +323,7 @@ describe("qretools build", () => {
 		await writeFile(join(ws, "scales/yes_no.yaml"), SCALE("Uncommitted"));
 		const r = await run("build", ws, "-o", join(ws, "out"));
 		expect(r.code).toBe(0);
-		expect(r.err).toMatch(/uncommitted changes: they aren't built/);
+		expect(r.err).toMatch(/uncommitted changes\. They aren't built/);
 		const ddi = r.written[join(ws, "out", "ddi.json")] ?? "";
 		expect(ddi).toContain("Nope");
 		expect(ddi).not.toContain("Uncommitted");
@@ -406,7 +406,7 @@ describe("qretools codebook", () => {
 		await writeFile(join(ws, "workspace.yaml"), "# No agency.\n");
 		const r = await run("codebook", ws, "-o", "codebook.html");
 		expect(r.code).toBe(1);
-		expect(r.err).toMatch(/declares no DDI agency/);
+		expect(r.err).toMatch(/has no DDI agency/);
 		expect(r.written).toEqual({});
 		const s = await run("codebook", SAMPLE, "--qsf");
 		expect(s.err).toMatch(/`--qsf` isn't an option of `codebook`/);
@@ -607,7 +607,7 @@ describe("a tag locked to the commit it named", () => {
 		const checked = await runWith(at(B), "check", dir);
 		expect(checked.code).toBe(0);
 		expect(checked.out).toMatch(
-			/warning: .*now points at a different version of its bank.*\[moved-tag\]/,
+			/warning: .*has moved to a new version.*\[moved-tag\]/,
 		);
 		expect((await runWith(at(B), "check", dir, "--strict")).code).toBe(1);
 		const exported = await exportIn(dir, B);
@@ -637,7 +637,9 @@ describe("a tag locked to the commit it named", () => {
 		const r = await exportIn(dir, A);
 		expect(r.code).toBe(0);
 		expect(r.written).toEqual({});
-		expect(r.err).toMatch(/Not locked: .* has no readable workspace\.yaml/);
+		expect(r.err).toMatch(
+			/Not locked: .* has no workspace\.yaml that QREtools can read/,
+		);
 	});
 
 	it("isn't written for an instrument outside a workspace, which still exports", async () => {

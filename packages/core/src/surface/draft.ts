@@ -1,9 +1,8 @@
 /**
- * A Draft is the core's view of a question: every field may still be a hole,
- * but what is present is typed, and impossible states are unrepresentable.
- * The response domain is one tagged union; a universe or instruction is either
- * prose or a resolved reference into the bank's schemes, never a dangling name
- * (an unresolved name is a hole and absent here).
+ * A Draft is the core's view of a question: any field may still be a hole, but what's
+ * there is typed, and impossible states can't be written. How it's answered is one
+ * tagged union; a universe or instruction is either words or a name found in the bank,
+ * never a name that points nowhere (that's a hole, and absent here).
  */
 import type { LabelledEntry, TextEntry } from "./env.ts";
 import type { Fill } from "./fills.ts";
@@ -11,9 +10,9 @@ import type { Fill } from "./fills.ts";
 export interface Code {
 	readonly code: string;
 	readonly label: string;
-	/** Select-many only: codebook title of this option's own variable. */
+	/** Select all that apply only: the codebook title of this option's variable. */
 	readonly title?: string;
-	/** Select-many only: this option's variable name when it departs from the default. */
+	/** Select all that apply only: this option's variable name, when it isn't the default. */
 	readonly variable?: string;
 	readonly note?: string;
 }
@@ -37,9 +36,9 @@ export type Domain =
 	  }
 	| { readonly kind: "open"; readonly maxLength?: number };
 
-/** Written as a sentence. */
+/** Written in words. */
 export type Prose = { readonly kind: "text"; readonly text: string };
-/** A name resolved against a scheme; the name is kept for DDI and for "used by". */
+/** A name found in the bank; the name is kept for DDI and for "used by". */
 export type Ref<T> = {
 	readonly kind: "ref";
 	readonly name: string;
@@ -74,9 +73,9 @@ export interface Draft {
 }
 
 /**
- * The variable a select-many option becomes in the dataset. One total function,
- * used by the previews and the elaborator alike. Undefined while `name` is a hole
- * and the option does not name its variable itself.
+ * The variable a select-all-that-apply option becomes in the dataset. One function,
+ * used by the previews and the DDI alike. Undefined while `name` is a hole and the
+ * option doesn't name its own variable.
  */
 export const optionVariable = (
 	name: string | undefined,
@@ -92,9 +91,9 @@ export interface DefinedVariable {
 }
 
 /**
- * The variables a question defines: one named like the question, or one per
- * select-many option. None without a name or a domain (no name, or no values).
- * The elaborator and the bank index both read this, so they cannot disagree.
+ * The variables a question defines: one named like the question, or one per option
+ * in select all that apply. None without a name or a way to answer. The DDI and the
+ * bank index both read this, so they can't disagree.
  */
 export function definedVariables(draft: Draft): readonly DefinedVariable[] {
 	const { name, domain } = draft;

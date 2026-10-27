@@ -549,7 +549,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 							layout="compact"
 							actionsLayout="inline"
 							title="New here?"
-							description="Explore an example instrument, which asks this workspace's example questions."
+							description="Try an example instrument that asks the example questions."
 							primaryAction={
 								<Banner.PrimaryAction
 									onClick={() =>
@@ -654,9 +654,9 @@ const SINGULAR = SCHEME_SINGULAR;
 const ROOT_USERS: Readonly<Record<RootKind, string>> = {
 	missing: "Every variable in the workspace uses the missing values.",
 	select_all:
-		"Every option of a select-all-that-apply question is stored as one of these two values.",
+		"Each option of a select all that apply question is stored as one of these two values.",
 	workspace:
-		"Every question, shared file and instrument in the workspace is read with these details.",
+		"These details apply to every question, shared file and instrument in the workspace.",
 };
 
 function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
@@ -783,9 +783,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									<SchemeValueView value={ev.value} />
 									{unsaved && (
 										<p className="quiet">
-											Questions in this browser already use this version. The
-											bank gets it when you save to your branch and your pull
-											request is merged.
+											Your questions here already use this version. The bank
+											gets it once you save to your branch and your pull request
+											is merged.
 										</p>
 									)}
 								</>
@@ -794,12 +794,12 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									{users === undefined ? (
 										<p className="quiet">{ROOT_USERS[e.kind as RootKind]}</p>
 									) : users.length === 0 && instrumentUsers.length === 0 ? (
-										<p className="quiet">No question or instrument names it.</p>
+										<p className="quiet">No question or instrument uses it.</p>
 									) : !inEffect ? (
 										<p className="fg-attention">
-											This can't be read yet, so each of these shows a field to
-											fill in where it names{" "}
-											<code className="code">{e.name}</code>.
+											<code className="code">{e.name}</code> can't be read yet,
+											so each of these shows a field to fill in where it uses
+											it.
 										</p>
 									) : null}
 									{users !== undefined && users.length > 0 && (
@@ -855,7 +855,7 @@ function SchemeValueView({ value }: { value: SchemeEvaluation["value"] }) {
 	if (value.kind === "coding")
 		return (
 			<p>
-				A select-all-that-apply option is stored as{" "}
+				Each option of a select all that apply question is stored as{" "}
 				{selectAllText(value.selectAll)}.
 			</p>
 		);
@@ -1025,9 +1025,7 @@ function Inspector({
 	if (at === undefined)
 		return (
 			<InspectorBox>
-				<p className="quiet">
-					Put the cursor in a field to see what it is for.
-				</p>
+				<p className="quiet">Put the cursor in a field to see what it's for.</p>
 			</InspectorBox>
 		);
 	const m = at.mention;

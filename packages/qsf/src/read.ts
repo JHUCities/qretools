@@ -1,12 +1,13 @@
 /**
- * An instrument's DDI read back into a small flow, for writing it as Qualtrics' QSF. The
- * DDI is the record of the survey; the QSF is made from it, never from the instrument's
- * source. Only DDI as the instrument's elaboration writes it is read (instrument/elaborate.ts
- * says how), and only through its fields: a name in a condition resolves through its
- * command's InParameter and Binding to the OutParameter of a Variable, a computed value or
- * a loop; an answer to the asks that bind into it; a select-all option to its code, and its
- * tick, through the Generation of the select-all list's categories. Anything else is a
- * finding at the DDI item's ID, never a guess from an identifier.
+ * An instrument's DDI read back into a small flow, to write as Qualtrics' QSF. The DDI is
+ * the record of the survey, so the QSF is made from it, never from the instrument's YAML.
+ * Only DDI shaped as instrument/elaborate.ts writes it is read, and only through its fields:
+ * - a name in a condition goes through its command's InParameter and Binding to the
+ *   OutParameter of a Variable, a computed value or a loop;
+ * - an answer goes to the asks that bind into it;
+ * - a select-all option goes to its code, and its tick through the Generation of the
+ *   select-all list's categories.
+ * Anything else is a finding at the DDI item's ID, never a guess from an identifier.
  */
 
 import type { DdiDocument, ItemType, JsonObject } from "@qretools/core";
@@ -277,7 +278,7 @@ export function readInstrument(ddi: DdiDocument): {
 		}
 		const domain = domainOf(asObj(q.ResponseDomain));
 		if (domain === undefined) {
-			unread(id, "This question has no response domain the export reads.");
+			unread(id, "The export can't read how this question is answered.");
 			continue;
 		}
 		questionOf.set(id, {
@@ -362,13 +363,13 @@ export function readInstrument(ddi: DdiDocument): {
 		const cmd = asList(asObj(code)?.Command)[0];
 		const text = str(cmd?.CommandContent);
 		if (cmd === undefined || text === undefined) {
-			unread(at, "A condition or value here has no VTL command.");
+			unread(at, "The DDI has no code for a condition or value here.");
 			return undefined;
 		}
 		const parsed = parseCondition(text, DDI_FUNCTIONS);
 		// The elaborator prints a hole as `null`: one here wasn't written by it.
 		if (parsed.problems.length > 0 || holesOf(parsed.expr).length > 0) {
-			unread(at, `This VTL isn't read: \`${text}\`.`);
+			unread(at, `The export can't read \`${text}\`.`);
 			return undefined;
 		}
 		const sources = new Map<string, Source>();
@@ -379,7 +380,7 @@ export function readInstrument(ddi: DdiDocument): {
 			);
 			const source = params.get(urnOf(binding?.SourceParameterReference) ?? "");
 			if (alias === undefined || source === undefined) {
-				unread(at, `\`${alias ?? "?"}\` is bound to nothing the export reads.`);
+				unread(at, `The export can't tell what \`${alias ?? "?"}\` refers to.`);
 				return undefined;
 			}
 			sources.set(alias, source);
@@ -401,7 +402,7 @@ export function readInstrument(ddi: DdiDocument): {
 			if (part === undefined) {
 				unread(
 					at,
-					"A value in this text is bound to nothing the export reads.",
+					"The export can't tell what a value in this text refers to.",
 				);
 				return [];
 			}
@@ -451,7 +452,7 @@ export function readInstrument(ddi: DdiDocument): {
 		if (r === undefined) return [];
 		const found = deref(r);
 		if (found === undefined) {
-			unread(at, "A construct this refers to isn't in the document.");
+			unread(at, "A step this points to isn't in the DDI.");
 			return [];
 		}
 		return construct(found.type, found.item);
@@ -462,7 +463,7 @@ export function readInstrument(ddi: DdiDocument): {
 		const qi = deref(c.QuestionReference);
 		const question = questionOf.get(str(qi?.item.ID) ?? "");
 		if (qi === undefined || question === undefined) {
-			unread(id, "This ask's question isn't in the document.");
+			unread(id, "The question asked here isn't in the DDI.");
 			return [];
 		}
 		// One ask in two places would record its variable twice, unchecked.
@@ -471,7 +472,7 @@ export function readInstrument(ddi: DdiDocument): {
 				code: "qsf-inexpressible",
 				severity: "error",
 				path: id,
-				message: "This ask is in the flow more than once.",
+				message: "This step is in the flow more than once.",
 			});
 		askPaths.set(id, [...path]);
 		const fills = new Map<string, Part>();
@@ -490,7 +491,10 @@ export function readInstrument(ddi: DdiDocument): {
 			}
 			const part = pipedValue(source);
 			if (part === undefined)
-				unread(id, "A fill is bound to nothing the export reads.");
+				unread(
+					id,
+					"The export can't tell what a value in this text refers to.",
+				);
 			else fills.set(target, part);
 		}
 		const order = str(asObj(c.ResponseSequence)?.ItemSequenceType);
@@ -524,7 +528,7 @@ export function readInstrument(ddi: DdiDocument): {
 				? e.operand.args[0]
 				: undefined;
 		if (cond === undefined || inner === undefined) {
-			unread(id, "This check's condition isn't written as a check is.");
+			unread(id, "The export can't read this check's condition.");
 			return undefined;
 		}
 		const said = sequenceOf(b.ThenConstructReference, id).find(
@@ -605,7 +609,7 @@ export function readInstrument(ddi: DdiDocument): {
 					];
 				}
 				if (kind !== undefined) {
-					unread(id, "A check isn't after the question it checks.");
+					unread(id, "This check doesn't come after the question it checks.");
 					return [];
 				}
 				const first = command(c.IfCondition, id);
@@ -634,7 +638,7 @@ export function readInstrument(ddi: DdiDocument): {
 			case "RepeatUntil":
 				return repeat(c);
 			default:
-				unread(id, `A ${type} isn't a step of an instrument's flow.`);
+				unread(id, `The export can't read a ${type} as a step.`);
 				return [];
 		}
 	};
@@ -646,7 +650,7 @@ export function readInstrument(ddi: DdiDocument): {
 		for (let i = 0; i < found.length; i++) {
 			const f = found[i];
 			if (f === undefined) {
-				unread(at, "A construct this refers to isn't in the document.");
+				unread(at, "A step this points to isn't in the DDI.");
 				continue;
 			}
 			if (f.type !== "QuestionConstruct") {
@@ -695,7 +699,7 @@ export function readInstrument(ddi: DdiDocument): {
 			limited.count === undefined ||
 			("max" in limited && max === undefined)
 		) {
-			unread(id, "This loop's condition isn't written as a roster's is.");
+			unread(id, "The export can't read this loop's condition.");
 			return [];
 		}
 		return [
@@ -754,14 +758,14 @@ export function readInstrument(ddi: DdiDocument): {
 				? started.right.operand.args[0]
 				: undefined;
 		if (cond === undefined || more === undefined || limit?.kind !== "number") {
-			unread(id, "This repeat's condition isn't written as a roster's is.");
+			unread(id, "The export can't read this repeat's condition.");
 			return [];
 		}
 		const [counter, ...rest] = parts;
 		const counterItem = deref(counter);
 		const row = urnOf(asObj(counterItem?.item.AssignedVariableReference));
 		if (counterItem?.type !== "ComputationItem" || row === undefined) {
-			unread(id, "This roster's rows don't start by counting themselves.");
+			unread(id, "The export can't read how this roster numbers its rows.");
 			return [];
 		}
 		return [
@@ -777,7 +781,7 @@ export function readInstrument(ddi: DdiDocument): {
 
 	const instrument = Object.values(ddi.Instrument ?? {})[0];
 	if (instrument === undefined) {
-		unread("", "The document has no Instrument.");
+		unread("", "The DDI has no instrument.");
 		return { instrument: { inputs: [], flow: [] }, findings };
 	}
 	const name = words(instrument.InstrumentName);
@@ -812,7 +816,7 @@ export function readInstrument(ddi: DdiDocument): {
 				code: "qsf-inexpressible",
 				severity: "error",
 				path: clash.ask,
-				message: `\`${s.variable}\` is recorded by asks a respondent can meet both of.`,
+				message: `\`${s.variable}\` is recorded in two places one respondent can both reach.`,
 			});
 	}
 	const inputs = [...params]

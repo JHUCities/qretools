@@ -8,7 +8,7 @@
  * "single-select needs a residual option" (bipolar scales are exhaustive
  * without one), "text must end in ?" (stems like "Please indicate..." are fine).
  */
-import { fixLabel, SCHEME_LABELS, SCHEME_NAME } from "./copy.ts";
+import { fixLabel, SCHEME_NAME } from "./copy.ts";
 import type { Finding, Fix, LintCode } from "./findings.ts";
 import { fold, labelsKey, unitKey } from "./fold.ts";
 import {
@@ -69,8 +69,8 @@ const duplicateLabels: Rule = ({ domain }) => {
 	if (domain?.kind !== "responses") return [];
 	const where =
 		domain.scale === undefined
-			? "Responses"
-			: `Scale \`${domain.scale}\`: responses`;
+			? "Options"
+			: `Shared scale \`${domain.scale}\`: options`;
 	const seen = new Map<string, string>();
 	return domain.codes.flatMap(({ code, label }) => {
 		const key = normalise(label);
@@ -103,9 +103,11 @@ const tooFewResponses: Rule = ({ domain }, _env, said) =>
 					"warning",
 					"responses",
 					domain.scale === undefined
-						? "A choice needs at least two labeled responses."
-						: `Scale \`${domain.scale}\` has fewer than two responses.`,
-					"Options must together be exhaustive: every respondent should find one that fits.",
+						? "A question with options needs at least two."
+						: `Shared scale \`${domain.scale}\` has fewer than two options.`,
+					domain.scale === undefined
+						? "Add another option."
+						: `Add another option to \`${domain.scale}\`.`,
 				),
 			]
 		: [];
@@ -124,7 +126,7 @@ const noNoneOption: Rule = ({ domain }) =>
 					"warning",
 					"select",
 					"This select all that apply question has no “None of these” option.",
-					"Without one, a respondent to whom nothing applies can't be told apart from one who skipped the question.",
+					"Add a “None of these” option, so people with nothing to choose can say so.",
 				),
 			]
 		: [];
@@ -154,7 +156,7 @@ const doubleBarreled: Rule = ({ text }) =>
 					"info",
 					"text",
 					"Does this ask about two things at once?",
-					"If a respondent could answer differently for each half of the “and”, split it into two questions.",
+					"If people could answer each half of the “and” differently, split it into two questions.",
 				),
 			]
 		: [];
@@ -172,7 +174,7 @@ const thinIntent: Rule = ({ intent, text }) => {
 					restatesText
 						? "The intent repeats the question text."
 						: "The intent is very short.",
-					"Say what you want to learn: the construct measured, and the hypothesis it serves or the prevalence it estimates.",
+					"Say what you want to learn from this question, and why.",
 				),
 			]
 		: [];
@@ -186,12 +188,12 @@ const legacyFields: Rule = ({ legacy }) =>
 					"legacy-fields",
 					"info",
 					"legacy",
-					`Legacy fields kept verbatim: ${legacy.join(", ")}.`,
-					"They aren't checked and aren't exported to DDI. Move each into a real field when its meaning is settled.",
+					`Kept as written under \`legacy\`: ${legacy.join(", ")}.`,
+					"Fields under `legacy` aren't checked or put in the DDI. Move each into a proper field once its meaning is clear.",
 				),
 			];
 
-/** Select-many options each become a variable; two options must not become the same one. */
+/** In select all that apply, each option is a variable; two options can't share one. */
 const optionVariables: Rule = ({ name, domain }) => {
 	if (domain?.kind !== "responses" || domain.select !== "many") return [];
 	const seen = new Map<string, string>();
@@ -207,8 +209,8 @@ const optionVariables: Rule = ({ name, domain }) => {
 					"duplicate-option-variable",
 					"warning",
 					`responses.${c.code}`,
-					`Options \`${first}\` and \`${c.code}\` both become the variable \`${variable}\`.`,
-					"In select all that apply, each option is its own variable; give one of them a different `variable`.",
+					`Options \`${first}\` and \`${c.code}\` both have the variable name \`${variable}\`.`,
+					"Each option is its own variable. Give one of them a different `variable:`.",
 				),
 			);
 		if (
@@ -222,7 +224,7 @@ const optionVariables: Rule = ({ name, domain }) => {
 					"info",
 					`responses.${c.code}`,
 					`Variable \`${c.variable}\` doesn't start with \`${name}\`.`,
-					`In a dataset listed by name, this variable may not sit beside \`${name}\`'s other variables. Rename it to start with \`${name}\`, or keep the name if an older dataset used it.`,
+					`A name starting with \`${name}\` keeps it beside \`${name}\`'s other variables. Rename it, unless an older dataset used this name.`,
 				),
 			);
 		return out;
@@ -267,17 +269,13 @@ const matchesScale: Rule = ({ domain }, env) => {
 			"matches-scale",
 			"warning",
 			"responses",
-			`These responses match ${which}${apart}.`,
+			`These options match ${which}${apart}.`,
 			[
 				matches.length === 1
-					? `Write \`responses: ${matches[0]}\` so a change to the scale reaches every question that uses it.`
-					: `Name one of them, such as \`responses: ${matches[0]}\`, so a change to the scale reaches every question that uses it.`,
-				apart === ""
-					? ""
-					: "Your data would then use the scale's codes, not these.",
-				plain
-					? ""
-					: "The options' own `title`, `variable` and `note` would be lost: a shared scale can't hold them.",
+					? `Use \`responses: ${matches[0]}\` instead, so one change updates every question.`
+					: `Use one of them instead, such as \`responses: ${matches[0]}\`, so one change updates every question.`,
+				apart === "" ? "" : "The stored codes would change.",
+				plain ? "" : "Option titles, variables and notes would be lost.",
 			]
 				.filter((s) => s !== "")
 				.join(" "),
@@ -308,8 +306,10 @@ const matchesShared =
 				key === "universe" ? "matches-universe" : "matches-instruction",
 				"warning",
 				key,
-				`This is the shared ${key} ${matches.map((m) => `\`${m}\``).join(", ")}.`,
-				`Write \`${key}: ${matches[0]}\` to share it, so a change reaches every question that uses it.`,
+				matches.length === 1
+					? `This is the shared ${key} \`${matches[0]}\`.`
+					: `This matches the shared ${key}s ${matches.map((m) => `\`${m}\``).join(", ")}.`,
+				`Use \`${key}: ${matches[0]}\` instead, so one change updates every question.`,
 				matches.length === 1 && matches[0] !== undefined
 					? nameFix(key, matches[0])
 					: undefined,
@@ -344,8 +344,10 @@ const writtenOut =
 					scheme === "concept" ? "matches-concept" : "matches-unit",
 					"warning",
 					path,
-					`This is the ${what} ${matches.map((m) => `\`${m}\``).join(", ")}.`,
-					`Write \`${path.split(".").at(-1)}: ${matches[0]}\`, so questions using it are found together.`,
+					matches.length === 1
+						? `This is the ${what} \`${matches[0]}\`.`
+						: `This matches the ${what}s ${matches.map((m) => `\`${m}\``).join(", ")}.`,
+					`Use \`${path.split(".").at(-1)}: ${matches[0]}\` instead, so questions on it can be found together.`,
 					matches.length === 1 && matches[0] !== undefined
 						? nameFix(path, matches[0])
 						: undefined,
@@ -357,8 +359,8 @@ const writtenOut =
 				scheme === "concept" ? "concept-prose" : "unit-prose",
 				"warning",
 				path,
-				`${SCHEME_LABELS[scheme]} are shared: this one is written only here.`,
-				`Make it a ${what}, so every question using it names the same one.`,
+				`This ${scheme} is written out here, not shared.`,
+				`Make it a ${what}, so every question can use the same one.`,
 				{
 					kind: "create",
 					label: `Make it a ${what} \`${name}\``,
@@ -392,8 +394,8 @@ export const missingCollisions = (
 				"missing-code",
 				"warning",
 				`${at}.${c.code}`,
-				`Code \`${c.code}\` is the bank's missing-value code.`,
-				"Pick another code; the dataset uses this one for missing data.",
+				`Code \`${c.code}\` is one of the bank's missing values.`,
+				`Pick another code. In the data, \`${c.code}\` means missing.`,
 			),
 		);
 };
@@ -416,8 +418,8 @@ export const usualCodingCollisions = (
 						"missing-code",
 						"warning",
 						`labels.${c.code}`,
-						`Code \`${c.code}\` is also what a select-all-that-apply option is stored as (${selectAllText(selectAll)}).`,
-						"Pick another missing-value code, or write the two values in `select_all.yaml`.",
+						`Code \`${c.code}\` is also stored for select all that apply options (${selectAllText(selectAll)}).`,
+						"Pick another missing value, or set other select all that apply values in `select_all.yaml`.",
 					),
 				);
 

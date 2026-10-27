@@ -1,10 +1,9 @@
 /**
- * The commonest YAML slip: no space after a key's colon. `open:{}` is not `open` with
- * the value `{}` but one word, so YAML reports a line it can't read, the key is unknown,
- * and on a line before another field it swallows that line too (`open:{} text`). One
- * finding says what happened, with a fix that adds the space; the findings the slip
- * caused are dropped. Read from the AST, never from raw lines: a block scalar's
- * `Time:10pm` is text, and stays text. Pure.
+ * The commonest YAML slip: no space after a key's colon. `open:{}` isn't `open` with the
+ * value `{}` but one word, so YAML can't read the line, the key is unknown, and on a line
+ * before another field it swallows that line too (`open:{} text`). One finding says what
+ * happened, with a fix that adds the space; the findings the slip caused are dropped.
+ * Read from the AST, never from raw lines: `Time:10pm` in a block of text stays text. Pure.
  */
 import { type Document, isMap, isScalar, Scalar } from "yaml";
 import type { Finding, Range } from "../findings.ts";
@@ -20,7 +19,7 @@ interface Slip {
 	readonly range: Range;
 }
 
-/** Every plain key, and every plain value that starts on a later line than its key, that slips. */
+/** Every plain key that slips, and every plain value that slips and starts on a line below its key. */
 function slipsIn(doc: Document, source: string): readonly Slip[] {
 	const found: Slip[] = [];
 	const walk = (node: unknown, prefix: string): void => {
@@ -69,8 +68,8 @@ function slipsIn(doc: Document, source: string): readonly Slip[] {
 const overlaps = (a: Range, b: Range): boolean => a[0] < b[1] && b[0] < a[1];
 
 /**
- * The findings with the slips said once: a `missing-space` finding for each, with the
- * fix, and none of the syntax errors or other findings it caused at its place.
+ * The findings with each slip said once: a `missing-space` finding with its fix, and
+ * none of the syntax errors or other findings the slip caused there.
  */
 export function withSpacing(
 	doc: Document,
@@ -79,8 +78,8 @@ export function withSpacing(
 ): readonly Finding[] {
 	const slips = slipsIn(doc, source);
 	if (slips.length === 0) return findings;
-	// Whatever the slip caused at its own place (an unknown key `open:{}`, or a value
-	// `1:Yes` read as a scale's name) goes with it; fixing it shows what is really there.
+	// Whatever the slip caused there (an unknown key `open:{}`, or a value `1:Yes` read
+	// as a scale's name) goes with it; fixing the slip shows what's really there.
 	const paths = new Set(slips.map((s) => s.path));
 	const kept = findings.filter(
 		(f) =>
@@ -99,7 +98,7 @@ export function withSpacing(
 				path: s.path,
 				range: s.range,
 				message: `Put a space after \`${s.word}:\`.`,
-				hint: "Without it YAML reads the colon and what follows as one word, sometimes with the next line too.",
+				hint: `Without the space, \`${s.word}:\` and what follows read as one word.`,
 				fix: {
 					kind: "space",
 					label: `Add a space after \`${s.word}:\``,

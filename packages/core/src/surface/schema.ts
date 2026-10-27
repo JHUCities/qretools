@@ -1,10 +1,10 @@
 /**
- * The surface language: the flat YAML document a question-maker writes.
+ * The surface language: the flat YAML a question's author writes.
  *
- * This Zod schema is the boundary shape. Its JSON Schema drives editor completion
- * and hover documentation, and it is what a finished question must satisfy. It stays
- * flat because YAML has no tags; the core `Draft` (see draft.ts) is the typed value
- * the rest of the program reasons about.
+ * This Zod schema is the shape at the boundary. Its JSON Schema drives the editor's
+ * completion and descriptions, and a finished question must satisfy it. It stays flat
+ * because YAML has no tags; the core `Draft` (see draft.ts) is the typed value the rest
+ * of the program works with.
  */
 import { z } from "zod";
 import { NAME_RULE_TEXT } from "../copy.ts";
@@ -20,9 +20,10 @@ import type { Scale } from "./scales.ts";
 export const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
 /**
- * A name made from words, for a shared entry created from what a question wrote:
+ * A name made from words, for a shared file created from what a question wrote:
  * "Racial identification" → `racial_identification`. Always a valid name: `fallback`
- * when no letters or digits are left, and prefixed by it when the words start with one.
+ * when no letters or digits are left, and `fallback` in front when the words start
+ * with a digit.
  */
 export function nameFrom(words: string, fallback: string): string {
 	const slug = words
@@ -39,21 +40,19 @@ export function nameFrom(words: string, fallback: string): string {
 
 export const NumberDomainSchema = z
 	.strictObject({
-		min: z.number().optional().describe("Smallest acceptable value."),
-		max: z.number().optional().describe("Largest acceptable value."),
+		min: z.number().optional().describe("The smallest answer allowed."),
+		max: z.number().optional().describe("The largest answer allowed."),
 		unit: z
 			.string()
 			.optional()
-			.describe(
-				"The unit of measure: the name of a shared unit, e.g. days, or words if it isn't shared yet.",
-			),
+			.describe("The unit: the name of a shared unit, such as days."),
 		decimals: z
 			.int()
 			.min(0)
 			.optional()
-			.describe("Decimal places allowed. Omit or 0 for whole numbers."),
+			.describe("Decimal places allowed. Leave out, or 0, for whole numbers."),
 	})
-	.describe("A numeric answer, such as years, dollars, or a count.");
+	.describe("A number answer, such as years, dollars, or a count.");
 
 export const OpenDomainSchema = z
 	.strictObject({
@@ -61,34 +60,34 @@ export const OpenDomainSchema = z
 			.int()
 			.positive()
 			.optional()
-			.describe("Maximum number of characters accepted."),
+			.describe("The most characters allowed."),
 	})
 	.describe("A free-text answer.");
 
 export const OptionSchema = z
 	.strictObject({
-		label: z.string().describe("Text shown to the respondent for this option."),
+		label: z.string().describe("The text respondents see for this option."),
 		title: z
 			.string()
 			.optional()
 			.describe(
-				"For select all that apply: the codebook title of this option's own variable, e.g. Services used -- Library.",
+				"For select all that apply: the codebook title of this option's variable, such as Services used -- Library.",
 			),
 		variable: z
 			.string()
 			.regex(NAME_PATTERN, NAME_RULE_TEXT)
 			.optional()
 			.describe(
-				"For select all that apply: this option's variable name when it isn't <name>_<code>.",
+				"For select all that apply: this option's variable name, if it isn't <name>_<code>.",
 			),
 		note: z
 			.string()
 			.optional()
-			.describe("Documentation for this option, not shown to the respondent."),
+			.describe("A note on this option. Respondents don't see it."),
 	})
-	.describe("A response option with its own documentation.");
+	.describe("An option with its own notes.");
 
-/** What a fill holds: a number, or words. The one list, read by the parser too. */
+/** What a fill holds: a number, or words. The one list; the parser reads it too. */
 export const FILL_TYPES = ["number", "text"] as const;
 
 export const QuestionSchema = z
@@ -97,75 +96,75 @@ export const QuestionSchema = z
 			.string()
 			.regex(NAME_PATTERN, NAME_RULE_TEXT)
 			.describe(
-				"Variable name used in the dataset and codebook. Lowercase, starts with a letter, e.g. service_satisfaction.",
+				"The variable name in the dataset and codebook, such as service_satisfaction.",
 			),
 		title: z
 			.string()
 			.optional()
-			.describe("Short codebook title, e.g. Overall satisfaction."),
+			.describe(
+				"A short title for the codebook, such as Overall satisfaction.",
+			),
 		text: z
 			.string()
 			.describe(
-				"The question exactly as the respondent will read it. Same stimulus for everyone.",
+				"The question exactly as respondents read it. Everyone sees the same words.",
 			),
 		intent: z
 			.string()
 			.describe(
-				"What you want to learn from this question: the construct it measures and whether it serves a hypothesis or estimates prevalence. Becomes the DDI QuestionIntent.",
+				"What you want to learn from this question, and why you ask it.",
 			),
 		concept: z
 			.string()
 			.optional()
 			.describe(
-				"The concept measured, e.g. satisfaction with services. Becomes a DDI Concept.",
+				"What the question measures: the name of a shared concept, such as service_satisfaction.",
 			),
 		universe: z
 			.string()
 			.optional()
 			.describe(
-				"Who answers this question, e.g. All respondents, or Owners only.",
+				"Who is asked this question, such as All respondents, or Owners only.",
 			),
-		// Documentation and JSON Schema only: parse.ts reads responses from the YAML
-		// AST (author order, original code spelling), not through this record.
+		// For descriptions and JSON Schema only: parse.ts reads responses from the YAML
+		// AST (in the author's order and spelling), not through this record.
 		responses: z
 			.union([
-				z.string().describe("The name of a shared scale, e.g. satisfied5."),
+				z.string().describe("The name of a shared scale, such as satisfied5."),
 				z.record(z.string(), z.union([z.string(), OptionSchema])),
 			])
 			.optional()
 			.describe(
-				"Response options as code: label pairs (e.g. 1: Very satisfied), or the name of a shared scale. Options must be mutually exclusive and together exhaustive. Becomes a DDI CodeList.",
+				'The options, one code: label line each (such as "1": Very satisfied), or the name of a shared scale.',
 			),
 		select: z
 			.enum(["one", "many"])
 			.optional()
 			.describe(
-				"Whether the respondent picks one response or may select all that apply. Default one.",
+				"one: respondents pick one option (the default). many: select all that apply.",
 			),
 		number: NumberDomainSchema.optional().describe(
-			"Numeric answer. Use instead of responses/open.",
+			"A number answer. Use instead of responses or open.",
 		),
 		open: OpenDomainSchema.optional().describe(
-			"Free-text answer. Use instead of responses/number.",
+			"A free-text answer. Use instead of responses or number.",
 		),
 		instruction: z
 			.string()
 			.optional()
 			.describe(
-				"Instruction shown with the question, e.g. Select all that apply.",
+				"An instruction shown with the question, such as Select all that apply.",
 			),
 		source: z
 			.string()
 			.optional()
 			.describe(
-				"Where the question comes from, e.g. Original, or a published survey question.",
+				"Where the question comes from, such as Original, or a published survey.",
 			),
 		note: z
 			.string()
 			.optional()
-			.describe(
-				"Documentation not shown to the respondent: fills, randomization, history.",
-			),
+			.describe("Notes respondents don't see, such as its history."),
 		fills: z
 			.record(
 				z.string().regex(NAME_PATTERN, NAME_RULE_TEXT),
@@ -173,23 +172,23 @@ export const QuestionSchema = z
 			)
 			.optional()
 			.describe(
-				"Gaps in the text that an instrument fills when it asks the question, each with its type, e.g. rent: number. Written in the text as {{rent}}.",
+				"Gaps in the text that an instrument fills in when it asks the question, each with its type, such as rent: number. Write {{rent}} in the text.",
 			),
 		variant_of: z
 			.record(z.string().regex(NAME_PATTERN, NAME_RULE_TEXT), z.string())
 			.optional()
 			.describe(
-				"Questions this one deliberately resembles, each with why they differ, e.g. dem_inclo: split ballot, lower range. Silences the duplicate finding for that pair.",
+				"Questions this one is meant to be like, each with why they differ, such as dem_inclo: split ballot, lower range. Stops the findings that call them duplicates.",
 			),
 		legacy: z
 			.record(z.string(), z.unknown())
 			.optional()
 			.describe(
-				"Fields carried over from an older format, kept verbatim and not checked.",
+				"Fields kept as they were from an older format. They aren't checked.",
 			),
 	})
 	.describe(
-		"A survey question and its documentation. It is answered exactly one way: responses, number, or open.",
+		"A survey question and its documentation. It's answered one way: responses, number, or open.",
 	);
 
 export type Surface = z.infer<typeof QuestionSchema>;
@@ -201,9 +200,9 @@ export const KNOWN_KEYS = Object.keys(
 export const REQUIRED_KEYS = ["name", "text", "intent"] as const;
 export const DOMAIN_KEYS = ["responses", "number", "open"] as const;
 /**
- * The fields a bank may also require of its questions (`required:` in `workspace.yaml`), as a
- * team's house rule: optional one-line fields only. A response domain is always required,
- * and `select`, `legacy` and `variant_of` are never something to demand.
+ * The fields a bank can also require of its questions (`required:` in `workspace.yaml`),
+ * as a team's house rule: optional one-line fields only. How a question is answered is
+ * always required, and `select`, `legacy` and `variant_of` are never worth demanding.
  */
 export const REQUIRABLE_KEYS = [
 	"title",
@@ -217,7 +216,7 @@ export const REQUIRABLE_KEYS = [
 	(typeof REQUIRED_KEYS)[number]
 >[];
 export type RequirableKey = (typeof REQUIRABLE_KEYS)[number];
-/** Fields whose value is one line of text (or a name); written empty, each is a hole. */
+/** Fields whose value is one line of text (or a name); each is a hole when written empty. */
 export const TEXT_KEYS = [
 	"name",
 	"title",
@@ -235,11 +234,10 @@ export const scaleSummary = (scale: Scale): string =>
 	scale.codes.map((c) => `${c.code} ${c.label}`).join(" · ");
 
 /**
- * Names in a scheme, offered as constants for completion, each carrying its
- * definition as the description the completion popup shows. On a prose-or-name
- * field the `oneOf` is a semantic lie (it says prose is invalid); nothing enforces
- * it, because the package's own linter is not used, and `examples`, the honest
- * keyword, is not completed from.
+ * The names of one kind, offered as constants for completion, each with its words as
+ * the description completion shows. On a field that takes words or a name, `oneOf` is
+ * untrue (it says words aren't allowed), but nothing enforces it: the package's own
+ * linter isn't used, and completion doesn't read `examples`, the honest keyword.
  */
 const withNames = (
 	node: Record<string, unknown>,
@@ -257,14 +255,14 @@ type JsonNode = Record<string, unknown> & {
 	properties?: Record<string, Record<string, unknown>>;
 };
 
-/** JSON Schema of the surface, for editor completion and hover, with the bank's names as constants. */
+/** The JSON Schema of a question, for completion and descriptions, with the bank's names as constants. */
 export function questionJsonSchema(
 	env: Env = EMPTY_ENV,
 ): Record<string, unknown> {
 	const schema = z.toJSONSchema(QuestionSchema) as JsonNode;
 	const props = schema.properties;
 	if (!props) return schema;
-	// The bank's own required fields, as name and text are, for completion and the inspector.
+	// The bank's own required fields, marked required like name and text, for completion and the inspector.
 	if (env.required.length > 0)
 		schema.required = [
 			...new Set([
@@ -283,7 +281,7 @@ export function questionJsonSchema(
 				: b,
 		);
 	}
-	// Every other kind at its place (`FIELD_OF`): a unit's is inside `number:`.
+	// Every other kind at its field (`FIELD_OF`): a unit's is inside `number:`.
 	for (const [kind, path] of Object.entries(FIELD_OF) as [
 		NamedScheme,
 		string,
@@ -309,29 +307,27 @@ export function questionJsonSchema(
 	return schema;
 }
 
-/** The schema of a scale file or the missing-values file: a `labels:` map. */
+/** The schema of a scale file or the missing values file: a `labels:` map. */
 export const LabelsFileSchema = z.strictObject({
 	labels: z
 		.record(z.string(), z.string())
-		.describe(
-			"Response options as code: label pairs, in the order they are shown.",
-		),
+		.describe("The options, one code: label line each, in the order shown."),
 });
 export const labelsJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(LabelsFileSchema) as Record<string, unknown>;
 
-/** The schema of a labelled file (a concept, a unit): its label, and what it means. */
+/** The schema of a concept or unit file: its label, and what it means. */
 export const LabelledFileSchema = z.strictObject({
 	label: z
 		.string()
 		.describe(
-			"The term as people say or write it, e.g. Neighborhood satisfaction, or days.",
+			"The words people use for it, such as Neighborhood satisfaction, or days.",
 		),
 	definition: z
 		.string()
 		.optional()
 		.describe(
-			"What it means, so every question naming it means the same thing.",
+			"What it means, so every question that names it means the same thing.",
 		),
 });
 export const labelledJsonSchema = (): Record<string, unknown> =>
@@ -341,51 +337,51 @@ export const labelledJsonSchema = (): Record<string, unknown> =>
 export const TextEntryFileSchema = z.strictObject({
 	text: z
 		.string()
-		.describe("The wording, as respondents or interviewers read it."),
+		.describe("The words, as respondents or interviewers read them."),
 });
 export const textEntryJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(TextEntryFileSchema) as Record<string, unknown>;
 
-/** The schema of the workspace's settings file, `workspace.yaml`. */
+/** The schema of the workspace details, `workspace.yaml`. */
 export const WorkspaceFileSchema = z.strictObject({
 	agency: z
 		.string()
 		.describe(
-			"The DDI agency this workspace's questions, shared files and instruments are published under: the registered code of the organization that maintains it, such as `org.example`.",
+			"The DDI agency for everything in this workspace: the registered code of the organization that runs it, such as `org.example`.",
 		),
 	required: z
 		.array(z.enum(REQUIRABLE_KEYS))
 		.optional()
 		.describe(
-			"Fields every question in this workspace must have, beyond `name`, `text` and `intent`, such as `title`. A question without one has it to fill in.",
+			"Fields every question must have, as well as `name`, `text` and `intent`, such as `title`.",
 		),
 	required_in: z
 		.record(z.string(), z.array(z.enum(REQUIRABLE_KEYS)))
 		.optional()
 		.describe(
-			"Fields the questions in one folder must also have, by the folder's path, such as `questions/health`. It adds to `required`, never removes.",
+			"Fields the questions in one folder must also have, such as `questions/health`. Adds to `required`.",
 		),
 	locked: z
 		.record(z.string(), z.string())
 		.optional()
 		.describe(
-			"The commit each tag this workspace's instruments use named when it was locked, such as `owner/repo@v1: <the commit's full sha>`. A tag that names another commit now is warned of. Saving or exporting an instrument writes it.",
+			"Each tag this workspace's instruments use, with the commit it named when locked, such as `owner/repo@v1: <the commit's full sha>`. Saving or exporting an instrument fills this in. If a tag moves, you get a warning.",
 		),
 });
 export const workspaceFileJsonSchema = (): Record<string, unknown> =>
 	z.toJSONSchema(WorkspaceFileSchema) as Record<string, unknown>;
 
-/** The schema of `select_all.yaml`: the two values a select-all option is stored as. */
+/** The schema of `select_all.yaml`: the two values a select-all-that-apply option is stored as. */
 export const SelectAllFileSchema = z.strictObject({
 	chosen: z
 		.record(z.string(), z.string())
 		.describe(
-			'The value stored when the respondent chose the option, with its label: one line, such as `"1": Yes`.',
+			'What\'s stored when a respondent picks the option, with its label, such as `"1": Yes`.',
 		),
 	not_chosen: z
 		.record(z.string(), z.string())
 		.describe(
-			'The value stored when the respondent didn\'t choose the option, with its label: one line, such as `"0": No`.',
+			"What's stored when a respondent doesn't pick the option, with its label, such as `\"0\": No`.",
 		),
 });
 export const selectAllFileJsonSchema = (): Record<string, unknown> =>
@@ -394,7 +390,7 @@ export const selectAllFileJsonSchema = (): Record<string, unknown> =>
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";
 
-/** The description of the field at a path: a number's or open answer's own part, else its top field. */
+/** The description of the field at a path: a part of `number` or `open`, else the top field. */
 export function describePath(path: string, key: SurfaceKey): string {
 	const sub = path.split(".")[1];
 	const part =

@@ -1,9 +1,8 @@
 /**
- * The storage port. The shell talks to a bank through this interface; today one
- * adapter implements it (GitHub with a pasted token). A GitHub App login or a
- * "propose a change" adapter implements the same shape later.
+ * The storage port: how the shell reads and writes a bank. One adapter implements
+ * it today, GitHub's (github.ts).
  *
- * A Failure is a shell value: HTTP and networks are not the core's vocabulary.
+ * A Failure belongs to the shell: HTTP and networks aren't the core's concern.
  */
 import { err, ok, type RemoteBank, type Result } from "@qretools/core";
 import type { Credentials } from "./auth.ts";
@@ -127,7 +126,7 @@ export function parseBank(text: string): Result<BankRef, string> {
 		.split("/")
 		.map((s) => (pasted ? safeDecode(s) : s));
 	const problem =
-		"Write the workspace as owner/name, or owner/name/folder for one in a folder, for example octo-org/surveys/qretools.";
+		"Write the workspace as owner/name, or owner/name/folder if it's in a folder, for example octo-org/surveys/qretools.";
 	const named = parseRepo(
 		`${owner ?? ""}/${(repo ?? "").replace(/\.git$/, "")}`,
 	);

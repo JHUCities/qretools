@@ -210,7 +210,7 @@ describe("pickers of fixed values", () => {
 		expect(select?.picker.kind !== "actions" && select?.picker.source).toEqual({
 			kind: "enum",
 			values: [
-				{ name: "one", detail: "The respondent picks one response" },
+				{ name: "one", detail: "Respondents pick one option" },
 				{ name: "many", detail: "Select all that apply" },
 			],
 		});

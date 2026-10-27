@@ -1,14 +1,15 @@
 /**
- * qretools' token exchange: the one narrow exception to "no server" (AGENTS.md, step 10).
+ * qretools' token exchange: the one exception to "no server" (AGENTS.md, step 10).
  *
- * GitHub accepts PKCE for GitHub Apps but still requires the client secret when a code
- * or refresh token is redeemed, and its token endpoint refuses browser calls. This
- * Worker holds the secret and does exactly two things: `POST /exchange` redeems a code
- * with its PKCE verifier, `POST /refresh` redeems a refresh token. It keeps no data.
+ * GitHub accepts PKCE for GitHub Apps but still needs the client secret to redeem a
+ * code or refresh token, and its token endpoint refuses browser calls. This Worker
+ * holds the secret and does two things only: `POST /exchange` redeems a code with its
+ * PKCE verifier, and `POST /refresh` redeems a refresh token. It keeps no data.
  *
- * The origin allowlist is hygiene, not a security boundary (a script can forge Origin):
- * `/exchange` is useless without the verifier held by the browser that started the
- * sign-in, `/refresh` without a refresh token. The Worker adds no power of its own.
+ * The origin allowlist is hygiene, not security (a script can forge Origin).
+ * `/exchange` is useless without the verifier, which only the browser that started the
+ * sign-in holds; `/refresh` is useless without a refresh token. The Worker adds no
+ * power of its own.
  */
 
 export interface Env {
@@ -31,7 +32,7 @@ const RETURNED = [
 	"refresh_token_expires_in",
 ] as const;
 
-/** GitHub's errors that mean this Worker is set up wrong; never passed on in detail. */
+/** GitHub's errors that mean this Worker is set up wrong. Never passed on in detail. */
 const OURS = new Set(["incorrect_client_credentials", "redirect_uri_mismatch"]);
 
 export default {

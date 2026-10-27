@@ -13,13 +13,16 @@
  * NotEmpty are false; NotSelected, NotEqualTo and Empty are true. Anything Qualtrics can't
  * say exactly is a finding, never an approximation.
  *
- * Measured in experiment 6: a typed number is compared as a number; text is compared
- * exactly (case and spaces); an embedded field never set, or set to an empty answer, is
- * tested as a question not answered is. An embedded field is ordered as a number but
- * EqualTo compares its text ("05" isn't 5), so a number is tested for equality by >= and <=.
+ * Measured in experiment 6:
+ * - a typed number is compared as a number;
+ * - text is compared exactly (case and spaces);
+ * - an embedded field never set, or set to an empty answer, is tested as an unanswered
+ *   question is;
+ * - an embedded field is ordered as a number, but EqualTo compares its text ("05" isn't 5),
+ *   so a number's equality is tested with >= and <=.
  * An ask not shown has no answer, even one given before going Back (experiment 6b).
- * Ordering text is refused: unmeasured.
- * The writer's part: `$e{}` over an empty answer writes "{Invalid Expression}" (experiment 4),
+ * Ordering text is refused: it's unmeasured.
+ * For the writer: `$e{}` over an empty answer writes "{Invalid Expression}" (experiment 4),
  * so a computed field is set only where its operands are answered, else left unset.
  */
 import type { BinaryOp, Expr } from "@qretools/core";
@@ -293,18 +296,20 @@ const mismatch = (
 	const ordering = op !== "EqualTo" && op !== "NotEqualTo";
 	if (domain?.kind === "choice")
 		return number
-			? "A code is compared with a code in quotes."
+			? 'Compare a code with a code in quotes, like `"1"`.'
 			: ordering
-				? "A coded answer is compared by `=` and `<>` only."
+				? "Compare a coded answer with `=` or `<>` only."
 				: undefined;
 	if (domain?.kind === "number")
-		return number ? undefined : "A number is compared with a number.";
+		return number
+			? undefined
+			: "Compare a number with a number, without quotes.";
 	if (domain?.kind === "text" && number)
-		return "Text is compared with text in quotes.";
+		return "Compare text with text in quotes.";
 	if (domain === undefined && number)
-		return "An input with no type is compared as text, in quotes.";
+		return "An input with no type is text. Compare it with text in quotes.";
 	return ordering && !number
-		? "Qualtrics' ordering of text isn't something the export relies on."
+		? "QREtools can't rely on how Qualtrics orders text. Compare text with `=` or `<>`."
 		: undefined;
 };
 
@@ -368,9 +373,7 @@ export function compileCondition(
 			case "unary":
 				return e.op === "not"
 					? negate(go(e.operand, sources))
-					: fail(
-							"Arithmetic in a condition isn't something Qualtrics can test.",
-						);
+					: fail("Qualtrics can't test arithmetic in a condition.");
 			case "binary": {
 				if (e.op === "and")
 					return both(go(e.left, sources), go(e.right, sources));
@@ -384,9 +387,9 @@ export function compileCondition(
 				return comparison(e.op, e.left, e.right, sources);
 			}
 			case "member": {
-				if (e.set.length === 0) return fail("A set to test holds values.");
+				if (e.set.length === 0) return fail("An empty set can't be tested.");
 				if (e.set.some((v) => literal(v) === undefined))
-					return fail("A set Qualtrics can test holds written values only.");
+					return fail("Qualtrics can only test a set of written values.");
 				const any = e.set
 					.map((v) => comparison("=", e.operand, v, sources))
 					.reduce(either);
@@ -403,7 +406,7 @@ export function compileCondition(
 					if (c?.kind === "refused") return fail(c.why);
 					const subject = subjectOf(x, sources);
 					if (subject === undefined)
-						return fail("`isnull` here tests something Qualtrics can't.");
+						return fail("Qualtrics can't test `isnull` on this.");
 					return subject.kind === "field"
 						? blank(subject.subject)
 						: allBlank(
@@ -424,13 +427,13 @@ export function compileCondition(
 						comparison(">=", x, lo, sources),
 						comparison("<=", x, hi, sources),
 					);
-				return fail(`\`${e.fn}\` isn't something Qualtrics can test.`);
+				return fail(`Qualtrics can't test \`${e.fn}\`.`);
 			}
 			case "string":
 			case "number":
 				return fail("A value alone isn't a condition.");
 			case "hole":
-				return fail("A condition is still to be written.");
+				return fail("This condition is still to fill in.");
 			default:
 				return e satisfies never;
 		}
@@ -450,9 +453,7 @@ export function compileCondition(
 		const operator = how === undefined ? undefined : COMPARISON[how];
 		const subject = subjectOf(name, sources);
 		if (value === undefined || operator === undefined || subject === undefined)
-			return fail(
-				"Qualtrics compares an answer with a written value, nothing else.",
-			);
+			return fail("Qualtrics can only compare an answer with a written value.");
 		const wrong = mismatch(subject.domain, operator, value.number);
 		if (wrong !== undefined) return fail(wrong);
 		const written = value.text;

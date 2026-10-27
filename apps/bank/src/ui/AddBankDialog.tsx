@@ -1,7 +1,6 @@
 /**
- * A bank on GitHub for an instrument's `uses` entry: its address given, and written
- * there once it's added. The reason it can't be added is policy from `update`
- * (`bankAddProblem`), shown as the author types.
+ * Adds a bank on GitHub to an instrument's `uses`. Why it can't be added comes from
+ * `update` (`bankAddProblem`), shown as the author types.
  */
 
 import { Dialog, FormControl, TextInput } from "@primer/react";
@@ -59,10 +58,10 @@ export function AddBankDialog({
 						}
 					/>
 					<FormControl.Caption>
-						A repository and the version to read it at, such as{" "}
-						<code className="code">owner/repo@v1</code>, with the workspace's
-						folder if it isn't at the root (
-						<code className="code">owner/repo/surveys/hh@v1</code>).
+						A repository and its version, such as{" "}
+						<code className="code">owner/repo@v1</code>. If the bank is in a
+						folder, add the folder:{" "}
+						<code className="code">owner/repo/surveys/hh@v1</code>.
 					</FormControl.Caption>
 					{shown !== undefined && (
 						<FormControl.Validation variant="error">

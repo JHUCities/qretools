@@ -1,6 +1,6 @@
-# Checks every pull request as the Pages deploy and the CLI release check main and a
-# release tag: the same checks, the app's build and the command's bundle, so a pull
-# request shows whether they pass before it's merged rather than after.
+# Runs on every pull request the checks that the Pages deploy and the CLI release run:
+# the tests, the app's build and the command's bundle. A pull request then shows
+# whether they pass before it's merged, not after.
 name: Check
 
 on:

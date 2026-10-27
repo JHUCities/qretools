@@ -1,9 +1,8 @@
 /**
- * A shared file is named before it exists: the name is its filename and the word
- * questions write to use it. A universe or instruction is also given its wording here,
- * so one dialog makes it whole and the question that asked for it can use it at once.
- * A draft (never saved) can be renamed with the same dialog. The reason a name cannot be
- * used is policy from `update`, shown as the author types.
+ * A shared file is named before it exists. The name is its filename and the word
+ * questions write to use it. A universe or instruction also gets its wording here, so
+ * the question that asked for it can use it at once. The same dialog renames a draft
+ * (never saved). Why a name can't be used comes from `update`, shown as the author types.
  */
 
 import { Dialog, FormControl, Stack, Textarea, TextInput } from "@primer/react";
@@ -113,7 +112,7 @@ export function SchemeNameDialog({
 								purpose.use !== undefined &&
 								" The question you came from will use it."}
 							{renaming &&
-								" Questions in this tab that use the old name follow."}
+								" Questions in this tab that use the old name are updated too."}
 						</FormControl.Caption>
 						{shown !== undefined && (
 							<FormControl.Validation variant="error">
@@ -138,8 +137,8 @@ export function SchemeNameDialog({
 							/>
 							<FormControl.Caption>
 								{shape === "labelled"
-									? `The ${SCHEME_SINGULAR[kind]} as people write it. Add its definition in the file.`
-									: "The wording, as respondents or interviewers read it. You can also write it later."}
+									? `The ${SCHEME_SINGULAR[kind]} in a few words. You can add a definition later.`
+									: "The words respondents or interviewers read. You can also write them later."}
 							</FormControl.Caption>
 						</FormControl>
 					)}

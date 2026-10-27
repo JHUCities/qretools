@@ -7,11 +7,11 @@
  * name (`scale-agree4`, `universe-renters`); prose becomes a per-question item.
  *
  * Every question yields its dataset Variables, as the codebook lists them: one
- * named like the question, or, for select-many, one per option. A variable is
- * keyed by its own name (`variable-<name>`), never by its question's, and points
- * back with `QuestionReference`: role 2 may ask one question twice and name two
- * variables. Hyphenated prefixes are namespaces (`NAME_PATTERN` has no hyphen, so
- * they cannot collide with a question); the one allowed dot hangs parts off a base.
+ * named like the question, or, for select all that apply, one per option. A variable
+ * is keyed by its own name (`variable-<name>`), never by its question's, and points
+ * back with `QuestionReference`: an instrument may ask one question twice and name
+ * two variables. Hyphenated prefixes are namespaces (`NAME_PATTERN` has no hyphen, so
+ * they can't collide with a question). The one allowed dot hangs parts off a base.
  */
 
 import { compact } from "../compact.ts";

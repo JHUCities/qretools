@@ -94,7 +94,7 @@ flow:
 			kind: "one",
 			source: {
 				kind: "enum",
-				values: [{ name: "label(bas.tenure)", detail: "coded response label" }],
+				values: [{ name: "label(bas.tenure)", detail: "the answer's label" }],
 			},
 		});
 		expect(

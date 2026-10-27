@@ -1,7 +1,7 @@
 /**
- * An instrument is named before it exists, as a shared file is: the name is its file's,
- * `instruments/<name>.yaml`, and the line its own `name:` starts with. The reason a name
- * can't be used is policy from `update`, shown as the author types.
+ * An instrument is named before it exists, as a shared file is. The name gives its file,
+ * `instruments/<name>.yaml`, and its first line, `name:`. Why a name can't be used comes
+ * from `update`, shown as the author types.
  */
 
 import { Dialog, FormControl, TextInput } from "@primer/react";
@@ -68,7 +68,7 @@ export function InstrumentNameDialog({
 						It's saved as{" "}
 						<code className="code">{instrumentPath(name || EXAMPLE)}</code>.
 						{example &&
-							" It asks questions of the bank, to show how an instrument reads: copy it or delete it."}
+							" It asks questions from the bank, to show what an instrument looks like. Copy it or delete it."}
 					</FormControl.Caption>
 					{shown !== undefined && (
 						<FormControl.Validation variant="error">

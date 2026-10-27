@@ -1,9 +1,8 @@
 /**
- * Why a write was refused, said where the author asked: a press on an inactive write
- * button (Save, Move, Delete, Update) opens this when the reason is one that stands
- * until someone acts. The same sentence as the top bar's, then what to do about it and
- * the way to do it, as Primer asks of an inactive button: explain why, and give a path
- * forward. What blocks and what fixes it are `update`'s (`blockage`); this only says them.
+ * Says why a save was refused. Pressing an inactive Save, Move, Delete or Update opens
+ * it when the reason lasts until someone acts. It repeats the top bar's sentence, then
+ * says what to do, as Primer asks of an inactive button. `update` decides both
+ * (`blockage`); this only shows them.
  */
 
 import { Dialog, LinkButton, Stack, VisuallyHidden } from "@primer/react";
@@ -25,9 +24,9 @@ export function BlockedDialog({
 	readonly dispatch: Dispatch;
 }) {
 	const close = () => dispatch({ kind: "blockedNoticeClosed" });
-	// Asking again: GitHub for what the app may do now (after installing it in the other
-	// tab, or being granted access), with the notice staying until it answers; or for the
-	// workspace that didn't load.
+	// Ask GitHub again: what the app may do now (after an install or a grant of access),
+	// or for the workspace that didn't load. The notice stays until GitHub answers.
+
 	const again = () =>
 		dispatch({
 			kind:

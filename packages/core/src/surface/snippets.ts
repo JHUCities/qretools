@@ -1,8 +1,8 @@
 /**
- * A response domain written out with its usual fields, for completion to offer beside
- * the bare key, as the instrument's constructs are (instrument/parse.ts `SNIPPETS`).
- * Each template is the text as it lands, at column 0 (a domain is a top-level field);
- * `${}` is a place to fill in, left empty so that, skipped, it is a hole, never an error.
+ * Each way to answer written out with its usual fields, for completion to offer beside
+ * the bare key, as an instrument's steps are (instrument/parse.ts `SNIPPETS`). Each
+ * template is the text as it lands, at column 0 (it's a top-level field). `${}` is a
+ * place to fill in, left empty so that, if skipped, it's a hole, never an error.
  */
 
 import { placeAt } from "./place.ts";
@@ -37,7 +37,7 @@ export interface FieldSnippet {
 }
 
 /**
- * The response domains written out, where a top-level field goes in a question that has
+ * The ways to answer written out, where a top-level field goes in a question that has
  * none yet (a question is answered one way only). Nothing elsewhere.
  */
 export function domainSnippets(

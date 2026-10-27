@@ -1,8 +1,8 @@
 /**
  * Signing out with unsaved work, which lives only in this tab: save it to the author's
- * branch first, discard it, or stay. What is saved, what is discarded and what blocks
- * the save are `update`'s (`signOutPlan`); this only says them. A failed save comes back
- * here, as Primer's Banner inside the dialog.
+ * branch first, discard it, or stay. `update` decides what is saved, what is discarded
+ * and what blocks the save (`signOutPlan`); this only shows them. A failed save shows
+ * here as a Primer Banner.
  */
 
 import { Banner, Dialog } from "@primer/react";
@@ -101,13 +101,13 @@ export function SignOutDialog({
 				/>
 			)}
 			<p>
-				It's kept only in this tab, and signing out leaves it behind.
+				It's only in this tab. Signing out leaves it behind.
 				{saveable && ` Saving puts ${what} on your branch.`}
 			</p>
 			{discard.length > 0 && (
 				<p>
-					{discard.length === 1 ? "A draft" : plural(discard.length, "draft")}{" "}
-					can't be saved without choosing a folder, so{" "}
+					{discard.length === 1 ? "A draft needs" : "Drafts need"} a folder
+					before {discard.length === 1 ? "it's" : "they're"} saved, so{" "}
 					{discard.length === 1 ? "it's" : "they're"} discarded either way:{" "}
 					{discard.join(", ")}. Cancel to save{" "}
 					{discard.length === 1 ? "it" : "them"} first.
@@ -115,9 +115,9 @@ export function SignOutDialog({
 			)}
 			{blocked.length > 0 && (
 				<p className="fg-attention">
-					{blocked.length === 1 ? "This" : "These"} changed on GitHub since you
-					started; reload {blocked.length === 1 ? "it" : "them"} first:{" "}
-					{blocked.join(", ")}.
+					Changed or deleted on GitHub since you started: {blocked.join(", ")}.
+					To keep your changes to {blocked.length === 1 ? "it" : "them"}, copy
+					them somewhere, then reload from GitHub.
 				</p>
 			)}
 			{reason !== undefined && !saving && blocked.length === 0 && saveable && (

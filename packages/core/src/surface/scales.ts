@@ -1,7 +1,7 @@
 /**
- * Shared response scales: a scale used by many questions exists once, and a
- * question names it (`responses: satisfied5`). Scales are a bank-level value the
- * shell loads and the core is given; one file per scale, body `labels: {code: label}`.
+ * Shared scales: a scale many questions use is written once, and each question
+ * names it (`responses: satisfied5`). The shell loads the bank's scales and hands
+ * them to the core. One file per scale, holding `labels: {code: label}`.
  */
 import { isMap, isScalar, parseDocument } from "yaml";
 import type { Finding } from "../findings.ts";
@@ -34,12 +34,13 @@ export function parseScale(text: string): ParsedScale {
 					code: "hole",
 					severity: "hole",
 					path: "labels",
-					message: "A scale is a `labels:` map of `code: label` lines.",
+					message: "Write the options under a `labels:` line.",
+					hint: 'Example:\nlabels:\n  "1": Yes\n  "2": No',
 				},
 			],
 		};
 	}
-	// Written but empty: a hole, as for any key (see `opened`), not a wrong type.
+	// Written but empty: a hole, as for any key (see `opened`), not a type error.
 	const empty = isScalar(node) ? (node.value as unknown) : undefined;
 	if (isScalar(node) && (empty === null || empty === ""))
 		return {
@@ -53,14 +54,14 @@ export function parseScale(text: string): ParsedScale {
 
 export interface ParsedScales {
 	readonly scales: Scales;
-	/** Findings of the scales that did not parse cleanly, by name. */
+	/** The findings of each scale that didn't read cleanly, by name. */
 	readonly findings: readonly {
 		readonly name: string;
 		readonly findings: readonly Finding[];
 	}[];
 }
 
-/** The bank's scale files, by name. A scale that yields findings is reported and, if unusable, absent. */
+/** The bank's scale files, by name. A scale with findings is reported, and left out if it can't be used. */
 export function parseScales(
 	files: readonly { readonly name: string; readonly text: string }[],
 ): ParsedScales {

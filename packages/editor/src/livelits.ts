@@ -1,10 +1,10 @@
 /**
- * Livelits in the editor: the core says which fields can be picked for (`Livelit`) and
- * what there is to choose (`Choice`); this draws a small button after each such field
- * and, when it is pressed (or Mod-. is pressed with the caret on the field), a picker as
- * a CodeMirror tooltip, outside the editable text. Choosing hands back a `Fix` (the
- * core's `useName`, or `createFor` a new one), which the app applies as it applies any
- * fix: the text stays the only truth, and nothing here decides about surveys.
+ * Livelits in the editor. The core says which fields have a picker (`Livelit`) and what
+ * there is to choose (`Choice`). This draws a small button after each such field. Pressing
+ * it (or Mod-. with the caret on the field) opens a picker as a CodeMirror tooltip,
+ * outside the editable text. Choosing hands back a `Fix` (the core's `useName`, or
+ * `createFor` for a new one), which the app applies like any fix. The text stays the only
+ * truth, and nothing here decides about surveys.
  */
 import {
 	Prec,

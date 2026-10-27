@@ -48,11 +48,11 @@ describe("the bank index", () => {
 			{
 				code: "duplicate-variable",
 				path: "responses.x",
-				message: "Variable `shared` is also defined by d.",
+				message: "Variable `shared` is also used by d.",
 			},
 		]);
 		expect(bankFindings("d", bank.d, index, label)[0]?.message).toMatch(
-			/also defined by b/,
+			/also used by b/,
 		);
 		expect(bankFindings("a", bank.a, index, label)).toEqual([]);
 	});

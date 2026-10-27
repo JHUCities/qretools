@@ -1,9 +1,9 @@
 /**
- * What the editor colours by meaning rather than grammar: a name that resolves in a
- * scheme, a response code, and the `legacy` block the tool never reads. YAML's grammar
- * cannot tell these apart: every key is a property name and every plain value is
- * content. The core decides; the shell only draws. Read from the YAML AST the parser
- * already holds. (Holes are findings, drawn by the editor's lint layer: `pointHoles`.)
+ * What the editor colours by meaning rather than grammar: a name found among the shared
+ * files, a response code, and the `legacy` block the tool never reads. YAML's grammar
+ * can't tell these apart: to it every key is a key and every plain value is content.
+ * The core decides; the shell only draws. Read from the YAML AST the parser already
+ * holds. (Holes are findings, drawn by the editor's lint layer: `pointHoles`.)
  */
 import { type Document, isMap, isNode, isScalar } from "yaml";
 import type { Range } from "../findings.ts";
@@ -11,11 +11,11 @@ import { type Env, inScope, type Mention } from "./env.ts";
 import { clampRange } from "./read.ts";
 
 /**
- * `external` is a name in a bank of another repository (an instrument's import): it
- * resolves, but opens where that bank is, never in place. `name` is a name an
- * instrument declares itself (an input, a compute, an `as`, a roster's row number), read
- * in a condition or a placeholder: it follows to its declaration. `codeRef` is a code
- * in an instrument's condition: coloured as a code, followed to its list.
+ * `external` is a name in another repository's bank (an instrument's import): it is
+ * found, but opens where that bank is, never here. `name` is a name an instrument sets
+ * itself (an input, a compute, an `as`, a roster's row number), used in a condition or
+ * a placeholder: it goes to where it's set. `codeRef` is a code in an instrument's
+ * condition: coloured as a code, and goes to its list.
  */
 export type MarkKind =
 	| "ref"
@@ -29,13 +29,13 @@ export type MarkKind =
 export interface Mark {
 	readonly kind: MarkKind;
 	readonly range: Range;
-	/** Where an `external` name's file is, as a web address: the shell's to make. */
+	/** Where an `external` name's file is, as a web address; the shell makes it. */
 	readonly href?: string;
 	/** What a `name` is, in words, for its hover (backticked names as code). */
 	readonly about?: string;
 }
 
-/** A question's marks by meaning: resolved names, response codes, the `legacy` block. */
+/** A question's marks by meaning: names found, response codes, the `legacy` block. */
 export function marksOf(
 	doc: Document,
 	mentions: readonly Mention[],

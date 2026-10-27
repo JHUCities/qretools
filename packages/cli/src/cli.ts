@@ -85,19 +85,19 @@ const USAGE = `Usage:
 dir is the workspace's folder (default: the current directory): workspace.yaml,
 questions/<folder>/, the shared folders (scales/ and so on), missing.yaml,
 select_all.yaml and instruments/.
-An instrument reads its own workspace (\`../\` in its \`uses\`) and other workspaces at
-a tag (\`owner/repo@v1\`, with git). A tag can be moved: \`instrument export\` locks
-each tag it reads at the commit read, under \`locked:\` in its workspace.yaml, and a
-tag that names another commit than its lock is a warning until the next export locks it.
+An instrument reads its own workspace as \`../\` in its \`uses\`, and other workspaces at
+a tag, such as \`owner/repo@v1\` (this needs git). A tag can move, so \`instrument export\`
+records the commit each tag points to, under \`locked:\` in workspace.yaml. If a tag
+moves after that, check warns until the next export records it again.
 --bank    read an alias written as \`owner/repo@v1\` from a directory instead, to work offline.
---strict  also fail on warnings; for codebook, fail on a reference to an item the
-          document doesn't have (the page is written either way).
---tag-message  also write the message a release's annotated tag carries: each file's
-          version, so a workspace that uses this one at the tag reads them.
---agency  the DDI agency the instrument is published under, when it isn't its
-          workspace's (workspace.yaml), as for a file outside a workspace's instruments/.
---qsf     write the instrument as a Qualtrics survey (QSF, made from its DDI) instead of
-          its DDI; refused when anything in it can't be run in Qualtrics as the DDI says.`;
+--strict  also fail on warnings; for codebook, also fail when the DDI refers to
+          something it doesn't contain (the page is written either way).
+--tag-message  also write the text for a release's tag: each file's version, so
+          workspaces that use this release can read them.
+--agency  the instrument's DDI agency, in place of its workspace's (workspace.yaml).
+          Needed for a file outside a workspace's instruments/.
+--qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
+          if any part of it can't work in Qualtrics as the DDI says.`;
 
 /** What to say when a directory holds nothing the tool reads: the wrong folder, most likely. */
 const nothingIn = (dir: string): string =>
@@ -407,7 +407,7 @@ async function checkWorkspace(
 		// finding in a file, so it isn't counted among them.
 		if (ignored) {
 			io.out(
-				`${join(dir, path)}:1:1: note: This file is read as nothing: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]\n`,
+				`${join(dir, path)}:1:1: note: QREtools ignores this file: it isn't in questions/<folder>/, a shared folder or instruments/. [ignored]\n`,
 			);
 			continue;
 		}
@@ -461,7 +461,7 @@ async function exportBank(
 	);
 	if (refusal?.kind === "noAgency") {
 		io.err(
-			"Not exported: the workspace declares no DDI agency (workspace.yaml, agency:).\n",
+			"Not exported: the workspace has no DDI agency. Add an `agency:` line to workspace.yaml.\n",
 		);
 		return PROBLEMS;
 	}
@@ -470,7 +470,7 @@ async function exportBank(
 	).length;
 	if (incomplete > 0)
 		io.err(
-			`${incomplete} files have something to fill in or fix; what they lack is left out of the DDI (\`qretools check\` lists it).\n`,
+			`${incomplete} files have something to fill in or fix. The DDI leaves out what's missing; \`qretools check\` lists it.\n`,
 		);
 	if (refusal !== undefined) return refused(refusal, io);
 	return emit(write(document), output, io);
@@ -494,7 +494,7 @@ async function build(
 	}
 	if (read.uncommitted)
 		io.err(
-			`${dir} has uncommitted changes: they aren't built, as they have no version yet.\n`,
+			`${dir} has uncommitted changes. They aren't built, as they have no version yet.\n`,
 		);
 	const versions = versionsOf(read.history);
 	const bank = bankOf(
@@ -523,17 +523,17 @@ function refused(r: Refusal, io: Io): number {
 		case "noAgency":
 			// The instrument's words: the workspace's export says its own before it gets here.
 			io.err(
-				"Not exported: the instrument has no DDI agency. It isn't in a workspace that declares one (workspace.yaml, agency:), and none is given with --agency.\n",
+				"Not exported: the instrument has no DDI agency. Add an `agency:` line to its workspace.yaml, or use --agency.\n",
 			);
 			break;
 		case "invalidAgency":
 			for (const f of r.findings) io.err(`${f.message}\n`);
-			io.err("Not exported: every item needs a real DDI agency.\n");
+			io.err("Not exported: a DDI agency is missing or wrong.\n");
 			break;
 		case "collisions":
 			for (const c of r.collisions)
-				io.err(`${c.urn} names different items in ${c.keys.join(", ")}\n`);
-			io.err("Not exported: items would share an identity.\n");
+				io.err(`${c.keys.join(" and ")} would share one DDI name, ${c.urn}.\n`);
+			io.err("Not exported: two things would share one DDI name.\n");
 			break;
 		// The CLI always runs the schema first, so `unchecked` can't arrive; were it to,
 		// it isn't exported for the schema's sake.
@@ -603,7 +603,7 @@ async function instrument(
 		const eq = b.indexOf("=");
 		if (eq <= 0 || eq === b.length - 1) {
 			io.err(
-				`\`--bank ${b}\` gives an alias its directory as alias=<dir>, such as --bank bas=../bas.\n`,
+				`\`--bank ${b}\` gives an alias its directory as alias=<dir>, such as --bank bank=../bank.\n`,
 			);
 			return USAGE_ERROR;
 		}
@@ -645,7 +645,7 @@ async function instrument(
 					: address.path !== HERE
 						? notHere(address.path)
 						: offline !== undefined
-							? `it's this instrument's own workspace (\`${HERE}\`), read from the folder above it; \`--bank\` is for one written as \`owner/repo@v1\`.`
+							? `it's this instrument's own workspace (\`${HERE}\`), read from the folder above. \`--bank\` is only for \`owner/repo@v1\` addresses.`
 							: // The folder above is read whole, so it must be a workspace's: the app's rule too.
 								basename(dirname(resolve(file))) !== WORKSPACE.instruments
 								? `\`${HERE}\` is this instrument's own workspace, and ${file} isn't in a workspace's \`${WORKSPACE.instruments}/\` folder.`
@@ -715,7 +715,7 @@ async function instrument(
 	if (refusal !== undefined) return refused(refusal, io);
 	if (status(result.findings).kind === "incomplete")
 		io.err(
-			"The instrument has something to fill in or fix; what it lacks is left out of the DDI (`qretools instrument check` lists it).\n",
+			"The instrument has something to fill in or fix. The DDI leaves out what's missing; `qretools instrument check` lists it.\n",
 		);
 	for (const f of moved)
 		io.err(`${findingLine(file, source, result.ranges, f)}\n`);
@@ -739,14 +739,14 @@ async function instrument(
 	}
 	if (settings === undefined) {
 		io.err(
-			`Not locked: ${dirname(settingsPath)} has no readable workspace.yaml (a workspace needs one for its agency).\n`,
+			`Not locked: ${dirname(settingsPath)} has no workspace.yaml that QREtools can read.\n`,
 		);
 		return OK;
 	}
 	const locked = withLocks(settings, next);
 	if (locked === undefined) {
 		io.err(
-			`Not locked: ${settingsPath} can't be read as fields (\`qretools check\` says why).\n`,
+			`Not locked: ${settingsPath} can't be read (\`qretools check\` says why).\n`,
 		);
 		return OK;
 	}

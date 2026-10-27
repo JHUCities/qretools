@@ -489,7 +489,7 @@ describe("GitHub adapter (Octokit)", () => {
 		expect(!limited.ok && limited.error.kind).toBe("rateLimited");
 		// A secondary limit lasts seconds: say them, never the primary limit's reset.
 		expect(!limited.ok && limited.error.message).toBe(
-			"GitHub is still limiting requests for now.",
+			"GitHub is limiting requests for a moment.",
 		);
 		expect(!limited.ok && limited.error.hint).toBe(
 			"Wait 60 seconds, then try again.",
@@ -880,7 +880,7 @@ describe("loading a workspace", () => {
 			ok: false,
 			error: {
 				kind: "unreadable",
-				message: expect.stringMatching(/too large/),
+				message: expect.stringMatching(/too many files/),
 			},
 		});
 	});

@@ -38,7 +38,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 						"qsf-inexpressible",
 						"error",
 						at,
-						`\`${source.variable}\` is true or false: Qualtrics can only test it, not show it.`,
+						`\`${source.variable}\` is true or false. Qualtrics can test it but can't show it.`,
 					);
 					return undefined;
 				}
@@ -52,7 +52,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 						"qsf-inexpressible",
 						"error",
 						at,
-						`\`${source.variable}\` is one option of a select-all question: Qualtrics can't show it.`,
+						`\`${source.variable}\` is one option of a select all that apply question. Qualtrics can't show it.`,
 					);
 					return undefined;
 				}
@@ -62,7 +62,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 						"qsf-inexpressible",
 						"error",
 						at,
-						`\`${source.variable}\` is recorded in a roster's rows: outside them there's no one row to show.`,
+						`\`${source.variable}\` is answered in each row of a roster. Outside the roster, Qualtrics can't tell which row to show.`,
 					);
 					return undefined;
 				}
@@ -104,7 +104,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 				"qsf-note",
 				"info",
 				at,
-				`\`${wanted}\` is also an embedded data field in Qualtrics: this question's export tag is ${qid}.`,
+				`\`${wanted}\` is also an embedded data field in Qualtrics, so this question's export tag is ${qid}.`,
 			);
 			return qid;
 		}
@@ -116,7 +116,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 			"qsf-note",
 			"info",
 			at,
-			`\`${wanted}\` is already another question's export tag in Qualtrics: this one's is ${qid}.`,
+			`\`${wanted}\` is already another question's export tag in Qualtrics, so this one's is ${qid}.`,
 		);
 		return qid;
 	};
@@ -141,14 +141,14 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 				"qsf-note",
 				"info",
 				s.id,
-				"Only a question with options has an order to shuffle: this one's is ignored.",
+				"This question has no options to shuffle, so its order is ignored.",
 			);
 		if (s.options === "rotate" && domain.kind === "choice")
 			ctx.note(
 				"qsf-inexpressible",
 				"warning",
 				s.id,
-				"Qualtrics can't rotate options: they're shuffled instead.",
+				"Qualtrics can't rotate options, so they're shuffled instead.",
 			);
 		if (domain.kind === "choice") {
 			const keys = domain.choices.map((_, i) => String(i + 1));

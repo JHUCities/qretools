@@ -86,7 +86,7 @@ export function instrumentOf(
 							severity: "hole",
 							path: "",
 							message: "This instrument has no DDI agency yet.",
-							hint: `Its DDI can't be exported until it has one: add an \`agency:\` line to the workspace's \`workspace.yaml\`. Until then the preview shows \`${UNDECLARED_AGENCY}\` in its place.`,
+							hint: "Add an `agency:` line to `workspace.yaml`. Until then the DDI can't be exported.",
 						},
 					]
 				: [];
@@ -104,7 +104,7 @@ export function instrumentOf(
 						severity: "error",
 						path: `uses.${u.alias}`,
 						message: `\`${u.alias}\` has no DDI agency, so this instrument's DDI can't be exported.`,
-						hint: `Add an \`agency:\` line to that workspace's \`workspace.yaml\`. Until then the preview shows \`${UNDECLARED_AGENCY}\` in its place.`,
+						hint: `Add an \`agency:\` line to the \`workspace.yaml\` of \`${u.alias}\`.`,
 					},
 				]
 			: [],
@@ -120,8 +120,8 @@ export function instrumentOf(
 							code: "manifest",
 							severity: "warning",
 							path: `uses.${u.alias}`,
-							message: `QREtools can't use the list of question versions in the \`${u.alias}\` release: ${m.reason}`,
-							hint: `Until it can, this instrument's DDI gives every \`${u.alias}\` question version 1. A release made by the bank's release workflow has a list that fits.`,
+							message: `QREtools can't read the version list in the \`${u.alias}\` release. ${m.reason}`,
+							hint: `Until it can, every \`${u.alias}\` question is version 1.`,
 						},
 					];
 		},
@@ -174,7 +174,7 @@ function clashFindings(
 				code: "name-clash",
 				severity: "error",
 				path: "",
-				message: `Two different things would be published under one DDI name, \`${c.urn}\`: from ${andList(c.keys.map((k) => `\`${k}\``))}.`,
+				message: `${andList(c.keys.map((k) => `\`${k}\``))} would share one DDI name, \`${c.urn}\`.`,
 			});
 			continue;
 		}
@@ -194,7 +194,7 @@ function clashFindings(
 			code: "name-clash",
 			severity: "error",
 			path: last === undefined ? "" : `uses.${last}`,
-			message: `${who} publish as \`${agency}\` but don't agree on how a select-all-that-apply option is stored.`,
+			message: `${who} publish as \`${agency}\` but store select all that apply options differently.`,
 			hint: `Make their \`select_all.yaml\` files agree. A workspace without one stores ${selectAllText(DEFAULT_SELECT_ALL)}.`,
 		};
 	});

@@ -1,7 +1,7 @@
 /**
  * An expression written back as VTL, with only the parentheses its evaluation order
  * needs. `rename` maps each name as written to the name to print (an instrument's
- * export rewrites `bas.nhd_sat` to the variable's name). A hole prints as `?`, so a
+ * export rewrites `bank.nhd_sat` to the variable's name). A hole prints as `?`, so a
  * printed draft shows where it's incomplete.
  */
 import type { Expr } from "./ast.ts";
