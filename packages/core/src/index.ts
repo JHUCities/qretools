@@ -131,6 +131,12 @@ export {
 	instrumentOf,
 } from "./instrument/instrument.ts";
 export type { Unread } from "./instrument/parse.ts";
+export {
+	type ByInput,
+	type Paths,
+	pathsOf,
+	type Reach,
+} from "./instrument/paths.ts";
 // An instrument's DDI read back as a flow, for every program that runs, exports or describes one.
 export {
 	type Check as FlowCheck,

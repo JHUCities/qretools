@@ -47,10 +47,11 @@ export function pageOf(read: ReadInstruments): string {
 `;
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+export const esc = (s: string) =>
+	s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 // Primer's colour tokens, light and dark, as plain values: the page loads nothing.
-const CSS = `
+export const CSS = `
 :root {
   color-scheme: light dark;
   --fg: #1f2328; --muted: #59636e; --bg: #ffffff; --inset: #f6f8fa; --border: #d1d9e0;
