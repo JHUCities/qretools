@@ -101,7 +101,14 @@ export type InstrumentCode =
 	/** Advice, in `check`: a tag read with no lock in `workspace.yaml`. */
 	| "unlocked-tag";
 
-export type FindingCode = ParseCode | LintCode | InstrumentCode | "ddi-invalid";
+export type FindingCode =
+	| ParseCode
+	| LintCode
+	| InstrumentCode
+	| "ddi-invalid"
+	/** Reading an instrument's DDI back: what can't be read, and a condition kept as written. */
+	| "ddi-unread"
+	| "ddi-verbatim";
 
 /** Character offsets into the source text, `[from, to)`. */
 export type Range = readonly [from: number, to: number];
