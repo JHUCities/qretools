@@ -14,15 +14,17 @@
 [![pnpm 10](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 
-Write survey questions and their documentation in the browser, and get
+Write survey questions and instruments in the browser, and get
 [DDI-Lifecycle 4.0](https://ddialliance.org/Specification/DDI-Lifecycle) out of them.
 
 **Use it:** <https://qretools.com/>
 
-QREtools is a question editor for survey teams that keep a question bank. Each question
-is a short YAML file. QREtools checks it as you type, shows it as a respondent and a
-codebook would, and turns it into DDI. The bank lives in a GitHub repository: you save
-to your own branch, and your changes join the bank through a pull request.
+QREtools is a question editor and instrument builder for survey teams that keep a
+question bank. Each question is a short YAML file. An instrument, also YAML, puts the
+bank's questions in order, with the conditions that decide who is asked what. QREtools
+checks a question as you type, shows it as a respondent and a codebook would, and turns
+it into DDI. The bank lives in a GitHub repository: you save to your own branch, and
+your changes join the bank through a pull request.
 
 It's built for any team with a question bank. The
 [Baltimore Area Survey](https://jhucities.github.io/baltimore-area-survey-data/bas-2025/codebook.html)
