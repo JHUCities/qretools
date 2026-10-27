@@ -35,7 +35,7 @@ interface Phrase {
 	readonly top?: "and" | "or";
 }
 
-const text = (t: string): Span => ({ kind: "text", text: t });
+const text = (t: string): Span => ({ kind: "text", text: t, own: true });
 const code = (t: string): Span => ({ kind: "code", text: t });
 const words = (...spans: Span[]): Phrase => ({ spans });
 
@@ -208,7 +208,8 @@ function phrase(
 				// Against a number, or another name: `n <= size` reads "n is at most size".
 				const right =
 					lit !== undefined
-						? text(lit)
+						? // The document's value, not the page's words.
+							({ kind: "text", text: lit } as const)
 						: e.right.kind === "name"
 							? nameOf(e.right)
 							: undefined;

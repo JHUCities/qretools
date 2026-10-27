@@ -15,7 +15,8 @@ import {
 } from "@qretools/core";
 
 export type Span =
-	| { readonly kind: "text"; readonly text: string }
+	/** Words; `own` where they're the page's own (a condition's phrasing), not the document's. */
+	| { readonly kind: "text"; readonly text: string; readonly own?: true }
 	| { readonly kind: "link"; readonly text: string; readonly url: string }
 	/** Words to show as code: a variable's or a code's literal value. */
 	| { readonly kind: "code"; readonly text: string }
