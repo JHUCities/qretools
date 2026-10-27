@@ -426,8 +426,9 @@ describe("a codebook's page", () => {
 		);
 		expect(universe?.getAttribute("href")).toBe("#org.x:adults");
 		expect(universe?.dataset.urn).toBe(urn("adults", "3"));
+		// A loop has its place in the instrument's map, so a reference to it links there.
 		const loop = page.querySelector('#org\\.x\\:age [data-kind="Loop"]');
-		expect(loop?.tagName).toBe("SPAN");
+		expect(loop?.tagName).toBe("A");
 	});
 
 	it("writes each entry's particulars as terms, and where it is asked plainly", () => {

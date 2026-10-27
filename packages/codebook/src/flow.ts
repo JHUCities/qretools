@@ -75,6 +75,8 @@ export interface Ask {
 	/** The question's newest URN. */
 	readonly question: string;
 	readonly responseOrder?: string;
+	/** What each of the question's fills shows here, by its InParameter's URN, through the ask's Bindings. */
+	readonly fills?: ReadonlyMap<string, Ref>;
 }
 
 /** An entry as a link names it: the anchor to go to, and its words. */
@@ -188,6 +190,27 @@ export function commandOf(
 	};
 }
 
+/** Every step in a tree of steps, in order, each before the steps it holds. */
+export function allStepsOf<A extends Ask>(
+	steps: readonly Step<A>[],
+): Step<A>[] {
+	return steps.flatMap((s): Step<A>[] => {
+		switch (s.kind) {
+			case "branch":
+				return [
+					s,
+					...s.arms.flatMap((a) => allStepsOf(a.steps)),
+					...allStepsOf(s.otherwise ?? []),
+				];
+			case "loop":
+			case "section":
+				return [s, ...allStepsOf(s.steps)];
+			default:
+				return [s];
+		}
+	});
+}
+
 export interface Flow {
 	/** Each instrument as a tree, newest versions, in document order. */
 	readonly instruments: readonly Outline[];
@@ -252,12 +275,20 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 				const found = follow(o.QuestionReference);
 				if (found === undefined) return [];
 				const responseOrder = str(asObj(o.ResponseSequence)?.ItemSequenceType);
+				const fills = new Map(
+					asList(o.Binding).flatMap((b): [string, Ref][] => {
+						const to = refUrn(b.TargetParameterReference);
+						const from = owner(b.SourceParameterReference);
+						return to === undefined || from === undefined ? [] : [[to, from]];
+					}),
+				);
 				return [
 					{
 						kind: "ask",
 						construct,
 						question: latestOf(index, found).urn,
 						...(responseOrder !== undefined && { responseOrder }),
+						...(fills.size > 0 && { fills }),
 					},
 				];
 			}

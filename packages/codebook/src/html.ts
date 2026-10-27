@@ -5,7 +5,14 @@
  */
 
 import { itemKeyOf } from "@qretools/core";
-import type { Asking, Command, LinkedAsk, Outline, Step } from "./flow.ts";
+import {
+	type Asking,
+	allStepsOf,
+	type Command,
+	type LinkedAsk,
+	type Outline,
+	type Step,
+} from "./flow.ts";
 import type {
 	Codebook,
 	Described,
@@ -76,6 +83,8 @@ interface Context extends Options {
 	/** Each entry by its URN, and each select-all question's options by the question's. */
 	readonly entries?: ReadonlyMap<string, Entry>;
 	readonly options?: ReadonlyMap<string, readonly Entry[]>;
+	/** At an ask: what each of its question's fills shows there, by the fill's parameter URN. */
+	readonly fills?: ReadonlyMap<string, Ref>;
 }
 
 interface Place {
@@ -93,7 +102,19 @@ export interface Options {
 	readonly href?: (ref: Ref) => string | undefined;
 }
 
-function spanHtml(s: Span, { anchors, inLink, href }: Context): string {
+function spanHtml(span: Span, cx: Context): string {
+	const { anchors, inLink, href } = cx;
+	// A fill at an ask shows what the ask binds into it: the variable, not the question's own parameter.
+	const bound =
+		span.kind === "ref" && span.fill ? cx.fills?.get(span.urn) : undefined;
+	const s: Span =
+		bound === undefined || span.kind !== "ref"
+			? span
+			: {
+					...bound,
+					...(span.name !== undefined && { name: span.name }),
+					fill: true,
+				};
 	switch (s.kind) {
 		case "text":
 			return escapeHtml(s.text);
@@ -115,9 +136,11 @@ function spanHtml(s: Span, { anchors, inLink, href }: Context): string {
 					(anchor !== undefined && anchors.has(anchor)
 						? hrefOf(anchor)
 						: undefined);
-			return to === undefined
-				? `<span ${data}>${words}</span>`
-				: `<a href="${escapeHtml(to)}" ${data}>${words}</a>`;
+			const ref =
+				to === undefined
+					? `<span ${data}>${words}</span>`
+					: `<a href="${escapeHtml(to)}" ${data}>${words}</a>`;
+			return s.fill ? `<span class="ddi-fill">[${ref}]</span>` : ref;
 		}
 		default:
 			return s satisfies never;
@@ -576,6 +599,12 @@ const anchorsOf = (cb: Codebook, blocks: readonly Block[]): Set<string> =>
 			...blocks.flatMap((b) => (b.kind === "group" ? [b.question.urn] : [])),
 			...SHARED.flatMap((s) => cb.shared[s.key].map((it) => it.urn)),
 			...cb.instruments.map((i) => i.urn),
+			// A loop, so a fill of its counter can link to it.
+			...cb.instruments.flatMap((i) =>
+				allStepsOf(i.steps).flatMap((s) =>
+					s.kind === "loop" ? [s.construct] : [],
+				),
+			),
 		].flatMap((urn) => {
 			const anchor = anchorOf(urn);
 			return anchor === undefined ? [] : [anchor];
@@ -583,24 +612,8 @@ const anchorsOf = (cb: Codebook, blocks: readonly Block[]): Set<string> =>
 	);
 
 /** The asks in a tree of steps, in order. */
-function asksOf(steps: readonly Step<LinkedAsk>[]): LinkedAsk[] {
-	return steps.flatMap((s) => {
-		switch (s.kind) {
-			case "ask":
-				return [s];
-			case "branch":
-				return [
-					...s.arms.flatMap((a) => asksOf(a.steps)),
-					...asksOf(s.otherwise ?? []),
-				];
-			case "loop":
-			case "section":
-				return asksOf(s.steps);
-			default:
-				return [];
-		}
-	});
-}
+const asksOf = (steps: readonly Step<LinkedAsk>[]): LinkedAsk[] =>
+	allStepsOf(steps).filter((s): s is LinkedAsk => s.kind === "ask");
 
 /**
  * Each ask's place in the map: its construct's anchor, on the first place it appears only
@@ -761,7 +774,12 @@ function stepHtml(
 					? ""
 					: `<p class="ddi-answers"><span${cx.en}>Options in order:</span> ${escapeHtml(s.responseOrder)}</p>`;
 			return `<li${id} class="ddi-ask"><p class="ddi-ask-name"><span class="ddi-number">${at.asked}.</span> ${name}</p>${
-				question === undefined ? "" : questionHtml(question, cx)
+				question === undefined
+					? ""
+					: questionHtml(
+							question,
+							s.fills === undefined ? cx : { ...cx, fills: s.fills },
+						)
 			}${order}${answersHtml(s, cx)}</li>`;
 		}
 		case "say":
@@ -798,7 +816,10 @@ function stepHtml(
 			// An unnamed loop isn't named by its URN: "Repeated while …" says enough.
 			const named =
 				s.ref.name === undefined ? "" : ` ${inlineHtml([[s.ref]], cx)}`;
-			return `<li><p>${lead("Repeated", cx)}${named}${how}</p>${flowHtml(s.steps, cx, at, depth)}</li>`;
+			// Its id once, as an ask's: a loop reached by two paths is drawn twice.
+			const id = at.drawn.has(s.construct) ? "" : idAttr(s.construct);
+			at.drawn.add(s.construct);
+			return `<li${id}><p>${lead("Repeated", cx)}${named}${how}</p>${flowHtml(s.steps, cx, at, depth)}</li>`;
 		}
 		case "section": {
 			// A section's name is its title (QREtools writes it there), so words, not code.

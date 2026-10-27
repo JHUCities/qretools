@@ -297,7 +297,7 @@ flow:
 			  "Instrument",
 			  "households Households and housing#Link to households Households and housing",
 			  "A small instrument with every construct of the language, for the library's tests.",
-			  "Thank you for taking part in this survey of county.",
+			  "Thank you for taking part in this survey of [county].",
 			  "1. consent",
 			  "Do you agree to take part in this survey?",
 			  "1Yes",
@@ -309,7 +309,7 @@ flow:
 			  "How many people live in your household, including you?",
 			  "Number from 1 to 20",
 			  "Repeated while members_index is at most size, and members_index is at most 20",
-			  "The next questions are about person members_index.",
+			  "The next questions are about person [members_index].",
 			  "3. age",
 			  "How old is this person?",
 			  "Number from 0 to 120",
@@ -331,7 +331,7 @@ flow:
 			  "Show if rent is at least 10000 (warning)",
 			  "That's a lot for a month's rent.",
 			  "7. utilities",
-			  "You said you pay rent a month. Does that include utilities?",
+			  "You said you pay [rent] a month. Does that include utilities?",
 			  "1Yes",
 			  "2No",
 			  "Repeated until (nvl(vehicles_index, 0) >= 1, and (more_vehicles is “No”, or not answered)), or nvl(vehicles_index, 0) >= 4",
@@ -347,7 +347,7 @@ flow:
 			  "2No",
 			  "Repeated while members_index is at most size, and members_index is at most 20",
 			  "Show if works is “Yes”",
-			  "Person members_index works.",
+			  "Person [members_index] works.",
 			  "10. comments",
 			  "Is there anything else you'd like to tell us?",
 			  "Text, up to 500 characters",
@@ -358,6 +358,26 @@ flow:
 		expect(new Set(ids).size).toBe(ids.length);
 		for (const [, to] of page.matchAll(/href="#([^"]+)"/g))
 			expect(ids).toContain(decodeURIComponent(to ?? ""));
+	});
+
+	it("links each fill to what it shows", async () => {
+		const root = fixture("households");
+		const page = pageOf(
+			codebook(
+				await instrument(
+					await readFile(`${root}/instruments/households.yaml`, "utf8"),
+				),
+			),
+		);
+		const fills = [
+			...page.matchAll(/class="ddi-fill">\[<a href="#([^"]+)"[^>]*>([^<]+)</g),
+		].map((m) => `${m[2]} → ${m[1]}`);
+		expect(fills).toEqual([
+			"county → org.example:instrument-households.var-county",
+			"members_index → org.example:instrument-households.roster-members",
+			"rent → org.example:instrument-households.var-rent",
+			"members_index → org.example:instrument-households.each-members",
+		]);
 	});
 
 	it("lists a select-all question's options under it", async () => {
