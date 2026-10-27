@@ -22,16 +22,22 @@ Each entry has:
 - the variable's name and label;
 - its question's text and instructions;
 - its codes (missing ones marked), its format, universes and concepts;
-- every place an instrument asks it: the conditions on the way there (the producer's
-  commands, verbatim), the loops around it, and the order its section and options are
-  shown in.
+- every place an instrument asks it: the conditions on the way there, the loops around
+  it, and the order its section and options are shown in.
 
-If the document has instruments, each is drawn as a map after the contents, before the
-variables. The map shows its statements, questions, conditions, loops, computations and
-named sections, in order and nested as the instrument nests them. Each question links to
-its entry, and each entry's "Asked" place links back. The wording stays in the entries.
-Conditions are the producer's commands as written; a CommandCode's description isn't
-shown.
+If the document has instruments, each is written out as its specification after the
+contents, before the variables, as a paper questionnaire is: its statements, sections,
+loops and computed values in order, nested as the instrument nests them, and each
+question numbered with its words, its options and their codes (missing ones left out)
+or its format. Over each conditional block, "Ask if" (or "Show if", over text alone)
+says what it adds to the conditions above it. Each question links to its entry, and each
+entry's "Asked" place links back.
+
+A condition in VTL (or in no language it names) is said in words, against the codes of
+what its names read through their bindings: `x = "1"` reads "x is “Yes”", and an else
+says "or not answered" where a question may not have been. A condition in any other
+language, or one that can't be read, is shown as written. A CommandCode's description
+isn't shown.
 
 The page is self-contained: its style is inline, it runs no script and fetches nothing,
 so it can be opened from a file, attached or printed. It looks like GitHub's Primer, in

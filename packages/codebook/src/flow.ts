@@ -6,18 +6,24 @@
  * The walk starts at each instrument and follows each reference as written (the version it
  * names, else the newest). So a construct no instrument reaches is asked nowhere, and every
  * path to an ask is a place it is asked.
- * Conditions are the producer's commands, verbatim. Nothing is parsed, so any program
- * language reads.
+ * Conditions are the producer's commands as written. One in VTL (or in no language it
+ * names) is also parsed, with what each of its names reads, so a page can say it in
+ * words; any other language is kept verbatim.
  */
 
 import {
 	asList,
 	asObj,
 	DDI_DEPTH,
+	DDI_FUNCTIONS,
 	type DdiIndex,
 	deref,
+	type Expr,
+	holesOf,
 	type Indexed,
 	latestOf,
+	parseCondition,
+	refUrn,
 	str,
 	words,
 } from "@qretools/core";
@@ -34,6 +40,13 @@ import {
 export interface Command {
 	readonly language?: string;
 	readonly command: string;
+	/** The command parsed, where it is VTL (or names no language) and reads cleanly. */
+	readonly expr?: Expr;
+	/**
+	 * What each name in it reads, through its InParameter's Binding: the variable, computed
+	 * value or loop that owns the source parameter. A name with no binding is absent.
+	 */
+	readonly reads?: ReadonlyMap<string, Ref>;
 }
 
 /** A condition on the way to an ask: its command, or that the command is not true. */
@@ -62,6 +75,8 @@ export interface Ask {
 	/** The question's newest URN. */
 	readonly question: string;
 	readonly responseOrder?: string;
+	/** What each of the question's fills shows here, by its InParameter's URN, through the ask's Bindings. */
+	readonly fills?: ReadonlyMap<string, Ref>;
 }
 
 /** An entry as a link names it: the anchor to go to, and its words. */
@@ -112,6 +127,8 @@ export type Step<A extends Ask = Ask> =
 			readonly loop: "Loop" | "RepeatUntil" | "RepeatWhile";
 			/** LoopWhile, UntilCondition or WhileCondition. */
 			readonly command?: Command;
+			/** A Loop's counter, where it counts the common way: from a constant, up by one. */
+			readonly counter?: { readonly name: string; readonly from: number };
 			readonly steps: readonly Step<A>[];
 	  }
 	| {
@@ -133,16 +150,87 @@ export interface Outline<A extends Ask = Ask> {
 	readonly steps: readonly Step<A>[];
 }
 
-/** A CommandCode's first command. */
+/** A CommandCode's first command; `owner` names the item a bound parameter belongs to. */
 // shortcut: a CommandCode may hold the same command in several languages; the first is shown.
-export function commandOf(code: unknown): Command | undefined {
+export function commandOf(
+	code: unknown,
+	owner?: (parameter: unknown) => Ref | undefined,
+): Command | undefined {
 	const c = asList(asObj(code)?.Command)[0];
 	const command = str(c?.CommandContent);
 	const language = str(asObj(c?.ProgramLanguage)?.StringValue);
-	return command === undefined
-		? undefined
-		: { command, ...(language !== undefined && { language }) };
+	if (command === undefined) return undefined;
+	const parsed =
+		language === undefined || /^vtl/i.test(language)
+			? parseCondition(command, DDI_FUNCTIONS)
+			: undefined;
+	const expr =
+		parsed === undefined ||
+		parsed.problems.length > 0 ||
+		holesOf(parsed.expr).length > 0
+			? undefined
+			: parsed.expr;
+	const reads = new Map<string, Ref>();
+	for (const p of asList(c?.InParameter)) {
+		const alias = str(p.Alias);
+		const binding = asList(c?.Binding).find(
+			(b) =>
+				refUrn(b.TargetParameterReference) !== undefined &&
+				refUrn(b.TargetParameterReference) === refUrn(p),
+		);
+		const ref =
+			binding === undefined
+				? undefined
+				: owner?.(binding.SourceParameterReference);
+		if (alias !== undefined && ref !== undefined) reads.set(alias, ref);
+	}
+	return {
+		command,
+		...(language !== undefined && { language }),
+		...(expr !== undefined && { expr }),
+		...(reads.size > 0 && { reads }),
+	};
 }
+
+/** Every step in a tree of steps, in order, each before the steps it holds. */
+export function allStepsOf<A extends Ask>(
+	steps: readonly Step<A>[],
+): Step<A>[] {
+	return steps.flatMap((s): Step<A>[] => {
+		switch (s.kind) {
+			case "branch":
+				return [
+					s,
+					...s.arms.flatMap((a) => allStepsOf(a.steps)),
+					...allStepsOf(s.otherwise ?? []),
+				];
+			case "loop":
+			case "section":
+				return [s, ...allStepsOf(s.steps)];
+			default:
+				return [s];
+		}
+	});
+}
+
+/** The variables, loops and computed values a tree of steps reads: in its texts, its commands and its asks' fills. */
+export const readsOf = <A extends Ask>(steps: readonly Step<A>[]): Ref[] =>
+	allStepsOf(steps).flatMap((s): Ref[] => {
+		const of = (c: Command | undefined) => [...(c?.reads?.values() ?? [])];
+		switch (s.kind) {
+			case "say":
+				return (s.text ?? []).flat().filter((x): x is Ref => x.kind === "ref");
+			case "ask":
+				return [...(s.fills?.values() ?? [])];
+			case "branch":
+				return s.arms.flatMap((a) => of(a.command));
+			case "compute":
+			case "loop":
+				return of(s.command);
+			default:
+				return [];
+		}
+	});
 
 export interface Flow {
 	/** Each instrument as a tree, newest versions, in document order. */
@@ -182,6 +270,11 @@ function parameterRef(p: unknown, lang?: string): Ref[] {
  */
 export function flowOf(index: DdiIndex, lang?: string): Flow {
 	const follow = (r: unknown) => deref(index, r);
+	/** The item a parameter belongs to, at its newest version. */
+	const owner = (p: unknown): Ref | undefined => {
+		const it = follow(p)?.owner;
+		return it === undefined ? undefined : refOf(latestOf(index, it), lang);
+	};
 	// `path` stops a cycle; DDI_DEPTH, a document nested past reading.
 	// shortcut: a construct reached by several paths is expanded on each; memoise if a real document is slow.
 	const under = (refs: unknown, path: ReadonlySet<Indexed>): Step[] =>
@@ -203,12 +296,20 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 				const found = follow(o.QuestionReference);
 				if (found === undefined) return [];
 				const responseOrder = str(asObj(o.ResponseSequence)?.ItemSequenceType);
+				const fills = new Map(
+					asList(o.Binding).flatMap((b): [string, Ref][] => {
+						const to = refUrn(b.TargetParameterReference);
+						const from = owner(b.SourceParameterReference);
+						return to === undefined || from === undefined ? [] : [[to, from]];
+					}),
+				);
 				return [
 					{
 						kind: "ask",
 						construct,
 						question: latestOf(index, found).urn,
 						...(responseOrder !== undefined && { responseOrder }),
+						...(fills.size > 0 && { fills }),
 					},
 				];
 			}
@@ -219,7 +320,7 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 				];
 			}
 			case "ComputationItem": {
-				const command = commandOf(o.CommandCode);
+				const command = commandOf(o.CommandCode, owner);
 				return [
 					{
 						kind: "compute",
@@ -234,7 +335,7 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 			case "IfThenElse": {
 				const type = str(asObj(o.TypeOfIfThenElse)?.StringValue);
 				const arm = (condition: unknown, then: unknown): Arm => {
-					const command = commandOf(condition);
+					const command = commandOf(condition, owner);
 					return {
 						...(command !== undefined && { command }),
 						steps: under(then, path),
@@ -266,7 +367,24 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 						: node.type === "RepeatUntil"
 							? [o.UntilCondition, o.UntilConstructReference]
 							: [o.WhileCondition, o.WhileConstructReference];
-				const command = commandOf(condition);
+				const command = commandOf(condition, owner);
+				const variable = asObj(o.LoopVariableReference);
+				const name =
+					variable === undefined
+						? undefined
+						: words(variable.ParameterName, lang);
+				const start = commandOf(o.InitialValue)?.command.trim();
+				const step = commandOf(o.StepValue)
+					?.command.replace(/\s+/g, " ")
+					.trim();
+				// shortcut: any other start or step keeps the loop's condition alone; say it if a bank needs it.
+				const counter =
+					name !== undefined &&
+					start !== undefined &&
+					/^-?\d+$/.test(start) &&
+					step === `${name} + 1`
+						? { name, from: Number(start) }
+						: undefined;
 				return [
 					{
 						kind: "loop",
@@ -274,6 +392,7 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 						ref: refOf(node, lang),
 						loop: node.type,
 						...(command !== undefined && { command }),
+						...(counter !== undefined && { counter }),
 						steps: under(body, path),
 					},
 				];

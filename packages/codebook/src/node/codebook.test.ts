@@ -282,4 +282,158 @@ flow:
 			]
 		`);
 	});
+
+	it("writes the instrument as its specification: numbered, worded, its conditions in words", async () => {
+		const root = fixture("households");
+		const page = pageOf(
+			codebook(
+				await instrument(
+					await readFile(`${root}/instruments/households.yaml`, "utf8"),
+				),
+			),
+		);
+		expect(specOf(page)).toMatchInlineSnapshot(`
+			[
+			  "Instrument",
+			  "households Households and housing#Link to households Households and housing",
+			  "A small instrument with every construct of the language, for the library's tests.",
+			  "Comes with each case: county (North County, South County). From the sample file.",
+			  "Thank you for taking part in this survey of [county].",
+			  "1. consent",
+			  "Do you agree to take part in this survey?",
+			  "1Yes",
+			  "2No",
+			  "Show if consent is “No” (stop)",
+			  "Thank you for your time.",
+			  "Ask if consent is “Yes”, or not answered",
+			  "2. size",
+			  "How many people live in your household, including you?",
+			  "Number from 1 to 20",
+			  "Repeated for members_index = 1, 2, 3 … while members_index is at most size, and members_index is at most 20",
+			  "The next questions are about person [members_index].",
+			  "3. age",
+			  "How old is this person?",
+			  "Number from 0 to 120",
+			  "4. works",
+			  "Does this person work for pay?",
+			  "1Yes",
+			  "2No",
+			  "Housing",
+			  "5. tenure",
+			  "Do you own or rent your home?",
+			  "1Own",
+			  "2Rent",
+			  "3Neither",
+			  "Computed renter is true when tenure is “Rent”",
+			  "Ask if renter is true",
+			  "6. rent",
+			  "How much is your rent each month, in dollars?",
+			  "Number, at least 0",
+			  "Show if rent is at least 10000 (warning)",
+			  "That's a lot for a month's rent.",
+			  "7. utilities",
+			  "You said you pay [rent] a month. Does that include utilities?",
+			  "1Yes",
+			  "2No",
+			  "Repeated until (nvl(vehicles_index, 0) >= 1, and (more_vehicles is “No”, or not answered)), or nvl(vehicles_index, 0) >= 4",
+			  "Computed vehicles_index is set to nvl(vehicles_index, 0) + 1 (VTL)",
+			  "8. vehicle",
+			  "What kind of vehicle is it?",
+			  "1Car",
+			  "2Truck",
+			  "3Motorcycle",
+			  "9. more_vehicles",
+			  "Does your household have another vehicle?",
+			  "1Yes",
+			  "2No",
+			  "Repeated for members_index = 1, 2, 3 … while members_index is at most size, and members_index is at most 20",
+			  "Show if works is “Yes”",
+			  "Person [members_index] works.",
+			  "10. comments",
+			  "Is there anything else you'd like to tell us?",
+			  "Text, up to 500 characters",
+			]
+		`);
+		// Every id once, and every link to one finds it.
+		const ids = [...page.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+		expect(new Set(ids).size).toBe(ids.length);
+		for (const [, to] of page.matchAll(/href="#([^"]+)"/g))
+			expect(ids).toContain(decodeURIComponent(to ?? ""));
+	});
+
+	it("links each fill to what it shows, and says an input isn't asked", async () => {
+		const root = fixture("households");
+		const page = pageOf(
+			codebook(
+				await instrument(
+					await readFile(`${root}/instruments/households.yaml`, "utf8"),
+				),
+			),
+		);
+		const fills = [
+			...page.matchAll(/class="ddi-fill">\[<a href="#([^"]+)"[^>]*>([^<]+)</g),
+		].map((m) => `${m[2]} → ${m[1]}`);
+		expect(fills).toEqual([
+			"county → org.example:instrument-households.var-county",
+			"members_index → org.example:instrument-households.roster-members",
+			"rent → org.example:instrument-households.var-rent",
+			"members_index → org.example:instrument-households.each-members",
+		]);
+		const county = page.slice(
+			page.indexOf('id="org.example:instrument-households.var-county"'),
+		);
+		expect(county).toContain(
+			"<dt>Asked</dt><dd>Not asked: comes with each case</dd>",
+		);
+	});
+
+	it("lists a select-all question's options under it", async () => {
+		const ddi = instrumentOf(
+			`name: news
+uses:
+  ex: ../
+flow:
+  - ask: ex.news_sources
+`,
+			{
+				banks: { ex: bankOf(await readWorkspace(fixture("bank"))) },
+				agency: "org.example",
+			},
+		).ddi;
+		const spec = specOf(pageOf(codebook(ddi)));
+		expect(spec.slice(spec.indexOf("1. news_sources"))).toMatchInlineSnapshot(`
+			[
+			  "1. news_sources",
+			  "Where do you get news about your community?",
+			  "Select all that apply",
+			  "Select all that apply",
+			  "1A local newspaper or its website",
+			  "2Television or radio",
+			  "3Social media",
+			  "4Friends, family or neighbors",
+			  "5None of these",
+			]
+		`);
+	});
 });
+
+/** The instrument's section of a page as lines of text: each block a line, tags gone. */
+function specOf(page: string): string[] {
+	const section = page.slice(
+		page.indexOf('<section aria-labelledby="ddi-instrument">'),
+		page.indexOf('<section aria-labelledby="ddi-variables">'),
+	);
+	return section
+		.split(/<(?:li|p|h\d|blockquote|div)\b[^>]*>/)
+		.map((l) =>
+			l
+				.replace(/<[^>]*>/g, "")
+				.replaceAll("&#39;", "'")
+				.replaceAll("&quot;", '"')
+				.replaceAll("&lt;", "<")
+				.replaceAll("&gt;", ">")
+				.replaceAll("&amp;", "&")
+				.trim(),
+		)
+		.filter((l) => l !== "");
+}

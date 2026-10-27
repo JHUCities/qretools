@@ -26,6 +26,8 @@ export type Span =
 			readonly type: string;
 			readonly urn: string;
 			readonly name?: string;
+			/** A value piped into a text, drawn as one: `[name]`. */
+			readonly fill?: true;
 	  };
 export type Ref = Extract<Span, { kind: "ref" }>;
 export type Para = readonly Span[];
@@ -73,14 +75,16 @@ export function textOf(s: string | undefined): Text | undefined {
 
 /**
  * An item's name, from its own name field (`VariableName`, `UniverseName`; a control
- * construct's `ConstructName`; a parameter's `ParameterName`, else its `Alias`), if it
- * has one. Never from its ID.
+ * construct's `ConstructName`; a parameter's `ParameterName`, whatever field holds it, as a
+ * loop's `LoopVariableReference` does; else its `Alias`), if it has one. Never from its ID.
  */
 export const nameOf = (it: Indexed, lang?: string): string | undefined =>
 	words(
 		it.item[
 			it.type.endsWith("Parameter") ? "ParameterName" : `${it.type}Name`
-		] ?? it.item.ConstructName,
+		] ??
+			it.item.ConstructName ??
+			it.item.ParameterName,
 		lang,
 	) ?? str(it.item.Alias);
 
@@ -93,6 +97,13 @@ export const refOf = (it: Indexed, lang?: string): Ref => {
 		...(name !== undefined && { name }),
 	};
 };
+
+/** What a fill's parameter can belong to that the page has a place for. */
+const FILLED: ReadonlySet<string> = new Set([
+	"Variable",
+	"Loop",
+	"ComputationItem",
+]);
 
 /**
  * A DynamicText (QuestionText, InstructionText): the one written for `lang`, else the
@@ -114,16 +125,22 @@ export function dynamicTextOf(
 		const p = asObj(t.SourceParameterReference);
 		const urn = refUrn(p);
 		if (p === undefined || urn === undefined) return [];
-		const target = follow(p);
+		const found = follow(p);
+		// An OutParameter stands for what owns it (a variable, a loop's counter, a computed value).
+		const target =
+			found?.owner !== undefined && FILLED.has(found.owner.type)
+				? found.owner
+				: found;
 		const name =
 			nameOf({ type: "Parameter", urn, item: p }, lang) ??
-			(target === undefined ? undefined : nameOf(target, lang));
+			(found === undefined ? undefined : nameOf(found, lang));
 		return [
 			{
 				kind: "ref",
 				type: target?.type ?? "Parameter",
 				urn: target?.urn ?? urn,
 				...(name !== undefined && { name }),
+				fill: true,
 			},
 		];
 	});

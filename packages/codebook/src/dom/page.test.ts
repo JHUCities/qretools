@@ -89,6 +89,7 @@ const CODEBOOK: Codebook = {
 			urn: urn("survey"),
 			name: "survey",
 			label: t("Pets & people"),
+			inputs: [],
 			steps: [
 				{ kind: "say", construct: urn("hello"), text: t("Hello.") },
 				{
@@ -335,20 +336,19 @@ describe("a codebook's page", () => {
 		expect(map?.querySelector("h3")?.textContent).toBe("survey Pets & people");
 		for (const list of map?.querySelectorAll("ol") ?? [])
 			expect(list.getAttribute("role")).toBe("list");
-		const asks = [...(map?.querySelectorAll("li > a") ?? [])];
+		// Numbered at each place, by name: the question's words follow.
+		const asks = [...(map?.querySelectorAll(".ddi-ask-name") ?? [])];
 		expect(asks.map((a) => a.textContent)).toEqual([
-			"age Age",
-			"pets",
-			"age Age",
+			"1. age",
+			"2. pets",
+			"3. age",
 		]);
-		expect(indicated(page, asks[0]?.getAttribute("href") ?? "")?.id).toBe(
-			"org.x:age",
-		);
+		const href = (p: Element | undefined) =>
+			p?.querySelector("a")?.getAttribute("href") ?? "";
+		expect(indicated(page, href(asks[0]))?.id).toBe("org.x:age");
 		// A select-all question links to its group.
 		expect(
-			indicated(page, asks[1]?.getAttribute("href") ?? "")?.classList.contains(
-				"ddi-group",
-			),
+			indicated(page, href(asks[1]))?.classList.contains("ddi-group"),
 		).toBe(true);
 		const words = (map?.textContent ?? "").replace(/\s+/g, " ");
 		for (const said of [
@@ -357,7 +357,7 @@ describe("a codebook's page", () => {
 			"If adult (VTL) (warning)",
 			"Repeated people while i <= n",
 			"Else",
-			"Compute x: x := 1",
+			"Computed x is set to x := 1",
 		])
 			expect(words).toContain(said);
 		// The page's own words, in a French codebook, are marked English.
@@ -374,7 +374,7 @@ describe("a codebook's page", () => {
 		expect(back?.textContent).toBe("in the instrument");
 		const place = indicated(page, back?.getAttribute("href") ?? "");
 		expect(place?.tagName).toBe("LI");
-		expect(place?.querySelector("a")?.textContent).toBe("age Age");
+		expect(place?.querySelector("a")?.textContent).toBe("age");
 		expect(page.querySelectorAll('[id="org.x:ask-age"]')).toHaveLength(1);
 	});
 
@@ -427,8 +427,9 @@ describe("a codebook's page", () => {
 		);
 		expect(universe?.getAttribute("href")).toBe("#org.x:adults");
 		expect(universe?.dataset.urn).toBe(urn("adults", "3"));
+		// A loop has its place in the instrument's map, so a reference to it links there.
 		const loop = page.querySelector('#org\\.x\\:age [data-kind="Loop"]');
-		expect(loop?.tagName).toBe("SPAN");
+		expect(loop?.tagName).toBe("A");
 	});
 
 	it("writes each entry's particulars as terms, and where it is asked plainly", () => {
@@ -442,7 +443,7 @@ describe("a codebook's page", () => {
 		expect(terms).toEqual({
 			Universe: "adults",
 			Asked:
-				"Unless consent = 2 (VTL) and if adult; repeated in people; section order: Random in the instrument",
+				"Unless consent = 2 (VTL) and if adult; repeated in people; section order: Random; in the instrument",
 			Format: "Number from 0 to 120, in </dd><b>years",
 		});
 		// The one plain string written into a particular: still escaped.
