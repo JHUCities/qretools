@@ -127,6 +127,8 @@ export type Step<A extends Ask = Ask> =
 			readonly loop: "Loop" | "RepeatUntil" | "RepeatWhile";
 			/** LoopWhile, UntilCondition or WhileCondition. */
 			readonly command?: Command;
+			/** A Loop's counter, where it counts the common way: from a constant, up by one. */
+			readonly counter?: { readonly name: string; readonly from: number };
 			readonly steps: readonly Step<A>[];
 	  }
 	| {
@@ -347,6 +349,23 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 							? [o.UntilCondition, o.UntilConstructReference]
 							: [o.WhileCondition, o.WhileConstructReference];
 				const command = commandOf(condition, owner);
+				const variable = asObj(o.LoopVariableReference);
+				const name =
+					variable === undefined
+						? undefined
+						: words(variable.ParameterName, lang);
+				const start = commandOf(o.InitialValue)?.command.trim();
+				const step = commandOf(o.StepValue)
+					?.command.replace(/\s+/g, " ")
+					.trim();
+				// shortcut: any other start or step keeps the loop's condition alone; say it if a bank needs it.
+				const counter =
+					name !== undefined &&
+					start !== undefined &&
+					/^-?\d+$/.test(start) &&
+					step === `${name} + 1`
+						? { name, from: Number(start) }
+						: undefined;
 				return [
 					{
 						kind: "loop",
@@ -354,6 +373,7 @@ export function flowOf(index: DdiIndex, lang?: string): Flow {
 						ref: refOf(node, lang),
 						loop: node.type,
 						...(command !== undefined && { command }),
+						...(counter !== undefined && { counter }),
 						steps: under(body, path),
 					},
 				];

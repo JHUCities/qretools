@@ -813,13 +813,18 @@ function stepHtml(
 				s.command === undefined
 					? ""
 					: ` ${english(s.loop === "RepeatUntil" ? "until" : "while", cx)} ${said ?? commandHtml(s.command)}`;
+			const c = s.counter;
+			const counted =
+				c === undefined
+					? ""
+					: ` ${english("for", cx)} <code>${escapeHtml(c.name)}</code> = ${[0, 1, 2].map((k) => c.from + k).join(", ")} …`;
 			// An unnamed loop isn't named by its URN: "Repeated while …" says enough.
 			const named =
 				s.ref.name === undefined ? "" : ` ${inlineHtml([[s.ref]], cx)}`;
 			// Its id once, as an ask's: a loop reached by two paths is drawn twice.
 			const id = at.drawn.has(s.construct) ? "" : idAttr(s.construct);
 			at.drawn.add(s.construct);
-			return `<li${id}><p>${lead("Repeated", cx)}${named}${how}</p>${flowHtml(s.steps, cx, at, depth)}</li>`;
+			return `<li${id}><p>${lead("Repeated", cx)}${named}${counted}${how}</p>${flowHtml(s.steps, cx, at, depth)}</li>`;
 		}
 		case "section": {
 			// A section's name is its title (QREtools writes it there), so words, not code.
