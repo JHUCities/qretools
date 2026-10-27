@@ -536,7 +536,14 @@ export function readInstruments(
 			const part = piped(keyOf(t.SourceParameterReference));
 			if (part === undefined) {
 				unread(at, "What a value in this text refers to can't be told.");
-				return [];
+				// Kept as its name, so the text isn't missing a word.
+				const p = asObj(t.SourceParameterReference);
+				return [
+					{
+						kind: "text",
+						text: `[${said(p?.ParameterName) ?? str(p?.Alias) ?? "?"}]`,
+					},
+				];
 			}
 			return [part];
 		});

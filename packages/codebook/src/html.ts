@@ -118,9 +118,8 @@ export interface Options {
 	readonly href?: (ref: Ref) => string | undefined;
 }
 
-function spanHtml(span: Span, cx: Context): string {
+function spanHtml(s: Span, cx: Context): string {
 	const { anchors, inLink, href } = cx;
-	const s = span;
 	switch (s.kind) {
 		case "text":
 			return escapeHtml(s.text);

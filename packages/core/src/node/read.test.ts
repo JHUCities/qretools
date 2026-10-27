@@ -187,6 +187,45 @@ flow:
 		});
 	});
 
+	it("keeps a fill it can't read as its name, so the text stays whole", () => {
+		const { value, findings } = read(
+			changed("StatementItem", "say-1", (st) => {
+				const [d] = st.DisplayText as JsonObject[];
+				const parts = d?.TextContent as JsonObject[];
+				return {
+					...st,
+					DisplayText: [
+						{
+							...d,
+							TextContent: parts.map((p) =>
+								p.SourceParameterReference === undefined
+									? p
+									: {
+											SourceParameterReference: {
+												URN: "urn:ddi:x:nothing:1",
+												ParameterName: [
+													{
+														String: [
+															{ MultilingualStringValue: { Value: "county" } },
+														],
+													},
+												],
+											},
+										},
+							),
+						},
+					],
+				};
+			}),
+		);
+		expect(findings.map((f) => f.code)).toEqual(["ddi-unread"]);
+		const first = value.instruments[0]?.flow[0];
+		expect(
+			first?.kind === "say" &&
+				first.text.map((p) => (p.kind === "text" ? p.text : "?")).join(""),
+		).toContain("[county]");
+	});
+
 	it("shows a text in the language asked for, else the first", () => {
 		const said = (lang?: string) => {
 			const two = changed("StatementItem", "say-1", (st) => {
