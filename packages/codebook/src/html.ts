@@ -847,6 +847,19 @@ function stepHtml(
 	}
 }
 
+/** What comes with each case: each input's name, its values, then what it says of itself. */
+function inputsHtml(inputs: readonly Entry[], cx: Context): string {
+	if (inputs.length === 0) return "";
+	const one = (e: Entry) => {
+		const labels = (e.responses?.rows ?? [])
+			.filter((r) => !r.missing && r.label !== undefined)
+			.map((r) => inlineHtml(r.label ?? [], cx));
+		const name = contentsLink(e.urn, e.name, undefined, cx);
+		return `<p>${lead("Comes with each case:", cx)} ${name}${labels.length === 0 ? "" : ` (${labels.join(", ")})`}.${e.notes === undefined ? "" : ` ${inlineHtml(e.notes, cx)}`}</p>`;
+	};
+	return inputs.map(one).join("");
+}
+
 /**
  * Each instrument as its specification, a paper questionnaire's: its title, what it is,
  * then its steps in order, each question numbered with its words and its answers, and
@@ -860,7 +873,7 @@ function instrumentsHtml(cb: Codebook, cx: Context): string {
 			(i) =>
 				`<article${idAttr(i.urn)}>${headingHtml(3, i.name, i.label, i.urn, cx)}${
 					i.description === undefined ? "" : blockHtml(i.description, cx)
-				}${flowHtml(i.steps, cx, { drawn, asked: 0 }, 0)}</article>`,
+				}${inputsHtml(i.inputs, cx)}${flowHtml(i.steps, cx, { drawn, asked: 0 }, 0)}</article>`,
 		)
 		.join("")}</section>`;
 }

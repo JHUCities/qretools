@@ -297,6 +297,7 @@ flow:
 			  "Instrument",
 			  "households Households and housing#Link to households Households and housing",
 			  "A small instrument with every construct of the language, for the library's tests.",
+			  "Comes with each case: county (North County, South County). From the sample file.",
 			  "Thank you for taking part in this survey of [county].",
 			  "1. consent",
 			  "Do you agree to take part in this survey?",

@@ -213,6 +213,25 @@ export function allStepsOf<A extends Ask>(
 	});
 }
 
+/** The variables, loops and computed values a tree of steps reads: in its texts, its commands and its asks' fills. */
+export const readsOf = <A extends Ask>(steps: readonly Step<A>[]): Ref[] =>
+	allStepsOf(steps).flatMap((s): Ref[] => {
+		const of = (c: Command | undefined) => [...(c?.reads?.values() ?? [])];
+		switch (s.kind) {
+			case "say":
+				return (s.text ?? []).flat().filter((x): x is Ref => x.kind === "ref");
+			case "ask":
+				return [...(s.fills?.values() ?? [])];
+			case "branch":
+				return s.arms.flatMap((a) => of(a.command));
+			case "compute":
+			case "loop":
+				return of(s.command);
+			default:
+				return [];
+		}
+	});
+
 export interface Flow {
 	/** Each instrument as a tree, newest versions, in document order. */
 	readonly instruments: readonly Outline[];

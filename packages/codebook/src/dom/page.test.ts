@@ -89,6 +89,7 @@ const CODEBOOK: Codebook = {
 			urn: urn("survey"),
 			name: "survey",
 			label: t("Pets & people"),
+			inputs: [],
 			steps: [
 				{ kind: "say", construct: urn("hello"), text: t("Hello.") },
 				{

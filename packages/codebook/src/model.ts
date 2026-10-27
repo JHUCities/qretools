@@ -36,6 +36,7 @@ import {
 	type Linked,
 	type LinkedAsk,
 	type Outline,
+	readsOf,
 	type Step,
 } from "./flow.ts";
 import {
@@ -154,7 +155,10 @@ export interface Codebook {
 	/** In the instruments' order where there are any, the rest in document order. */
 	readonly entries: readonly Entry[];
 	/** Each instrument as a map, each question in it linked to its entry; none without one. */
-	readonly instruments: readonly Outline<LinkedAsk>[];
+	readonly instruments: readonly (Outline<LinkedAsk> & {
+		/** The variables it reads that come with each case: no question asks them, nothing computes them. */
+		readonly inputs: readonly Entry[];
+	})[];
 	/** What the entries refer to, each once, in the order first referred to. */
 	readonly shared: {
 		readonly concepts: readonly Described[];
@@ -660,10 +664,24 @@ export function codebookOf(
 		...(lang !== undefined && { lang }),
 		...(title !== undefined && { title }),
 		entries: entries.map((e) => e.entry),
-		instruments: flow.instruments.map((i) => ({
-			...i,
-			steps: linked(i.steps),
-		})),
+		instruments: flow.instruments.map((i) => {
+			const read = new Set(
+				readsOf(i.steps).map((r) => itemKeyOf(r.urn) ?? r.urn),
+			);
+			return {
+				...i,
+				steps: linked(i.steps),
+				inputs: entries
+					.map((e) => e.entry)
+					.filter(
+						(e) =>
+							e.type === "Variable" &&
+							e.question === undefined &&
+							e.derivation === undefined &&
+							read.has(itemKeyOf(e.urn) ?? e.urn),
+					),
+			};
+		}),
 		shared: {
 			concepts: [...concepts.values()],
 			universes: [...universes.values()],
