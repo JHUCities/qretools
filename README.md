@@ -14,15 +14,17 @@
 [![pnpm 10](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 
-Write survey questions and their documentation in the browser, and get
+Write survey questions and instruments in the browser, and get
 [DDI-Lifecycle 4.0](https://ddialliance.org/Specification/DDI-Lifecycle) out of them.
 
 **Use it:** <https://qretools.com/>
 
-QREtools is a question editor for survey teams that keep a question bank. Each question
-is a short YAML file. QREtools checks it as you type, shows it as a respondent and a
-codebook would, and turns it into DDI. The bank lives in a GitHub repository: you save
-to your own branch, and your changes join the bank through a pull request.
+QREtools is a question editor and instrument builder for survey teams that keep a
+question bank. Each question is a short YAML file. An instrument, also YAML, puts the
+bank's questions in order, with the conditions that decide who is asked what. QREtools
+checks a question as you type, shows it as a respondent and a codebook would, and turns
+it into DDI. The bank lives in a GitHub repository: you save to your own branch, and
+your changes join the bank through a pull request.
 
 It's built for any team with a question bank. The
 [Baltimore Area Survey](https://jhucities.github.io/baltimore-area-survey-data/bas-2025/codebook.html)
@@ -30,43 +32,36 @@ It's built for any team with a question bank. The
 
 ## What a question looks like
 
-```yaml
-name: service_satisfaction
-title: Overall satisfaction
-text: Overall, how satisfied are you with the service you received?
-intent: Estimates overall satisfaction with the service.
-concept: service_satisfaction
-universe: all_respondents
-responses: satisfied5
-instruction: select_one
-```
+![A question in the QREtools editor: service_satisfaction, with its title, text and intent written out, and its concept, universe, response scale and instruction named from the bank's shared files, shown in green.](docs/images/question.png)
 
 A question is answered in one of three ways: `responses` (a list of options, or the name
 of a shared scale; add `select: many` for select all that apply), `number` (a range and a
 unit) or `open` (free text). `name`, `text` and `intent` are required. You never write
 DDI by hand: QREtools adds the identifiers, versions and references.
 
-## What it does
+## What an instrument looks like
 
-- **Unfinished is fine.** An empty or missing field is something to fill in, not an
-  error. Every draft still previews and exports, and you can save it.
-- **Live previews.** The question as a respondent sees it, its codebook entry, and its
-  DDI, checked against the official schema.
-- **Shared values, named once.** Concepts, response scales, units, universes,
-  instructions and the bank's missing values each live in their own file. Any question
-  can name them. The editor suggests the names, and the panel under it says what a name
-  refers to and which questions use it.
-- **A bank without duplicates.** QREtools points out repeats on every question
-  involved, with a link to the others: the same text, response list, universe or
-  instruction written twice, two shared scales with the same labels, or a question worded
-  much like another. Where a shared one could replace a repeat, one click does it
-  ("Use `satisfied5`"). Questions that are alike on purpose say so with `variant_of`.
-- **Advice from survey practice.** Double-barreled wording, the same option twice, a
-  missing "none of these", an intent that says too little. This is advice; it never
-  stops you saving.
-- **Git underneath, not in the way.** You save to your own branch
-  (`qretools-<login>`) and propose changes with a pull request. The bank changes when
-  it's merged. Review, history and conflicts stay on GitHub.
+![An instrument in the QREtools editor: it asks service_satisfaction, then asks service_comments only if the answer was 4 or 5, then library_visits.](docs/images/instrument.png)
+
+`uses` names the workspaces an instrument reads, each under a short alias: `../` is its
+own. `ask` asks a bank's question, written `alias.name`. `if` follows its `then` list
+when its condition is true (here, an answer of 4 or 5), and its `else` list, if it has
+one, when it isn't.
+
+## What's in it
+
+- **The web app** (`apps/bank/`, [qretools.com](https://qretools.com/)): write questions,
+  the scales and other values they share, and instruments, checked as you type, and save
+  them to your branch.
+- **The `qretools` command** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)):
+  `check` a workspace, `export` its questions' DDI, write its `codebook`, `build` its
+  versioned DDI from its git history, and `instrument check` or `instrument export` an instrument.
+- **The codebook** (`packages/codebook/`): a codebook page from any DDI-Lifecycle 4.0
+  document, not only one QREtools made, and the same as a `<ddi-codebook>` element for
+  any web page.
+- **The Qualtrics export** (`packages/qsf/`): an instrument as a Qualtrics survey (QSF),
+  made from its DDI. Download it in the web app, or run
+  `qretools instrument export --qsf`.
 
 ## Start a workspace
 
@@ -100,7 +95,8 @@ system, with CodeMirror 6 for the editor, Zod for the question schema and ajv fo
 validation, built with Vite and tested with Vitest. It runs entirely in the browser. It
 has a functional core (`packages/core/`, `@qretools/core`: parse, check, turn into DDI,
 render) and an imperative shell in the Elm style (`apps/bank/`: one Model, one `update`,
-effects described as data).
+effects described as data). `packages/editor/` is the CodeMirror editor and
+`packages/shell/` what the apps share at their edge (sign-in, storage, links, the look).
 
 Signing in with GitHub needs a GitHub App and one small Cloudflare Worker (`worker/`)
 that swaps the sign-in code for a token. It's the only part that runs on a server.
