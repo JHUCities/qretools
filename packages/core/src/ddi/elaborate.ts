@@ -486,7 +486,7 @@ function elaborateResponses(
 					ctx.shared("scale", domain.scale),
 					sharedId("scale", domain.scale),
 					domain.codes,
-					{ principal: true },
+					{ principal: true, name: domain.scale },
 				);
 	const maximum =
 		domain.select === "one"
@@ -517,12 +517,15 @@ function codeListItems(
 	{
 		isMissing = false,
 		principal = false,
+		name,
 		generation,
 	}: {
 		/** The bank's missing-value list: its categories are marked missing. */
 		readonly isMissing?: boolean;
 		/** The list is its file's principal item: a shared scale's. */
 		readonly principal?: boolean;
+		/** The list's name, where its source has one: a shared scale's. */
+		readonly name?: string;
 		/** How a respondent comes to be in a code's category, when the list says. */
 		readonly generation?: (c: Code) => JsonObject;
 	} = {},
@@ -551,7 +554,10 @@ function codeListItems(
 		"CodeList",
 		`${base}.codes`,
 		version,
-		{ Code: options.map((o) => o.code) },
+		obj({
+			CodeListName: maybe(name, (n) => [intl(n)]),
+			Code: options.map((o) => o.code),
+		}),
 		principal,
 	);
 	return { codeList, categories: options.map((o) => o.category) };

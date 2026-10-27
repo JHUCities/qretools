@@ -1,0 +1,11 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		// No DOM but the runtime's, which names it itself: the rest is pure.
+		"lib": ["ES2023"],
+		"erasableSyntaxOnly": true
+	},
+	"include": ["src"],
+	// Tests that read fixtures from disk have their own config.
+	"exclude": ["src/node"]
+}

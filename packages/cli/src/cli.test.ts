@@ -498,6 +498,49 @@ describe("qretools codebook", () => {
 	});
 });
 
+describe("qretools form", () => {
+	const HOUSEHOLDS = here(
+		"../../core/fixtures/households/instruments/households.yaml",
+	);
+	const fileOf = async (text: string): Promise<string> => {
+		const file = join(
+			await mkdtemp(join(tmpdir(), "qretools-form-")),
+			"ddi.json",
+		);
+		await writeFile(file, text);
+		return file;
+	};
+
+	it("writes the test form of an instrument's DDI, which runs in the page", async () => {
+		const ddi = await fileOf(
+			(await run("instrument", "export", HOUSEHOLDS)).out,
+		);
+		const r = await run("form", ddi, "-o", "form.html");
+		expect(r).toMatchObject({ code: 0, out: "", err: "" });
+		const page = r.written["form.html"] ?? "";
+		expect(page).toMatch(/^<!doctype html>/);
+		expect(page).toContain("<h1>Households and housing</h1>");
+		expect((await run("form", ddi)).out).toBe(page);
+	});
+
+	it("writes nothing for a file with no instrument, and takes only -o", async () => {
+		const r = await run(
+			"form",
+			await fileOf((await run("export", SAMPLE)).out),
+		);
+		expect(r).toMatchObject({ code: 1, out: "" });
+		expect(r.err).toMatch(/Not written: there's no instrument in this DDI/);
+		const bad = await run("form", await fileOf("{"));
+		expect(bad).toMatchObject({ code: 1, out: "" });
+		expect(bad.err).toMatch(/this isn't JSON.*\[form-unreadable\]/);
+		const none = await run("form");
+		expect(none.code).toBe(2);
+		expect(none.err).toMatch(/^Usage:/);
+		const s = await run("form", await fileOf("{}"), "--strict");
+		expect(s.err).toMatch(/`--strict` isn't an option of `form`/);
+	});
+});
+
 describe("the command under real Node", () => {
 	it("runs from source with no build or loader", async () => {
 		const exec = promisify(execFile);
@@ -523,7 +566,25 @@ describe("the command under real Node", () => {
 			"--qsf",
 		]);
 		expect(JSON.parse(qsf.stdout).SurveyEntry.SurveyName).toBe("households");
-		// Four real Node processes, each loading the core from source: slower than the
+		// The form package too, its page script taken from its own source text.
+		const ddi = join(
+			await mkdtemp(join(tmpdir(), "qretools-form-")),
+			"ddi.json",
+		);
+		await writeFile(
+			ddi,
+			(
+				await exec(process.execPath, [
+					bin,
+					"instrument",
+					"export",
+					here("../../core/fixtures/households/instruments/households.yaml"),
+				])
+			).stdout,
+		);
+		const form = await exec(process.execPath, [bin, "form", ddi]);
+		expect(form.stdout).toContain("function walk(");
+		// Six real Node processes, each loading the core from source: slower than the
 		// default 5s on a CI runner, where it timed out.
 	}, 30_000);
 
@@ -534,6 +595,7 @@ describe("the command under real Node", () => {
 			"../../core/src",
 			"../../qsf/src",
 			"../../codebook/src",
+			"../../form/src",
 			".",
 		])
 			for await (const file of glob("**/*.ts", { cwd: here(root) }))

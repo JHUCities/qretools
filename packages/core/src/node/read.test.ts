@@ -22,6 +22,10 @@ const cond = (c: Condition): string =>
 		? printCondition(c.expr)
 		: `as written: ${c.command.text}`;
 
+/** A loop's name, if it has one, after its kind. */
+const named = (s: { readonly name?: string }): string =>
+	s.name === undefined ? "" : ` ${s.name}`;
+
 /** A flow as indented lines: each step's kind and what it turns on. */
 const lines = (steps: readonly Step[], ind = ""): string[] =>
 	steps.flatMap((s): string[] => {
@@ -53,11 +57,20 @@ const lines = (steps: readonly Step[], ind = ""): string[] =>
 					...lines(s.else, ind),
 				];
 			case "count":
-				return [`${ind}count ${cond(s.count)} max ${s.max}`, ...inner(s.flow)];
+				return [
+					`${ind}count${named(s)} ${cond(s.count)} max ${s.max}`,
+					...inner(s.flow),
+				];
 			case "repeat":
-				return [`${ind}repeat ${cond(s.more)} max ${s.max}`, ...inner(s.flow)];
+				return [
+					`${ind}repeat${named(s)} ${cond(s.more)} max ${s.max}`,
+					...inner(s.flow),
+				];
 			case "loop":
-				return [`${ind}${s.construct} ${cond(s.cond)}`, ...inner(s.flow)];
+				return [
+					`${ind}${s.construct}${named(s)} ${cond(s.cond)}`,
+					...inner(s.flow),
+				];
 			case "section":
 				return [`${ind}section ${s.name ?? ""}`, ...inner(s.flow)];
 			default:
@@ -127,7 +140,7 @@ flow:
 			  "stop consent = "2"",
 			  "  say",
 			  "ask size size",
-			  "count size max 20",
+			  "count members size max 20",
 			  "  say",
 			  "  ask age age",
 			  "  ask works works",
@@ -138,10 +151,10 @@ flow:
 			  "    ask rent rent",
 			  "      check warning rent < 10000",
 			  "    ask utilities utilities",
-			  "repeat more_vehicles = "1" max 4",
+			  "repeat vehicles more_vehicles = "1" max 4",
 			  "  ask vehicle vehicle",
 			  "  ask more_vehicles more_vehicles",
-			  "count size max 20",
+			  "count members size max 20",
 			  "  if works = "1"",
 			  "    say",
 			  "ask comments comments",
@@ -262,7 +275,7 @@ flow:
 			}),
 		);
 		expect(lines(value.instruments[0]?.flow ?? [])).toContain(
-			"Loop members_index > size",
+			"Loop members members_index > size",
 		);
 	});
 
