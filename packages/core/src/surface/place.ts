@@ -8,7 +8,14 @@
  * a half-written word isn't structure yet. CodeMirror's own YAML tree was tried first
  * and couldn't answer after trailing spaces or at the end of the text (AGENTS.md).
  */
-import { isMap, isScalar, type Pair, parseDocument, type YAMLMap } from "yaml";
+import {
+	isMap,
+	isScalar,
+	type Pair,
+	parseDocument,
+	visit,
+	type YAMLMap,
+} from "yaml";
 import { keyText } from "./codes.ts";
 
 export type Place =
@@ -67,6 +74,29 @@ export function placeAt(source: string, offset: number): Place | undefined {
 		typed: key?.[2] ?? "",
 	};
 }
+
+/**
+ * The lines (numbered from 1) that continue a value begun on a line above: a `|` or
+ * `>` block, or a plain or quoted value written over several lines. They hold the
+ * author's words, so a colon or a `#` there is neither a key nor a comment.
+ */
+export function textLines(source: string): ReadonlySet<number> {
+	const lines = new Set<number>();
+	visit(parseDocument(source, { prettyErrors: false }), {
+		Scalar(_, node) {
+			if (node.range == null) return;
+			// A block's range takes its trailing newline, so its last line holds end - 1.
+			const last = lineNumber(source, node.range[1] - 1);
+			for (let n = lineNumber(source, node.range[0]) + 1; n <= last; n++)
+				lines.add(n);
+		},
+	});
+	return lines;
+}
+
+/** The number (from 1) of the line holding `at`. */
+const lineNumber = (source: string, at: number): number =>
+	source.slice(0, at).split("\n").length;
 
 /** Where the line holding `at` starts. */
 const lineOf = (source: string, at: number): number =>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placeAt } from "./place.ts";
+import { placeAt, textLines } from "./place.ts";
 
 /** The place at `▮`. */
 const at = (marked: string) =>
@@ -116,5 +116,42 @@ describe("where the caret is, for completion", () => {
 		expect(at("name: q # a ▮")).toBeUndefined(); // a comment
 		expect(at("number:\n\t▮")).toBeUndefined(); // a tab, which YAML forbids
 		expect(at("legacy:\n  - a\n  ▮")).toBeUndefined(); // a list
+	});
+});
+
+describe("the lines that continue a value", () => {
+	const lines = (source: string) =>
+		[...textLines(source)].sort((a, b) => a - b);
+
+	it("are a block's lines after its `|`, colons, `#` and blank lines included", () => {
+		expect(
+			lines("note: |\n  Title: A\n  # not a comment\n\n  end\ntext: x\n"),
+		).toEqual([2, 3, 4, 5]);
+	});
+
+	it("stop before a real comment after a kept block", () => {
+		expect(lines("note: |+\n  a\n# a comment\ntext: x\n")).toEqual([2]);
+	});
+
+	it("include a plain value written over several lines", () => {
+		expect(
+			lines("note: Canonical wording\n  and response labels: in full\nx: y\n"),
+		).toEqual([2]);
+	});
+
+	it("include a block under a list item", () => {
+		expect(lines("- ask: |\n    Title: A\n    b\n- say: c\n")).toEqual([2, 3]);
+	});
+
+	it("survive a broken document after a block", () => {
+		expect(lines("note: |\n  a: b\nbroken: [\n")).toEqual([2]);
+	});
+
+	it("include a `>` block at the end of the text with no newline", () => {
+		expect(lines("note: >\n  a\n  b")).toEqual([2, 3]);
+	});
+
+	it("are none for keys, comments and one-line values", () => {
+		expect(lines("# Note: x\nname: q\ntext: 'a: b'\n")).toEqual([]);
 	});
 });

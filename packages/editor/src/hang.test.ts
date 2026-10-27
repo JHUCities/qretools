@@ -15,7 +15,11 @@ describe("where a wrapped line continues", () => {
 		expect(hangOf("    and its wording goes on")).toBe(4);
 		expect(hangOf('  "1": Strongly agree')).toBe(2);
 		expect(hangOf("")).toBe(0);
-		// Accepted: a wrapped sentence with a colon reads as a key; it only changes the look.
-		expect(hangOf("  Note: the rest of a long value")).toBe(8);
+	});
+
+	it("is the indentation alone on a line that continues a value", () => {
+		expect(hangOf("  Title: the rest of a long value", true)).toBe(2);
+		expect(hangOf("  # not a comment", true)).toBe(2);
+		expect(hangOf("  - not a list item", true)).toBe(2);
 	});
 });
