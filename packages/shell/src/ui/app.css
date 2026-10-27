@@ -592,6 +592,23 @@ code,
 	padding: var(--base-size-12);
 }
 /*
+ * The test form: a page that scrolls itself, so a chosen height, the same whether it
+ * shows the form or why it can't (the DDI pane below never moves).
+ */
+.test-form {
+	block-size: min(40rem, 70dvh);
+}
+.test-form > iframe {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-medium);
+}
+.test-form > p {
+	margin: 0;
+}
+/*
  * A header row holding a heading and its tools (the DDI pane's verdict and download):
  * drawn as a pane's h3 is, one small control high whether or not a control is there.
  */

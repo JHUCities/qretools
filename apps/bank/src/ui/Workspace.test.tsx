@@ -360,6 +360,30 @@ describe("a workspace's instruments", () => {
 		);
 	});
 
+	it("run as a test form beside the source, or say why they can't", async () => {
+		renderWorkspace([
+			...FILES,
+			file(
+				"instruments/wave2.yaml",
+				"name: wave2\nuses:\n  a: ../\nflow:\n  - ask: a.nope\n",
+			),
+		]);
+		await act(async () => {});
+		fireEvent.click(screen.getByRole("treeitem", { name: /^wave1\b/ }));
+		await act(async () => {});
+		expect(screen.getByRole("heading", { name: /^Test form/ })).toBeTruthy();
+		const frame = screen.getByTitle("Test form for wave1");
+		// Scripts and its own forms only: never this page's origin.
+		expect(frame.getAttribute("sandbox")).toBe("allow-scripts allow-forms");
+		expect(frame.getAttribute("srcdoc")).toMatch(/<h1>wave1<\/h1>/);
+		fireEvent.click(screen.getByRole("treeitem", { name: /^wave2\b/ }));
+		await act(async () => {});
+		expect(screen.queryByTitle(/^Test form for/)).toBeNull();
+		expect(
+			screen.getByText(/test form needs everything in Findings/),
+		).toBeTruthy();
+	});
+
 	it("are made from New, named first", async () => {
 		const app = renderWorkspace();
 		await act(async () => {});

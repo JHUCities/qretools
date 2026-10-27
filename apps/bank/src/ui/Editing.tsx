@@ -18,6 +18,7 @@ import { codebookOf, parse as parseDdi } from "@qretools/codebook";
 import {
 	type DdiDocument,
 	DEFAULT_SELECT_ALL,
+	ddiIndexOf,
 	documentOf,
 	type Evaluation,
 	envAt,
@@ -39,6 +40,7 @@ import {
 	questionItems,
 	type Range,
 	type RootKind,
+	readInstruments,
 	refusalReason,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
@@ -64,6 +66,7 @@ import {
 	workspaceFileJsonSchema,
 } from "@qretools/core/editor";
 import { PICK_KEY, toDiagnostics } from "@qretools/editor";
+import { pageOf as formOf } from "@qretools/form";
 import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
 import { bankText, formatLink } from "@qretools/shell";
 import {
@@ -425,10 +428,32 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 	const [listed, flushFindings] = useSettled(findings, SETTLE_MS, e.id);
 	const outline = useMemo(() => outlineOf(draft), [draft]);
 	const [outlined, flushOutline] = useSettled(outline, SETTLE_MS, e.id);
+	// The test form is made from the DDI once typing pauses: each new page reloads the
+	// frame and starts the walk again. Not while the instrument has fields to fill in.
+	const [formDdi, flushForm] = useSettled(
+		status(findings).kind === "incomplete" ? undefined : ddi,
+		SETTLE_MS,
+		e.id,
+	);
+	// As `qretools form` writes it: a page whenever an instrument can be read from the DDI.
+	// What the reader can't read isn't listed here: in DDI this app made, that's our bug,
+	// not the author's (the form's tests read the households DDI with no findings).
+	// In the app's theme: a frame's prefers-color-scheme follows the system's, not the
+	// app's toggle, even with `color-scheme` set on the iframe (tried, Chromium). Choosing
+	// a theme makes a new page, which reloads the frame and starts the walk again.
+	const theme = useModel((m) => m.theme);
+	const form = useMemo(() => {
+		if (formDdi === undefined) return undefined;
+		const read = readInstruments(ddiIndexOf(formDdi)).value;
+		return read.instruments.length === 0
+			? undefined
+			: formOf(read, theme === "system" ? undefined : theme);
+	}, [formDdi, theme]);
 	const flush = () => {
 		flushFindings();
 		flushOutline();
 		flushQsf();
+		flushForm();
 	};
 	const also = useMemo(
 		() =>
@@ -629,6 +654,23 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 													</FileLink>
 												);
 											}}
+										/>
+									)}
+								</div>
+							) : pane === "test" ? (
+								// Reloaded before a click lands in it, never during one.
+								<div className="test-form" onPointerEnter={flush}>
+									{form === undefined ? (
+										<p className="quiet">
+											The test form needs everything in Findings filled in or
+											fixed.
+										</p>
+									) : (
+										// Its own origin (no allow-same-origin): the page runs only its own walk.
+										<iframe
+											title={`Test form for ${e.name}`}
+											sandbox="allow-scripts allow-forms"
+											srcDoc={form}
 										/>
 									)}
 								</div>

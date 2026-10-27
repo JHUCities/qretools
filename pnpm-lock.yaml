@@ -29,6 +29,9 @@ importers:
       '@qretools/editor':
         specifier: workspace:*
         version: link:../../packages/editor
+      '@qretools/form':
+        specifier: workspace:*
+        version: link:../../packages/form
       '@qretools/qsf':
         specifier: workspace:*
         version: link:../../packages/qsf
