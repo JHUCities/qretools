@@ -35,7 +35,7 @@ describe("two workspaces under one agency", () => {
 			[
 				"",
 				expect.stringMatching(
-					/^`urn:ddi:org\.a:scale-agree\.cat-0:1` would name/,
+					/^Two different things would be published under one DDI name, `urn:ddi:org\.a:scale-agree\.cat-0:1`: from /,
 				),
 			],
 			[

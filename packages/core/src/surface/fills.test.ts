@@ -208,8 +208,12 @@ describe("fills", () => {
 		);
 		expect(draft.fills).toEqual([{ name: "rent", type: "number" }]);
 		expect(
-			findings.filter((f) => f.path === "fills.rent").map((f) => f.code),
-		).toEqual(["fill-name"]);
+			findings
+				.filter((f) => f.path === "fills.rent")
+				.map((f) => `${f.code}: ${f.hint}`),
+		).toEqual([
+			"fill-name: Only the first `rent` is used. Remove or rename the other.",
+		]);
 	});
 
 	it("aren't words the respondent reads, for advice on wording", () => {

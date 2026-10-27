@@ -100,7 +100,7 @@ export function readFills(doc: Document): Read<readonly Fill[]> {
 			error(
 				"wrong-type",
 				"fills",
-				"`fills` is a list of `name: type` lines.",
+				"Write `fills` as `name: type` lines, one per fill.",
 				`Types: ${FILL_TYPES.join(", ")}.`,
 			),
 		);
@@ -113,7 +113,12 @@ export function readFills(doc: Document): Read<readonly Fill[]> {
 		// The first of a repeated name stands: two parameters can't share an ID.
 		if (fills.some((f) => f.name === name)) {
 			findings.push(
-				error("fill-name", at, `The fill \`${name}\` is declared twice.`),
+				error(
+					"fill-name",
+					at,
+					`The fill \`${name}\` is declared twice.`,
+					`Only the first \`${name}\` is used. Remove or rename the other.`,
+				),
 			);
 			continue;
 		}
@@ -194,7 +199,7 @@ export function fillFindings(
 				severity: "warning",
 				path: `fills.${f.name}`,
 				message: `The fill \`${f.name}\` isn't used in the text.`,
-				hint: `Write \`{{${f.name}}}\` where it goes, or remove it.`,
+				hint: `Write \`{{${f.name}}}\` in the text where it goes, or remove \`${f.name}\` from \`fills:\`.`,
 			});
 	return findings;
 }
@@ -250,6 +255,6 @@ export function leadingFill(
 		severity: "error",
 		path: "text",
 		message: "Text that starts with a fill needs quotes.",
-		hint: `YAML reads a \`{\` at the start of a value as a map. Write it as text: ${JSON.stringify(written)}`,
+		hint: `Without quotes, a \`{\` at the start isn't read as text. Put it in quotes: ${JSON.stringify(written)}.`,
 	};
 }

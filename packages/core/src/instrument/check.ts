@@ -282,16 +282,18 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 						code: "name-clash",
 						severity: "error",
 						path: `${node.path}.as`,
-						message: `\`${node.as}\` is already recorded on ${seen.definite.has(node.as) ? "this" : "a"} path here.`,
-						hint: "Asked again on one path, the answer needs a name of its own.",
+						message: seen.definite.has(node.as)
+							? `\`${node.as}\` already names an answer or a computed value before this point.`
+							: `\`${node.as}\` may already name an answer or a computed value before this point, on some routes.`,
+						hint: "Give this answer another name with `as:`.",
 					});
 				if (node.as === undefined && seen.possible.has(key))
 					say({
 						code: "name-clash",
 						severity: "error",
 						path: `${node.path}.ask`,
-						message: `\`${q.alias}.${q.name}\` is already asked on ${seen.definite.has(key) ? "this" : "a"} path here, so its answer would be recorded twice.`,
-						hint: "To ask it again, give the second answer its own name with `as:`.",
+						message: `\`${q.alias}.${q.name}\` is already asked before this point${seen.definite.has(key) ? "" : " (on some routes)"}, so its answer would be recorded twice.`,
+						hint: `To ask \`${q.alias}.${q.name}\` again, give this answer its own name with \`as:\`.`,
 					});
 				universe(node, conditional);
 				fillTypes(node);
@@ -330,6 +332,9 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 							message: decided
 								? "An earlier condition is always true, so this branch is never taken."
 								: "This condition is never true, so its branch is never taken.",
+							hint: decided
+								? "Change the earlier condition, or remove this branch."
+								: "Change the condition, or remove the branch.",
 						});
 					ends.push(flow(branch.then, seen, true));
 					if (value === true) decided = true;
@@ -342,6 +347,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 							path: `${node.path}.else`,
 							message:
 								"A condition above is always true, so `else` is never taken.",
+							hint: "Change the condition above, or remove `else`.",
 						});
 					ends.push(flow(node.else, seen, true));
 				} else ends.push(seen);
@@ -357,6 +363,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 						path: `${node.path}.stop`,
 						message:
 							"This condition is always true, so nothing after it is ever asked.",
+						hint: "Change the condition so it stops only some respondents.",
 					});
 				return seen;
 			case "compute": {
@@ -443,8 +450,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "universe",
 				severity: "info",
 				path: at,
-				message: `Everyone is asked this, but its universe is ${effective.said}.`,
-				hint: "Ask it under the condition that picks out its universe, or widen the universe.",
+				message: `Everyone who reaches this point is asked this, but its universe is ${effective.said}.`,
+				hint: `Put this step inside an \`if:\` that narrows the universe to be ${effective.said}, or set a new universe on this step using \`universe:\`.`,
 			});
 		if (
 			conditional &&
@@ -481,6 +488,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					severity: "error",
 					path: fill.path,
 					message: `\`${fill.name}\` is a number fill, so it needs a number to fill it.`,
+					hint: `Fill \`${fill.name}\` with a number question's answer, a computed number, or a number such as \`3\`.`,
 					range: value.range,
 				});
 			if (

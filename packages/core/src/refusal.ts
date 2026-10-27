@@ -56,9 +56,9 @@ export function refusalReason(r: Refusal): string {
 		case "noAgency":
 			return "There's no DDI agency to publish it under yet.";
 		case "invalidAgency":
-			return "Every item needs a real DDI agency.";
+			return "A DDI agency is missing or isn't valid: see Findings.";
 		case "collisions":
-			return "Two different items would share an identity.";
+			return "Two different things would be published under one DDI name: see Findings.";
 		case "unchecked":
 			return "The DDI hasn't been checked against the official schema yet.";
 		case "schema":

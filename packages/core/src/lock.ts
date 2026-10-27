@@ -60,8 +60,8 @@ export function movedTags(
 						code: "moved-tag",
 						severity: "warning",
 						path: `uses.${alias}`,
-						message: `\`${key}\` names commit \`${shortCommit(commit)}\` now, but this workspace locked it at \`${shortCommit(locked)}\`: the tag was moved, so its questions may have changed.`,
-						hint: "Saving or exporting the instrument locks it at the new commit, under `locked:` in `workspace.yaml`, for review to see.",
+						message: `\`${key}\` now points at a different version of its bank from the one this workspace recorded, so its questions may have changed.`,
+						hint: `Check what changed in \`${key.split("@")[0]}\`. Save the instrument in QREtools, or run \`qretools instrument export\`, to record the new version in the workspace details (\`locked:\`).`,
 					},
 				];
 	});
@@ -86,8 +86,8 @@ export function unlockedTags(
 						code: "unlocked-tag",
 						severity: "warning",
 						path: `uses.${alias}`,
-						message: `\`${key}\` isn't locked to the commit it names, so if the tag were moved its questions would change unnoticed.`,
-						hint: "Saving the instrument in QREtools, or `qretools instrument export`, locks it under `locked:` in `workspace.yaml`.",
+						message: `This workspace hasn't recorded which version of \`${key}\` it read, so if the tag moved, its questions could change without warning.`,
+						hint: "Save the instrument in QREtools, or run `qretools instrument export`, to record it in the workspace details (`locked:`).",
 					},
 				],
 	);
