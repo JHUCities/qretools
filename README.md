@@ -65,7 +65,7 @@ Three to look at:
 ## What's in it
 
 - **The web app** (`apps/bank/`, [qretools.com](https://qretools.com/)). Write questions and
-  instruments, checked as you type, and save them to your branch.
+  instruments in the browser.
 - **The command-line package** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)
   as `qretools`). Run `check`, `export`, `codebook` or `build` on a workspace, and
   `instrument check` or `instrument export` on an instrument.
