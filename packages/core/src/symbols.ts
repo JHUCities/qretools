@@ -1,15 +1,15 @@
 /**
- * The bank's symbol table. Each file defines variables, mentions scheme names, and
- * writes content that another file may repeat; "used by", "also defined by" and
- * "the same as" are all queries over one index of those. Keys are the caller's (the
- * shell's numeric ids); names are only what the index is keyed on, never an identity.
+ * The bank's symbol table. Each file defines variables, names shared files, and
+ * writes content that another file may repeat. "Used by", "also used by" and "the
+ * same as" are all lookups in one index of those. Keys are the caller's (the app's
+ * numeric ids). Names are only what the index looks up, never what a file is.
  *
- * Pure, and free of the app: another tool can build the same index over its own files.
+ * Pure, and free of the app, so another tool can build the same index over its files.
  *
  * Duplicates are found at three strengths, as code clones are (Roy and Cordy): the same
- * as written; the same once case, punctuation and spacing are folded (and, for response
- * lists, codes ignored); and, for question text only, similar wording (word overlap),
- * computed for one file at a time against the index, never for every pair.
+ * as written; the same once case, punctuation and spacing are ignored (and, for
+ * response lists, codes); and, for question text only, similar wording (word overlap).
+ * Similar wording is computed for one file against the index, never for every pair.
  */
 import {
 	type Finding,
@@ -29,9 +29,9 @@ import type { Mention, NamedScheme } from "./surface/env.ts";
 import type { Parsed, Variant } from "./surface/parse.ts";
 
 /**
- * What a piece of content is, for comparing like with like. A question's own list or
- * sentence is compared with other questions'; a shared file's with other shared files'.
- * One equal to a shared entry is the parse's to say ("use the name", lint.ts), not this.
+ * What a piece of content is, so like is compared with like: a question's list or
+ * sentence with other questions', a shared file's with other shared files'. Content
+ * equal to a shared file is reported by lint.ts ("use the name"), not here.
  */
 export type PrintKind =
 	| "text"
@@ -270,55 +270,55 @@ const SAID: Readonly<
 		code: "duplicate-text",
 		what: "The same question text",
 		where: "is in",
-		hint: "Keep one question. If both are meant, add `variant_of:` naming the other, with why they differ.",
+		hint: "Keep one question. If you need both, add `variant_of:` naming the other, and say how they differ.",
 	},
 	list: {
 		code: "duplicate-list",
 		what: "The same responses",
 		where: "are written in",
-		hint: "If each option is a plain `code: label` line, make them one shared scale that each question names, so one change reaches them all.",
+		hint: "If each option is a plain `code: label` line, make the list a shared scale, so one change updates every question.",
 	},
 	universe: {
 		code: "duplicate-universe",
 		what: "The same universe",
 		where: "is written in",
-		hint: "Make it a shared universe, so each question names it.",
+		hint: "Make this universe a shared one, so one change updates every question.",
 	},
 	instruction: {
 		code: "duplicate-instruction",
 		what: "The same instruction",
 		where: "is written in",
-		hint: "Make it a shared instruction, so each question names it.",
+		hint: "Make this instruction a shared one, so one change updates every question.",
 	},
 	scale: {
 		code: "duplicate-scale",
 		what: "The same labels",
 		where: "are in the shared scale",
-		hint: "Keep one scale and have questions name it.",
+		hint: "Keep one of these shared scales, and have questions name that one.",
 	},
 	"universe-file": {
 		code: "duplicate-universe",
-		what: "The same universe",
-		where: "is the shared universe",
-		hint: "Keep one and have questions name it.",
+		what: "The same text",
+		where: "is in the shared universe",
+		hint: "Keep one of these shared universes, and have questions name that one.",
 	},
 	"instruction-file": {
 		code: "duplicate-instruction",
-		what: "The same instruction",
-		where: "is the shared instruction",
-		hint: "Keep one and have questions name it.",
+		what: "The same text",
+		where: "is in the shared instruction",
+		hint: "Keep one of these shared instructions, and have questions name that one.",
 	},
 	"concept-file": {
 		code: "duplicate-concept",
 		what: "The same label",
-		where: "is the shared concept",
-		hint: "One concept, one label: keep one and have questions name it.",
+		where: "is in the shared concept",
+		hint: "Keep one of these shared concepts, and have questions name that one.",
 	},
 	"unit-file": {
 		code: "duplicate-unit",
 		what: "The same label",
-		where: "is the shared unit",
-		hint: "One unit, one label: keep one and have questions name it.",
+		where: "is in the shared unit",
+		hint: "Keep one of these shared units, and have questions name that one.",
 	},
 };
 
@@ -326,8 +326,8 @@ const listed = (names: readonly string[]): string =>
 	names.map((n) => `\`${n}\``).join(", ");
 
 /**
- * Findings that span files, attached to this file where it writes the shared thing;
- * each file involved gets its own, naming the others. A pair either file lists under
+ * Findings that span files, placed where this file writes the repeated thing. Each
+ * file involved gets its own, naming the others. A pair that either file lists under
  * `variant_of` is deliberate and not reported. `label` names a file.
  */
 export function bankFindings<K>(
@@ -358,16 +358,16 @@ export function bankFindings<K>(
 				code: "duplicate-variable",
 				severity: "warning",
 				path: d.path,
-				message: `Variable \`${d.name}\` is also defined by ${names(keys).join(", ")}.`,
+				message: `Variable \`${d.name}\` is also used by ${names(keys).join(", ")}.`,
 				hint: d.path.startsWith("responses.")
-					? "Each variable is one column in the dataset, so two with one name may stop the bank's DDI export. Give this option a different `variable:`."
-					: "Each variable is one column in the dataset, so two with one name may stop the bank's DDI export. Give this question another name.",
+					? "Two variables can't share a name. Give this option a different `variable:`."
+					: "Two variables can't share a name. Rename this question.",
 				others: keys,
 			},
 		];
 	});
 
-	// One name, one identity: two questions named alike would elaborate to the same IDs.
+	// Two questions with one name would get the same DDI IDs.
 	const named = symbols.name;
 	const sameName =
 		named === undefined
@@ -381,8 +381,8 @@ export function bankFindings<K>(
 						code: "duplicate-name",
 						severity: "warning",
 						path: "name",
-						message: `Other questions are also named \`${named}\`.`,
-						hint: "A name is a question's identity, in the bank and in DDI: give each its own.",
+						message: `${sameName.length === 1 ? "Another question is" : "Other questions are"} also named \`${named}\`.`,
+						hint: "Each question needs its own name. Rename this question.",
 						others: sameName,
 					},
 				];
@@ -396,7 +396,7 @@ export function bankFindings<K>(
 						severity: "warning",
 						path: v.path,
 						message: `No other question is named \`${v.name}\`.`,
-						hint: "Check the name, or remove the line.",
+						hint: "Check the name under `variant_of`, or remove it.",
 						others: [],
 					},
 				],
@@ -436,8 +436,8 @@ export function bankFindings<K>(
 					if (t.key === key || t.folded === text.key || deliberate(t.key))
 						return [];
 					if (overlap(mine, t.words) < SIMILAR) return [];
-					// Named under `variant_of` by its name: only where that name is its alone,
-					// and this question has one to be named back by.
+					// Offered only when the other's name is its alone, and this question has
+					// a name for the other to list back.
 					const other = index.files.get(t.key)?.name;
 					const fix: Fix | undefined =
 						other !== undefined &&
@@ -455,7 +455,7 @@ export function bankFindings<K>(
 							severity: "info",
 							path: "text",
 							message: `Reads like \`${label(t.key)}\`: ${quote(t.raw)}`,
-							hint: "If they ask the same thing, keep one. If both are meant, add `variant_of:` naming the other, with why they differ.",
+							hint: "If both questions ask the same thing, keep one. If you need both, add `variant_of:` naming the other, and say how they differ.",
 							others: [t.key],
 							...(fix !== undefined && { fix }),
 						},
@@ -467,8 +467,7 @@ export function bankFindings<K>(
 
 /**
  * Everything a file reports: its own findings and the bank's about it, in document
- * order. The one merge rule, so a bank checked whole and a file open in an editor
- * agree.
+ * order. The one place they are merged, so a whole-bank check and the editor agree.
  */
 export const fileFindings = <K>(
 	key: K,

@@ -1,8 +1,8 @@
 /**
  * When a DDI export is refused: one rule for a bank's export and an instrument's, in
  * the CLI and in the apps alike. An export is refused, with nothing written, when it
- * would be wrong: no agency to publish under, an agency that isn't one, two items under
- * one identity, or a document the official schema rejects (or hasn't checked yet).
+ * would be wrong: no agency, an agency that isn't valid, two things sharing one DDI
+ * name, or a document the official schema rejects (or hasn't checked yet).
  * Holes don't refuse it: they leave elements out, and the findings say so.
  */
 import type { Collision } from "./ddi/document.ts";
@@ -14,7 +14,7 @@ export interface Exportable {
 	readonly agency?: string;
 	/** Its findings: those coded `invalid-agency` refuse it. */
 	readonly findings?: readonly Finding[];
-	/** Identities two different items would share. */
+	/** DDI names that two different things would share. */
 	readonly collisions: readonly Collision<string>[];
 }
 
@@ -56,11 +56,11 @@ export function refusalReason(r: Refusal): string {
 		case "noAgency":
 			return "There's no DDI agency to publish it under yet.";
 		case "invalidAgency":
-			return "A DDI agency is missing or isn't valid: see Findings.";
+			return "A DDI agency is missing or wrong. See Findings.";
 		case "collisions":
-			return "Two different things would be published under one DDI name: see Findings.";
+			return "Two things would share one DDI name. See Findings.";
 		case "unchecked":
-			return "The DDI hasn't been checked against the official schema yet.";
+			return "The DDI hasn't been checked yet.";
 		case "schema":
 			return "The DDI doesn't match the official schema.";
 		default:

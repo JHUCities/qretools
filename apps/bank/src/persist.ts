@@ -83,7 +83,7 @@ export function readWork(
 ): Result<Work | undefined, Failure> {
 	// Only this version: older work is set aside as unreadable, never upgraded.
 	return parseStored(raw, WorkSchema, {
-		what: "The work kept in this tab",
+		what: "Your unsaved work from this tab",
 		key: WORK_UNREADABLE_KEY,
 	});
 }
@@ -157,14 +157,14 @@ function parseStored<T>(
 	{ what, key }: { readonly what: string; readonly key: string },
 ): Result<T | undefined, Failure> {
 	if (raw === null) return ok(undefined);
-	const hint = `It was set aside under \`${key}\`.`;
+	const hint = `A copy is kept in this browser under \`${key}\`.`;
 	let json: unknown;
 	try {
 		json = JSON.parse(raw);
 	} catch {
 		return err({
 			kind: "unreadable",
-			message: `${what} can't be read.`,
+			message: `${what} can't be read, so it isn't restored.`,
 			detail: "Not valid JSON.",
 			hint,
 		});
@@ -173,7 +173,7 @@ function parseStored<T>(
 	if (!parsed.success) {
 		return err({
 			kind: "unreadable",
-			message: `${what} doesn't match what this version of the app expects.`,
+			message: `${what} can't be read by this version of QREtools.`,
 			detail: parsed.error.issues[0]?.message ?? "invalid",
 			hint,
 		});

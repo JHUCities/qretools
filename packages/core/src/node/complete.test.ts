@@ -167,7 +167,7 @@ describe("completion in an instrument", async () => {
 		);
 	});
 
-	it("offers a select-all option's codes: chosen or not, and the bank's missing ones", () => {
+	it("offers a select all that apply option's codes: chosen or not, and the bank's missing ones", () => {
 		const b = bankOf({
 			"workspace.yaml": "agency: org.example\n",
 			"missing.yaml": 'labels:\n  "-9": Don\'t know\n',

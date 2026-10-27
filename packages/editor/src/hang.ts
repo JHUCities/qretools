@@ -1,12 +1,12 @@
 /**
- * A wrapped line continues where its own text starts, not at the left margin: past its
- * indentation, any `- ` list markers, a comment's `# ` (and a `1. ` or `- ` item in it),
- * and a `key: `, so a long value hangs under itself. VS Code's wrappingIndent and the
- * CodeMirror forum's recipe know only leading whitespace; a key, a comment and a list
- * marker are why this is our own. The hang is drawn by padding the line and pulling its
- * first row back (a negative text-indent), in `ch`: the editor is monospaced, and YAML
- * indents with spaces only. Read from the line's text alone, as it only changes how the
- * line looks.
+ * A wrapped line continues where its own text starts, not at the left margin. That is past
+ * its indentation, any `- ` list markers, a comment's `# ` (and a `1. ` or `- ` item in
+ * it), and a `key: `, so a long value hangs under itself.
+ * VS Code's wrappingIndent and the CodeMirror forum's recipe know only leading whitespace.
+ * Keys, comments and list markers are why this is our own.
+ * The hang pads the line and pulls its first row back (a negative text-indent), in `ch`:
+ * the editor is monospaced, and YAML indents with spaces only. It reads the line's text
+ * alone, since it only changes how the line looks.
  */
 import { type Extension, RangeSetBuilder } from "@codemirror/state";
 import {

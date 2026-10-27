@@ -96,45 +96,45 @@ describe("checking an instrument's flow", () => {
 				.filter((f) => f.code === "order" && f.severity === "info")
 				.map((f) => `${f.message} | ${f.hint}`);
 		};
-		const asked =
-			"It is possible that some respondents haven't been asked `bas.tenure` by this point. | Anyone not asked `bas.tenure` by this point has no answer to it";
+		const asked = "Some respondents may not have been asked `bas.tenure` yet.";
+		const people = "People with no answer to `bas.tenure`";
 		expect(notes('  - if: bas.tenure = "2"\n    then: []\n')).toEqual([
-			`${asked}, so this condition may not be true for them and the branch may be skipped. To include them, add \`or isnull(bas.tenure)\`; to treat them differently, give them a branch on \`isnull(bas.tenure)\`.`,
+			`${asked} | ${people} may skip this branch. To include them, add \`or isnull(bas.tenure)\`.`,
 		]);
 		expect(
 			notes(
 				'  - ask: bas.why\n    checks:\n      - ensure: bas.tenure = "1"\n        severity: warning\n        message: Owners only.\n',
 			),
 		).toEqual([
-			`${asked}, so this check may pass for them and its message may not be shown. If the check should cover them too, add a check on \`isnull(bas.tenure)\`.`,
+			`${asked} | ${people} may pass this check. To check them too, add a check on \`isnull(bas.tenure)\`.`,
 		]);
 		expect(notes('  - compute: renter\n    value: bas.tenure = "2"\n')).toEqual(
 			[
-				`${asked}, so this value may be empty for them. To give them a value, compute it in a branch on \`isnull(bas.tenure)\`.`,
+				`${asked} | ${people} get no value here. To give them one, compute it in a branch on \`isnull(bas.tenure)\`.`,
 			],
 		);
 		expect(notes('  - say: "You said {{bas.tenure}}."\n')).toEqual([
-			`${asked}, so this text shows nothing in its place for them. Ask \`bas.tenure\` on every route that reaches here, or move this text into the branch that asks it.`,
+			`${asked} | ${people} see a blank here. Ask \`bas.tenure\` on every route to here, or move this text into the branch that asks it.`,
 		]);
 		expect(
 			notes(
 				"  - roster: rooms\n    count: bas.rent\n    max: 5\n    flow:\n      - ask: bas.why\n",
 			),
 		).toEqual([
-			"It is possible that some respondents haven't been asked `bas.rent` by this point. | Anyone not asked `bas.rent` by this point has no answer to it, so this roster may have no rows for them. To give them rows, ask `bas.rent` on every route that reaches here.",
+			"Some respondents may not have been asked `bas.rent` yet. | People with no answer to `bas.rent` get no rows. Ask `bas.rent` on every route to here.",
 		]);
 		expect(notes('  - stop: bas.tenure = "2"\n')).toEqual([
-			`${asked}, so this condition may not be true for them and they may not be stopped here. To stop them too, add \`or isnull(bas.tenure)\`.`,
+			`${asked} | ${people} may not be stopped here. To stop them too, add \`or isnull(bas.tenure)\`.`,
 		]);
 		expect(
 			notes(
 				'  - roster: visits\n    more: bas.tenure = "2"\n    max: 5\n    flow:\n      - ask: bas.why\n',
 			),
 		).toEqual([
-			`${asked}, so this condition may not be true for them and their roster may end here. To ask them for more rows, add \`or isnull(bas.tenure)\`.`,
+			`${asked} | ${people} may get no more rows. To keep asking them, add \`or isnull(bas.tenure)\`.`,
 		]);
 		expect(notes("  - if: owner\n    then: []\n")).toEqual([
-			"It is possible that `owner` hasn't been computed for some respondents by this point. | Anyone for whom `owner` isn't computed by this point has no value for it, so this condition may not be true for them and the branch may be skipped. To include them, add `or isnull(owner)`; to treat them differently, give them a branch on `isnull(owner)`.",
+			"`owner` may not have been computed for some respondents yet. | People with no value for `owner` may skip this branch. To include them, add `or isnull(owner)`.",
 		]);
 	});
 
@@ -152,21 +152,21 @@ describe("checking an instrument's flow", () => {
 		expect(
 			said('  - if: bas.tenure = "2"\n    then: []\n  - ask: bas.tenure\n'),
 		).toContain(
-			"order: `bas.tenure` is used here, but no route asks it before this point. | Ask `bas.tenure` earlier in the flow, on every route that reaches here.",
+			"order: `bas.tenure` is used here, but no route asks it before this point. | Ask `bas.tenure` earlier, on every route to here.",
 		);
 		expect(
 			said(
 				'  - ask: bas.consent\n  - if: bas.consent = "1"\n    then:\n      - ask: bas.why\n',
 			),
 		).toContain(
-			"universe: Some respondents may not reach this question, but it has no universe to say who is asked it. | Say who is asked it with `universe:` on this step.",
+			"universe: Not everyone reaches this question, but it has no universe. | Say who is asked with `universe:`.",
 		);
 		expect(
 			said(
 				'  - ask: bas.consent\n  - roster: people\n    more: bas.consent = "1"\n    max: 5\n    flow:\n      - compute: n\n        value: 1\n  - if: n = 1\n    then: []\n',
 			),
 		).toContain(
-			"misplaced: `n` has a value for each row of `people`, so it can only be used inside `people` or an `each` over it. | Move this into `people`, or into an `each: people` step.",
+			"misplaced: `n` has a value for each row of `people`, so it can only be used inside `people`. | Move this step into `people`, or into an `each: people` step.",
 		);
 		// A select all that apply question's options hold the bank's own chosen code.
 		const recoded = bankOf({
@@ -181,7 +181,7 @@ describe("checking an instrument's flow", () => {
 			{ bas: recoded },
 		);
 		expect(parsed.findings.find((f) => f.code === "unknown-name")?.hint).toBe(
-			'`bas.modes` is a select all that apply question, so each option has its own answer: `bas.modes_b`, `bas.modes_w`. Each holds `"Y"` when the option is chosen.',
+			'Each option of `bas.modes` has its own answer: `bas.modes_b`, `bas.modes_w`. A chosen option holds `"Y"`.',
 		);
 	});
 
@@ -213,7 +213,7 @@ describe("checking an instrument's flow", () => {
 				'  - ask: bas.tenure\n    checks:\n      - ensure: bas.tenure = "1"\n        message: Owners only.\n',
 			),
 		).toContain(
-			"hole: `blocking` asks the question again until the check passes; `warning` and `info` show the message and go on.",
+			"hole: `blocking` asks again until the answer passes; `warning` and `info` just show the message.",
 		);
 		expect(
 			hints(

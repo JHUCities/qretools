@@ -56,34 +56,32 @@ type Use = "branch" | "stop" | "more" | "check" | "value" | "count" | "text";
 
 /**
  * What a missing answer does where it's read, and what the author can do about it. Each
- * hint says who it's about, so it reads on its own, without its message.
+ * hint names the answer, so it reads on its own, without its message.
  */
 function emptyHint(name: string, use: Use, computed: boolean): string {
 	const n = `\`${name}\``;
-	const missing = computed
-		? `Anyone for whom ${n} isn't computed by this point has no value for it`
-		: `Anyone not asked ${n} by this point has no answer to it`;
-	const isnull = `\`isnull(${name})\``;
+	const people = computed
+		? `People with no value for ${n}`
+		: `People with no answer to ${n}`;
+	const ask = computed ? "Compute" : "Ask";
+	const asks = computed ? "computes" : "asks";
 	const add = `add \`or isnull(${name})\``;
 	// "May": a condition can still be true without this answer (`a = "1" or x = "2"`).
-	const untrue = `${missing}, so this condition may not be true for them`;
 	switch (use) {
 		case "branch":
-			return `${untrue} and the branch may be skipped. To include them, ${add}; to treat them differently, give them a branch on ${isnull}.`;
+			return `${people} may skip this branch. To include them, ${add}.`;
 		case "stop":
-			return `${untrue} and they may not be stopped here. To stop them too, ${add}.`;
+			return `${people} may not be stopped here. To stop them too, ${add}.`;
 		case "more":
-			return `${untrue} and their roster may end here. To ask them for more rows, ${add}.`;
+			return `${people} may get no more rows. To keep asking them, ${add}.`;
 		case "check":
-			return `${missing}, so this check may pass for them and its message may not be shown. If the check should cover them too, add a check on ${isnull}.`;
+			return `${people} may pass this check. To check them too, add a check on \`isnull(${name})\`.`;
 		case "value":
-			return `${missing}, so this value may be empty for them. To give them a value, compute it in a branch on ${isnull}.`;
+			return `${people} get no value here. To give them one, compute it in a branch on \`isnull(${name})\`.`;
 		case "count":
-			return `${missing}, so this roster may have no rows for them. To give them rows, ${computed ? "compute" : "ask"} ${n} on every route that reaches here.`;
+			return `${people} get no rows. ${ask} ${n} on every route to here.`;
 		case "text":
-			return computed
-				? `${missing}, so this text shows nothing in its place for them. Compute ${n} on every route that reaches here, or move this text into the branch that computes it.`
-				: `${missing}, so this text shows nothing in its place for them. Ask ${n} on every route that reaches here, or move this text into the branch that asks it.`;
+			return `${people} see a blank here. ${ask} ${n} on every route to here, or move this text into the branch that ${asks} it.`;
 		default:
 			return use satisfies never;
 	}
@@ -182,8 +180,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "misplaced",
 				severity: "error",
 				path,
-				message: `\`${name}\` has a value for each row of \`${row}\`, so it can only be used inside \`${row}\` or an \`each\` over it.`,
-				hint: `Move this into \`${row}\`, or into an \`each: ${row}\` step.`,
+				message: `\`${name}\` has a value for each row of \`${row}\`, so it can only be used inside \`${row}\`.`,
+				hint: `Move this step into \`${row}\`, or into an \`each: ${row}\` step.`,
 				...(range !== undefined && { range }),
 			});
 			return;
@@ -199,8 +197,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 						: `\`${name}\` is used here, but no route asks it before this point.`,
 				hint:
 					named.kind === "compute"
-						? `Compute \`${name}\` earlier in the flow.`
-						: `Ask \`${name}\` earlier in the flow, on every route that reaches here.`,
+						? `Compute \`${name}\` earlier.`
+						: `Ask \`${name}\` earlier, on every route to here.`,
 				...(range !== undefined && { range }),
 			});
 		else if (!seen.definite.has(key) && !guarded)
@@ -210,8 +208,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				path,
 				message:
 					named.kind === "compute"
-						? `It is possible that \`${name}\` hasn't been computed for some respondents by this point.`
-						: `It is possible that some respondents haven't been asked \`${name}\` by this point.`,
+						? `\`${name}\` may not have been computed for some respondents yet.`
+						: `Some respondents may not have been asked \`${name}\` yet.`,
 				hint: emptyHint(name, use, named.kind === "compute"),
 				...(range !== undefined && { range }),
 			});
@@ -283,17 +281,19 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 						severity: "error",
 						path: `${node.path}.as`,
 						message: seen.definite.has(node.as)
-							? `\`${node.as}\` already names an answer or a computed value before this point.`
-							: `\`${node.as}\` may already name an answer or a computed value before this point, on some routes.`,
-						hint: "Give this answer another name with `as:`.",
+							? `\`${node.as}\` is already used as a name.`
+							: `\`${node.as}\` may already be used as a name.`,
+						hint: "Use another name with `as:`.",
 					});
 				if (node.as === undefined && seen.possible.has(key))
 					say({
 						code: "name-clash",
 						severity: "error",
 						path: `${node.path}.ask`,
-						message: `\`${q.alias}.${q.name}\` is already asked before this point${seen.definite.has(key) ? "" : " (on some routes)"}, so its answer would be recorded twice.`,
-						hint: `To ask \`${q.alias}.${q.name}\` again, give this answer its own name with \`as:\`.`,
+						message: seen.definite.has(key)
+							? `\`${q.alias}.${q.name}\` is already asked earlier.`
+							: `\`${q.alias}.${q.name}\` may already be asked earlier.`,
+						hint: "To ask it again, name this answer with `as:`.",
 					});
 				universe(node, conditional);
 				fillTypes(node);
@@ -450,8 +450,8 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				code: "universe",
 				severity: "info",
 				path: at,
-				message: `Everyone who reaches this point is asked this, but its universe is ${effective.said}.`,
-				hint: `Put this step inside an \`if:\` that narrows the universe to be ${effective.said}, or set a new universe on this step using \`universe:\`.`,
+				message: `Everyone here is asked this, but its universe is ${effective.said}.`,
+				hint: `Ask it inside an \`if:\` that picks out ${effective.said}, or change its \`universe:\`.`,
 			});
 		if (
 			conditional &&
@@ -463,9 +463,9 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 				path: at,
 				message:
 					effective === undefined
-						? "Some respondents may not reach this question, but it has no universe to say who is asked it."
-						: `Some respondents may not reach this question, but its universe is ${effective.said}, the whole instrument's.`,
-				hint: "Say who is asked it with `universe:` on this step.",
+						? "Not everyone reaches this question, but it has no universe."
+						: "Not everyone reaches this question, but its universe is everyone's.",
+				hint: "Say who is asked with `universe:`.",
 			});
 	};
 
@@ -487,7 +487,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					code: "type",
 					severity: "error",
 					path: fill.path,
-					message: `\`${fill.name}\` is a number fill, so it needs a number to fill it.`,
+					message: `The fill \`${fill.name}\` needs a number.`,
 					hint: `Fill \`${fill.name}\` with a number question's answer, a computed number, or a number such as \`3\`.`,
 					range: value.range,
 				});
@@ -500,7 +500,7 @@ export function inspectInstrument(parsed: ParsedInstrument): InstrumentCheck {
 					code: "type",
 					severity: "error",
 					path: fill.path,
-					message: `\`${fill.name}\` is text, so a coded answer needs its respondent-facing label.`,
+					message: `The fill \`${fill.name}\` is text, so it needs the answer's label.`,
 					hint: `Write \`label(${printCondition(value)})\`.`,
 					range: value.range,
 				});

@@ -1,11 +1,12 @@
 /**
- * An instrument's control constructs as a tree (its map), and from that tree where each
- * question is asked: for each QuestionConstruct, the conditions on the way to it, the
- * loops around it and the order its section and its options are shown in, so the map and
- * the "Asked" places can't disagree. Walked down from each instrument, following
- * each reference as written (a version it names, else the newest), so a construct no
- * instrument reaches is asked nowhere, and every path to an ask is a place it is asked.
- * Conditions are the producer's commands, verbatim: nothing is parsed, so any program
+ * An instrument's control constructs as a tree (its map). From that same tree comes where
+ * each question is asked: for each QuestionConstruct, the conditions on the way to it, the
+ * loops around it, and the order of its section and options. So the map and the "Asked"
+ * places can't disagree.
+ * The walk starts at each instrument and follows each reference as written (the version it
+ * names, else the newest). So a construct no instrument reaches is asked nowhere, and every
+ * path to an ask is a place it is asked.
+ * Conditions are the producer's commands, verbatim. Nothing is parsed, so any program
  * language reads.
  */
 

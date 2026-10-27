@@ -20,7 +20,7 @@ export type ValueDomain =
 	| {
 			readonly kind: "responses";
 			readonly codes: readonly Code[];
-			/** A bank's shared scale, qualified (`bas.agree4`), when the codes came from one. */
+			/** A bank's shared scale, qualified (`bank.agree4`), when the codes came from one. */
 			readonly scale?: string;
 	  }
 	| {

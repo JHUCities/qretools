@@ -218,12 +218,12 @@ flow:
 		expect(said(uses("../"))).toEqual([]);
 		for (const other of [".././", "../.", "./", "../../out"])
 			expect(said(uses(other)), other).toEqual([
-				`\`${other}\`: an instrument uses its own workspace as \`../\`, and another workspace as \`owner/repo@v1\`.`,
+				`\`${other}\` isn't valid. Write \`../\` for this workspace, or \`owner/repo@v1\` for another.`,
 			]);
 		// A folder inside it: `../` is no more than that, since only what's asked is taken.
 		for (const folder of ["../questions", "../banks/x"])
 			expect(said(uses(folder)), folder).toEqual([
-				`\`${folder}\` isn't valid. To use the questions in this instrument's own workspace, \`../\` is enough.`,
+				`\`${folder}\` isn't valid. For this workspace's questions, write \`../\`.`,
 			]);
 		expect(said(uses("../@v1"))).toEqual([
 			expect.stringContaining("Write `../`."),

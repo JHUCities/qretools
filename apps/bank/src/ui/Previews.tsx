@@ -512,7 +512,7 @@ export function Codebook({
 						/>
 						<QuestionWords q={b.question} {...opt} />
 						<p className="quiet">
-							Select all that apply, each option a variable of its own
+							Select all that apply: each option is its own variable
 						</p>
 						<table className="cb-table">
 							<caption>Options</caption>
@@ -591,8 +591,8 @@ export function AgencyNotice({ declare }: { declare: () => void }) {
 		<InlineMessage variant="warning">
 			<span>
 				This workspace has no valid DDI agency yet, so its DDI can't be
-				exported, and this preview shows{" "}
-				<code className="code">{UNDECLARED_AGENCY}</code> in its place.{" "}
+				exported. Until it has one, this preview shows{" "}
+				<code className="code">{UNDECLARED_AGENCY}</code>.{" "}
 				<Link as="button" type="button" onClick={declare}>
 					Add the workspace's agency
 				</Link>
@@ -601,7 +601,8 @@ export function AgencyNotice({ declare }: { declare: () => void }) {
 	);
 }
 
-/** Shared text shows the scheme name it came from, so the author sees it is not theirs to reword here. */
+/** Shared text shows the name it came from, so the author sees it isn't theirs to reword here. */
+
 function ResolvedText({ value }: { value: Resolved }) {
 	return (
 		<>

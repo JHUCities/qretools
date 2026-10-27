@@ -300,7 +300,7 @@ describe("concept", () => {
 		);
 		expect(hole).toMatchObject({
 			severity: "hole",
-			message: "No concept named `income`.",
+			message: "No shared concept is named `income`.",
 			fix: {
 				label: "New shared concept `income`",
 				create: {

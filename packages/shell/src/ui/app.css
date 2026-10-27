@@ -264,7 +264,7 @@ code,
 }
 /*
  * The name takes the row's spare room and the status follows it. On narrow screens the
- * status takes a row of its own, kept even when empty.
+ * status takes a row of its own, only while it says something (below).
  */
 /* A zero basis: a wrapping row breaks at natural widths, so the brand never asks for any. */
 .topbar .brand {

@@ -63,10 +63,10 @@ describe("parsing conditions", () => {
 		expect(problems('x = "1')).toEqual(["This text has no closing quote."]);
 		expect(problems("(x = 1")).toEqual(["This `(` isn't closed."]);
 		expect(problems("x in 1")[0]).toBe("`in` takes a set of values in braces.");
-		expect(problems("x = 1 y = 2")[0]).toMatch(/doesn't follow/);
+		expect(problems("x = 1 y = 2")[0]).toMatch(/can't follow/);
 		expect(problems("x @ 1")[0]).toBe("`@` isn't part of a condition.");
 		expect(problems("count(x) > 1")[0]).toBe(
-			"`count` isn't a function conditions can use.",
+			"`count` isn't a function you can use here.",
 		);
 		expect(parseCondition('x = "1' + '"').problems).toEqual([]);
 	});
@@ -138,7 +138,7 @@ describe("typing conditions against the questions", () => {
 
 	it("tells a code from a number, with the fix when the code exists", () => {
 		const [p] = typed("bas.nhd_sat = 1").problems;
-		expect(p?.message).toBe('A code is text: write `"1"`.');
+		expect(p?.message).toBe('Codes go in quotes: write `"1"`.');
 		expect(p?.replace).toBe('"1"');
 		expect(p?.range).toEqual([14, 15]);
 		const [none] = typed("bas.nhd_sat = 7").problems;
@@ -255,7 +255,7 @@ describe("evaluating conditions", () => {
 		).toBe("nvl(n, 0) >= 1");
 		// An author can't write it.
 		expect(problems("nvl(n, 0) > 1")).toEqual([
-			"`nvl` isn't a function conditions can use.",
+			"`nvl` isn't a function you can use here.",
 		]);
 	});
 });

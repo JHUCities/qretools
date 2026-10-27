@@ -1,8 +1,8 @@
 # @qretools/codebook
 
 A codebook from any DDI-Lifecycle 4.0 document, not only one QREtools made. The model
-is the document's variables and questions as data for a page to show, with text as
-typed spans (words, links, code, references to other items by URN); `pageOf` writes it
+holds the document's variables and questions as data for a page to show. Its text is
+typed spans: words, links, code, and references to other items by URN. `pageOf` writes it
 as one HTML page.
 
 ```ts
@@ -18,17 +18,20 @@ if (parsed.ok) {
 }
 ```
 
-Each entry has the variable's name and label, its question's text and instructions, its
-codes (missing ones marked), its format, universes and concepts, and every place an
-instrument asks it: the conditions on the way there (the producer's commands, verbatim),
-the loops around it and the order its section and options are shown in.
+Each entry has:
+- the variable's name and label;
+- its question's text and instructions;
+- its codes (missing ones marked), its format, universes and concepts;
+- every place an instrument asks it: the conditions on the way there (the producer's
+  commands, verbatim), the loops around it, and the order its section and options are
+  shown in.
 
-Where the document has instruments, each is drawn as a map after the contents, before
-the variables: its statements, questions, conditions, loops, computations and named
-sections in order and nested as the instrument nests them, each question a link to its
-entry, and each entry's "Asked" place a link back to it. The wording stays in the
-entries. Conditions are the producer's commands as written; a CommandCode's description
-isn't shown.
+If the document has instruments, each is drawn as a map after the contents, before the
+variables. The map shows its statements, questions, conditions, loops, computations and
+named sections, in order and nested as the instrument nests them. Each question links to
+its entry, and each entry's "Asked" place links back. The wording stays in the entries.
+Conditions are the producer's commands as written; a CommandCode's description isn't
+shown.
 
 The page is self-contained: its style is inline, it runs no script and fetches nothing,
 so it can be opened from a file, attached or printed. It looks like GitHub's Primer, in

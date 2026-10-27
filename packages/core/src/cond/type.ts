@@ -91,8 +91,8 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 				const exists = code.codes.some((c) => c.code === otherX.text);
 				say(
 					exists
-						? `A code is text: write \`"${otherX.text}"\`.`
-						: `\`${otherX.text}\` isn't one of this answer's codes, which are text.`,
+						? `Codes go in quotes: write \`"${otherX.text}"\`.`
+						: `\`${otherX.text}\` isn't one of this answer's codes.`,
 					otherX.range,
 					`Codes: ${listCodes(code)}.`,
 					exists ? `"${otherX.text}"` : undefined,
@@ -152,7 +152,7 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 						say(
 							"`not` applies to a condition.",
 							x.range,
-							'`not` takes only what follows it, so put a comparison in brackets: `not(bank.x = "1")`.',
+							'Put the comparison in brackets: `not(bank.x = "1")`.',
 						);
 					return BOOLEAN;
 				}
@@ -188,7 +188,7 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 						if (other !== undefined) {
 							const fixed = `${x.op === "<>" ? "not " : ""}isnull(${printCondition(other)})`;
 							say(
-								`\`${x.op} null\` is never true, even for someone with no answer. Write \`${fixed}\`.`,
+								`\`${x.op} null\` is never true. Write \`${fixed}\`.`,
 								x.range,
 								undefined,
 								fixed,
@@ -254,7 +254,7 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 	return { type: go(e), problems };
 }
 
-/** A condition: typed, and true or false as a whole (`bas.x` alone is an answer, not a condition). */
+/** A condition: typed, and true or false as a whole (`bank.x` alone is an answer, not a condition). */
 export function typeCondition(e: Expr, scope: Scope): Typed {
 	const typed = typeOf(e, scope);
 	const { type } = typed;

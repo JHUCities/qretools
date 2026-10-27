@@ -608,15 +608,15 @@ export function App() {
 				>
 					{/* Where the deletion goes: the author's branch, never the bank directly. */}
 					{confirm.base === undefined
-						? `${confirmName ?? "This draft"} exists only in this browser and can't be recovered.`
+						? `${confirmName ?? "This draft"} was never saved, so it can't be recovered.`
 						: model.session.kind === "connected"
-							? `It's removed from your branch, ${ownBranch(model.session.login)}. ${model.session.defaultBranch} is unchanged until your pull request is merged.`
-							: "It's removed from your branch. The default branch is unchanged until your pull request is merged."}
+							? `It's removed from your branch, ${ownBranch(model.session.login)}. ${model.session.defaultBranch} doesn't change until your pull request is merged.`
+							: "It's removed from your branch. The bank doesn't change until your pull request is merged."}
 					{confirm.base !== undefined &&
 						isUnsaved(confirm) &&
-						" Your unsaved changes to it are discarded."}
+						" Your unsaved changes to it are lost too."}
 					{confirmUsers + confirmInstruments > 0 &&
-						` ${namedBy(confirmUsers, confirmInstruments)} it; each will show a field to fill in there until it's changed.`}
+						` ${namedBy(confirmUsers, confirmInstruments)} it. Each will show a field to fill in until it's changed.`}
 				</ConfirmationDialog>
 			)}
 		</>
@@ -842,7 +842,7 @@ const busy = (model: Model): boolean =>
 			saving(model) ||
 			(model.screen.kind === "foreign" && model.screen.file === undefined)));
 
-/** "3 questions and 1 instrument name", "1 question names": who names a shared file. */
+/** "3 questions and 1 instrument use", "1 question uses": who uses a shared file. */
 function namedBy(questions: number, instruments: number): string {
 	const count = (n: number, what: string) =>
 		`${n} ${what}${n === 1 ? "" : "s"}`;
@@ -850,7 +850,7 @@ function namedBy(questions: number, instruments: number): string {
 		...(questions > 0 ? [count(questions, "question")] : []),
 		...(instruments > 0 ? [count(instruments, "instrument")] : []),
 	].join(" and ");
-	return `${who} ${questions + instruments === 1 ? "names" : "name"}`;
+	return `${who} ${questions + instruments === 1 ? "uses" : "use"}`;
 }
 
 const capitalise = (s: string): string =>

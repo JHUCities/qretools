@@ -344,14 +344,15 @@ export function refRangeAt(
 const FOLLOW_KEYS = ` (${IS_MAC ? "⌘" : "Ctrl"}-click or F12)`;
 
 /**
- * Go to definition, as an IDE has it. Mod-click on a shared name (the core marked it
- * `ref`) reports its offset; anywhere else Mod-click still adds a cursor, as CodeMirror
- * does. F12 does the same at the caret, and only there (elsewhere F12 is the
- * browser's). While Mod is held the names underline, as VS Code's do: the state is a
- * class on the content, set as CodeMirror's own crosshairCursor sets its cursor.
- * Hovering a name offers it as a fix's tooltip offers a fix: a link, its keys muted after
- * it (our own markup, styled with lint's action, never lint's classes). None of it on
- * another author's version (read only), which never follows.
+ * Go to definition, as in an IDE.
+ * - Mod-click on a shared name (the core marked it `ref`) reports its offset. Anywhere
+ *   else, Mod-click still adds a cursor, as CodeMirror does.
+ * - F12 does the same at the caret, and only on a name (elsewhere F12 is the browser's).
+ * - While Mod is held, the names underline, as in VS Code. The state is a class on the
+ *   content, set the way CodeMirror's own crosshairCursor sets its cursor.
+ * - Hovering a name offers it as a fix's tooltip offers a fix: a link, its keys muted
+ *   after it (our own markup, styled like lint's action, never lint's classes).
+ * None of this on another author's version (read only), which never follows a name.
  * `update` decides what the name opens; this only says where the author pointed.
  */
 function followDefinition(onFollow: (offset: number) => void) {
@@ -844,14 +845,17 @@ const primerTheme = EditorView.theme({
 });
 
 /**
- * Colour marks roles, not grammar. The author's words stay plain at full contrast;
- * field names take Primer's entity colour; comments and punctuation are muted (not
- * read by the tool; the `legacy` block is muted the same way, by its mark). No bold or italic,
- * keywords uncoloured. YAML's grammar gives every plain value one `content` tag and
- * every key, response codes included, `definition(propertyName)`, so telling codes,
- * constants and resolved names apart is the core's job (its marks, drawn as decorations). These
- * are Primer's prettylights tokens, what github.com highlights code with; they would
- * follow Primer's colour-blind themes too, were the app to load them (it loads light
+ * Colour marks roles, not grammar:
+ * - the author's words stay plain, at full contrast;
+ * - field names take Primer's entity colour;
+ * - comments and punctuation are muted, since the tool doesn't read them (the `legacy`
+ *   block is muted the same way, by its mark);
+ * - no bold or italic, and keywords stay uncoloured.
+ * YAML's grammar gives every plain value one `content` tag, and every key (response codes
+ * included) `definition(propertyName)`. So telling codes, constants and resolved names
+ * apart is the core's job: its marks, drawn as decorations.
+ * These are Primer's prettylights tokens, which github.com highlights code with. They
+ * would follow Primer's colour-blind themes too, if the app loaded them (it loads light
  * and dark only).
  */
 const primerHighlight = syntaxHighlighting(

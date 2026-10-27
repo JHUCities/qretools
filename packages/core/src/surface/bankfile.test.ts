@@ -294,13 +294,13 @@ describe("the fields a folder's questions must also have", () => {
 				"warning",
 				"unknown-folder",
 				"required_in.questions/nh",
-				"The folders with saved questions are `questions/nhd`. Until this is one of them, it requires nothing.",
+				"Until `questions/nh` holds a saved question, this line has no effect. Folders with saved questions: `questions/nhd`.",
 			],
 			[
 				"warning",
 				"unknown-folder",
 				"required_in.questions/nhd/sub",
-				"The folders with saved questions are `questions/nhd`. Until this is one of them, it requires nothing.",
+				"Until `questions/nhd/sub` holds a saved question, this line has no effect. Folders with saved questions: `questions/nhd`.",
 			],
 		]);
 		expect(
@@ -428,7 +428,7 @@ describe("how a bank stores a select-all option's answer", () => {
 			expect(value, text).toBe(DEFAULT_SELECT_ALL);
 			for (const f of findings)
 				expect(f.hint).toContain(
-					"Until it reads, the usual coding is used: 0 = No, 1 = Yes.",
+					"Until this is fixed, options are stored as 0 = No, 1 = Yes.",
 				);
 		}
 	});

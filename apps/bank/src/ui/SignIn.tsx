@@ -1,12 +1,12 @@
 /**
  * Signed out, the app is this page: which bank, and "Sign in with GitHub", in one
- * narrow column as github.com's own sign-in page is. There is nothing to edit without
- * a bank; the author's own unsaved work in this tab waits for the sign-in.
+ * narrow column like github.com's sign-in page. Without a bank there's nothing to
+ * edit; unsaved work in this tab waits for the sign-in.
  *
- * A native form: Enter signs in. The repository is written as GitHub writes it,
- * `owner/name[/folder]`, and parsed once on submit (`parseBank`); a link to another bank offers
- * its repository here. The text, the checkbox and a pasted development token are
- * transient input, so component state; the token goes to the effects, never a Msg.
+ * A native form, so Enter signs in. The repository is written as GitHub writes it,
+ * `owner/name[/folder]`, and parsed once on submit (`parseBank`). A link to another
+ * bank fills it in. The fields are component state, since they're passing input; the
+ * token goes to the effects, never a Msg.
  */
 
 import { MarkGithubIcon } from "@primer/octicons-react";
@@ -125,9 +125,9 @@ export function SignIn({ model }: { model: Model }) {
 								onChange={(e) => setText(e.target.value)}
 							/>
 							<FormControl.Caption>
-								The GitHub repository that holds your workspace (its questions
-								and instruments), as owner/name, or owner/name/folder for a
-								workspace in a folder.
+								The GitHub repository that holds your workspace, written
+								owner/name. If the workspace is in a folder, add it:
+								owner/name/folder.
 							</FormControl.Caption>
 							{problem !== undefined && (
 								<FormControl.Validation variant="error">
@@ -212,8 +212,8 @@ export function SignIn({ model }: { model: Model }) {
 								</Link>
 							</>
 						)}
-						: a bank of examples to copy, edit or delete, and an example
-						instrument one click away in New.
+						. It has example questions to copy, edit or delete, and New offers
+						an example instrument.
 					</p>
 				)}
 				{elsewhere && (

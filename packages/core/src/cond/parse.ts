@@ -68,7 +68,7 @@ export function parseCondition(
 		if (own !== undefined)
 			problems.push({
 				kind: "syntax",
-				message: `Conditions write \`${own}\`, not \`${t.text}\`.`,
+				message: `Write \`${own}\`, not \`${t.text}\`.`,
 				range: t.range,
 				replace: own === "not" ? "not " : own,
 			});
@@ -141,7 +141,7 @@ export function parseCondition(
 					problems.push({
 						kind: "syntax",
 						message: "This text has no closing quote.",
-						hint: 'Codes and text are written in double quotes: "1".',
+						hint: 'Put codes and text in double quotes: "1".',
 						range: t.range,
 					});
 				return { kind: "string", value: t.text, range: t.range };
@@ -229,7 +229,7 @@ export function parseCondition(
 		if (!(functions as readonly string[]).includes(name.text)) {
 			problems.push({
 				kind: "syntax",
-				message: `\`${name.text}\` isn't a function conditions can use.`,
+				message: `\`${name.text}\` isn't a function you can use here.`,
 				hint: `Functions: ${functions.join(", ")}.`,
 				range: name.range,
 			});
@@ -249,7 +249,7 @@ export function parseCondition(
 						: fn === "label"
 							? "`label` takes one coded answer: `label(bank.x)`."
 							: fn === "nvl"
-								? "`nvl` takes two values: an answer, and what to use when it has none: `nvl(bank.n, 0)`."
+								? "`nvl` takes an answer and what to use when it's empty: `nvl(bank.n, 0)`."
 								: "`between` takes a value and two bounds: `between(bank.n, 18, 64)`.",
 				range,
 			});
@@ -310,7 +310,7 @@ export function parseCondition(
 	else if (rest.kind !== "end")
 		problems.push({
 			kind: "syntax",
-			message: `\`${text.slice(rest.range[0], text.length).trim().split(/\s/)[0]}\` doesn't follow from what's before it.`,
+			message: `\`${text.slice(rest.range[0], text.length).trim().split(/\s/)[0]}\` can't follow what comes before it.`,
 			hint: "Join conditions with `and` or `or`.",
 			range: [rest.range[0], text.length],
 		});

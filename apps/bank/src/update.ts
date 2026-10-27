@@ -922,12 +922,10 @@ function step(model: Model, msg: Msg): Step {
 			const q = fileOf(model, msg.id);
 			const as = writable(model);
 			if (!q || as === undefined) return [model, []];
-			// A bank file goes back to the path it was opened at. A draft's path is chosen
-			// once, deliberately: it decides the folder, and git would create an
-			// unseen folder without a word. A scheme file's path follows from its kind
-			// and the name it was given at creation.
+			// A saved file goes back where it was opened. A new question's folder is
+			// chosen in a dialog, since git would create a mistyped folder without a word.
+			// A new shared file or instrument goes where its kind and name say.
 			if (q.base !== undefined) return write(model, as, msg.id, q, q.base.path);
-			// So does an instrument's (its name).
 			if (q.kind !== "question") {
 				const path = claimOf(q);
 				if (path === undefined) return [model, []];
@@ -1497,7 +1495,7 @@ function step(model: Model, msg: Msg): Step {
 								{
 									kind: "unreadable",
 									message,
-									hint: "Keep this tab open and save to GitHub before reloading it.",
+									hint: "Keep this tab open, and save to your branch before you reload it.",
 								},
 							],
 						},
@@ -1585,8 +1583,8 @@ function write(
 			refuse(
 				model,
 				id,
-				"This changed on GitHub since you started.",
-				"Copy your version somewhere first if you want to keep it, then reload from GitHub.",
+				"This was changed both here and on GitHub.",
+				"Copy your changes somewhere, reload from GitHub, then save again.",
 			),
 			[],
 		];
@@ -1608,13 +1606,11 @@ function write(
 		const name = nameOf(model, stuck);
 		// A root file is named by its kind alone: "the workspace details".
 		const root = stuck.kind !== "question" && isRoot(stuck.kind);
-		// Blocked means changed here and on GitHub (reloading drops the changes here), or deleted there.
+		// Blocked: changed here and on GitHub (reloading drops the changes here), or deleted there.
 		const deleted =
 			syncOf(stuck, remoteBlob(model.remote, stuck)) === "deletedOnGitHub";
-		const subject =
-			stuck.kind === "question"
-				? `The question \`${name}\` this instrument asks`
-				: `The ${SCHEME_NAME[stuck.kind]}${root ? "" : ` \`${name}\``} this ${q.kind === "question" ? "question names" : "instrument reads"}`;
+		const subject = root ? `The ${SCHEME_NAME[stuck.kind]}` : `\`${name}\``;
+		const was = root ? "were" : "was";
 		const open = root
 			? `Open the ${SCHEME_NAME[stuck.kind]}`
 			: `Open \`${name}\``;
@@ -1624,11 +1620,11 @@ function write(
 				model,
 				id,
 				deleted
-					? `${subject} ${root ? "were" : "was"} deleted on GitHub.`
-					: `${subject} changed on GitHub as well as here.`,
+					? `${subject} ${was} deleted on GitHub.`
+					: `${subject} ${was} changed both here and on GitHub.`,
 				deleted
-					? `${open} and reload ${it} from GitHub${root ? "" : `, or stop using it in this ${q.kind}`}, then save again.`
-					: `${open}, copy your changes to ${it} if you want to keep them, reload ${it} from GitHub, then save again.`,
+					? `${open} and reload ${it}${root ? "" : ", or stop using it here"}, then save again.`
+					: `${open}, copy your changes somewhere, reload ${it} from GitHub, then save again.`,
 			),
 			[],
 		];
@@ -1660,16 +1656,16 @@ const nameOf = (model: Model, f: BankEntry): string =>
 		: f.name;
 
 /**
- * What saving an instrument takes along, so it never lands on the branch reading
- * differently from how it reads here: each bank file it names (an asked question, a
- * universe) that is a draft or has unsaved changes, and each asked question's own
- * unsaved shared files. The second step goes beyond a question's save because the
- * instrument's DDI elaborates its questions through their banks' shared files: an
- * unsaved scale changes what the instrument means. Only what is named is taken, never
- * every unsaved file of a bank, and never the missing values or the select-all coding
- * implicitly, as for a question. The workspace's details go along when it reads another
- * repository's bank: they hold the tags' locks, which saving it writes. Not yet followed: a bank
- * name in a condition, or an input's shared scale (`refs` doesn't hold them).
+ * What saving an instrument takes along, so it reads on the branch as it reads here:
+ * each bank file it names (an asked question, a universe) that is a draft or has
+ * unsaved changes, and each asked question's own unsaved shared files. That goes
+ * further than a question's save, because the instrument's DDI is built from its
+ * questions' shared files: an unsaved scale changes what the instrument means. Only
+ * what is named is taken: never every unsaved file of a bank, and never the missing
+ * values or the select-all coding by default, as for a question. The workspace details
+ * go along when the instrument reads another repository's bank: they hold the tags'
+ * locks, which saving writes. Not yet followed: a bank name in a condition, or an
+ * input's shared scale (`refs` doesn't hold them).
  */
 export function instrumentDependencies(
 	model: Pick<Model, "local" | "remote" | "remoteBanks">,
@@ -1959,7 +1955,7 @@ function setAside(model: Model, message: string): Step {
 				{
 					kind: "refused",
 					message,
-					hint: "It's kept in this browser's storage (`qretools.work.aside`).",
+					hint: "A copy is kept in this browser (`qretools.work.aside`). QREtools can't open it yet.",
 				},
 			],
 		},
@@ -2111,9 +2107,9 @@ export function moveProblem(
 	if (to === q.base.path) return "It's already in that folder.";
 	const sync = syncOf(q, remoteBlob(model.remote, q));
 	if (sync === "conflict")
-		return "This question changed on GitHub as well as here. Copy your changes if you want to keep them, then reload it from GitHub.";
+		return "This question was changed both here and on GitHub. Copy your changes somewhere, then reload it from GitHub.";
 	if (sync === "deletedOnGitHub") return "This question was deleted on GitHub.";
-	if (taken(model, to, q.id)) return `\`${to}\` is already taken.`;
+	if (taken(model, to, q.id)) return `A question is already at \`${to}\`.`;
 	return undefined;
 }
 
@@ -2232,7 +2228,7 @@ function openLink(model: Model, link: Link): Step {
 		return [
 			refused(
 				model,
-				`This link is to ${link.repo}; you are signed in to ${repo}.`,
+				`This link is to ${link.repo}, but you're signed in to ${repo}.`,
 				`Sign out, then sign in to ${link.repo} to open it.`,
 			),
 			[],
@@ -2270,7 +2266,7 @@ function openLink(model: Model, link: Link): Step {
 					refused(
 						model,
 						`\`${link.file}\` isn't on ${link.branch}.`,
-						"It may have been moved, renamed or deleted.",
+						`\`${link.file}\` may have been moved, renamed or deleted.`,
 					),
 					[],
 				];
@@ -2292,8 +2288,7 @@ function openLink(model: Model, link: Link): Step {
 }
 
 /** What marks the unread notice among the failures, so a later load replaces it. */
-const UNREAD_HINT =
-	"GitHub sends a file as text only when it is text and not too large.";
+const UNREAD_HINT = "GitHub only sends files that are text and not too large.";
 
 /** Files of the workspace GitHub wouldn't give as text: left out of the load, named. */
 const unreadNotice = (
@@ -2502,7 +2497,7 @@ function shareProblem(model: Model, naming: Naming): string | undefined {
 			: model.local.questions[purpose.use.id];
 	return q !== undefined && sharedScaleSource(q.source) !== undefined
 		? undefined
-		: "These responses can't be shared as they are now: each must be a plain `code: label` line, with no title, variable or note of its own.";
+		: "These responses can't be shared as they are. Each option must be a plain `code: label` line, with no title, variable or note.";
 }
 
 /** Every question in this tab that names the file by its old name now names the new one. */
@@ -2592,7 +2587,7 @@ export function blockage(model: Model): Blockage | undefined {
 		return {
 			kind: "standing",
 			reason:
-				"You have read access only to this repository, so this workspace can't be changed",
+				"You can only read this repository, so you can't change this workspace",
 			hint: "Ask its owner for write access, then try again.",
 			fix: "recheck",
 		};
@@ -2601,7 +2596,7 @@ export function blockage(model: Model): Blockage | undefined {
 			kind: "standing",
 			reason:
 				"The QREtools app isn't installed on this repository, so this workspace can't be changed",
-			hint: "Install it there, then try again.",
+			hint: "Install the QREtools app on this repository, then try again.",
 			fix: "install",
 		};
 	if (model.updating)
@@ -2823,7 +2818,7 @@ function writeLivelit(
  */
 export function bankAddProblem(adding: AddingBank): string | undefined {
 	const text = adding.text.trim();
-	if (text === "") return "Give its address.";
+	if (text === "") return "Write the bank's address.";
 	const address = addressOf(text);
 	if (address.kind === "invalid") return address.reason;
 	return address.kind === "local"

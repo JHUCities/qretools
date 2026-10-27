@@ -79,13 +79,13 @@ export function manifestVersions(
 	try {
 		json = JSON.parse(body);
 	} catch {
-		return { kind: "unreadable", reason: "its manifest isn't JSON." };
+		return { kind: "unreadable", reason: "It isn't JSON." };
 	}
 	const parsed = Manifest.safeParse(json);
 	if (!parsed.success)
 		return {
 			kind: "unreadable",
-			reason: "its manifest isn't one this version of QREtools reads.",
+			reason: "This version of QREtools doesn't know its format.",
 		};
 	const { files } = parsed.data;
 	const differ = [
@@ -95,7 +95,7 @@ export function manifestVersions(
 	if (differ.length > 0)
 		return {
 			kind: "stale",
-			reason: `its manifest doesn't describe what's there (${differ.slice(0, 3).join(", ")}${differ.length > 3 ? ", …" : ""}).`,
+			reason: `It doesn't match the files in the release: ${differ.slice(0, 3).join(", ")}${differ.length > 3 ? ", …" : ""}.`,
 		};
 	const versions: Record<string, Version> = {};
 	for (const [path, e] of Object.entries(files))

@@ -213,7 +213,7 @@ describe("an inline list and a shared scale", () => {
 			env,
 		).filter((x) => x.code === "matches-scale");
 		expect(f?.message).toBe(
-			"These responses match the shared scale `often3` (apart from codes).",
+			"These options match the shared scale `often3` (apart from codes).",
 		);
 	});
 });

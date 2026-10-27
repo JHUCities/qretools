@@ -36,6 +36,8 @@ describe("the sign-in page", () => {
 				.getAttribute("href"),
 		).toBe("https://github.com/o/template/generate");
 		expect(screen.queryByRole("link", { name: /^Start a bank/ })).toBeNull();
-		expect(screen.getByText(/a bank of examples to copy/)).toBeTruthy();
+		expect(
+			screen.getByText(/It has example questions to copy, edit or delete/),
+		).toBeTruthy();
 	});
 });

@@ -98,7 +98,7 @@ export const CONSTRUCTS = [
 ] as const;
 /** What each check severity does, said wherever one is missing or misspelt. */
 const SEVERITY_HINT =
-	"`blocking` asks the question again until the check passes; `warning` and `info` show the message and go on.";
+	"`blocking` asks again until the answer passes; `warning` and `info` just show the message.";
 /**
  * The fields whose value is a list of items: a flow's steps (the instrument's own, a
  * section's, a roster's, an `each`'s, an `if`'s `then` and `else`) and an ask's checks.
@@ -192,13 +192,13 @@ export const FILL_SOURCE = "fill";
 const ORDERS: readonly Order[] = ["random", "rotate"];
 
 /**
- * A bank's name as an instrument writes it, `alias.name` (`bas.nhd_sat`, `bas.renters`):
+ * A bank's name as an instrument writes it, `alias.name` (`bank.nhd_sat`, `bank.renters`):
  * the one rule for what reads as a name rather than prose, here and in its pickers.
  */
 export const QUALIFIED = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/;
 
 /**
- * An instrument read against the banks it uses, each given by its alias (`bas`), already
+ * An instrument read against the banks it uses, each given by its alias (`bank`), already
  * evaluated (`bankOf`). Fetching them is the caller's: the core is given values.
  */
 export function parseInstrument(
@@ -301,7 +301,7 @@ export function parseInstrument(
 					"error",
 					path,
 					`\`${name}\` already names something in this instrument.`,
-					"Give each input, computed value and answer asked again its own name.",
+					`Choose another name for \`${name}\`.`,
 				),
 			);
 		scope.set(name, named);
@@ -338,7 +338,7 @@ export function parseInstrument(
 						"hole",
 						"hole",
 						"flow",
-						"`flow` is required: the steps the instrument takes.",
+						"Add a `flow`: the steps of the instrument.",
 					),
 				)
 			: readFlow(flowNode, "flow", ctx, true);
@@ -504,7 +504,7 @@ function readUses(
 		say(
 			emptyHole(
 				"uses",
-				"Name each bank it asks, `alias: address`: `bank: ../` for this workspace.",
+				"List each bank as `alias: address`, such as `bank: ../` for this workspace.",
 			),
 		);
 		return [];
@@ -515,7 +515,7 @@ function readUses(
 				"wrong-type",
 				"error",
 				"uses",
-				"`uses` names each bank: `alias: address`.",
+				"Write `uses` as `alias: address` lines.",
 			),
 		);
 		return [];
@@ -547,8 +547,8 @@ function readUses(
 					"hole",
 					"hole",
 					path,
-					`Where is \`${alias}\`? Give the bank's address.`,
-					"This workspace (`../`), or a repository and version, such as `owner/repo@v1`.",
+					`\`${alias}\` has no address.`,
+					"Write `../` for this workspace, or a repository and version, such as `owner/repo@v1`.",
 				),
 			);
 		else if (banks[alias] === undefined) {
@@ -561,7 +561,7 @@ function readUses(
 						"unknown-bank",
 						"error",
 						path,
-						`QREtools hasn't read the bank \`${alias}\` names.`,
+						`QREtools hasn't read the bank \`${alias}\`.`,
 						`\`${alias}\` is at \`${address}\`.`,
 					),
 				);
@@ -581,10 +581,7 @@ function readInputs(
 	if (node === undefined) return [];
 	if (emptyValue(node)) {
 		say(
-			emptyHole(
-				"inputs",
-				"Name each value from outside, with its type, or remove the line.",
-			),
+			emptyHole("inputs", "Name each input and its type, or remove the line."),
 		);
 		return [];
 	}
@@ -594,7 +591,7 @@ function readInputs(
 				"wrong-type",
 				"error",
 				"inputs",
-				"`inputs` names each value from outside, with its type.",
+				"Write `inputs` as one line per input, with its type.",
 			),
 		);
 		return [];
@@ -624,7 +621,7 @@ function readInputs(
 					"hole",
 					path,
 					`Input \`${name}\` has no type.`,
-					"Give it `responses`, `number` or `open`, as a question has.",
+					`Give \`${name}\` \`responses\`, \`number\` or \`open\`, as for a question.`,
 				),
 			);
 			inputs.push({ name, path });
@@ -657,7 +654,7 @@ function readInputs(
 					"hole",
 					path,
 					`Input \`${name}\` has no type.`,
-					"Give it `responses`, `number` or `open`, as a question has.",
+					`Give \`${name}\` \`responses\`, \`number\` or \`open\`, as for a question.`,
 				),
 			);
 		if (kinds.length > 1)
@@ -826,7 +823,7 @@ function readUniverse(
 ): UniverseRef | undefined {
 	const text = readText(node, path, false, ctx.say);
 	if (text === undefined) return undefined;
-	// `bas.renters` is a bank's shared universe; anything else is prose.
+	// `bank.renters` is a bank's shared universe; anything else is prose.
 	const named = QUALIFIED.exec(text);
 	if (named === null) return { kind: "text", text };
 	const [, alias = "", name = ""] = named;
@@ -839,7 +836,7 @@ function readUniverse(
 				"hole",
 				path,
 				`\`${text}\` names no shared universe.`,
-				"Name a bank's universe with its alias, such as `bas.adults`, or write it as a sentence.",
+				"Name a bank's universe with its alias, such as `bank.adults`, or write it as a sentence.",
 			),
 		);
 		return undefined;
@@ -861,7 +858,7 @@ function readFlow(
 					"hole",
 					path,
 					"The flow is empty.",
-					"List its steps: `- ask: bas.x`, `- say: ...`.",
+					"List its steps: `- ask: bank.x`, `- say: ...`.",
 				),
 			);
 			return [];
@@ -1009,8 +1006,8 @@ function readStep(
 						"misplaced",
 						"error",
 						at,
-						"`stop` ends the instrument, so it goes in the top-level flow.",
-						"Inside a section or branch, put what follows under an `if` instead.",
+						"`stop` ends the instrument, so it can only go in the instrument's main `flow`.",
+						"Anywhere else, put what follows under an `if` instead.",
 					),
 				);
 			const cond = readCond(own, at, ctx, EXPRESSIONS.stop.stop);
@@ -1074,12 +1071,7 @@ function readStep(
 			return readEach(item, own, path, ctx);
 		default:
 			ctx.say(
-				problem(
-					"not-yet",
-					"error",
-					at,
-					`\`${kind}\` isn't in this version of the instrument language yet.`,
-				),
+				problem("not-yet", "error", at, `QREtools can't use \`${kind}\` yet.`),
 			);
 			return hole;
 	}
@@ -1101,7 +1093,7 @@ function readRoster(
 				"not-yet",
 				"error",
 				at,
-				"A roster inside another roster's rows isn't in this version yet.",
+				"A roster can't go inside another roster's rows yet.",
 				"For now, ask it as its own roster, outside this one.",
 			),
 		);
@@ -1137,7 +1129,7 @@ function readRoster(
 				"unknown-key",
 				"error",
 				`${path}.more`,
-				"A roster ends one way: `count` (how many, asked first) or `more` (anyone else?, asked last in each row).",
+				"A roster uses `count` or `more`, not both.",
 				"Keep `count` or `more`, and remove the other.",
 			),
 		);
@@ -1189,7 +1181,8 @@ function readRoster(
 				"hole",
 				"hole",
 				at,
-				"How many rows? Give `count` (a number asked first) or `more` (a condition asked last in each row).",
+				"This roster doesn't say how many rows it has.",
+				"Give `count` (a number asked first) or `more` (a condition asked at the end of each row).",
 			),
 		);
 	const max = readRosterMax(item.get("max", true), path, end, ctx);
@@ -1222,7 +1215,7 @@ function readRosterMax(
 		ctx.say(
 			emptyHole(
 				at,
-				"Give the most rows it can have, or remove the line to take it from what it counts.",
+				"Give the most rows this roster can have, or remove the line to use what it counts.",
 			),
 		);
 		return counted.max;
@@ -1266,8 +1259,8 @@ function readRosterMax(
 			"hole",
 			at,
 			end?.kind === "more"
-				? "A roster that asks `more` needs `max`: the most rows it can have."
-				: "How many rows at most? Give `max`, or count with a number question that has its own `max`.",
+				? "This roster needs `max`, the most rows it can have."
+				: "This roster needs `max`, the most rows it can have. Or count with a number question that has its own `max`.",
 			"Survey software needs a limit on every loop.",
 		),
 	);
@@ -1318,7 +1311,7 @@ function readEach(
 						`No roster is named \`${roster}\`.`,
 						ctx.rosters.size > 0
 							? `Rosters: ${[...ctx.rosters.keys()].join(", ")}.`
-							: "Declare it with `- roster:` first.",
+							: "Add it with `- roster:` first.",
 					),
 				);
 		});
@@ -1371,8 +1364,8 @@ function readOrder(
 			"wrong-type",
 			"error",
 			path,
-			"Write `random` or `rotate`.",
-			"Omit it to keep the order as written.",
+			"The order is `random` or `rotate`.",
+			"Remove the line to keep the order as written.",
 		),
 	);
 	return undefined;
@@ -1558,7 +1551,7 @@ function resolveQuestion(
 				"error",
 				path,
 				`\`${text}\` isn't a question's name.`,
-				"Name a bank question with the bank's alias: `bas.nhd_sat`.",
+				"Name a bank question with the bank's alias, such as `bank.x`.",
 			),
 		);
 		return undefined;
@@ -1574,10 +1567,10 @@ function resolveQuestion(
 				"unknown-bank",
 				"error",
 				path,
-				`No bank is used as \`${alias}\`.`,
+				`No bank in \`uses:\` is called \`${alias}\`.`,
 				ctx.uses.length > 0
 					? `Banks: ${ctx.uses.map((u) => u.alias).join(", ")}.`
-					: "Name it under `uses:`.",
+					: "Add it under `uses:`.",
 			),
 		);
 		return undefined;
@@ -1603,7 +1596,7 @@ function resolveQuestion(
 				"error",
 				path,
 				`\`${alias}\` has more than one question named \`${name}\`: ${paths.join(", ")}.`,
-				"The bank must give each question its own name.",
+				"Each question in a bank needs its own name.",
 			),
 		);
 	const evaluation = bank.questions[first];
@@ -1694,8 +1687,10 @@ function readCond(
 				"condition",
 				"error",
 				path,
-				`This reads as a list or a group of fields, not as a ${as === "fill" ? "fill's value" : as}.`,
-				'Unquoted braces or a leading `- ` do that. Put it all in quotes: `if: "bank.x in {\\"1\\", \\"2\\"}"`.',
+				`This isn't read as a ${as === "condition" ? "condition" : "value"}.`,
+				as === "condition"
+					? 'Put it in quotes: `if: "…"`.'
+					: 'Put it in quotes: `"…"`.',
 			),
 		);
 		return undefined;
@@ -1830,13 +1825,13 @@ function selectAllHint(
 	if (draft?.domain?.kind !== "responses" || draft.domain.select !== "many")
 		return undefined;
 	const alias = name.slice(0, dot);
-	return `\`${name}\` is a select all that apply question, so each option has its own answer: ${definedVariables(
+	return `Each option of \`${name}\` has its own answer: ${definedVariables(
 		draft,
 	)
 		.map((d) => `\`${alias}.${d.name}\``)
 		.join(
 			", ",
-		)}. Each holds \`"${bank?.env.selectAll.chosen.code}"\` when the option is chosen.`;
+		)}. A chosen option holds \`"${bank?.env.selectAll.chosen.code}"\`.`;
 }
 
 /** A bank `uses` names that wasn't given: its names are said nowhere (see `readUses`). */
@@ -1863,7 +1858,7 @@ function ambiguous(
 				"error",
 				path,
 				`\`${alias}\` defines \`${name.slice(dot + 1)}\` in more than one question: ${files.sort().join(", ")}.`,
-				"The bank must give each variable its own name.",
+				"Each variable in a bank needs its own name.",
 				range,
 			),
 		);
@@ -1884,8 +1879,8 @@ function typeComputes(ctx: Context): void {
 					"cycle",
 					"error",
 					`${c.path}.value`,
-					`\`${c.name}\` depends on itself, through the computed values it reads.`,
-					"A computed value can read inputs, answers and earlier computed values, never itself.",
+					`\`${c.name}\` is computed from itself, through other computed values.`,
+					`Compute \`${c.name}\` from inputs, answers and earlier computed values only.`,
 				),
 			);
 			return;
@@ -1923,7 +1918,7 @@ function readFills(
 					"hole",
 					"hole",
 					path.replace(/\.fill$/, ".ask"),
-					`Fill \`${f.name}\` of \`${question?.alias}.${question?.name}\` has nothing to fill it.`,
+					`The fill \`${f.name}\` in \`${question?.alias}.${question?.name}\` has no value.`,
 					`Add \`fill: {${f.name}: ...}\` naming an earlier answer, an input or a computed value.`,
 				),
 			);
@@ -1946,7 +1941,7 @@ function readFills(
 				"wrong-type",
 				"error",
 				path,
-				"`fill` names each fill and what fills it: `rent: bas.hou_rent`.",
+				"Write `fill` as `name: value` lines, such as `rent: bank.rent`.",
 			),
 		);
 		return [];
@@ -1965,7 +1960,7 @@ function readFills(
 					`\`${question.alias}.${question.name}\` has no fill named \`${name}\`.`,
 					declared.length > 0
 						? `Its fills: ${declared.map((f) => f.name).join(", ")}.`
-						: "It has no fills.",
+						: `\`${question.alias}.${question.name}\` has no fills.`,
 				),
 			);
 		const source = readCond(pair.value, at, ctx, FILL_SOURCE);
@@ -2003,7 +1998,7 @@ function readFills(
 					"hole",
 					"hole",
 					path,
-					`Fill \`${f.name}\` has nothing to fill it.`,
+					`The fill \`${f.name}\` has no value.`,
 					`Add \`${f.name}: ...\` naming an earlier answer, an input or a computed value.`,
 				),
 			);
@@ -2031,7 +2026,7 @@ function readChecks(
 				"wrong-type",
 				"error",
 				path,
-				"`checks` is a list: `- ensure: ...` with its `severity` and `message`.",
+				"Write each check as `- ensure: ...` with its `severity` and `message`.",
 			),
 		);
 		return [];
@@ -2255,8 +2250,8 @@ function outsideRows(
 			"misplaced",
 			"error",
 			path,
-			`\`${name}\` is a row's number, so it's read inside \`${row[1]}\` or an \`each\` over it.`,
-			undefined,
+			`\`${name}\` is a row's number, so it can only be used inside \`${row[1]}\`.`,
+			`Move this step into \`${row[1]}\`, or into an \`each: ${row[1]}\` step.`,
 			range,
 		),
 	);

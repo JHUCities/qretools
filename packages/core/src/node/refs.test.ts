@@ -176,7 +176,7 @@ describe("the codes a condition compares a bank answer with", () => {
 		]);
 	});
 
-	it("follows a select-all option's code to where the bank's own file says it, when it does", () => {
+	it("follows a select all that apply option's code to where the bank's own file says it, when it does", () => {
 		// The usual coding is written nowhere: there is nowhere to follow it to.
 		expect(codes('b.news_1 = "1"')).toEqual([]);
 		const recoded = bankOf({
@@ -192,14 +192,14 @@ describe("the codes a condition compares a bank answer with", () => {
 				path: "select_all.yaml",
 				at: "chosen.1",
 				about:
-					"`Selected`, as its workspace stores a select-all-that-apply option.",
+					"`Selected`, an answer to an option of a select all that apply question.",
 			},
 			{
 				written: '"2"',
 				path: "select_all.yaml",
 				at: "not_chosen.2",
 				about:
-					"`Not selected`, as its workspace stores a select-all-that-apply option.",
+					"`Not selected`, an answer to an option of a select all that apply question.",
 			},
 		]);
 	});

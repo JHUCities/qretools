@@ -1,12 +1,13 @@
 /**
- * Rosters as Qualtrics can run them (owner, 2026-10-18), before the survey is written. A
- * count roster Qualtrics can loop exactly (`loopable`) stays a loop, which the writer makes
- * a Loop & Merge block. Every other roster is written out row by row: a count roster or an
- * `each` as rows 1..max, row k under `count >= k`; a roster by `more` as rounds 1..max,
- * round k nested under round k-1's `more`; an `each` over such a roster, row k under every
- * earlier round's `more`. In row k, `index` is k, an answer or value recorded in a written-
- * out roster is row k's copy, `<k>_<variable>` (as Qualtrics names a loop's columns), and
- * an answer recorded in a looped roster is read at its round k.
+ * Rosters as Qualtrics can run them (owner, 2026-10-18), before the survey is written.
+ * A count roster Qualtrics can loop exactly (`loopable`) stays a loop: the writer makes it
+ * a Loop & Merge block. Every other roster is written out row by row:
+ * - a count roster or an `each`: rows 1..max, row k under `count >= k`;
+ * - a roster by `more`: rounds 1..max, round k nested under round k-1's `more`;
+ * - an `each` over a roster by `more`: row k under every earlier round's `more`.
+ * In row k, `index` is k. An answer or value recorded in a written-out roster is row k's
+ * copy, `<k>_<variable>` (Qualtrics' name for a loop's columns). An answer recorded in a
+ * looped roster is read at round k.
  */
 import type { Expr } from "@qretools/core";
 import type { Finding } from "./findings.ts";
@@ -158,12 +159,14 @@ export function unroll(instrument: ReadInstrument): {
 		}
 	};
 	/**
-	 * A count roster's maximum when Qualtrics can loop it exactly: counted by one whole-number
-	 * question asked outside any roster; only asks, statements, sections and ifs inside;
-	 * conditions on its own answers, answers outside rosters and inputs; texts piping only its
-	 * row number; and no if asking what its conditions read (display logic is evaluated again on
-	 * each page, so an answer given inside an arm would change it). Undefined otherwise: it's
-	 * written out row by row.
+	 * A count roster's maximum, when Qualtrics can loop it exactly. That needs all of:
+	 * - a count from one whole-number question asked outside any roster;
+	 * - only asks, statements, sections and ifs inside;
+	 * - conditions only on its own answers, answers outside rosters, and inputs;
+	 * - texts that pipe in only its row number;
+	 * - no if that asks what its conditions use (display logic runs again on each page, so
+	 *   an answer given inside an arm would change it).
+	 * Undefined otherwise: the roster is written out row by row.
 	 */
 	const loopable = (s: Extract<Step, { kind: "loop" }>): number | undefined => {
 		const counted = countedBy(s);
@@ -312,10 +315,7 @@ export function unroll(instrument: ReadInstrument): {
 				case "loop":
 				case "repeat":
 					if (k === 1)
-						refuse(
-							s.id,
-							"A roster inside a roster: Qualtrics can't nest them.",
-						);
+						refuse(s.id, "Qualtrics can't put a roster inside a roster.");
 					return [];
 				default:
 					return s satisfies never;
@@ -354,7 +354,7 @@ export function unroll(instrument: ReadInstrument): {
 		if (max === undefined) {
 			refuse(
 				s.id,
-				"This roster has no maximum, and its count has none: Qualtrics needs one to write its rows.",
+				"Qualtrics needs to know the most rows this roster can have. Give it a `max:`.",
 			);
 			return [];
 		}

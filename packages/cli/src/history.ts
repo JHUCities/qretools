@@ -115,7 +115,7 @@ export async function readHistory(dir: string): Promise<HistoryRead> {
 		return {
 			kind: "unavailable",
 			reason:
-				"the repository is a shallow clone, so its history is cut short and versions would be undercounted. Fetch it whole (`git fetch --unshallow`, or `fetch-depth: 0` in CI).",
+				"the repository is a shallow clone, so its versions would be too low. Fetch its whole history (`git fetch --unshallow`, or `fetch-depth: 0` in CI).",
 		};
 	const log = await git(
 		top,
@@ -137,7 +137,7 @@ export async function readHistory(dir: string): Promise<HistoryRead> {
 	if (commits.length === 0)
 		return {
 			kind: "unavailable",
-			reason: `nothing in ${dir} is committed yet: the build is of the last commit.`,
+			reason: `nothing in ${dir} is committed yet, and the build uses the last commit.`,
 		};
 	const snapshots: Snapshot[] = [];
 	for (const { sha, date } of commits)

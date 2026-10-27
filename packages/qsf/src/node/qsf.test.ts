@@ -124,7 +124,7 @@ describe("reading the households instrument's DDI back", () => {
 			findings.map((f) => `${f.severity} ${f.path}: ${f.message}`),
 		).toMatchInlineSnapshot(`
 			[
-			  "info : The bank's missing-value codes aren't offered to respondents in Qualtrics.",
+			  "info : Respondents in Qualtrics don't see the missing values as options.",
 			  "info instrument-households.ask-comments: Qualtrics doesn't limit this answer to 500 characters.",
 			]
 		`);

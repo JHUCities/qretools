@@ -1,6 +1,6 @@
 /**
- * Reading a `code: label` map from the YAML AST, shared by question responses
- * and scale files. The AST, not `toJS()`, so codes keep the author's order and
+ * Reads a `code: label` map from the YAML AST, for a question's responses and for
+ * scale files. It reads the AST, not `toJS()`, so codes keep the author's order and
  * spelling (`010` stays `010`, and a quoted `'0'` is `0`).
  */
 import type { Document } from "yaml";
@@ -23,14 +23,14 @@ import { OptionSchema } from "./schema.ts";
 export const EXAMPLE = 'Example:\n  "1": Yes\n  "2": No';
 
 /**
- * Whether a code is written so that YAML reads it as something other than text: a plain
- * `1`, `010`, `-8`, `true` or `~`. A code is text (DDI's `StringValue`, compared as text
- * in conditions), so it is written in quotes. Words (`DK`, `opt1`) already read as text.
+ * Whether YAML reads a code as something other than text: a plain `1`, `010`, `-8`,
+ * `true` or `~`. A code is text (DDI's `StringValue`, compared as text in conditions),
+ * so it goes in quotes. Words (`DK`, `opt1`) already read as text.
  */
 const unquoted = (key: Scalar): boolean =>
 	key.type === Scalar.PLAIN && typeof key.value !== "string";
 
-/** The advice on an unquoted code, underlining the code alone, with the fix that quotes it. */
+/** The advice on an unquoted code: underlines just the code, with a fix that quotes it. */
 function unquotedCode(key: Scalar, code: string, at: string): Finding {
 	const quoted = JSON.stringify(code);
 	return compact({
@@ -38,8 +38,8 @@ function unquotedCode(key: Scalar, code: string, at: string): Finding {
 		severity: "info",
 		path: at,
 		message: `Put the code \`${code}\` in quotes: \`${quoted}\`.`,
-		hint: "A code is text. Without quotes, other programs that read this file may read `010` as a number, and `01` and `1` count as the same code.",
-		// AST ranges are offsets into this source, so they are within it.
+		hint: "Without quotes, `01` and `1` count as the same code.",
+		// AST ranges are offsets into this text, so they fall inside it.
 		range: key.range ? ([key.range[0], key.range[1]] as const) : undefined,
 		fix: { kind: "quote", label: `Quote \`${code}\``, path: at, code },
 	});
@@ -49,9 +49,9 @@ function unquotedCode(key: Scalar, code: string, at: string): Finding {
 export const keyText = (key: Scalar): string => key.source ?? String(key.value);
 
 /**
- * Every pair of a map node becomes a Code. A label may be plain text or, when
- * `options` is allowed, a small map with `label`, `title`, `variable`, `note`.
- * Findings are addressed under `path` (e.g. `responses.3`).
+ * Each pair in the map becomes a Code. A label is text or, when `options` is
+ * allowed, a small map with `label`, `title`, `variable` and `note`.
+ * Findings sit under `path` (e.g. `responses.3`).
  */
 export function readCodeMap(
 	doc: Document,
@@ -70,7 +70,7 @@ export function readCodeMap(
 		);
 	const codes: Code[] = [];
 	const findings: Finding[] = [];
-	// Each spelling's first key: `"1"` and `1` are one code to us but two keys to YAML.
+	// The first key of each spelling: `"1"` and `1` are one code to us but two keys to YAML.
 	const seen = new Map<string, Scalar>();
 	for (const pair of node.items) {
 		if (!isScalar(pair.key)) continue;
@@ -78,7 +78,7 @@ export function readCodeMap(
 		const at = `${path}.${code}`;
 		const first = seen.get(code);
 		if (first === undefined) seen.set(code, pair.key);
-		// YAML already reports two keys of one value; only the ones it can't tell apart are ours.
+		// YAML already reports two keys with one value; we report only those it sees as different.
 		else if (first.value !== pair.key.value)
 			findings.push(
 				compact({
@@ -86,9 +86,9 @@ export function readCodeMap(
 						"duplicate-code",
 						at,
 						`The code \`${code}\` is written twice.`,
-						"Each response needs its own code.",
+						"Give each option its own code.",
 					),
-					// The second key itself: the path names both.
+					// Underline the second key; the path covers both.
 					range: pair.key.range
 						? ([pair.key.range[0], pair.key.range[1]] as const)
 						: undefined,
@@ -98,14 +98,20 @@ export function readCodeMap(
 		if (isScalar(pair.value)) {
 			const label = pair.value.value;
 			if (label === null || label === undefined || label === "") {
-				findings.push(hole(at, `Response \`${code}\` has no label.`));
+				findings.push(
+					hole(
+						at,
+						`Option \`${code}\` has no label.`,
+						"Write the text respondents see after the colon.",
+					),
+				);
 			} else if (typeof label !== "string") {
 				findings.push(
 					error(
 						"wrong-type",
 						at,
-						`Label for \`${code}\` must be text.`,
-						`Quote it: ${JSON.stringify(code)}: "${String(label)}"`,
+						`Option \`${code}\`'s label must be text.`,
+						`Put it in quotes: \`${JSON.stringify(code)}: "${String(label)}"\`.`,
 					),
 				);
 			} else {
@@ -116,17 +122,17 @@ export function readCodeMap(
 			const obj = isPlainObject(raw) ? raw : {};
 			const label = obj.label;
 			if (label === undefined || label === null || label === "") {
-				// Written empty, the hole is the `label` line itself; absent, it is the option.
+				// Written empty, the hole is the `label` line; left out, it's the option.
 				findings.push(
 					hole(
 						label === undefined ? at : `${at}.label`,
 						`Option \`${code}\` has no label.`,
-						"Add `label: ...` under it.",
+						`Add \`label:\` under option \`${code}\`, with the text respondents see.`,
 					),
 				);
 				continue;
 			}
-			// The label is present, so any other key written empty is its own hole.
+			// The label is there, so any other key written empty is its own hole.
 			const { rest, holes } = opened(obj, at);
 			const result = OptionSchema.safeParse(rest);
 			if (!result.success) {
@@ -163,10 +169,21 @@ export function readCodeMap(
 			findings.push(...holes);
 			codes.push({ code, ...compact(result.data) });
 		} else if (pair.value === null || pair.value === undefined) {
-			findings.push(hole(at, `Response \`${code}\` has no label.`));
+			findings.push(
+				hole(
+					at,
+					`Option \`${code}\` has no label.`,
+					"Write the text respondents see after the colon.",
+				),
+			);
 		} else {
 			findings.push(
-				error("wrong-type", at, `Label for \`${code}\` must be text.`),
+				error(
+					"wrong-type",
+					at,
+					`Option \`${code}\`'s label must be text.`,
+					`Write the label on the same line: \`${JSON.stringify(code)}: Yes\`.`,
+				),
 			);
 		}
 	}

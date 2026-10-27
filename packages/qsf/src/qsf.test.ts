@@ -22,7 +22,7 @@ describe("an instrument's DDI as a Qualtrics survey", () => {
 		const r = qsfOf({}, { name: "x", created: "2026-10-18 00:00:00" });
 		expect(r).toMatchObject({ kind: "refused", errors: 1 });
 		expect(qsfRefusalReason(1)).toBe(
-			"1 thing in this instrument can't be run in Qualtrics as its DDI says.",
+			"1 thing in this instrument can't be run in Qualtrics.",
 		);
 	});
 
