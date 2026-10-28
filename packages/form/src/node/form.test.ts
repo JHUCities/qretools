@@ -211,10 +211,5 @@ describe("the households page", () => {
 		($("[data-back]") as HTMLButtonElement).click();
 		($("[data-back]") as HTMLButtonElement).click();
 		expect($("main h2").textContent).toBe("Question 1consent");
-		for (let k = 0; k < 20; k++) {
-			$("#restart").click();
-			$("#random").click();
-			expect(["The end", "Screened out"]).toContain($("main h2").textContent);
-		}
 	});
 });

@@ -2,7 +2,7 @@
 /**
  * The form's runtime, in the page: the imperative shell around `walk`. Its state is a
  * `Run` (and which instrument); every change replaces the run and draws the page again
- * from `walk`. Shuffles and random answers are drawn here, never in `walk`.
+ * from `walk`. Shuffles and inputs left to chance are drawn here, never in `walk`.
  *
  * Self-contained, as `walk` is: the page runs it from its source text, so it names
  * nothing outside itself but its arguments and the browser's globals.
@@ -10,7 +10,6 @@
 import type {
 	Choice,
 	evaluateCondition,
-	FlowDomain,
 	FlowStep,
 	ReadInstruments,
 } from "@qretools/core";
@@ -147,19 +146,6 @@ export function runtime(
 					: null,
 			]),
 		);
-	const randomAnswer = (d: FlowDomain): Answer => {
-		if (Math.random() < 0.05) return null; // now and then, no answer
-		if (d.kind === "choice")
-			return (
-				d.choices[Math.floor(Math.random() * d.choices.length)]?.code ?? null
-			);
-		if (d.kind === "number") {
-			const lo = d.min ?? 0;
-			const hi = d.max ?? lo + 10;
-			return lo + Math.floor(Math.random() * (hi - lo + 1));
-		}
-		return "A typed answer";
-	};
 
 	const main = byId("screen");
 	const panel = byId("panel");
@@ -511,18 +497,6 @@ export function runtime(
 
 	byId("restart").addEventListener("click", () => {
 		state = fresh(state.which);
-		render(true);
-	});
-	byId("random").addEventListener("click", () => {
-		if (state.run === undefined) start(randomInputs());
-		for (let guard = 0; guard < 10000 && state.run !== undefined; guard++) {
-			const run: Run = state.run;
-			const at = walked(run).current;
-			if (at === undefined) break;
-			const answer =
-				at.step.kind === "ask" ? randomAnswer(at.step.question.domain) : null;
-			state = { ...state, run: { ...run, answers: [...run.answers, answer] } };
-		}
 		render(true);
 	});
 	render(false);

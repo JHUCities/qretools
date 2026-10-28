@@ -31,7 +31,6 @@ export function pageOf(read: ReadInstruments): string {
     <p class="muted">A test form: it follows the survey's routing and saves nothing.</p>
   </div>
   <div class="actions">
-    <button type="button" id="random">Random answers</button>
     <button type="button" id="restart">Start again</button>
   </div>
 </header>
