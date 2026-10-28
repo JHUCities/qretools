@@ -541,6 +541,30 @@ describe("qretools form", () => {
 	});
 });
 
+describe("qretools paths", () => {
+	it("writes the report of an instrument's paths, and refuses what form refuses", async () => {
+		const file = join(
+			await mkdtemp(join(tmpdir(), "qretools-paths-")),
+			"ddi.json",
+		);
+		await writeFile(
+			file,
+			(
+				await run(
+					"instrument",
+					"export",
+					here("../../core/fixtures/households/instruments/households.yaml"),
+				)
+			).out,
+		);
+		const r = await run("paths", file);
+		expect(r).toMatchObject({ code: 0, err: "" });
+		expect(r.out).toContain("<h1>Households and housing: paths and reach</h1>");
+		await writeFile(file, "{");
+		expect((await run("paths", file)).err).toMatch(/\[paths-unreadable\]/);
+	});
+});
+
 describe("the command under real Node", () => {
 	it("runs from source with no build or loader", async () => {
 		const exec = promisify(execFile);

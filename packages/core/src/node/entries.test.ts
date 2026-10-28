@@ -103,6 +103,7 @@ describe("the entry points", () => {
 			    "parseSelectAllFile",
 			    "parseSettingsFile",
 			    "parseSurface",
+			    "pathsOf",
 			    "piecesOf",
 			    "placeFindings",
 			    "placeholders",
