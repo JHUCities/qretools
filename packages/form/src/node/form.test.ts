@@ -217,4 +217,15 @@ describe("the households page", () => {
 			expect(["The end", "Screened out"]).toContain($("main h2").textContent);
 		}
 	});
+
+	it("says what random answers does, from a button beside it", () => {
+		document.documentElement.innerHTML = pageOf(read.value);
+		const info = document.querySelector(".info") as HTMLElement;
+		const help = document.getElementById(
+			info.getAttribute("popovertarget") ?? "",
+		);
+		expect(info.getAttribute("aria-label")).toBe("About random answers");
+		expect(help?.hasAttribute("popover")).toBe(true);
+		expect(help?.textContent).toContain("one question in 20");
+	});
 });

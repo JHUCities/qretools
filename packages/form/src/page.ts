@@ -32,6 +32,16 @@ export function pageOf(read: ReadInstruments): string {
   </div>
   <div class="actions">
     <button type="button" id="random">Random answers</button>
+    <button type="button" class="info" popovertarget="random-help" aria-label="About random answers"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg></button>
+    <div id="random-help" popover>
+      <p>Runs the interview for you, answering each question until it ends:</p>
+      <ul>
+        <li>a choice gets one of its options, each as likely, even where several may be ticked;</li>
+        <li>a number gets a whole number in its range (0 to 10 if it has no limits);</li>
+        <li>anything else gets the words “A typed answer”.</li>
+      </ul>
+      <p>About one question in 20 is left unanswered. Before a run starts, an empty input with options gets one at random. Pressed partway through, it finishes the run from there.</p>
+    </div>
     <button type="button" id="restart">Start again</button>
   </div>
 </header>
@@ -93,6 +103,20 @@ legend { padding: 0; margin-bottom: 4px; }
 button { font: inherit; font-weight: 500; color: var(--fg); background: var(--inset); border: 1px solid var(--border);
   border-radius: 6px; padding: 5px 16px; cursor: pointer; min-height: 32px; }
 button:hover { border-color: var(--muted); }
+button.info { display: inline grid; place-items: center; width: 32px; padding: 0; margin-left: -4px; color: var(--muted);
+  background: transparent; border-color: transparent; anchor-name: --random-help; }
+button.info:hover { color: var(--fg); background: var(--inset); }
+#random-help { max-width: min(360px, calc(100vw - 32px)); padding: 12px 16px; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); }
+#random-help p { margin: 0; }
+#random-help ul { margin: 8px 0; padding-left: 20px; }
+/* Under the icon where anchor positioning works; centred, the popover's default, where it doesn't. */
+@supports (position-area: block-end) {
+  #random-help { position-anchor: --random-help; inset: auto; margin: 4px 0;
+    position-area: block-end span-inline-start; position-try-fallbacks: flip-block; }
+  /* On a phone, the screen's width less its gutters, not the space left of the icon. */
+  @media (max-width: 543px) { #random-help { position-area: block-end span-all; inset-inline: 16px; max-width: none; } }
+}
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 aside h2 { font-size: 14px; margin-top: 16px; }
