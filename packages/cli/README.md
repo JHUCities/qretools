@@ -18,7 +18,7 @@ qretools export path/to/workspace -o questions.json   # its questions' DDI, vali
 qretools build path/to/workspace             # its last commit's DDI, versioned from git history, in path/to/workspace/dist/ddi.json
 qretools codebook path/to/workspace -o codebook.html  # its questions' codebook, one HTML page
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
-qretools form wave1.json -o form.html        # a test form of an instrument's DDI, one HTML page
+qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -125,21 +125,19 @@ If the DDI refers to something it doesn't contain, the page shows it, and stderr
 as `check` says a finding (`ddi.json: error: <where>: <message> [codebook-dangling]`).
 With `--strict` the command fails, but the page is still written.
 
-## Test form
+## Paths
 
-`form` writes a test form of an instrument's DDI: one HTML page that asks its questions
-one at a time and follows its routing, so you can see who is asked what. Beside each
-question it shows why it's asked, the values so far and the route taken. "Random
-answers" runs to the end. The page saves nothing and sends nothing.
+`paths` writes a report of an instrument's paths: one HTML page saying how many ways there
+are through its routing, how many questions each asks, and which questions each reaches.
+The page says how it counts.
 
 ```sh
 qretools instrument export instruments/wave1.yaml -o wave1.json
-qretools form wave1.json -o wave1-form.html
+qretools paths wave1.json -o wave1-paths.html
 ```
 
 It reads any DDI-Lifecycle 4.0 JSON with an instrument in it. What it can't read is said
-on stderr as `check` says a finding. Not run yet: select all that apply questions, and
-loops written in a form it doesn't recognise. Checks on answers aren't run.
+on stderr as `check` says a finding.
 
 ## Output
 

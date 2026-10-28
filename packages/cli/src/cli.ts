@@ -58,7 +58,7 @@ import {
 	workspaceOf,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
-import { pageOf as formOf, pathsPageOf } from "@qretools/form";
+import { pathsPageOf } from "@qretools/paths";
 import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
 import pkg from "../package.json" with { type: "json" };
 import type { HistoryRead } from "./history.ts";
@@ -82,12 +82,10 @@ const USAGE = `Usage:
   qretools codebook [dir | file.json] [-o file] [--strict]
                                     Write a codebook, one HTML page: of its questions' DDI, or of
                                     any DDI-Lifecycle 4.0 JSON file
-  qretools form <file.json> [-o file]
-                                    Write a test form, one HTML page that follows an instrument's
-                                    routing, from its DDI (as \`instrument export\` writes it)
   qretools paths <file.json> [-o file]
                                     Write a report of an instrument's paths, one HTML page: how many
-                                    ways through its routing, and which questions each reaches
+                                    ways through its routing, and which questions each reaches, from
+                                    its DDI (as \`instrument export\` writes it)
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
@@ -142,7 +140,6 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "export" &&
 		command !== "build" &&
 		command !== "codebook" &&
-		command !== "form" &&
 		command !== "paths"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
@@ -176,13 +173,13 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values["tag-message"],
 			io,
 		);
-	if (command === "form" || command === "paths") {
+	if (command === "paths") {
 		// A file, always: there's no workspace default to fall back on.
 		if (args.positionals[1] === undefined) {
 			io.err(`${USAGE}\n`);
 			return USAGE_ERROR;
 		}
-		return writePage(command, dir, args.values.output, io);
+		return writePaths(dir, args.values.output, io);
 	}
 	const strict = args.values.strict === true;
 	// A file is a DDI document, any producer's; a directory is a workspace.
@@ -311,12 +308,10 @@ function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
 }
 
 /**
- * A DDI file's instruments as a page, its test form or its paths: one HTML page, and a
- * line in `check`'s form for each part of the DDI it can't read. Not written when the
- * file isn't DDI or holds no instrument.
+ * A DDI file's instruments' paths as one HTML page, and a line in `check`'s form for each
+ * part of the DDI it can't read. Not written when the file isn't DDI or holds no instrument.
  */
-async function writePage(
-	command: "form" | "paths",
+async function writePaths(
 	file: string,
 	output: string | undefined,
 	io: Io,
@@ -335,7 +330,7 @@ async function writePage(
 		return emit(
 			{
 				lines: [
-					`${file}: error: Not written: this isn't JSON (${json.detail}). [${command}-unreadable]`,
+					`${file}: error: Not written: this isn't JSON (${json.detail}). [paths-unreadable]`,
 				],
 				problems: true,
 			},
@@ -352,15 +347,18 @@ async function writePage(
 			{
 				lines: [
 					...lines,
-					`${file}: error: Not written: there's no instrument in this DDI. [${command}-unreadable]`,
+					`${file}: error: Not written: there's no instrument in this DDI. [paths-unreadable]`,
 				],
 				problems: true,
 			},
 			output,
 			io,
 		);
-	const page = command === "form" ? formOf : pathsPageOf;
-	return emit({ text: page(read.value), lines, problems: false }, output, io);
+	return emit(
+		{ text: pathsPageOf(read.value), lines, problems: false },
+		output,
+		io,
+	);
 }
 
 function parse(argv: readonly string[]) {

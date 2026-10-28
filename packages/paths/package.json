@@ -1,9 +1,9 @@
 {
-	"name": "@qretools/form",
+	"name": "@qretools/paths",
 	"version": "2.0.0-alpha.0",
 	"private": true,
 	"type": "module",
-	"description": "A test form from an instrument's DDI-Lifecycle 4.0: one HTML page that runs its routing",
+	"description": "An instrument's paths and reach from its DDI-Lifecycle 4.0: one HTML page",
 	"exports": {
 		".": "./src/index.ts"
 	},
@@ -17,7 +17,6 @@
 	},
 	"devDependencies": {
 		"@types/node": "^26.6.4",
-		"jsdom": "^30.1.1",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.0",
 		"vitest": "^5.0.1"

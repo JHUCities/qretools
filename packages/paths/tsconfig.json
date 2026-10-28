@@ -1,7 +1,7 @@
 {
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		// No DOM but the runtime's, which names it itself: the rest is pure.
+		// No DOM: it writes a page as a string.
 		"lib": ["ES2023"],
 		"erasableSyntaxOnly": true
 	},

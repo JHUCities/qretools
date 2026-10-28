@@ -9,7 +9,6 @@ import {
 	pathsOf,
 	type ReadInstruments,
 } from "@qretools/core";
-import { CSS, esc } from "./page.ts";
 
 export function pathsPageOf(read: ReadInstruments): string {
 	const first = read.instruments[0];
@@ -25,7 +24,7 @@ export function pathsPageOf(read: ReadInstruments): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}: paths and reach</title>
-<style>${CSS}${PATHS_CSS}</style>
+<style>${CSS}</style>
 </head>
 <body>
 <header>
@@ -178,7 +177,7 @@ function instrumentHtml(i: FlowInstrument, p: Paths, heading: boolean): string {
 			: []),
 		...(p.unread > 0
 			? [
-					`${plural(p.unread, "condition")} couldn't be read, so ${p.unread === 1 ? "it's" : "each is"} counted as going both ways. The test form treats ${p.unread === 1 ? "it" : "them"} as never true.`,
+					`${plural(p.unread, "condition")} couldn't be read, so ${p.unread === 1 ? "it's" : "each is"} counted as going both ways.`,
 				]
 			: []),
 		"A number answer is tried at the values conditions compare it with and one either side (for “age < 18”, ages 17, 18 and 19), at its limits, and with no answer. That is enough when conditions compare answers with fixed numbers, not with each other.",
@@ -208,7 +207,30 @@ ${rows}
 </section>`;
 }
 
-const PATHS_CSS = `
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
+// Primer's colour tokens, light and dark, as plain values: the page loads nothing.
+const CSS = `
+:root {
+  color-scheme: light dark;
+  --fg: #1f2328; --muted: #59636e; --bg: #ffffff; --inset: #f6f8fa; --border: #d1d9e0;
+  --accent: #0969da; --danger: #d1242f;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --fg: #f0f6fc; --muted: #9198a1; --bg: #0d1117; --inset: #151b23; --border: #3d444d;
+    --accent: #4493f8; --danger: #f85149; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.5 var(--font); color: var(--fg); background: var(--bg); }
+code { font-family: var(--mono); font-size: 12px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+header { padding: 16px; border-bottom: 1px solid var(--border); }
+header p { margin: 0; }
+.muted { color: var(--muted); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .report { max-width: 1100px; margin: 0 auto; padding: 16px; }
 @media (min-width: 768px) { .report { padding: 24px; } }
 .report section + section { margin-top: 32px; }
@@ -228,6 +250,4 @@ thead th { border-top: 0; background: var(--inset); font-size: 12px; font-weight
 tbody th { font-weight: normal; white-space: nowrap; }
 td.never, .never { color: var(--danger); }
 tr.unreached th code { color: var(--danger); }
-:root { --danger: #d1242f; }
-@media (prefers-color-scheme: dark) { :root { --danger: #f85149; } }
 `;
