@@ -35,6 +35,6 @@ describe("the paths report", () => {
 
 	it("says how rosters and screen-outs are counted", () => {
 		expect(text).toContain("1 path ends at a screen-out");
-		expect(text).toContain("counted once, as for one row");
+		expect(text).toContain("counted once, as if it had one row");
 	});
 });

@@ -157,31 +157,31 @@ function instrumentHtml(i: FlowInstrument, p: Paths, heading: boolean): string {
 		})
 		.join("\n");
 	const notes = [
-		"A path is one outcome for each condition met, kept only if some answers lead there. Paths aren't respondents: they aren't weighted by how people answer, so a share of paths isn't a share of the sample.",
-		"Conditions on one path agree with each other: two conditions on the same answer can't be taken in contradictory ways. A question not asked on a path counts as not answered.",
-		"A question left unanswered is an answer here, so it can make a path of its own.",
-		"Branches that change only what is said, and not which questions are asked, still count as paths.",
+		"A path is one way through the instrument: which way each condition goes, for answers that could take it. Paths aren't people. Each counts once, however many respondents would take it, so a tenth of the paths isn't a tenth of the sample.",
+		"Answers on a path don't contradict each other. If one condition asks whether age is under 18 and a later one whether it's over 65, no path meets both. A condition that reads a question the path skipped finds no answer.",
+		"Leaving a question unanswered counts as an answer, so a condition such as “if income has no answer” can send a path its own way.",
+		"A condition still splits the path when its branches ask the same questions and differ only in what is read out.",
 		...(p.stopped > 0
 			? [
-					`${plural(p.stopped, "path ends", "paths end")} at a screen-out. “Every path”, “Always” and the questions per path leave those out.`,
+					`${plural(p.stopped, "path ends", "paths end")} at a screen-out, and ${p.stopped === 1 ? "it's" : "they're"} left out of “Asked on every path”, “Every path”, “Always” and the questions per path.`,
 				]
 			: []),
 		...(p.repeated.length > 0
 			? [
-					`A roster's questions are counted once, as for one row. A roster by count has no rows when its count is blank or below 1. (${plural(p.repeated.length, "roster or loop", "rosters or loops")} here.)`,
+					`A roster's questions are counted once, as if it had one row, however many it has. A roster whose count is blank or below 1 has no rows, so its questions aren't asked. (${plural(p.repeated.length, "roster or loop", "rosters or loops")} here.)`,
 				]
 			: []),
 		...(shuffled
 			? [
-					"* In a section shown in random order, “asked before” follows the written order.",
+					"* In a section shown in random order, “Questions asked before” counts them in the order they're written.",
 				]
 			: []),
 		...(p.unread > 0
 			? [
-					`${plural(p.unread, "condition")} couldn't be read, so both of ${p.unread === 1 ? "its" : "their"} outcomes are counted. The test form treats such a condition as never true.`,
+					`${plural(p.unread, "condition")} couldn't be read, so ${p.unread === 1 ? "it's" : "each is"} counted as going both ways. The test form treats ${p.unread === 1 ? "it" : "them"} as never true.`,
 				]
 			: []),
-		"Number answers are tried at the values the conditions compare them with and one either side, which is enough for comparisons with a single number.",
+		"A number answer is tried at the values conditions compare it with and one either side (for “age < 18”, ages 17, 18 and 19), at its limits, and with no answer. That is enough when conditions compare answers with fixed numbers, not with each other.",
 	];
 	const id = esc(i.id);
 	return `<section aria-labelledby="${id}">
