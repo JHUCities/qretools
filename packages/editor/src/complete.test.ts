@@ -121,16 +121,15 @@ describe("completion at any depth, read from the parsed question", () => {
 		);
 	});
 
-	it("writes its own space straight after the colon, and offers {} for a field of keys", () => {
-		const after = at("instruction:");
-		expect(after?.options).toMatchObject([
+	it("writes its own space straight after the colon", () => {
+		expect(at("instruction:")?.options).toMatchObject([
 			{ label: "select_one", apply: " select_one" },
 		]);
-		expect(at("number:")?.options).toMatchObject([
-			{ label: "{}", apply: " {}" },
-		]);
-		expect(at("number: ")?.options).toMatchObject([{ label: "{}" }]);
-		expect(at("number: ")?.options[0]?.apply).toBeUndefined();
+	});
+
+	it("offers no value of its own for a field of keys", () => {
+		expect(at("number: ")).toBeNull();
+		expect(at("number:")).toBeNull();
 	});
 
 	it("offers nothing straight after a colon while typing, so Enter starts the block", () => {

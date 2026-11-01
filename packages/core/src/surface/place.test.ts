@@ -41,6 +41,13 @@ describe("where the caret is, for completion", () => {
 		expect(at("name: q\nselect:ma▮")).toBeUndefined();
 	});
 
+	it("has no value place where the value is on the lines below", () => {
+		expect(at("number:▮\n  min: 1\n")).toBeUndefined();
+		expect(at("number: ▮\n  min: 1\n")).toBeUndefined();
+		expect(at("text: ▮\n  Written below\n")).toBeUndefined();
+		expect(at("number: ▮\ntext: x\n")).toMatchObject({ kind: "value" });
+	});
+
 	it("reads line 1 apart from the key below it", () => {
 		const place = { kind: "key", segments: [], siblings: ["title"] };
 		expect(at("▮\ntitle: x\n")).toEqual({ ...place, typed: "" });

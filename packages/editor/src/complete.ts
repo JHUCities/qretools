@@ -57,16 +57,11 @@ function nodeAt(
 }
 
 /**
- * Values a field may take: a plain enum, the constants of a branch (shared scale
- * names), or, for a field that holds keys of its own (`open`, `number`), `{}`: none of
- * them written.
+ * Values a field may take: a plain enum, or the constants of a branch (shared scale
+ * names).
  */
 function valuesOf(node: SchemaNode | undefined): readonly Completion[] {
 	if (!node) return [];
-	if (node.properties)
-		return [
-			{ label: "{}", type: "constant", detail: "No settings of its own" },
-		];
 	if (node.enum)
 		return node.enum.map((v) => ({ label: String(v), type: "enum" }));
 	return (node.anyOf ?? [node]).flatMap((branch) =>
@@ -83,6 +78,16 @@ function valuesOf(node: SchemaNode | undefined): readonly Completion[] {
 		),
 	);
 }
+
+/** The keys under `node`: a union's object branch holds them (an option: a label, or a map with a label). */
+const keysOf = (node: SchemaNode | undefined): readonly string[] =>
+	Object.keys(
+		(node?.anyOf ?? [node]).find((b) => b?.properties)?.properties ?? {},
+	);
+
+/** The schema's order (name, text, intent first), not the alphabet's, whichever keys are written. */
+const keyBoost = (keys: readonly string[], name: string): number =>
+	50 - keys.indexOf(name);
 
 export function schemaCompletion(
 	context: CompletionContext,
@@ -102,7 +107,7 @@ export function schemaCompletion(
 				? valuesOf(node)
 				: [];
 		// Straight after the colon, an option writes its own space, as completion in
-		// VS Code's and IntelliJ's YAML does: `open:` becomes `open: {}`, never `open:{}`.
+		// VS Code's and IntelliJ's YAML does: `instruction:` becomes `instruction: select_one`.
 		return options.length === 0
 			? null
 			: {
@@ -114,18 +119,13 @@ export function schemaCompletion(
 	}
 
 	const { typed, siblings } = place;
-	// A union's object branch holds the keys (an option: a label, or a map with a label).
-	const properties = (node?.anyOf ?? [node]).find(
-		(b) => b?.properties,
-	)?.properties;
-	if (!properties) return null;
-	const options: Completion[] = Object.entries(properties)
-		.filter(([name]) => name.startsWith(typed) && !siblings.includes(name))
-		.map(([name], i) => ({
+	const keys = keysOf(node);
+	const options: Completion[] = keys
+		.filter((name) => name.startsWith(typed) && !siblings.includes(name))
+		.map((name) => ({
 			label: name,
 			type: "property",
-			// Keep the schema's order (name, text, intent first), not the alphabet's.
-			boost: 50 - i,
+			boost: keyBoost(keys, name),
 			apply: `${name}: `,
 		}));
 	return options.length === 0
@@ -155,11 +155,14 @@ export interface Snippet {
 	readonly snippet: string;
 	/** Where it replaces from: the start of the word being typed. */
 	readonly from: number;
+	/** Offered with no word typed, without being asked. */
+	readonly unasked?: boolean;
 }
 
 /**
- * The given snippets, beside the schema's keys (same label, the detail says what comes
- * with it). Unasked, only once a word is typed, as keys are.
+ * The given snippets, each just above the schema's key of the same name (the detail
+ * says what comes with it), so Enter takes it. Unasked, only once a word is typed, as
+ * keys are, or where a snippet says so.
  */
 export const snippetSource =
 	(snippets: (source: string, offset: number) => readonly Snippet[]) =>
@@ -168,9 +171,10 @@ export const snippetSource =
 		const [first] = found;
 		if (
 			first === undefined ||
-			(first.from === context.pos && !context.explicit)
+			(first.from === context.pos && !context.explicit && !first.unasked)
 		)
 			return null;
+		const keys = keysOf(getJSONSchema(context.state) as SchemaNode | undefined);
 		const base =
 			/^ */.exec(context.state.doc.lineAt(first.from).text)?.[0] ?? "";
 		return {
@@ -180,6 +184,9 @@ export const snippetSource =
 					label: s.label,
 					detail: s.detail,
 					type: "text",
+					...(keys.includes(s.label) && {
+						boost: keyBoost(keys, s.label) + 0.5,
+					}),
 				}),
 			),
 			validFor: /^\w*$/,

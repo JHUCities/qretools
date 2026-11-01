@@ -26,6 +26,21 @@ export const DOMAIN_SNIPPETS: Readonly<
 	},
 	open: { snippet: "open:\n  max_length: ${}", detail: "with max_length" },
 };
+/** The same two written on one line, as a field's value: `number: { min: 1, max: 20 }`. */
+export const INLINE_SNIPPETS: Readonly<
+	Partial<Record<DomainKey, { label: string; snippet: string; detail: string }>>
+> = {
+	number: {
+		label: "{ min: , max: }",
+		snippet: "{ min: ${}, max: ${} }",
+		detail: "on one line",
+	},
+	open: {
+		label: "{ max_length: }",
+		snippet: "{ max_length: ${} }",
+		detail: "on one line",
+	},
+};
 /* biome-ignore-end lint/suspicious/noTemplateCurlyInString: above */
 
 export interface FieldSnippet {
@@ -34,17 +49,38 @@ export interface FieldSnippet {
 	readonly snippet: string;
 	/** Where it replaces from: the start of the word being typed. */
 	readonly from: number;
+	/** Offered with no word typed, without being asked. */
+	readonly unasked?: boolean;
 }
 
 /**
  * The ways to answer written out, where a top-level field goes in a question that has
- * none yet (a question is answered one way only). Nothing elsewhere.
+ * none yet (a question is answered one way only), and on one line at the empty value
+ * of `number` or `open`. Nothing elsewhere.
  */
 export function domainSnippets(
 	source: string,
 	offset: number,
 ): readonly FieldSnippet[] {
 	const place = placeAt(source, offset);
+	if (place?.kind === "value") {
+		const [key, deeper] = place.segments;
+		const inline =
+			key === undefined || deeper !== undefined
+				? undefined
+				: INLINE_SNIPPETS[key as DomainKey];
+		if (inline === undefined || place.typed !== "") return [];
+		return [
+			{
+				...inline,
+				// Straight after the colon it brings its own space, and only when asked:
+				// `number:` then Enter starts a block.
+				snippet: place.spaced ? inline.snippet : ` ${inline.snippet}`,
+				from: offset,
+				unasked: place.spaced,
+			},
+		];
+	}
 	if (
 		place?.kind !== "key" ||
 		place.segments.length > 0 ||
