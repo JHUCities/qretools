@@ -70,3 +70,28 @@ describe("a link waiting for sign-in", () => {
 		expect(cmds).not.toContainEqual({ kind: "clearLink" });
 	});
 });
+
+describe("the address the last bank left behind, with no link waiting", () => {
+	const signedOut = () =>
+		init({
+			work: ok(undefined),
+			hasToken: false,
+			settings: settings("old"),
+		})[0];
+
+	it("is cleared first when another bank is chosen", () => {
+		const [, cmds] = update(signedOut(), {
+			kind: "signInRequested",
+			settings: settings("chosen"),
+		});
+		expect(cmds[0]?.kind).toBe("clearLink");
+	});
+
+	it("is kept when the same bank is chosen again, to reopen what was open", () => {
+		const [, cmds] = update(signedOut(), {
+			kind: "signInRequested",
+			settings: settings("old"),
+		});
+		expect(cmds).not.toContainEqual({ kind: "clearLink" });
+	});
+});

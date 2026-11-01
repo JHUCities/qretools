@@ -1943,7 +1943,7 @@ describe("links while connecting", () => {
 
 describe("signing in", () => {
 	it("keeps the settings and leaves for GitHub", () => {
-		const settings = { ...SETTINGS, remember: true };
+		const settings = { ...fresh().settings, remember: true };
 		const [m, cmds] = update(fresh(), { kind: "signInRequested", settings });
 		expect(m.session).toEqual({ kind: "connecting", toGitHub: true });
 		expect(cmds.map((c) => c.kind)).toEqual([
