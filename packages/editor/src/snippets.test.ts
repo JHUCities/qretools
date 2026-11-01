@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
-import { CompletionContext } from "@codemirror/autocomplete";
+import {
+	acceptCompletion,
+	CompletionContext,
+	currentCompletions,
+	nextSnippetField,
+	startCompletion,
+} from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { domainSnippets } from "@qretools/core/editor";
-import { describe, expect, it } from "vitest";
+import { domainSnippets, questionJsonSchema } from "@qretools/core/editor";
+import { stateExtensions } from "codemirror-json-schema";
+import { describe, expect, it, vi } from "vitest";
 import { snippetSource } from "./complete.ts";
 import { createEditor } from "./editor.ts";
 
@@ -50,7 +57,7 @@ describe("a response domain written out, as picked in the editor", () => {
 		const at = (doc: string, explicit: boolean) =>
 			snippetSource(domainSnippets)(
 				new CompletionContext(
-					EditorState.create({ doc }),
+					EditorState.create({ doc, extensions: stateExtensions() }),
 					doc.length,
 					explicit,
 				),
@@ -58,5 +65,74 @@ describe("a response domain written out, as picked in the editor", () => {
 		expect(at(HEAD, false)).toBeUndefined();
 		expect(at(HEAD, true)).toEqual(["responses", "number", "open"]);
 		expect(at(`${HEAD}n`, false)).toEqual(["number"]);
+	});
+});
+
+describe("in the editor, as it sorts them", () => {
+	/** `typed` at the end of `doc`: what's listed, then the text Enter would leave. */
+	const complete = async (doc: string, typed: string, ask = false) => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const editor = createEditor(
+			parent,
+			() => {},
+			() => {},
+			() => {},
+			{ snippets: domainSnippets },
+		);
+		const schema = questionJsonSchema();
+		editor.sync({ id: 1, text: doc, diagnostics: [], marks: [], schema });
+		const view = EditorView.findFromDOM(parent) as EditorView;
+		view.focus();
+		const at = doc.length + typed.length;
+		view.dispatch({
+			changes: { from: doc.length, insert: typed },
+			selection: { anchor: at },
+			userEvent: "input.type",
+		});
+		if (ask) startCompletion(view);
+		await vi.waitFor(() =>
+			expect(currentCompletions(view.state).length).toBeGreaterThan(0),
+		);
+		const listed = currentCompletions(view.state).map((o) =>
+			`${o.label} ${o.detail ?? ""}`.trim(),
+		);
+		// CodeMirror ignores Enter for its first moments, lest it take a stray key.
+		await new Promise((done) => setTimeout(done, 100));
+		acceptCompletion(view);
+		const text = view.state.doc.toString().slice(doc.length);
+		const caret = () =>
+			view.state.doc.sliceString(doc.length, view.state.selection.main.head);
+		const first = caret();
+		nextSnippetField(view);
+		const places = [first, caret()];
+		editor.destroy();
+		return { listed, text, places };
+	};
+	const BARE = "text: How often?\nintent: Prevalence of bus use\n";
+
+	it("puts a field written out above its bare key, so Enter takes it", async () => {
+		const { listed, text } = await complete(HEAD, "num");
+		expect(listed).toEqual(["number with min and max", "number"]);
+		expect(text).toBe("number:\n  min: \n  max: ");
+	});
+
+	it("keeps name first when `n` could be either", async () => {
+		const { listed } = await complete(BARE, "n");
+		expect(listed.slice(0, 2)).toEqual(["name", "number with min and max"]);
+	});
+
+	it("offers the one-line form after `number: `, and after `open:` when asked", async () => {
+		expect((await complete(HEAD, "number: ")).text).toBe(
+			"number: { min: , max:  }",
+		);
+		expect((await complete(HEAD, "open:", true)).text).toBe(
+			"open: { max_length:  }",
+		);
+	});
+
+	it("moves from min to max with Tab", async () => {
+		const { places } = await complete(HEAD, "number: ");
+		expect(places).toEqual(["number: { min: ", "number: { min: , max: "]);
 	});
 });

@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../evaluate.ts";
 import { EMPTY_ENV } from "./env.ts";
 import { parseSurface } from "./parse.ts";
-import { DOMAIN_SNIPPETS, domainSnippets } from "./snippets.ts";
+import {
+	DOMAIN_SNIPPETS,
+	domainSnippets,
+	INLINE_SNIPPETS,
+} from "./snippets.ts";
 
 const HEAD =
 	"name: q\ntext: How often?\nintent: Prevalence of bus use among adults\n";
@@ -43,6 +47,36 @@ describe("a response domain written out", () => {
 				[],
 			]);
 		}
+	});
+
+	it("on one line, left as written, has holes and nothing wrong; filled in, is complete", () => {
+		for (const [key, inline] of Object.entries(INLINE_SNIPPETS)) {
+			const line = `${HEAD}${key}: ${left(inline.snippet)}\n`;
+			const { findings } = evaluate(line, EMPTY_ENV);
+			expect(
+				findings.filter((f) => f.severity !== "hole" && f.path.startsWith(key)),
+			).toEqual([]);
+			expect(findings.some((f) => f.severity === "hole")).toBe(true);
+			const filled = inline.snippet.replace(/\$\{\}/g, () => "5");
+			expect(
+				parseSurface(`${HEAD}${key}: ${filled}\n`, EMPTY_ENV).findings,
+			).toEqual([]);
+		}
+	});
+
+	it("is offered on one line at an empty value, with its own space straight after the colon", () => {
+		const spaced = `${HEAD}number: `;
+		expect(domainSnippets(spaced, spaced.length)).toMatchObject([
+			{ snippet: "{ min: ${}, max: ${} }", unasked: true },
+		]);
+		const tight = `${HEAD}open:`;
+		expect(domainSnippets(tight, tight.length)).toMatchObject([
+			{ snippet: " { max_length: ${} }", unasked: false },
+		]);
+		for (const none of ["responses: ", "number: 5", "text: "])
+			expect(domainSnippets(none, none.length)).toEqual([]);
+		const below = "number: \n  min: 1\n";
+		expect(domainSnippets(below, 8)).toEqual([]);
 	});
 
 	it("is offered where a top-level field goes, narrowed by the word typed, from its start", () => {

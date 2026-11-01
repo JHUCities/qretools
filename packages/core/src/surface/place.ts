@@ -10,6 +10,7 @@
  */
 import {
 	isMap,
+	isNode,
 	isScalar,
 	type Pair,
 	parseDocument,
@@ -60,13 +61,27 @@ export function placeAt(source: string, offset: number): Place | undefined {
 	const root = parseDocument(text, { prettyErrors: false }).contents;
 	const scope = scopeAt(source, root, lineStart, indent);
 	if (scope === undefined) return undefined;
-	if (value)
+	if (value) {
+		// A value already written on the lines below (`number:` then its `min:`).
+		const own = scope.map?.items.find(
+			(p) =>
+				isScalar(p.key) &&
+				p.key.range != null &&
+				lineOf(source, p.key.range[0]) === lineStart,
+		)?.value;
+		if (
+			(value[4] ?? "") === "" &&
+			isNode(own) &&
+			!(isScalar(own) && own.value === null)
+		)
+			return undefined;
 		return {
 			kind: "value",
 			segments: [...scope.segments, value[2] ?? ""],
 			typed: value[4] ?? "",
 			spaced: value[3] !== undefined,
 		};
+	}
 	return {
 		kind: "key",
 		segments: scope.segments,
