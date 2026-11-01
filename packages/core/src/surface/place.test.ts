@@ -41,6 +41,12 @@ describe("where the caret is, for completion", () => {
 		expect(at("name: q\nselect:ma▮")).toBeUndefined();
 	});
 
+	it("reads line 1 apart from the key below it", () => {
+		const place = { kind: "key", segments: [], siblings: ["title"] };
+		expect(at("▮\ntitle: x\n")).toEqual({ ...place, typed: "" });
+		expect(at("n▮\ntitle: x\n")).toEqual({ ...place, typed: "n" });
+	});
+
 	it("puts a key at the top level beside the keys written there", () => {
 		expect(at("name: q\n▮\ntext: x\n")).toEqual({
 			kind: "key",

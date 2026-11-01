@@ -4,7 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { stateExtensions } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import { describe, expect, it } from "vitest";
-import { schemaCompletion, withoutInfo } from "./complete.ts";
+import { exceptKeys, schemaCompletion, withoutInfo } from "./complete.ts";
 
 const schema = {
 	type: "object",
@@ -80,10 +80,30 @@ describe("completion's own options", () => {
 		).toBe(true);
 	});
 
-	it("step aside once a prefix is typed at the top level, and never stay valid for it (keys appeared twice)", () => {
-		const result = at("name: q\n");
-		expect(result?.validFor).toBeUndefined();
-		expect(at("name: q\nt")).toBeNull();
+	it("complete a typed prefix themselves, by prefix, beside the keys written", () => {
+		expect(labels("name: q\nt")).toEqual(["title"]);
+		expect(labels("n▮\ntitle: x\n")).toEqual(["name", "number"]);
+	});
+
+	it("replace only the word on line 1, never the key below it", () => {
+		const doc = "n\ntitle: x\n";
+		const result = at("n▮\ntitle: x\n");
+		expect(result?.from).toBe(0);
+		expect(result?.to).toBeUndefined();
+		const theirs = exceptKeys(yamlCompletion() as never)(
+			new CompletionContext(stateOf(doc), 1, false),
+		);
+		expect(theirs).toBeNull();
+	});
+
+	it("drop the package's empty result, whose position is off the document", () => {
+		const doc = "\ntitle: x\n";
+		const theirs = withoutInfo(yamlCompletion())(
+			new CompletionContext(stateOf(doc), 0, true),
+		);
+		expect(theirs).toBeNull();
+		expect(labels("▮\ntitle: x\n")).toContain("name");
+		expect(labels("▮\ntitle: x\n")).not.toContain("title");
 	});
 });
 

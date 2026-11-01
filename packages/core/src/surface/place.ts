@@ -50,7 +50,14 @@ export function placeAt(source: string, offset: number): Place | undefined {
 	const key = value ? undefined : KEY_LINE.exec(before);
 	const indent = (value ?? key)?.[1]?.length;
 	if (indent === undefined) return undefined;
-	const root = parseDocument(source, { prettyErrors: false }).contents;
+	// A half-typed word isn't structure, and on line 1 YAML would read it and the next
+	// line as one key (`n\ntitle: x`). The same length, so offsets still hold.
+	const text = key
+		? source.slice(0, lineStart) +
+			" ".repeat(before.length) +
+			source.slice(offset)
+		: source;
+	const root = parseDocument(text, { prettyErrors: false }).contents;
 	const scope = scopeAt(source, root, lineStart, indent);
 	if (scope === undefined) return undefined;
 	if (value)
@@ -63,13 +70,8 @@ export function placeAt(source: string, offset: number): Place | undefined {
 	return {
 		kind: "key",
 		segments: scope.segments,
-		// Every key written at this level except on the caret's line (a half-typed word).
 		siblings: (scope.map?.items ?? []).flatMap((p) =>
-			isScalar(p.key) &&
-			p.key.range != null &&
-			lineOf(source, p.key.range[0]) !== lineStart
-				? [keyText(p.key)]
-				: [],
+			isScalar(p.key) ? [keyText(p.key)] : [],
 		),
 		typed: key?.[2] ?? "",
 	};
@@ -117,14 +119,14 @@ function lineNumber(starts: readonly number[], at: number): number {
 
 /** Where the line holding `at` starts. */
 const lineOf = (source: string, at: number): number =>
-	source.lastIndexOf("\n", at - 1) + 1;
+	// Not `lastIndexOf("\n", at - 1)`: at 0 that also looks at the first character.
+	source.slice(0, at).lastIndexOf("\n") + 1;
 
 /**
  * The block map a key at `indent` on the line starting at `lineStart` belongs to, and
  * the keys leading to it. Goes down while the last key before that line sits left of
- * the indent; an empty value (or one starting on the caret's line: the author typing its
- * first key) has no map yet. Undefined where completion doesn't help: under a written
- * value, inside a `{…}` map, or indented with no parent.
+ * the indent; an empty value has no map yet. Undefined where completion doesn't help:
+ * under a written value, inside a `{…}` map, or indented with no parent.
  */
 function scopeAt(
 	source: string,
@@ -157,10 +159,7 @@ function scopeAt(
 			continue;
 		}
 		const empty =
-			v === null ||
-			(isScalar(v) &&
-				((v.value === null && v.source === "") ||
-					(v.range != null && v.range[0] >= lineStart)));
+			v === null || (isScalar(v) && v.value === null && v.source === "");
 		return empty ? { segments, map: undefined } : undefined;
 	}
 	return indent === 0 || segments.length > 0 ? { segments, map } : undefined;

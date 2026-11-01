@@ -1,8 +1,8 @@
 /**
- * Completion where codemirror-json-schema offers none: on a blank line, for the
- * first key under a parent, and for an empty value that has known choices (an
- * enum, or the shared scale names). Generic over the JSON Schema in the editor's
- * state; it knows nothing about surveys.
+ * Completion where codemirror-json-schema offers none, or can't be trusted: every
+ * key, and an empty value that has known choices (an enum, or the shared scale
+ * names). Generic over the JSON Schema in the editor's state; it knows nothing about
+ * surveys.
  *
  * One rule for what an option shows beside it: a name's content, on its own row
  * (`detail`: a shared instruction's text, a scale's labels), never what a field
@@ -118,13 +118,9 @@ export function schemaCompletion(
 	const properties = (node?.anyOf ?? [node]).find(
 		(b) => b?.properties,
 	)?.properties;
-	if (
-		!properties ||
-		packageHandles(typed, place.segments.length === 0, siblings)
-	)
-		return null;
+	if (!properties) return null;
 	const options: Completion[] = Object.entries(properties)
-		.filter(([name]) => !siblings.includes(name))
+		.filter(([name]) => name.startsWith(typed) && !siblings.includes(name))
 		.map(([name], i) => ({
 			label: name,
 			type: "property",
@@ -134,9 +130,7 @@ export function schemaCompletion(
 		}));
 	return options.length === 0
 		? null
-		: // No `validFor`: once a prefix is typed, the package completes it, so this list
-			// must be asked again (and step aside) rather than kept, or keys appear twice.
-			{ from: context.pos - typed.length, options };
+		: { from: context.pos - typed.length, options };
 }
 
 /**
@@ -193,14 +187,18 @@ export const snippetSource =
 	};
 
 /**
- * codemirror-json-schema completes a typed prefix, except for the first key under
- * a parent. Everywhere it works we stay out of its way, or options appear twice.
+ * The package's answers except where a key goes, which `schemaCompletion` gives: on
+ * line 1 the package reads a half-typed word and the next line as one key and would
+ * replace both. Renaming a written key has no place, so that stays the package's.
  */
-const packageHandles = (
-	typed: string,
-	topLevel: boolean,
-	siblings: readonly string[],
-): boolean => typed !== "" && (topLevel || siblings.length > 0);
+export const exceptKeys =
+	(
+		source: (context: CompletionContext) => CompletionResult | null,
+	): ((context: CompletionContext) => CompletionResult | null) =>
+	(context) =>
+		placeAt(context.state.doc.toString(), context.pos)?.kind === "key"
+			? null
+			: source(context);
 
 /**
  * The package's options under the same rule: a value's description (a string `info`)
@@ -215,8 +213,15 @@ export const withoutInfo =
 	): ((context: CompletionContext) => CompletionResult | null) =>
 	(context) => {
 		const result = source(context);
-		// The package answers "nothing here" with an empty array.
-		if (result === null || !("options" in result)) return null;
+		// The package answers "nothing here" with an empty array or an empty result. The
+		// latter must go: its `from` can be anywhere, even negative, and CodeMirror places
+		// the list at the lowest `from` of every result.
+		if (
+			result === null ||
+			!("options" in result) ||
+			result.options.length === 0
+		)
+			return null;
 		return {
 			...result,
 			options: result.options.map(({ info, detail: _own, ...option }) =>

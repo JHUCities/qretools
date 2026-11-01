@@ -46,6 +46,7 @@ import { basicSetup, EditorView } from "codemirror";
 import { stateExtensions, updateSchema } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import {
+	exceptKeys,
 	type Snippet,
 	schemaCompletion,
 	snippetSource,
@@ -119,7 +120,7 @@ export function createEditor(
 		// editor given its own completions (an instrument's) offers only those.
 		...(
 			options.completions ?? [
-				withoutInfo(yamlCompletion()),
+				exceptKeys(withoutInfo(yamlCompletion())),
 				schemaCompletion,
 				...(options.snippets === undefined
 					? []
