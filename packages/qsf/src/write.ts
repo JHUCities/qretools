@@ -609,26 +609,39 @@ export function writeQsf(
 	 */
 	const section = (s: Extract<Step, { kind: "section" }>): Node[] => {
 		if (s.order === undefined) return layout(s.flow, s.title);
-		/** Whether a step lays out as exactly one block (a looped roster in a randomizer is unmeasured). */
-		const oneBlock = (step: Step): boolean =>
+		/**
+		 * Whether a step lays out as exactly one node a randomizer can hold: a question or
+		 * statement, or a section of them, whether or not that section shuffles its own (a
+		 * looped roster in a randomizer is unmeasured).
+		 *
+		 * This asks what we allow; the check after it asks whether the layout was exact.
+		 * Both are needed. Laying the steps out first and judging the nodes alone would lay
+		 * a refused section out twice, and `flagFor` is not idempotent: an `if` inside it
+		 * would take a `qretools_branch_N` name and report a note for a branch that is never
+		 * written. It would also admit a Loop & Merge block and an always-true `if`, which
+		 * each lay out as one node and are refused on purpose.
+		 */
+		const oneNode = (step: Step): boolean =>
 			step.kind === "ask" ||
 			step.kind === "say" ||
 			(step.kind === "section" &&
-				step.order === undefined &&
 				step.flow.length > 0 &&
-				step.flow.every(oneBlock));
-		const each = s.flow.every(oneBlock)
+				step.flow.every(oneNode));
+		const each = s.flow.every(oneNode)
 			? s.flow.map((step) => layout([step]))
 			: undefined;
-		const blocks = (each ?? []).flatMap((nodes) =>
-			nodes.length === 1 && nodes[0]?.kind === "block" ? [nodes[0]] : [],
+		const children = (each ?? []).flatMap((nodes) =>
+			nodes.length === 1 &&
+			(nodes[0]?.kind === "block" || nodes[0]?.kind === "randomizer")
+				? [nodes[0]]
+				: [],
 		);
-		if (each === undefined || blocks.length !== s.flow.length) {
+		if (each === undefined || children.length !== s.flow.length) {
 			note(
 				"qsf-inexpressible",
 				"error",
 				s.id,
-				"Qualtrics can only shuffle a section of questions and statements. This one holds more, so it keeps its order.",
+				"Qualtrics can only shuffle questions, statements and sections of them. This one holds something else, so it keeps its order.",
 			);
 			return each?.flat() ?? layout(s.flow, s.title);
 		}
@@ -639,17 +652,20 @@ export function writeQsf(
 				s.id,
 				"Qualtrics can't rotate a section, so it's shuffled instead.",
 			);
-		return blocks.length === 0
+		return children.length === 0
 			? []
 			: [
 					{
 						kind: "randomizer",
-						blocks: blocks.map((b, k) => ({
-							...b,
-							...(s.title !== undefined && {
-								description: `${s.title} (${k + 1} of ${blocks.length})`,
-							}),
-						})),
+						// A randomizer element has no description of its own, so only a block is named.
+						children: children.map((c, k) =>
+							c.kind === "block" && s.title !== undefined
+								? {
+										...c,
+										description: `${s.title} (${k + 1} of ${children.length})`,
+									}
+								: c,
+						),
 					},
 				];
 	};
