@@ -21,6 +21,9 @@ import { parseSurface } from "./parse.ts";
 const found = (source: string) =>
 	parseSettingsFile(source).findings.map((f) => [f.severity, f.code, f.path]);
 
+const said = (source: string) =>
+	parseSettingsFile(source).findings.map((f) => f.message);
+
 describe("the workspace's settings file", () => {
 	it("reads the agency", () => {
 		expect(parseSettingsFile("agency: edu.example.dept-1\n")).toEqual({
@@ -32,9 +35,25 @@ describe("the workspace's settings file", () => {
 		});
 	});
 
-	it("is a hole while the agency is absent or empty", () => {
+	it("is a hole while the agency is absent or empty, and says which", () => {
 		expect(found("")).toEqual([["hole", "hole", "agency"]]);
 		expect(found("agency:\n")).toEqual([["hole", "hole", "agency"]]);
+		// Both are holes at `agency`, so only the sentence tells them apart.
+		expect(said("")).toEqual([
+			"Add an `agency:` line: the DDI agency for everything in this workspace.",
+		]);
+		// The line is written: telling the author to add one sends them looking for it.
+		for (const written of [
+			"agency:\n",
+			"agency:   \n",
+			'agency: ""\n',
+			"agency: null\n",
+			"agency: ~\n",
+		])
+			expect([written, said(written)]).toEqual([
+				written,
+				["`agency` is empty."],
+			]);
 	});
 
 	it("refuses an agency DDI wouldn't register, whole, not just in part", () => {
@@ -50,6 +69,7 @@ describe("the workspace's settings file", () => {
 				parseSettingsFile(`agency: "${bad}"\n`).agency,
 				found(`agency: "${bad}"\n`),
 			]).toEqual([bad, undefined, [["error", "invalid-agency", "agency"]]]);
+		expect(said("agency: {}\n")).toEqual(["`{}` isn't a DDI agency."]);
 		expect(
 			parseSettingsFile(`agency: ${"a".repeat(63)}.org\n`).agency,
 		).toBeDefined();
@@ -327,6 +347,9 @@ describe("the settings template a new workspace starts from", () => {
 			"Letters, digits and hyphens, up to 63 at a time, in parts joined by dots",
 		);
 		expect(holes(workspaceTemplate)).toEqual([["hole", "agency"]]);
+		// The template writes the line and leaves it empty, so this is the sentence every
+		// new workspace reads first: tags alone passed while it told them to add the line.
+		expect(said(workspaceTemplate)).toEqual(["`agency` is empty."]);
 		const on = workspaceTemplate.replace(
 			"#required:\n#  - title",
 			"required:\n  - title",
