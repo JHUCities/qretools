@@ -285,8 +285,9 @@ function readAgency(doc: ReturnType<typeof parseDocument>): {
 	value?: string;
 	findings: readonly Finding[];
 } {
-	const agency = agencyAsWritten(doc);
-	if (agency === undefined)
+	// Presence first: an empty value reads as `undefined` here, as an absent key does, so
+	// asking the value alone would tell an author who wrote the line to add one.
+	if (!doc.has("agency"))
 		return {
 			findings: [
 				hole(
@@ -296,7 +297,14 @@ function readAgency(doc: ReturnType<typeof parseDocument>): {
 				),
 			],
 		};
-	if (agency === null || (typeof agency === "string" && agency.trim() === ""))
+	const agency = agencyAsWritten(doc);
+	// Written empty reads as `undefined` (`agency:`, `agency: ~`) or `""` (`agency: ""`)
+	// in yaml 2.9; `null` is taken too, so the reading doesn't rest on which it gives.
+	if (
+		agency === undefined ||
+		agency === null ||
+		(typeof agency === "string" && agency.trim() === "")
+	)
 		return {
 			findings: [hole("agency", "`agency` is empty.", AGENCY_RULE_TEXT)],
 		};
