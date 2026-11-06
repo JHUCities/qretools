@@ -24,6 +24,26 @@ const modes: Question = {
 		],
 	},
 };
+/** Every randomizer's SubSet, outermost first: how many children it presents. */
+const subSets = (qsf: ReturnType<typeof writeQsf>["qsf"]): number[] => {
+	const found: number[] = [];
+	const walk = (ns: readonly unknown[]) => {
+		for (const n of ns) {
+			const el = n as { Type?: string; SubSet?: number; Flow?: unknown[] };
+			if (el.Type === "BlockRandomizer" && el.SubSet !== undefined)
+				found.push(el.SubSet);
+			walk(el.Flow ?? []);
+		}
+	};
+	const elements = (
+		qsf as unknown as {
+			SurveyElements: { Element: string; Payload: { Flow?: unknown[] } }[];
+		}
+	).SurveyElements;
+	walk(elements.find((e) => e.Element === "FL")?.Payload.Flow ?? []);
+	return found;
+};
+
 const payloads = (instrument: ReadInstrument) => {
 	const { qsf, findings } = writeQsf(instrument, {
 		name: "t",
@@ -640,6 +660,159 @@ describe("writing a survey as QSF", () => {
 		`);
 		expect(findings.map((f) => `${f.severity} ${f.path}`)).toEqual([
 			"warning s",
+		]);
+	});
+
+	it("nests a randomizer where a shuffled section holds shuffled sections", () => {
+		const ask = (id: string): Step => ({
+			kind: "ask",
+			id,
+			question: { ...modes, name: id },
+			records: [{ variable: id, code: "b" }],
+			text: [{ kind: "text", text: `${id}?` }],
+			checks: [],
+		});
+		const screen = (id: string, a: string, b: string): Step => ({
+			kind: "section",
+			id,
+			title: id,
+			order: "random",
+			flow: [ask(a), ask(b)],
+		});
+		const { qsf, findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "section",
+						id: "outer",
+						title: "Beliefs",
+						order: "random",
+						flow: [screen("screen1", "a", "b"), screen("screen2", "c", "d")],
+					},
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		// The two screens shuffle against each other and each shuffles its own, so the
+		// screens stay whole: one randomizer over all four would interleave them.
+		expect(flowOutline(qsf)).toMatchInlineSnapshot(`
+			[
+			  "Block BL_qretools000001",
+			  "BlockRandomizer",
+			  "  BlockRandomizer",
+			  "    Standard BL_qretools000002",
+			  "    Standard BL_qretools000003",
+			  "  BlockRandomizer",
+			  "    Standard BL_qretools000004",
+			  "    Standard BL_qretools000005",
+			]
+		`);
+		// Every level presents all of its children. A smaller SubSet shows a subset, which is
+		// the reported trap for nested randomizers. Verified by round trip (exp9): wave132's
+		// QSF imported to jh, read back through the API, and the nesting kept with SubSet 2
+		// outside and 5 in each screen.
+		expect(subSets(qsf)).toEqual([2, 2, 2]);
+		expect(findings).toEqual([]);
+	});
+
+	it("nests to any depth, and names only the children Qualtrics can name", () => {
+		const ask = (id: string): Step => ({
+			kind: "ask",
+			id,
+			question: { ...modes, name: id },
+			records: [{ variable: id, code: "b" }],
+			text: [{ kind: "text", text: `${id}?` }],
+			checks: [],
+		});
+		const shuffled = (id: string, flow: Step[]): Step => ({
+			kind: "section",
+			id,
+			title: id,
+			order: "random",
+			flow,
+		});
+		const deep = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					shuffled("l1", [
+						shuffled("l2", [shuffled("l3", [ask("a"), ask("b")])]),
+						ask("c"),
+					]),
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(subSets(deep.qsf)).toEqual([2, 1, 2]);
+		expect(deep.findings).toEqual([]);
+		// The two deepest questions sit three randomizers down, and the lone question one
+		// down. A randomizer element has no name in Qualtrics, so only a block child takes
+		// the `(k of n)` description: in a mixed randomizer that leaves a gap in the
+		// numbering, and the outer section's own title appears nowhere. Both are accepted;
+		// the alternative is to thread a parent's title into a child that cannot show it.
+		expect(flowOutline(deep.qsf).filter((l) => l.includes("Standard"))).toEqual(
+			[
+				"      Standard BL_qretools000002",
+				"      Standard BL_qretools000003",
+				"  Standard BL_qretools000004",
+			],
+		);
+	});
+
+	it("shuffles both levels when either says rotate, innermost first", () => {
+		const ask = (id: string): Step => ({
+			kind: "ask",
+			id,
+			question: { ...modes, name: id },
+			records: [{ variable: id, code: "b" }],
+			text: [{ kind: "text", text: `${id}?` }],
+			checks: [],
+		});
+		const { findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "section",
+						id: "outer",
+						order: "rotate",
+						flow: [
+							{
+								kind: "section",
+								id: "inner",
+								order: "rotate",
+								flow: [ask("a"), ask("b")],
+							},
+						],
+					},
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(findings.map((f) => `${f.severity} ${f.path}`)).toEqual([
+			"warning inner",
+			"warning outer",
+		]);
+	});
+
+	it("keeps a shuffled section's order when a child isn't one thing to shuffle", () => {
+		const { findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "section",
+						id: "outer",
+						order: "random",
+						flow: [{ kind: "section", id: "empty", order: "random", flow: [] }],
+					},
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(findings.map((f) => `${f.severity} ${f.code} ${f.path}`)).toEqual([
+			"error qsf-inexpressible outer",
 		]);
 	});
 });

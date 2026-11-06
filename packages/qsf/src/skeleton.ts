@@ -38,10 +38,17 @@ export type Node =
 			}[];
 	  }
 	| { readonly kind: "end" }
-	/** Blocks shown in a random order, all of them (a section's `order`). */
+	/**
+	 * Its children shown in a random order, all of them (a section's `order`). A child is a
+	 * block, or another randomizer where a random section holds random sections: each level
+	 * shuffles its own children and keeps them together.
+	 */
 	| {
 			readonly kind: "randomizer";
-			readonly blocks: readonly Extract<Node, { kind: "block" }>[];
+			readonly children: readonly Extract<
+				Node,
+				{ kind: "block" | "randomizer" }
+			>[];
 	  };
 
 /**
@@ -88,6 +95,21 @@ export function toQsf(
 			? { Type: "Block", ID: id, FlowID: flowId() }
 			: { Type: "Standard", ID: id, FlowID: flowId(), Autofill: [] };
 	};
+	/**
+	 * `SubSet` is the child count at every level, so each one presents all of its children:
+	 * a smaller number makes Qualtrics show a subset, which is the trap reported for nested
+	 * randomizers. The ID comes before the children's, as it does for a single level.
+	 */
+	const randomizer = (
+		n: Extract<Node, { kind: "randomizer" }>,
+	): QsfObject => ({
+		Type: "BlockRandomizer",
+		FlowID: flowId(),
+		SubSet: n.children.length,
+		Flow: n.children.map((c) =>
+			c.kind === "block" ? block(c) : randomizer(c),
+		),
+	});
 	const serialise = (ns: readonly Node[]): QsfObject[] =>
 		ns.flatMap((n): QsfObject[] => {
 			switch (n.kind) {
@@ -97,15 +119,7 @@ export function toQsf(
 					// A randomizer holds Standard blocks (iain-reference-2.qsf): the Default one goes first.
 					const lead =
 						all.length === 0 ? [block({ kind: "block", pages: [] })] : [];
-					return [
-						...lead,
-						{
-							Type: "BlockRandomizer",
-							FlowID: flowId(),
-							SubSet: n.blocks.length,
-							Flow: n.blocks.map(block),
-						},
-					];
+					return [...lead, randomizer(n)];
 				}
 				case "branch": {
 					const id = flowId();
