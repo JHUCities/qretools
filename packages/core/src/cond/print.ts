@@ -4,7 +4,7 @@
  * export rewrites `bank.nhd_sat` to the variable's name). A hole prints as `?`, so a
  * printed draft shows where it's incomplete.
  */
-import type { Expr } from "./ast.ts";
+import { CAST_TO, type Expr } from "./ast.ts";
 
 const POWER: Readonly<Record<string, number>> = {
 	or: 1,
@@ -65,7 +65,10 @@ export function printCondition(
 					`${go(x.operand, MEMBER + 1)} ${x.negated ? "not_in" : "in"} {${x.set.map((v) => go(v, MEMBER + 1)).join(", ")}}`,
 				);
 			case "call":
-				return `${x.fn}(${x.args.map((a) => go(a, 0)).join(", ")})`;
+				// The type `cast` converts to is syntax: the node doesn't hold it.
+				return x.fn === "cast"
+					? `cast(${go(x.args[0] ?? { kind: "hole", range: x.range }, 0)}, ${CAST_TO})`
+					: `${x.fn}(${x.args.map((a) => go(a, 0)).join(", ")})`;
 			default:
 				return x satisfies never;
 		}

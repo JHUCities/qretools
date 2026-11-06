@@ -22,8 +22,17 @@ export type BinaryOp =
 export type UnaryOp = "not" | "-" | "+";
 
 /** VTL's scalar functions in the subset. */
-export type Fn = "isnull" | "between" | "label" | "nvl";
-export const FUNCTIONS: readonly Fn[] = ["isnull", "between"];
+export type Fn = "isnull" | "between" | "cast" | "label" | "nvl";
+/**
+ * `cast(x, integer)`, VTL's type conversion, is how a coded answer reaches arithmetic:
+ * a Likert answer summed into a score. Its node holds only the operand, because the
+ * type is syntax (`print.ts` writes it back), so every walk over an expression's
+ * arguments — `namesOf`, `holesOf`, `moveRanges` — is right without knowing of it.
+ * shortcut: one target type; give the node a field for it when a second one is wanted.
+ */
+export const FUNCTIONS: readonly Fn[] = ["isnull", "between", "cast"];
+/** The only scalar type `cast` converts to. VTL casts a string to an integer with no mask. */
+export const CAST_TO = "integer";
 /** `label(x)` is a projection used only while binding a question fill. */
 export const FILL_FUNCTIONS: readonly Fn[] = [...FUNCTIONS, "label"];
 /**

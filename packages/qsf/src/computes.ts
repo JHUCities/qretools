@@ -111,6 +111,23 @@ export const arithmetic = (
 					return `\${q://${s.row === undefined ? "" : `${s.row}_`}${ctx.qidOf(s.asks[0] ?? "")}/ChoiceTextEntryValue}`;
 				return undefined;
 			}
+			case "call": {
+				// `cast(x, integer)`: the code Qualtrics recorded, which is the DDI code.
+				// One cast per compute is what the guard can carry; see `answeredAll`.
+				if (x.fn !== "cast") return undefined;
+				const [operand] = x.args;
+				if (operand?.kind !== "name") return undefined;
+				const s = value.sources.get(operand.name);
+				if (
+					s?.kind !== "answer" ||
+					s.question.domain.kind !== "choice" ||
+					s.option !== undefined ||
+					s.asks.length !== 1 ||
+					(s.row === undefined && s.asks.some(ctx.outside))
+				)
+					return undefined;
+				return `\${q://${s.row === undefined ? "" : `${s.row}_`}${ctx.qidOf(s.asks[0] ?? "")}/SelectedChoicesRecode}`;
+			}
 			case "unary": {
 				const v = go(x.operand);
 				return v === undefined ? undefined : x.op === "-" ? `-(${v})` : v;
@@ -141,7 +158,15 @@ export const divides = (e: Expr): boolean =>
 	e.kind === "binary"
 		? e.op === "/" || divides(e.left) || divides(e.right)
 		: e.kind === "unary" && divides(e.operand);
-/** Every name the value reads, answered: else `$e{}` writes "{Invalid Expression}" (experiment 4). */
+/**
+ * Every name the value reads, answered: else `$e{}` writes "{Invalid Expression}" (experiment 4).
+ * A coded answer's "answered" is one test per choice, and Qualtrics takes DNF, so the cost
+ * multiplies: measured, a five-point scale caps at three items (MAX_TESTS). A value computed
+ * before, read by name, is one test however many codes it had, so a long sum is written as a
+ * compute per answer and a sum of those, which is what a score of ten items does.
+ * shortcut: no finding says that, so the way out is this comment. Say it where the cap is
+ * reported, or measure Qualtrics' own "is answered" test for a choice question.
+ */
 export const answeredAll = (value: Cond): Cond => {
 	const names = [...new Set(namesOf(value.expr).map((n) => n.name))];
 	const range = value.expr.range;

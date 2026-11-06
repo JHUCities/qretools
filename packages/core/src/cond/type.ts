@@ -28,6 +28,12 @@ const BOOLEAN: Type = { kind: "boolean" };
 const NUMBER: Type = { kind: "number" };
 const STRING: Type = { kind: "string" };
 const UNKNOWN: Type = { kind: "unknown" };
+/**
+ * A code `cast` can read as a number: VTL casts a string to an integer, nothing else.
+ * `eval.ts` holds the same rule as its own literal, since it must name nothing outside
+ * itself; widen one and widen the other.
+ */
+const INTEGER = /^-?\d+$/;
 
 /** What a name means in a condition: its type, or undefined when nothing has that name. */
 export type Scope = (name: string) => Type | undefined;
@@ -235,6 +241,28 @@ export function typeOf(e: Expr, scope: Scope): Typed {
 					return value?.kind === "unknown"
 						? (fallback ?? UNKNOWN)
 						: (value ?? UNKNOWN);
+				}
+				// A coded answer read as a number. Every code must be one, or the arithmetic
+				// would be of a word; the bank's missing codes are left out, since every
+				// coded answer carries them and they are never arithmetic.
+				if (x.fn === "cast") {
+					const [v] = args;
+					const [vx] = x.args;
+					if (v !== undefined && vx !== undefined) {
+						if (v.kind !== "code") expect(v, "code", vx, "`cast`");
+						else {
+							const word = v.codes.find(
+								(c) => c.missing !== true && !INTEGER.test(c.code),
+							);
+							if (word !== undefined)
+								say(
+									`\`cast\` needs an answer whose codes are all numbers; \`${word.code}\` isn't.`,
+									vx.range,
+									`Codes: ${listCodes(v)}.`,
+								);
+						}
+					}
+					return NUMBER;
 				}
 				if (x.fn === "between") {
 					const [v, lo, hi] = args;

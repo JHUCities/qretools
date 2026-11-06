@@ -114,6 +114,18 @@ export function evaluateCondition(
 				if (x.fn === "nvl")
 					return args[0] === null ? (args[1] ?? null) : (args[0] ?? null);
 				if (args.includes(hole)) return hole;
+				// VTL's cast to an integer: the code's own text as a whole number. A code
+				// that isn't one is empty here, where VTL raises a runtime error; the core
+				// has no exceptions, and either way no number comes of it. The same rule as
+				// `INTEGER` in type.ts, written again because this function names nothing
+				// outside itself; widen one and widen the other.
+				if (x.fn === "cast") {
+					const v = args[0];
+					if (typeof v === "number") return v;
+					if (typeof v !== "string") return null;
+					const t = v.trim();
+					return /^-?[0-9]+$/.test(t) ? Number(t) : null;
+				}
 				switch (x.fn) {
 					case "isnull":
 						return args[0] === null;

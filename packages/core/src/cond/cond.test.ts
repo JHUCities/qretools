@@ -259,3 +259,88 @@ describe("evaluating conditions", () => {
 		]);
 	});
 });
+
+describe("`cast`, a coded answer read as a number", () => {
+	const WORDS: Type = {
+		kind: "code",
+		codes: [
+			{ code: "a", label: "Agree" },
+			{ code: "d", label: "Disagree" },
+		],
+	};
+	// A scale of numbers, with the bank's word missing codes on it, as an answer carries them.
+	const LIKERT: Type = {
+		kind: "code",
+		codes: [
+			{ code: "1", label: "Disagree" },
+			{ code: "5", label: "Agree" },
+			{ code: "REF", label: "Refused", missing: true },
+		],
+	};
+	const casting: Scope = (name) =>
+		({ likert: LIKERT, words: WORDS, n: { kind: "number" } as Type })[name];
+	const cast = (text: string) => typeOf(parseCondition(text).expr, casting);
+	const value = (text: string, values: Record<string, Value>) =>
+		evaluateCondition(parseCondition(text).expr, (n) => values[n] ?? null);
+
+	it("prints back as VTL, with the type it converts to", () => {
+		expect(print("cast(likert, integer) + (6 - cast(words, integer))")).toBe(
+			"cast(likert, integer) + (6 - cast(words, integer))",
+		);
+		expect(print("cast(likert, integer)")).toBe("cast(likert, integer)");
+	});
+
+	it("holds only its operand, so nothing reads the type as a name", () => {
+		const { expr } = parseCondition("cast(likert, integer) + 1");
+		expect(namesOf(expr).map((n) => n.name)).toEqual(["likert"]);
+		expect(holesOf(parseCondition("cast()").expr).length).toBe(1);
+	});
+
+	it("asks for the type, and offers the fix in the shape that's missing", () => {
+		const form =
+			"`cast` takes an answer and the type `integer`: `cast(bank.x, integer)`.";
+		// Half-typed: the fix is the whole call, since there's nothing to replace.
+		expect(problems("cast(likert)")).toEqual([form]);
+		const [half] = parseCondition("cast(likert)").problems;
+		expect(half?.replace).toBe("cast(likert, integer)");
+		// The type written as something else: the fix is the type alone.
+		const [wrong] = parseCondition("cast(likert, string)").problems;
+		expect(wrong?.message).toBe(form);
+		expect(wrong?.replace).toBe("integer");
+		expect(problems("cast(likert, integer, 2)")).toContain(form);
+		// Nothing to offer while the answer is still to be written.
+		expect(parseCondition("cast()").problems[0]?.replace).toBeUndefined();
+	});
+
+	it("is a number, and needs an answer whose codes are numbers", () => {
+		expect(cast("cast(likert, integer) + 1").type.kind).toBe("number");
+		expect(cast("cast(likert, integer) >= 4").problems).toEqual([]);
+		const [p] = cast("cast(words, integer)").problems;
+		expect(p?.message).toBe(
+			"`cast` needs an answer whose codes are all numbers; `a` isn't.",
+		);
+		expect(p?.hint).toContain('"a" Agree');
+		expect(cast("cast(n, integer)").problems[0]?.message).toBe(
+			"`cast` needs a coded answer; this is a number.",
+		);
+	});
+
+	it("is empty for a code that isn't a number, so no score comes of a refusal", () => {
+		expect(value("cast(x, integer)", { x: "5" })).toBe(5);
+		expect(value("cast(x, integer)", { x: "010" })).toBe(10);
+		expect(value("cast(x, integer)", { x: "REF" })).toBe(null);
+		expect(value("cast(x, integer)", {})).toBe(null);
+		expect(value("cast(x, integer)", { x: "" })).toBe(null);
+		expect(value("cast(x, integer)", { x: true })).toBe(null);
+		expect(value("cast(x, integer)", { x: 4 })).toBe(4);
+		expect(value("cast()", {})).toBe(UNKNOWN);
+		// One item unanswered leaves the whole score empty: nothing is imputed.
+		expect(
+			value("cast(a, integer) + (6 - cast(b, integer))", { a: "5", b: "2" }),
+		).toBe(9);
+		expect(value("cast(a, integer) + cast(b, integer)", { a: "5" })).toBe(null);
+		expect(
+			value("cast(a, integer) + cast(b, integer)", { a: "5", b: "REF" }),
+		).toBe(null);
+	});
+});
