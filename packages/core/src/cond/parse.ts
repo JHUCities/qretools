@@ -8,6 +8,7 @@
 import type { Range } from "../findings.ts";
 import {
 	type BinaryOp,
+	CAST_TO,
 	type Expr,
 	type Fn,
 	FUNCTIONS,
@@ -19,6 +20,9 @@ export interface ParsedCondition {
 	readonly expr: Expr;
 	readonly problems: readonly Problem[];
 }
+
+/** The form `cast` takes, in both messages about getting it wrong. */
+const CAST_FORM = `\`cast\` takes an answer and the type \`${CAST_TO}\`: \`cast(bank.x, ${CAST_TO})\`.`;
 
 /** Binding power of each infix operator: higher binds tighter. */
 const INFIX: Readonly<Record<string, number>> = {
@@ -236,7 +240,12 @@ export function parseCondition(
 			return { kind: "hole", range };
 		}
 		const fn = name.text as Fn;
-		const arity = fn === "isnull" || fn === "label" ? 1 : fn === "nvl" ? 2 : 3;
+		const arity =
+			fn === "isnull" || fn === "label"
+				? 1
+				: fn === "nvl" || fn === "cast"
+					? 2
+					: 3;
 		// Too few is still being written: holes. Too many is a mistake.
 		while (args.length < arity)
 			args.push({ kind: "hole", range: [range[1], range[1]] });
@@ -250,9 +259,31 @@ export function parseCondition(
 							? "`label` takes one coded answer: `label(bank.x)`."
 							: fn === "nvl"
 								? "`nvl` takes an answer and what to use when it's empty: `nvl(bank.n, 0)`."
-								: "`between` takes a value and two bounds: `between(bank.n, 18, 64)`.",
+								: fn === "cast"
+									? CAST_FORM
+									: "`between` takes a value and two bounds: `between(bank.n, 18, 64)`.",
 				range,
 			});
+		if (fn === "cast") {
+			const [operand, to] = args;
+			const written = to !== undefined && to.kind !== "hole";
+			if (!(to?.kind === "name" && to.name === CAST_TO))
+				problems.push({
+					kind: "syntax",
+					message: CAST_FORM,
+					// The type written as something else: replace that. Not written at all
+					// (`cast(bank.x)`, the common half-typed case): write the whole call.
+					range: written ? to.range : range,
+					...(written
+						? { replace: CAST_TO }
+						: operand !== undefined &&
+							operand.kind !== "hole" && {
+								replace: `cast(${text.slice(operand.range[0], operand.range[1])}, ${CAST_TO})`,
+							}),
+				});
+			// The type is syntax, not a value, so the node keeps the operand alone.
+			return { kind: "call", fn, args: args.slice(0, 1), range };
+		}
 		return { kind: "call", fn, args, range };
 	}
 

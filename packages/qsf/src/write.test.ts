@@ -270,6 +270,62 @@ describe("writing a survey as QSF", () => {
 		`);
 	});
 
+	it("sums coded answers with `cast`, from the codes Qualtrics records", () => {
+		const item = (n: string): Question => ({
+			id: `q-${n}`,
+			name: n,
+			domain: {
+				kind: "choice",
+				many: false,
+				choices: [
+					{ code: "1", label: "Disagree" },
+					{ code: "5", label: "Agree" },
+				],
+			},
+		});
+		const [a, b] = [item("a"), item("b")];
+		const sources = new Map<string, Source>([
+			["a", { kind: "answer", variable: "a", asks: ["ask-a"], question: a }],
+			["b", { kind: "answer", variable: "b", asks: ["ask-b"], question: b }],
+		]);
+		const ask = (q: Question): Step => ({
+			kind: "ask",
+			id: `ask-${q.name}`,
+			question: q,
+			records: [{ variable: q.name }],
+			text: [{ kind: "text", text: `${q.name}?` }],
+			checks: [],
+		});
+		const { qsf, findings } = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					ask(a),
+					ask(b),
+					{
+						kind: "compute",
+						id: "c-score",
+						variable: "score",
+						value: {
+							expr: parseCondition("cast(a, integer) + (6 - cast(b, integer))")
+								.expr,
+							sources,
+						},
+					},
+				],
+			},
+			{ name: "t", created: "2026-10-18 00:00:00" },
+		);
+		expect(flowOutline(qsf)).toMatchInlineSnapshot(`
+			[
+			  "Block BL_qretools000001",
+			  "Branch compute score: q://QID1/SelectableChoice/1 Selected And q://QID2/SelectableChoice/1 Selected Or q://QID1/SelectableChoice/1 Selected And q://QID2/SelectableChoice/2 Selected Or q://QID1/SelectableChoice/2 Selected And q://QID2/SelectableChoice/1 Selected Or q://QID1/SelectableChoice/2 Selected And q://QID2/SelectableChoice/2 Selected",
+			  "  EmbeddedData  score=$e{ (\${q://QID1/SelectedChoicesRecode} + (6 - \${q://QID2/SelectedChoicesRecode})) }",
+			]
+		`);
+		expect(findings.map((f) => `${f.path}: ${f.message}`)).toEqual([]);
+	});
+
 	it("inlines nothing whose value at its reader could differ from when it was computed", () => {
 		const size: Question = {
 			id: "q-size",
