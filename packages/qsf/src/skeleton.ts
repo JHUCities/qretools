@@ -100,9 +100,7 @@ export function toQsf(
 	 * a smaller number makes Qualtrics show a subset, which is the trap reported for nested
 	 * randomizers. The ID comes before the children's, as it does for a single level.
 	 */
-	const randomizer = (
-		n: Extract<Node, { kind: "randomizer" }>,
-	): QsfObject => ({
+	const randomizer = (n: Extract<Node, { kind: "randomizer" }>): QsfObject => ({
 		Type: "BlockRandomizer",
 		FlowID: flowId(),
 		SubSet: n.children.length,
