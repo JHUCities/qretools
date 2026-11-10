@@ -76,11 +76,31 @@ const element = (
 	Payload: payload,
 });
 
+/**
+ * The fields that say who wrote a survey. Each is a column in every response, so no variable
+ * may take one of these names.
+ */
+export const PROVENANCE = {
+	instrument: "qretools_instrument",
+	ddi: "qretools_ddi",
+	version: "qretools_version",
+} as const;
+
+export interface QsfOptions {
+	readonly name: string;
+	/** When the survey is made, `YYYY-MM-DD hh:mm:ss`: Qualtrics requires one (the core has no clock). */
+	readonly created: string;
+	/** A digest of the DDI the survey is made from, worked out by the caller (the core has no crypto). */
+	readonly digest?: string;
+	/** The version of QREtools that writes the survey. */
+	readonly version?: string;
+}
+
 /** The flow as a QSF document, on a skeleton with nothing from any account. */
 export function toQsf(
 	nodes: readonly Node[],
 	instrument: ReadInstrument,
-	{ name, created }: { readonly name: string; readonly created: string },
+	{ name, created, digest, version }: QsfOptions,
 ): QsfObject {
 	const all: Extract<Node, { kind: "block" }>[] = [];
 	const ids: string[] = [];
@@ -160,6 +180,17 @@ export function toQsf(
 					return n satisfies never;
 			}
 		});
+	// Who wrote the survey, first in the flow and so in every response: Qualtrics refuses any
+	// key it doesn't know, which leaves constant embedded data as the one carrier. A value
+	// that isn't known is left out, never written as a placeholder.
+	const fields = [
+		{ name: PROVENANCE.instrument, value: instrument.urn },
+		{ name: PROVENANCE.ddi, value: digest },
+		{ name: PROVENANCE.version, value: version },
+	].flatMap(({ name, value }) =>
+		value === undefined ? [] : [{ name, value }],
+	);
+	const stamp = fields.length === 0 ? [] : serialise([{ kind: "set", fields }]);
 	const inputs: QsfObject[] =
 		instrument.inputs.length === 0
 			? []
@@ -177,7 +208,7 @@ export function toQsf(
 						})),
 					},
 				];
-	const flow = [...inputs, ...serialise(nodes)];
+	const flow = [...stamp, ...inputs, ...serialise(nodes)];
 	// A survey with no questions still has its Default block.
 	if (all.length === 0) {
 		all.push({ kind: "block", pages: [] });

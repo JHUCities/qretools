@@ -816,3 +816,80 @@ describe("writing a survey as QSF", () => {
 		]);
 	});
 });
+
+describe("saying who wrote the survey", () => {
+	const flowOf = (qsf: ReturnType<typeof writeQsf>["qsf"]) =>
+		(
+			qsf.SurveyElements as {
+				Element: string;
+				Payload: { Flow: unknown[] };
+			}[]
+		).find((e) => e.Element === "FL")?.Payload.Flow ?? [];
+	const urn = "urn:ddi:org.example:instrument-t:1";
+	const at = { name: "t", created: "2026-11-10 00:00:00" };
+
+	it("puts the instrument, the DDI's digest and the version first in the flow, so every response carries them", () => {
+		const { qsf } = writeQsf(
+			{ urn, inputs: [{ kind: "input", variable: "county" }], flow: [] },
+			{ ...at, digest: "sha256:ab", version: "2.0.0" },
+		);
+		// The shape Qualtrics imported and carried into each response as its own column.
+		expect(flowOf(qsf)[0]).toEqual({
+			Type: "EmbeddedData",
+			FlowID: "FL_2",
+			EmbeddedData: [
+				["qretools_instrument", urn],
+				["qretools_ddi", "sha256:ab"],
+				["qretools_version", "2.0.0"],
+			].map(([field, value]) => ({
+				Description: field,
+				Type: "Custom",
+				Field: field,
+				VariableType: "String",
+				DataVisibility: [],
+				AnalyzeText: false,
+				Value: value,
+			})),
+		});
+		expect(flowOutline(qsf)[1]).toBe("EmbeddedData  county=(url)");
+	});
+
+	it("leaves out a value it isn't given, and writes nothing when it knows none", () => {
+		const known = writeQsf({ urn, inputs: [], flow: [] }, at);
+		expect(flowOutline(known.qsf)[0]).toBe(
+			`EmbeddedData  qretools_instrument=${urn}`,
+		);
+		const none = writeQsf({ inputs: [], flow: [] }, at);
+		expect(flowOutline(none.qsf).join("\n")).not.toContain("qretools_");
+	});
+
+	it("refuses a variable named like one of the fields, whether or not that field's value is known", () => {
+		const clash = (name: string) => ({
+			code: "qsf-inexpressible",
+			severity: "error",
+			path: "",
+			message: `\`${name}\` is a column QREtools adds to every response in Qualtrics, so no variable can have that name.`,
+		});
+		// A URL input and a compute reach the names by different paths, so each is tried.
+		const input = writeQsf(
+			{ inputs: [{ kind: "input", variable: "qretools_ddi" }], flow: [] },
+			at,
+		);
+		expect(input.findings).toContainEqual(clash("qretools_ddi"));
+		const compute = writeQsf(
+			{
+				inputs: [],
+				flow: [
+					{
+						kind: "compute",
+						id: "c",
+						variable: "qretools_version",
+						value: { expr: parseCondition("1 + 1").expr, sources: new Map() },
+					},
+				],
+			},
+			at,
+		);
+		expect(compute.findings).toContainEqual(clash("qretools_version"));
+	});
+});

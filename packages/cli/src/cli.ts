@@ -8,6 +8,7 @@
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
+import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -254,9 +255,13 @@ async function emit(
 	return r.problems ? PROBLEMS : OK;
 }
 
+/** A DDI document as every command writes it, and as the QSF exporter digests it. */
+const ddiText = (document: DdiDocument): string =>
+	`${JSON.stringify(document, null, 2)}\n`;
+
 /** The DDI as `export` writes it. */
 const asJson = (document: DdiDocument): Rendered => ({
-	text: `${JSON.stringify(document, null, 2)}\n`,
+	text: ddiText(document),
 	lines: [],
 	problems: false,
 });
@@ -795,7 +800,7 @@ async function instrument(
 	if (args.values.qsf === true)
 		code = await exportQsf(file, source, result, args, io);
 	else {
-		const text = `${JSON.stringify(result.ddi, null, 2)}\n`;
+		const text = ddiText(result.ddi);
 		if (args.values.output === undefined) io.out(text);
 		else await io.writeFile(args.values.output, text);
 	}
@@ -849,6 +854,9 @@ async function exportQsf(
 	const made = qsfOf(result.ddi, {
 		name: result.draft.name ?? basename(file, extname(file)),
 		created: qsfTime(new Date()),
+		// Of the DDI as `instrument export` writes it, so `shasum -a 256` on that file agrees.
+		digest: `sha256:${createHash("sha256").update(ddiText(result.ddi)).digest("hex")}`,
+		version: pkg.version,
 	});
 	for (const f of placeFindings(made.findings, result.places))
 		io.err(`${findingLine(file, source, result.ranges, f)}\n`);

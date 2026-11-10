@@ -8,7 +8,7 @@
 import type { DdiDocument } from "@qretools/core";
 import type { Finding } from "./findings.ts";
 import { readInstrument } from "./read.ts";
-import type { QsfObject } from "./skeleton.ts";
+import type { QsfObject, QsfOptions } from "./skeleton.ts";
 import { writeQsf } from "./write.ts";
 
 export type { Qsf, QsfObject } from "./skeleton.ts";
@@ -26,14 +26,7 @@ export type QsfResult =
 			readonly findings: readonly Finding[];
 	  };
 
-export function qsfOf(
-	ddi: DdiDocument,
-	options: {
-		readonly name: string;
-		/** When the survey is made (`qsfTime`): the core has no clock. */
-		readonly created: string;
-	},
-): QsfResult {
+export function qsfOf(ddi: DdiDocument, options: QsfOptions): QsfResult {
 	const read = readInstrument(ddi);
 	// DDI the export can't read is no survey: what it would leave out isn't known.
 	const findings = read.findings.some((f) => f.severity === "error")
