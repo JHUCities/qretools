@@ -85,8 +85,9 @@ describe("reading the households instrument's DDI back", () => {
 		// are written out row by row (4 rounds, 20 rows).
 		expect(blocks.length).toBe(32);
 		const lines = flowOutline(qsf);
-		expect(lines.slice(0, 11)).toMatchInlineSnapshot(`
+		expect(lines.slice(0, 12)).toMatchInlineSnapshot(`
 			[
+			  "EmbeddedData  qretools_instrument=urn:ddi:org.example:instrument-households:1",
 			  "EmbeddedData  county=(url)",
 			  "Block BL_qretools000001",
 			  "Branch stop if consent = "2": q://QID2/SelectableChoice/2 Selected",
@@ -170,7 +171,9 @@ describe("reading the households instrument's DDI back", () => {
 
 describe("the households survey against its golden file", () => {
 	// The golden file is the survey Qualtrics imported and ran as written (2026-10-18): its
-	// re-export differed only in Qualtrics' own IDs, dates, theme and preview link.
+	// re-export differed only in Qualtrics' own IDs, dates, theme and preview link. Since then
+	// it opens with the instrument's URN as constant embedded data, a shape Qualtrics imported
+	// and carried into every response when tried on its own (2026-11-09).
 	it("writes the survey Qualtrics was shown to run", async () => {
 		const golden = fileURLToPath(
 			new URL("../../fixtures/households.qsf", import.meta.url),

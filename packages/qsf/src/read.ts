@@ -150,6 +150,8 @@ export type Step =
 export interface ReadInstrument {
 	readonly name?: string;
 	readonly title?: string;
+	/** The Instrument item's DDI URN: which instrument every response came from. */
+	readonly urn?: string;
 	/** Whether the bank has missing-value codes (on its variables, never a question's choices). */
 	readonly missing?: true;
 	readonly inputs: readonly Extract<Source, { kind: "input" }>[];
@@ -362,6 +364,7 @@ export function readInstrument(ddi: DdiDocument): {
 		instrument: {
 			...(first.name !== undefined && { name: first.name }),
 			...(first.label !== undefined && { title: first.label }),
+			urn: first.urn,
 			...(Object.keys(ddi.ManagedMissingValuesRepresentation ?? {}).length >
 				0 && { missing: true as const }),
 			inputs: read.value.inputs,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ import {
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
+import pkg from "../package.json" with { type: "json" };
 import { type Io, main } from "./cli.ts";
 
 const here = (path: string): string =>
@@ -269,9 +271,21 @@ describe("qretools instrument", () => {
 			);
 			const r = await run("instrument", "export", ok, "--qsf", "-o", "x.qsf");
 			expect(r.code).toBe(0);
-			expect(
-				JSON.parse(r.written["x.qsf"] ?? "{}").SurveyEntry.SurveyName,
-			).toBe("short");
+			const qsf = JSON.parse(r.written["x.qsf"] ?? "{}");
+			expect(qsf.SurveyEntry.SurveyName).toBe("short");
+			// Who wrote it, in every response: this version, and a digest of the very DDI
+			// `instrument export` writes for the same file.
+			const ddi = await run("instrument", "export", ok);
+			const stamp: { Field: string; Value: string }[] = qsf.SurveyElements.find(
+				(e: { Element: string }) => e.Element === "FL",
+			).Payload.Flow[0].EmbeddedData;
+			expect(Object.fromEntries(stamp.map((f) => [f.Field, f.Value]))).toEqual({
+				qretools_instrument: expect.stringMatching(
+					/^urn:ddi:[^:]+:instrument-short:1$/,
+				),
+				qretools_ddi: `sha256:${createHash("sha256").update(ddi.out).digest("hex")}`,
+				qretools_version: pkg.version,
+			});
 		} finally {
 			await rm(dir, { recursive: true });
 		}

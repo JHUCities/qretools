@@ -31,7 +31,13 @@ import {
 import { context, number } from "./number.ts";
 import { questionsOf } from "./questions.ts";
 import type { Cond, ReadInstrument, Source, Step } from "./read.ts";
-import { type Node, type QsfObject, toQsf } from "./skeleton.ts";
+import {
+	type Node,
+	PROVENANCE,
+	type QsfObject,
+	type QsfOptions,
+	toQsf,
+} from "./skeleton.ts";
 import { baseId, countedBy, unroll } from "./unroll.ts";
 
 /** `isnull(x) or (x >= min and x <= max)` for an ask's own answer: the range its number check held. */
@@ -83,11 +89,7 @@ const numberRange = (
 
 export function writeQsf(
 	read: ReadInstrument,
-	options: {
-		readonly name: string;
-		/** When the survey is made, `YYYY-MM-DD hh:mm:ss`: Qualtrics requires one (the core has no clock). */
-		readonly created: string;
-	},
+	options: QsfOptions,
 ): { readonly qsf: QsfObject; readonly findings: readonly Finding[] } {
 	const unrolled = unroll(read);
 	const instrument = unrolled.instrument;
@@ -107,6 +109,15 @@ export function writeQsf(
 		findings.push({ code, severity, path, message });
 	};
 	const numbering = number(instrument);
+	// Checked whether or not the caller knows the field's value: a name collides either way.
+	for (const field of Object.values(PROVENANCE))
+		if (numbering.names.has(field))
+			note(
+				"qsf-inexpressible",
+				"error",
+				"",
+				`\`${field}\` is a column QREtools adds to every response in Qualtrics, so no variable can have that name.`,
+			);
 	const ctx = context(numbering, note);
 	const { notYet, placeOf } = ctx;
 	const { askQuestion, statement, warning } = questionsOf(ctx, instrument);
