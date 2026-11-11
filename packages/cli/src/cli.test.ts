@@ -16,7 +16,7 @@ import { addressOf, bankOf, questionItems, remoteScope } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
-import { readHistory } from "./history.ts";
+import { ownRepository, readHistory } from "./history.ts";
 import { readTagged } from "./remote.ts";
 
 const here = (path: string): string =>
@@ -45,6 +45,7 @@ async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
 		},
 		readRemote,
 		readHistory,
+		ownRepository,
 	};
 	const code = await main(argv, io);
 	return { code, out: out.join(""), err: err.join(""), written };
@@ -388,7 +389,7 @@ describe("qretools build", () => {
 			expect(r.code).toBe(1);
 			expect(r.written).toEqual({});
 			expect(r.err).toMatch(
-				/instruments\/x\.yaml:4:3: error: `b` reads this workspace's questions as they are now, so the instrument is a draft\./,
+				/instruments\/x\.yaml:4:3: error: `b` reads this workspace's questions as they are now, not at a tag, so the instrument can't be released\. \[untagged-use\]/,
 			);
 			expect(r.err).toMatch(/Not built: an instrument is released only when/);
 		});
@@ -439,6 +440,57 @@ describe("qretools build", () => {
 			expect(r.code).toBe(1);
 			expect(r.written).toEqual({});
 			expect(r.err).toMatch(/instruments\/x\.yaml:\d+:\d+: (error|to fill in)/);
+		});
+
+		it("has check and instrument export read an own pin from this clone too, and another repository's from GitHub", async () => {
+			const settings = `agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n  other/bank@v1: ${A}\n`;
+			const { ws, root } = await withInstrument("acme/ws/sub@v1", settings);
+			await writeFile(
+				join(ws, "instruments/x.yaml"),
+				"name: x\nuses:\n  b: acme/ws/sub@v1\n  o: other/bank@v1\nflow:\n  - ask: b.q\n  - ask: o.p\n",
+			);
+			const asked: (string | undefined)[][] = [];
+			const at: Io["readRemote"] = async (a, from) => {
+				asked.push([a.key, from]);
+				// Each bank its own question, so the two don't share a DDI name.
+				const name = a.key === "other/bank@v1" ? "p" : "q";
+				const path = `questions/t/${name}.yaml`;
+				return {
+					kind: "files",
+					files: {
+						"workspace.yaml": "agency: org.example\n",
+						[path]: OPEN.replace("name: q", `name: ${name}`),
+					},
+					at: { commit: A, blobs: { [path]: "b1" } },
+				};
+			};
+			const clone = await realpath(root);
+			const own = ["acme/ws/sub@v1", clone];
+			const other = ["other/bank@v1", undefined];
+			expect((await runWith(at, "check", ws)).code).toBe(0);
+			expect(asked.sort()).toEqual([own, other]);
+			asked.length = 0;
+			const x = join(ws, "instruments/x.yaml");
+			expect((await runWith(at, "instrument", "export", x)).code).toBe(0);
+			expect(asked.sort()).toEqual([own, other]);
+		});
+
+		it("says to fetch the tags when the clone hasn't the own tag a pin names", async () => {
+			const { ws } = await withInstrument(
+				"acme/ws/sub@v1",
+				`agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n`,
+			);
+			const r = await runWith(
+				async () => ({
+					kind: "unavailable",
+					reason: "acme/ws has no tag `v1`.",
+				}),
+				"check",
+				ws,
+			);
+			expect(r.out + r.err).toMatch(
+				/own tags are read from its clone .*fetch it with `git fetch --tags`, or check out with `fetch-depth: 0` in CI/,
+			);
 		});
 
 		it("refuses a pinned tag that has moved since it was locked", async () => {

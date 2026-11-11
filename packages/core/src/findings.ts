@@ -101,7 +101,7 @@ export type InstrumentCode =
 	/** Advice, in `check`: a tag read with no lock in `workspace.yaml`. */
 	| "unlocked-tag"
 	/** A release: an instrument that reads its own workspace as its files are (`../`), not at a tag. */
-	| "draft-instrument";
+	| "untagged-use";
 
 export type FindingCode =
 	| ParseCode

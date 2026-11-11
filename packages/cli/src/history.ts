@@ -26,12 +26,6 @@ export type HistoryRead =
 			readonly history: History;
 			/** Whether the folder has changes not committed, which the build leaves out. */
 			readonly uncommitted: boolean;
-			/**
-			 * The repository's own GitHub address (`owner/repo`, lowercased) and this clone's
-			 * folder, so a tag of it is read here rather than fetched; absent without an
-			 * `origin` on GitHub.
-			 */
-			readonly self?: { readonly repository: string; readonly path: string };
 	  }
 	| { readonly kind: "unavailable"; readonly reason: string };
 
@@ -172,21 +166,36 @@ export async function readHistory(dir: string): Promise<HistoryRead> {
 		Object.entries(head).map(([path, blob]) => [path, texts[blob] ?? ""]),
 	);
 	const status = await git(dir, "status", "--porcelain", "--", ".");
-	const origin = await git(top, "remote", "get-url", "origin").catch(() => "");
-	const own = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(
-		origin.trim(),
-	);
 	return {
 		kind: "read",
 		files,
 		history: { snapshots, texts },
 		uncommitted: status.trim() !== "",
-		...(own?.[1] !== undefined &&
-			own[2] !== undefined && {
-				self: {
-					repository: `${own[1]}/${own[2]}`.toLowerCase(),
-					path: top,
-				},
-			}),
 	};
+}
+
+/** The GitHub repository a clone is of, and the clone's folder. */
+export interface OwnRepository {
+	/** `owner/repo`, lowercased, as GitHub compares them. */
+	readonly repository: string;
+	readonly path: string;
+}
+
+/**
+ * The repository the folder `dir` is a clone of, from its `origin` on GitHub, so a tag of
+ * it is read from this clone rather than fetched; absent outside git or without one.
+ */
+export async function ownRepository(
+	dir: string,
+): Promise<OwnRepository | undefined> {
+	try {
+		const top = (await git(dir, "rev-parse", "--show-toplevel")).trim();
+		const origin = (await git(top, "remote", "get-url", "origin")).trim();
+		const m = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(origin);
+		return m?.[1] === undefined || m[2] === undefined
+			? undefined
+			: { repository: `${m[1]}/${m[2]}`.toLowerCase(), path: top };
+	} catch {
+		return undefined;
+	}
 }
