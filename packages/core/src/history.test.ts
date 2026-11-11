@@ -97,3 +97,35 @@ describe("versionsOf", () => {
 		).toEqual({});
 	});
 });
+
+describe("an instrument's version", () => {
+	const I = "instruments/hh.yaml";
+	const pinned = (title: string) =>
+		`name: hh\ntitle: ${title}\nuses:\n  b: acme/ws@v1\nflow: []\n`;
+	const settings = (own: string, other: string) =>
+		`agency: org.example\nlocked:\n  acme/ws@v1: ${own}\n  acme/other@v2: ${other}\n`;
+
+	it("counts it whole: its file, and the lock of each tag it pins, but no other lock", () => {
+		const v = versionsOf(
+			history(
+				[
+					["d1", { [I]: "i1", "workspace.yaml": "w1" }],
+					// A tag it doesn't pin is re-locked: not its change.
+					["d2", { [I]: "i1", "workspace.yaml": "w2" }],
+					// Its own tag is re-locked, the file unchanged: what it pins changed.
+					["d3", { [I]: "i1", "workspace.yaml": "w3" }],
+					// Its file changes.
+					["d4", { [I]: "i2", "workspace.yaml": "w3" }],
+				],
+				{
+					i1: pinned("One"),
+					i2: pinned("Two"),
+					w1: settings("c".repeat(40), "a".repeat(40)),
+					w2: settings("c".repeat(40), "b".repeat(40)),
+					w3: settings("d".repeat(40), "b".repeat(40)),
+				},
+			),
+		);
+		expect(v[I]).toEqual({ number: "3", date: "d4", blob: "i2" });
+	});
+});

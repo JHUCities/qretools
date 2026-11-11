@@ -4,6 +4,7 @@ import {
 	instrumentAt,
 	instrumentPath,
 	readsInWorkspace,
+	releaseFindings,
 	remoteScope,
 	workspaceOf,
 } from "./workspace.ts";
@@ -258,5 +259,86 @@ describe("a tag locked to a commit in workspace.yaml", () => {
 				message: expect.stringContaining("has moved to a new version"),
 			}),
 		]);
+	});
+});
+
+describe("releasing an instrument", () => {
+	const A = "a".repeat(40);
+	const B = "b".repeat(40);
+	const Q = {
+		"questions/t/q.yaml": "name: q\ntext: Q?\nintent: i\nopen: {}\n",
+	};
+	const at = (commit: string) =>
+		({
+			kind: "files",
+			files: { ...Q, "workspace.yaml": "agency: org.example\n" },
+			at: { commit, blobs: { "questions/t/q.yaml": "b1" } },
+		}) as const;
+	const X = "instruments/x.yaml";
+	const released = (settings: string, use: string, commit = A) => {
+		const ws = workspaceOf(
+			{
+				...Q,
+				"workspace.yaml": settings,
+				[X]: `name: x\nuses:\n  b: ${use}\nflow:\n  - ask: b.q\n`,
+			},
+			{
+				remote: { "org/bank@v1": at(commit) },
+				versions: { [X]: { number: "4" } },
+			},
+		);
+		const one = ws.instruments[X];
+		if (one === undefined) throw new Error("no instrument");
+		return { one, findings: releaseFindings(one) };
+	};
+	const locked = `agency: org.example\nlocked:\n  org/bank@v1: ${A}\n`;
+
+	it("is a draft while it reads this workspace as `../`, and can't be released", () => {
+		expect(released("agency: org.example\n", "../").findings).toEqual([
+			expect.objectContaining({
+				code: "draft-instrument",
+				severity: "error",
+				path: "uses.b",
+			}),
+		]);
+	});
+
+	it("is released when every bank is read at a tag locked at the commit it names", () => {
+		expect(released(locked, "org/bank@v1").findings).toEqual([]);
+	});
+
+	it("isn't released at a tag with no lock, or one that has moved: what check advises, a release refuses", () => {
+		expect(released("agency: org.example\n", "org/bank@v1").findings).toEqual([
+			expect.objectContaining({ code: "unlocked-tag", severity: "error" }),
+		]);
+		expect(released(locked, "org/bank@v1", B).findings).toEqual([
+			expect.objectContaining({ code: "moved-tag", severity: "error" }),
+		]);
+	});
+
+	it("isn't released while it's incomplete: here it asks a question its tag doesn't have", () => {
+		const ws = workspaceOf(
+			{
+				...Q,
+				"workspace.yaml": locked,
+				[X]: "name: x\nuses:\n  b: org/bank@v1\nflow:\n  - ask: b.nowhere\n",
+			},
+			{ remote: { "org/bank@v1": at(A) } },
+		);
+		const one = ws.instruments[X];
+		expect(one && releaseFindings(one).length).toBeGreaterThan(0);
+		expect(
+			one && releaseFindings(one).every((f) => f.severity !== "warning"),
+		).toBe(true);
+	});
+
+	it("puts its one version on every item it makes, and leaves the bank's items at theirs", () => {
+		const { ddi } = released(locked, "org/bank@v1").one.instrument;
+		const own = Object.entries(ddi).flatMap(([, items]) =>
+			Object.keys(items ?? {}).filter((k) => k.includes("instrument-x")),
+		);
+		expect(own.length).toBeGreaterThan(1);
+		expect(own.every((k) => k.endsWith(":4"))).toBe(true);
+		expect(Object.keys(ddi.QuestionItem ?? {})).toEqual(["org.example:q:1"]);
 	});
 });

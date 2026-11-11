@@ -99,7 +99,9 @@ export type InstrumentCode =
 	/** Advice: a tag that names another commit than `workspace.yaml` locked it at. */
 	| "moved-tag"
 	/** Advice, in `check`: a tag read with no lock in `workspace.yaml`. */
-	| "unlocked-tag";
+	| "unlocked-tag"
+	/** A release: an instrument that reads its own workspace as its files are (`../`), not at a tag. */
+	| "draft-instrument";
 
 export type FindingCode =
 	| ParseCode

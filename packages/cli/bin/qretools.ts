@@ -21,7 +21,8 @@ process.exitCode = await main(process.argv.slice(2), {
 		await mkdir(dirname(path), { recursive: true });
 		await writeFile(path, text, "utf8");
 	},
-	readRemote: (address) => readTagged(address),
+	readRemote: (address, from) =>
+		readTagged(address, from === undefined ? {} : { urlOf: () => from }),
 	readHistory,
 }).catch((e: unknown) => {
 	process.stderr.write(
