@@ -63,19 +63,23 @@ import { readWorkspace } from "@qretools/core/node";
 import { pathsPageOf } from "@qretools/paths";
 import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
 import pkg from "../package.json" with { type: "json" };
-import type { HistoryRead } from "./history.ts";
+import type { HistoryRead, OwnRepository } from "./history.ts";
 
 /** Where the command writes: findings or the DDI on `out`, everything said to people on `err`. */
 export interface Io {
 	readonly out: (text: string) => void;
 	readonly err: (text: string) => void;
 	readonly writeFile: (path: string, text: string) => Promise<void>;
-	/** A workspace in another repository, read at its tag (the command uses git: `readTagged`). */
-	/** A bank at its tag; `from` is a local clone to read it from in place of GitHub. */
+	/**
+	 * A workspace in another repository, read at its tag (the command uses git:
+	 * `readTagged`); `from` is a local clone to read it from in place of GitHub.
+	 */
 	readonly readRemote: (
 		address: RemoteAddress,
 		from?: string,
 	) => Promise<RemoteBank>;
+	/** The repository a folder is a clone of, and the clone's folder (`ownRepository`). */
+	readonly ownRepository: (dir: string) => Promise<OwnRepository | undefined>;
 	/** The workspace in a directory at its last commit, with its history (the command uses git: `readHistory`). */
 	readonly readHistory: (dir: string) => Promise<HistoryRead>;
 }
@@ -422,23 +426,42 @@ export function findingLine(
 }
 
 /**
- * Each workspace in another repository its instruments use, read once at its tag, by key.
- * One in `self`'s repository (the workspace's own, at a tag) is read from that clone.
+ * A bank at its tag. One in the workspace's own repository is read from this clone (no
+ * network, and no credentials for a private repository), any other from GitHub. Every
+ * command reads a pin through here, so they all agree.
  */
+async function readPin(
+	io: Io,
+	a: RemoteAddress,
+	own: OwnRepository | undefined,
+): Promise<RemoteBank> {
+	if (
+		own === undefined ||
+		`${a.owner}/${a.repo}`.toLowerCase() !== own.repository
+	)
+		return io.readRemote(a);
+	const read = await io.readRemote(a, own.path);
+	// A shallow checkout has no tags: say where the tag was looked for, and how to get it.
+	return read.kind === "unavailable"
+		? {
+				...read,
+				reason: `${read.reason} This workspace's own tags are read from its clone (${own.path}): if \`${a.ref}\` is on GitHub, fetch it with \`git fetch --tags\`, or check out with \`fetch-depth: 0\` in CI.`,
+			}
+		: read;
+}
+
+/** Each workspace in another repository its instruments use, read once at its tag, by key. */
 const readRemotes = async (
 	files: Readonly<Record<string, string>>,
 	io: Io,
-	self?: { readonly repository: string; readonly path: string },
+	own: OwnRepository | undefined,
 ): Promise<Record<string, RemoteBank>> =>
 	Object.fromEntries(
 		await Promise.all(
 			remotesOf(files).map(
 				async (a): Promise<[string, RemoteBank]> => [
 					a.key,
-					self !== undefined &&
-					`${a.owner}/${a.repo}`.toLowerCase() === self.repository
-						? await io.readRemote(a, self.path)
-						: await io.readRemote(a),
+					await readPin(io, a, own),
 				],
 			),
 		),
@@ -460,7 +483,7 @@ async function checkWorkspace(
 		return USAGE_ERROR;
 	}
 	// Workspaces in other repositories, each read once at its tag; one that can't be says why on its use.
-	const remote = await readRemotes(files, io);
+	const remote = await readRemotes(files, io, await io.ownRepository(dir));
 	const ws = workspaceOf(files, { remote });
 	// Each file as the workspace has it: its findings, its text, and its ranges.
 	const checked: {
@@ -602,7 +625,7 @@ async function build(
 	// Its instruments, each released whole at its version and read against the banks it
 	// pins: its own repository's from this clone, others' from GitHub. All are checked
 	// before anything is written, so a refused build writes nothing.
-	const remote = await readRemotes(read.files, io, read.self);
+	const remote = await readRemotes(read.files, io, await io.ownRepository(dir));
 	const { instruments } = workspaceOf(read.files, { remote, versions });
 	let blocked = false;
 	for (const [path, one] of Object.entries(instruments))
@@ -767,6 +790,8 @@ async function instrument(
 	const reads: Record<string, RemoteBank> = {};
 	const tagged: Record<string, string> = {};
 	const banks: Record<string, BankScope> = {};
+	// The repository this instrument's clone is of, once: a pin to it is read from the clone.
+	const own = await io.ownRepository(dirname(resolve(file)));
 	for (const use of uses) {
 		const address: Address =
 			use.address === undefined
@@ -792,7 +817,7 @@ async function instrument(
 		}
 		// In another repository, with no directory given for it: read at its tag.
 		if (address.kind === "remote" && offline === undefined) {
-			const read = await io.readRemote(address);
+			const read = await readPin(io, address, own);
 			if (read.kind === "unavailable") {
 				io.err(`Can't read \`${use.alias}\`: ${read.reason}\n`);
 				return USAGE_ERROR;

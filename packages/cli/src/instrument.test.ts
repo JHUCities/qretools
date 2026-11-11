@@ -15,6 +15,7 @@ import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
 import pkg from "../package.json" with { type: "json" };
 import { type Io, main } from "./cli.ts";
+import { ownRepository } from "./history.ts";
 
 const here = (path: string): string =>
 	fileURLToPath(new URL(path, import.meta.url));
@@ -197,6 +198,7 @@ describe("qretools instrument", () => {
 			writeFile: async (p, t) => {
 				written[p] = t;
 			},
+			ownRepository,
 			readHistory: async () => ({
 				kind: "unavailable",
 				reason: "not in these tests",

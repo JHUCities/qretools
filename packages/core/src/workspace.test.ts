@@ -293,10 +293,10 @@ describe("releasing an instrument", () => {
 	};
 	const locked = `agency: org.example\nlocked:\n  org/bank@v1: ${A}\n`;
 
-	it("is a draft while it reads this workspace as `../`, and can't be released", () => {
+	it("can't be released while it reads this workspace as `../`, not at a tag", () => {
 		expect(released("agency: org.example\n", "../").findings).toEqual([
 			expect.objectContaining({
-				code: "draft-instrument",
+				code: "untagged-use",
 				severity: "error",
 				path: "uses.b",
 			}),

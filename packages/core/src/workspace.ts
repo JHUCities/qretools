@@ -358,8 +358,9 @@ export function workspaceOf(
 /**
  * What stops an instrument of `workspaceOf` being released: only a complete instrument is,
  * reading every bank at a tag its workspace has locked, at the commit locked. A use of
- * this workspace as its files are (`../`) makes it a draft; an unlocked or moved tag
- * (advice in `check`, an error here) would let its questions change under the release;
+ * this workspace as its files are (`../`) isn't at a tag, so it can't be released; an
+ * unlocked or moved tag (advice in `check`, an error here) would let its questions change
+ * under the release;
  * and any hole or error, such as a bank that couldn't be read, would release it with
  * questions missing under a version that doesn't move.
  */
@@ -367,14 +368,14 @@ export function releaseFindings({
 	instrument,
 	uses,
 }: InstrumentIn): readonly Finding[] {
-	const drafts = Object.entries(uses).flatMap(([alias, r]): Finding[] =>
+	const untagged = Object.entries(uses).flatMap(([alias, r]): Finding[] =>
 		r.kind === "local"
 			? [
 					{
-						code: "draft-instrument",
+						code: "untagged-use",
 						severity: "error",
 						path: `uses.${alias}`,
-						message: `\`${alias}\` reads this workspace's questions as they are now, so the instrument is a draft.`,
+						message: `\`${alias}\` reads this workspace's questions as they are now, not at a tag, so the instrument can't be released.`,
 						hint: "To release it, point it at a tag of this workspace, such as `owner/repo@v3`.",
 					},
 				]
@@ -389,7 +390,7 @@ export function releaseFindings({
 		(f) => f.severity === "hole" || f.severity === "error",
 	);
 	return inDocumentOrder(
-		[...drafts, ...tags, ...incomplete],
+		[...untagged, ...tags, ...incomplete],
 		instrument.ranges,
 	);
 }

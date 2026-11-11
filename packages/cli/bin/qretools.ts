@@ -3,7 +3,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { main } from "../src/cli.ts";
-import { readHistory } from "../src/history.ts";
+import { ownRepository, readHistory } from "../src/history.ts";
 import { readTagged } from "../src/remote.ts";
 
 // A reader that stops early (`| head`) closes the pipe: that ends the output, not the command.
@@ -24,6 +24,7 @@ process.exitCode = await main(process.argv.slice(2), {
 	readRemote: (address, from) =>
 		readTagged(address, from === undefined ? {} : { urlOf: () => from }),
 	readHistory,
+	ownRepository,
 }).catch((e: unknown) => {
 	process.stderr.write(
 		`qretools failed: ${e instanceof Error ? e.stack : String(e)}\n`,
