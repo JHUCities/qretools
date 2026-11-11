@@ -45,6 +45,7 @@ import {
 	type RemoteBank,
 	ROOT,
 	readInstruments,
+	releaseFindings,
 	remoteScope,
 	remotesOf,
 	type Severity,
@@ -70,7 +71,11 @@ export interface Io {
 	readonly err: (text: string) => void;
 	readonly writeFile: (path: string, text: string) => Promise<void>;
 	/** A workspace in another repository, read at its tag (the command uses git: `readTagged`). */
-	readonly readRemote: (address: RemoteAddress) => Promise<RemoteBank>;
+	/** A bank at its tag; `from` is a local clone to read it from in place of GitHub. */
+	readonly readRemote: (
+		address: RemoteAddress,
+		from?: string,
+	) => Promise<RemoteBank>;
 	/** The workspace in a directory at its last commit, with its history (the command uses git: `readHistory`). */
 	readonly readHistory: (dir: string) => Promise<HistoryRead>;
 }
@@ -88,7 +93,10 @@ const USAGE = `Usage:
                                     ways through its routing, and which questions each reaches, from
                                     its DDI (as \`instrument export\` writes it)
   qretools build [dir] [-o outdir] [--tag-message file]
-                                    Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist)
+                                    Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist),
+                                    and each instrument's to outdir/instruments/<name>.json. Refused while an
+                                    instrument is incomplete, reads this workspace as \`../\`, or reads a tag it
+                                    hasn't locked or that has moved
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -413,17 +421,24 @@ export function findingLine(
 	return `${path}:${line}:${col}: ${LEVEL[f.severity]}: ${f.message} [${what}]`;
 }
 
-/** Each workspace in another repository its instruments use, read once at its tag, by key. */
+/**
+ * Each workspace in another repository its instruments use, read once at its tag, by key.
+ * One in `self`'s repository (the workspace's own, at a tag) is read from that clone.
+ */
 const readRemotes = async (
 	files: Readonly<Record<string, string>>,
 	io: Io,
+	self?: { readonly repository: string; readonly path: string },
 ): Promise<Record<string, RemoteBank>> =>
 	Object.fromEntries(
 		await Promise.all(
 			remotesOf(files).map(
 				async (a): Promise<[string, RemoteBank]> => [
 					a.key,
-					await io.readRemote(a),
+					self !== undefined &&
+					`${a.owner}/${a.repo}`.toLowerCase() === self.repository
+						? await io.readRemote(a, self.path)
+						: await io.readRemote(a),
 				],
 			),
 		),
@@ -584,11 +599,54 @@ async function build(
 		io.err(nothingIn(dir));
 		return USAGE_ERROR;
 	}
+	// Its instruments, each released whole at its version and read against the banks it
+	// pins: its own repository's from this clone, others' from GitHub. All are checked
+	// before anything is written, so a refused build writes nothing.
+	const remote = await readRemotes(read.files, io, read.self);
+	const { instruments } = workspaceOf(read.files, { remote, versions });
+	let blocked = false;
+	for (const [path, one] of Object.entries(instruments))
+		for (const f of releaseFindings(one)) {
+			io.err(
+				`${findingLine(join(dir, path), read.files[path] ?? "", one.instrument.ranges, f)}\n`,
+			);
+			blocked = true;
+		}
+	if (blocked) {
+		io.err(
+			"Not built: an instrument is released only when it's complete and reads every bank at a tag this workspace has locked.\n",
+		);
+		return PROBLEMS;
+	}
+	for (const [path, { instrument }] of Object.entries(instruments)) {
+		const refusal = exportRefusal(instrument, await validate(instrument.ddi));
+		if (refusal === undefined) continue;
+		io.err(`${join(dir, path)}:\n`);
+		return refused(refusal, io);
+	}
 	const code = await exportBank(bank, join(out, "ddi.json"), io, asJson);
-	// Only for a build that exported: a refused one is no release.
-	if (code === OK && message !== undefined)
-		await io.writeFile(message, tagMessage(versions, pkg.version));
-	return code;
+	if (code !== OK) return code;
+	for (const [path, { instrument }] of Object.entries(instruments))
+		await emit(
+			asJson(instrument.ddi),
+			join(out, WORKSPACE.instruments, `${instrumentAt(path)}.json`),
+			io,
+		);
+	// Only for a build that exported: a refused one is no release. Workspaces that use this
+	// release read banks from the message, never instruments, so it lists the bank's files.
+	if (message !== undefined)
+		await io.writeFile(
+			message,
+			tagMessage(
+				Object.fromEntries(
+					Object.entries(versions).filter(
+						([p]) => instrumentAt(p) === undefined,
+					),
+				),
+				pkg.version,
+			),
+		);
+	return OK;
 }
 
 /**

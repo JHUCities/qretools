@@ -12,7 +12,7 @@ import {
 } from "./address.ts";
 import { UNVERSIONED, type Version, type Versions } from "./ddi/version.ts";
 import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
-import { inDocumentOrder } from "./findings.ts";
+import { type Finding, inDocumentOrder } from "./findings.ts";
 import type { Use } from "./instrument/draft.ts";
 import {
 	type Instrument,
@@ -222,6 +222,7 @@ export function instrumentIn(
 		remoteBanks,
 		agency,
 		locks = {},
+		version,
 	}: {
 		/** The workspace's own bank; needed only when a use is local (`resolveUses`). */
 		readonly bank: BankScope | undefined;
@@ -231,6 +232,8 @@ export function instrumentIn(
 		readonly agency?: string | undefined;
 		/** The commits `workspace.yaml` locks its tags at (`locksWritten`): a tag moved from one is warned of. */
 		readonly locks?: Locks;
+		/** The instrument's DDI version, from its history; every item it makes carries it. */
+		readonly version?: string;
 	},
 ): InstrumentIn {
 	const uses = resolveUses(importsOf(source), remote);
@@ -251,6 +254,7 @@ export function instrumentIn(
 		banks: given,
 		unresolved,
 		...(agency !== undefined && { agency }),
+		...(version !== undefined && { version }),
 	});
 	const moved = movedTags(remoteKeys(uses), remote, locks);
 	return {
@@ -285,7 +289,8 @@ export interface Workspace {
  * workspace is an empty bank), and each instrument read against the banks it uses,
  * published under the agency `workspace.yaml` gives its questions too. `remote` holds
  * the banks in other repositories as read (see `remotesOf`); one not there yet is
- * pending. `versions` gives the bank's files' DDI versions, by path. Total, and
+ * pending. `versions` gives the DDI versions of the bank's files and of its instruments,
+ * by path; an instrument's every item carries its one version. Total, and
  * independent of the order of the files.
  */
 export function workspaceOf(
@@ -320,12 +325,14 @@ export function workspaceOf(
 			if (readsInWorkspace(path)) ignored.push(path);
 			continue;
 		}
+		const version = versions?.[path]?.number;
 		const read = instrumentIn(outside[path] ?? "", {
 			bank,
 			remote,
 			remoteBanks,
 			agency,
 			locks,
+			...(version !== undefined && { version }),
 		});
 		// The workspace as committed, as `check` reads it: a tag no lock holds got here
 		// unlocked (`unlockedTags`). Only here, never in `instrumentIn`, which the app
@@ -346,4 +353,43 @@ export function workspaceOf(
 					};
 	}
 	return { bank, remote: remoteBanks, instruments, ignored: ignored.sort() };
+}
+
+/**
+ * What stops an instrument of `workspaceOf` being released: only a complete instrument is,
+ * reading every bank at a tag its workspace has locked, at the commit locked. A use of
+ * this workspace as its files are (`../`) makes it a draft; an unlocked or moved tag
+ * (advice in `check`, an error here) would let its questions change under the release;
+ * and any hole or error, such as a bank that couldn't be read, would release it with
+ * questions missing under a version that doesn't move.
+ */
+export function releaseFindings({
+	instrument,
+	uses,
+}: InstrumentIn): readonly Finding[] {
+	const drafts = Object.entries(uses).flatMap(([alias, r]): Finding[] =>
+		r.kind === "local"
+			? [
+					{
+						code: "draft-instrument",
+						severity: "error",
+						path: `uses.${alias}`,
+						message: `\`${alias}\` reads this workspace's questions as they are now, so the instrument is a draft.`,
+						hint: "To release it, point it at a tag of this workspace, such as `owner/repo@v3`.",
+					},
+				]
+			: [],
+	);
+	const tags = instrument.findings.flatMap((f): Finding[] =>
+		f.code === "moved-tag" || f.code === "unlocked-tag"
+			? [{ ...f, severity: "error" }]
+			: [],
+	);
+	const incomplete = instrument.findings.filter(
+		(f) => f.severity === "hole" || f.severity === "error",
+	);
+	return inDocumentOrder(
+		[...drafts, ...tags, ...incomplete],
+		instrument.ranges,
+	);
 }

@@ -7,7 +7,13 @@
 import { execFile, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { promisify } from "node:util";
-import { type History, readsInWorkspace, type Snapshot } from "@qretools/core";
+import {
+	type History,
+	instrumentAt,
+	ROOT,
+	readsInWorkspace,
+	type Snapshot,
+} from "@qretools/core";
 import { isNoGit, noGit } from "./git.ts";
 
 const run = promisify(execFile);
@@ -20,6 +26,12 @@ export type HistoryRead =
 			readonly history: History;
 			/** Whether the folder has changes not committed, which the build leaves out. */
 			readonly uncommitted: boolean;
+			/**
+			 * The repository's own GitHub address (`owner/repo`, lowercased) and this clone's
+			 * folder, so a tag of it is read here rather than fetched; absent without an
+			 * `origin` on GitHub.
+			 */
+			readonly self?: { readonly repository: string; readonly path: string };
 	  }
 	| { readonly kind: "unavailable"; readonly reason: string };
 
@@ -143,20 +155,38 @@ export async function readHistory(dir: string): Promise<HistoryRead> {
 	for (const { sha, date } of commits)
 		snapshots.push({ date, blobs: await blobsAt(top, sha, prefix) });
 	const head = await blobsAt(top, "HEAD", prefix);
-	// Text for every question blob in history (for what it names) and every file at HEAD.
+	// Text for every file at HEAD, and in history for what its version depends on: each
+	// question's (what it names), each instrument's (the tags it pins) and each
+	// workspace.yaml's (the commits it locks them at).
 	const wanted = new Set(Object.values(head));
 	for (const { blobs } of snapshots)
 		for (const [path, blob] of Object.entries(blobs))
-			if (path.startsWith("questions/")) wanted.add(blob);
+			if (
+				path.startsWith("questions/") ||
+				instrumentAt(path) !== undefined ||
+				path === ROOT.workspace
+			)
+				wanted.add(blob);
 	const texts = await catBlobs(top, [...wanted]);
 	const files = Object.fromEntries(
 		Object.entries(head).map(([path, blob]) => [path, texts[blob] ?? ""]),
 	);
 	const status = await git(dir, "status", "--porcelain", "--", ".");
+	const origin = await git(top, "remote", "get-url", "origin").catch(() => "");
+	const own = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(
+		origin.trim(),
+	);
 	return {
 		kind: "read",
 		files,
 		history: { snapshots, texts },
 		uncommitted: status.trim() !== "",
+		...(own?.[1] !== undefined &&
+			own[2] !== undefined && {
+				self: {
+					repository: `${own[1]}/${own[2]}`.toLowerCase(),
+					path: top,
+				},
+			}),
 	};
 }

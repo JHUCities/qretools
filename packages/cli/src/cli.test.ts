@@ -5,6 +5,7 @@ import {
 	mkdir,
 	mkdtemp,
 	readFile,
+	realpath,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -352,6 +353,117 @@ describe("qretools build", () => {
 		const s = await run("build", join(shallow, "c", "sub"));
 		expect(s).toMatchObject({ code: 2, written: {} });
 		expect(s.err).toMatch(/shallow clone/);
+	});
+
+	describe("releasing its instruments", () => {
+		const A = "a".repeat(40);
+		const OPEN = "name: q\ntext: Q?\nintent: i\nopen: {}\n";
+		const instrument = (title: string, use: string) =>
+			`name: x\ntitle: ${title}\nuses:\n  b: ${use}\nflow:\n  - ask: b.q\n`;
+
+		/** `repo()` with an instrument committed twice, its repository on GitHub as acme/ws. */
+		async function withInstrument(use: string, settings: string) {
+			const ws = await repo();
+			const root = dirname(ws);
+			await git(
+				root,
+				"remote",
+				"add",
+				"origin",
+				"https://github.com/acme/ws.git",
+			);
+			await mkdir(join(ws, "instruments"));
+			await writeFile(join(ws, "workspace.yaml"), settings);
+			await writeFile(join(ws, "instruments/x.yaml"), instrument("One", use));
+			await git(root, "add", "-A");
+			await git(root, "commit", "-q", "-m", "instrument");
+			await writeFile(join(ws, "instruments/x.yaml"), instrument("Two", use));
+			await git(root, "commit", "-q", "-am", "retitled");
+			return { ws, root };
+		}
+
+		it("refuses a draft, which reads this workspace as `../`, and writes nothing", async () => {
+			const { ws } = await withInstrument("../", "agency: org.example\n");
+			const r = await run("build", ws);
+			expect(r.code).toBe(1);
+			expect(r.written).toEqual({});
+			expect(r.err).toMatch(
+				/instruments\/x\.yaml:4:3: error: `b` reads this workspace's questions as they are now, so the instrument is a draft\./,
+			);
+			expect(r.err).toMatch(/Not built: an instrument is released only when/);
+		});
+
+		it("releases one pinned to its own repository at a locked tag, read from this clone, at its version", async () => {
+			const { ws, root } = await withInstrument(
+				"acme/ws/sub@v1",
+				`agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n`,
+			);
+			const asked: (string | undefined)[][] = [];
+			const r = await runWith(
+				async (a, from) => {
+					asked.push([a.key, from]);
+					return {
+						kind: "files",
+						files: {
+							"workspace.yaml": "agency: org.example\n",
+							"questions/t/q.yaml": OPEN,
+						},
+						at: { commit: A, blobs: { "questions/t/q.yaml": "b1" } },
+					};
+				},
+				"build",
+				ws,
+			);
+			expect(r.code).toBe(0);
+			expect(asked).toEqual([["acme/ws/sub@v1", await realpath(root)]]);
+			const ddi = JSON.parse(
+				r.written[join(ws, "dist", "instruments", "x.json")] ?? "{}",
+			);
+			// Committed twice: version 2, on the instrument and on every item it makes.
+			expect(Object.keys(ddi.Instrument)).toEqual([
+				"org.example:instrument-x:2",
+			]);
+			expect(r.written[join(ws, "dist", "ddi.json")]).toBeDefined();
+		});
+
+		it("refuses one whose bank can't be read, rather than release it with questions missing", async () => {
+			const { ws } = await withInstrument(
+				"acme/ws/sub@v1",
+				`agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n`,
+			);
+			const r = await runWith(
+				async () => ({ kind: "unavailable", reason: "GitHub is down." }),
+				"build",
+				ws,
+			);
+			expect(r.code).toBe(1);
+			expect(r.written).toEqual({});
+			expect(r.err).toMatch(/instruments\/x\.yaml:\d+:\d+: (error|to fill in)/);
+		});
+
+		it("refuses a pinned tag that has moved since it was locked", async () => {
+			const { ws } = await withInstrument(
+				"acme/ws/sub@v1",
+				`agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n`,
+			);
+			const r = await runWith(
+				async () => ({
+					kind: "files",
+					files: {
+						"workspace.yaml": "agency: org.example\n",
+						"questions/t/q.yaml": OPEN,
+					},
+					at: { commit: "b".repeat(40), blobs: { "questions/t/q.yaml": "b1" } },
+				}),
+				"build",
+				ws,
+			);
+			expect(r.code).toBe(1);
+			expect(r.written).toEqual({});
+			expect(r.err).toMatch(
+				/error: `acme\/ws\/sub@v1` has moved to a new version/,
+			);
+		});
 	});
 });
 

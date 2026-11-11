@@ -114,6 +114,7 @@ describe("the entry points", () => {
 			    "readsInWorkspace",
 			    "refUrn",
 			    "refusalReason",
+			    "releaseFindings",
 			    "remoteKeys",
 			    "remoteScope",
 			    "remotesOf",

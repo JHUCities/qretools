@@ -6,13 +6,21 @@
  * A file's version is how many times its content key has changed, oldest commit first.
  * A shared file's key is its own blob. A question's is its blob and the blobs of every
  * shared file it names, so a question's version moves when its scale (or universe, or
- * `missing.yaml`) does, as a reference carries the referenced item's version.
+ * `missing.yaml`) does, as a reference carries the referenced item's version. An
+ * instrument's is its blob and the commit `workspace.yaml` locks each tag it names at:
+ * it is versioned whole, and what it pins is part of it, so a moved and re-locked tag is
+ * a new version even when the file is the same.
  */
 
+import { type AddressKey, addressOf } from "./address.ts";
 import type { Version, Versions } from "./ddi/version.ts";
+import { importsOf } from "./instrument/instrument.ts";
+import type { Locks } from "./lock.ts";
 import { kindAt, ROOT, schemePath } from "./schemes.ts";
+import { locksWritten } from "./surface/bankfile.ts";
 import { EMPTY_ENV } from "./surface/env.ts";
 import { parseSurface } from "./surface/parse.ts";
+import { instrumentAt } from "./workspace.ts";
 
 /** One commit of the workspace: when it was made, and each file's blob, by workspace path. */
 export interface Snapshot {
@@ -22,8 +30,8 @@ export interface Snapshot {
 }
 
 /**
- * The workspace's history, oldest first, and the text of every question blob in it
- * (shared files' text isn't needed: their key is their blob).
+ * The workspace's history, oldest first, and the text of every question, instrument and
+ * `workspace.yaml` blob in it (shared files' text isn't needed: their key is their blob).
  */
 export interface History {
 	readonly snapshots: readonly Snapshot[];
@@ -57,13 +65,42 @@ export function versionsOf(history: History): Versions {
 		}
 		return d;
 	};
+	// The tags an instrument names, and the locks a workspace.yaml records, by blob.
+	const pins = new Map<string, readonly AddressKey[]>();
+	const pinsOf = (blob: string): readonly AddressKey[] => {
+		let p = pins.get(blob);
+		if (p === undefined) {
+			p = importsOf(history.texts[blob] ?? "").flatMap((u) => {
+				const a = u.address === undefined ? undefined : addressOf(u.address);
+				return a?.kind === "remote" ? [a.key] : [];
+			});
+			pins.set(blob, p);
+		}
+		return p;
+	};
+	const locks = new Map<string, Locks>();
+	const locksAt = (blob: string | undefined): Locks => {
+		if (blob === undefined) return {};
+		let l = locks.get(blob);
+		if (l === undefined) {
+			l = locksWritten(history.texts[blob] ?? "");
+			locks.set(blob, l);
+		}
+		return l;
+	};
 	const state = new Map<string, { key: string; version: Version }>();
 	for (const { date, blobs } of history.snapshots)
 		for (const [path, blob] of Object.entries(blobs)) {
+			const instrument = instrumentAt(path) !== undefined;
 			const at = kindAt(path);
-			if (at === undefined || at.kind === "workspace") continue;
-			const key =
-				at.kind === "question"
+			if (!instrument && (at === undefined || at.kind === "workspace"))
+				continue;
+			const locked = instrument ? locksAt(blobs[ROOT.workspace]) : {};
+			const key = instrument
+				? [blob, ...pinsOf(blob).map((k) => `${k}=${locked[k] ?? ""}`)].join(
+						" ",
+					)
+				: at?.kind === "question"
 					? [blob, ...depsOf(blob).map((d) => `${d}=${blobs[d] ?? ""}`)].join(
 							" ",
 						)

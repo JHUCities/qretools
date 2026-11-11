@@ -277,6 +277,7 @@ export {
 	type RemoteBank,
 	type Resolution,
 	readsInWorkspace,
+	releaseFindings,
 	remoteKeys,
 	remoteScope,
 	remotesOf,
