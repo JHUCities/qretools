@@ -89,9 +89,11 @@ export async function handle(
 		path === "/exchange" ? exchangeGrant(body, origin) : refreshGrant(body);
 	if (grant === undefined) return reply(400, { error: "invalid_request" });
 
-	let answer: Record<string, unknown>;
+	// Each 502 below logs why, for Workers Logs: statuses, header values and field names,
+	// never a body or a parse error's message (V8 quotes the body, which may hold a token).
+	let response: Response;
 	try {
-		const response = await upstream(TOKEN_URL, {
+		response = await upstream(TOKEN_URL, {
 			method: "POST",
 			headers: {
 				Accept: "application/json",
@@ -103,14 +105,42 @@ export async function handle(
 				...grant,
 			}),
 		});
-		if (!response.ok) return reply(502, { error: "upstream" });
-		answer = (await response.json()) as Record<string, unknown>;
-	} catch {
+	} catch (e) {
+		// A fetch error names the network fault; the request body is never in it.
+		console.log(
+			"upstream unreachable",
+			path,
+			e instanceof Error ? e.message : typeof e,
+		);
 		return reply(502, { error: "upstream" });
 	}
+	const contentType = response.headers.get("Content-Type");
+	if (!response.ok) {
+		console.log(
+			"upstream status",
+			path,
+			response.status,
+			contentType,
+			response.headers.get("Retry-After"),
+		);
+		return reply(502, { error: "upstream" });
+	}
+	let parsed: unknown;
+	try {
+		parsed = await response.json();
+	} catch {
+		console.log("upstream unreadable", path, contentType);
+		return reply(502, { error: "upstream" });
+	}
+	if (!isObject(parsed)) {
+		console.log("upstream not an object", path, contentType);
+		return reply(502, { error: "upstream" });
+	}
+	const answer = parsed;
 	// GitHub reports errors as 200 with an `error` field.
 	const error = answer.error;
-	if (typeof error === "string")
+	if (typeof error === "string") {
+		if (OURS.has(error)) console.log("misconfigured", error, path);
 		return OURS.has(error)
 			? reply(502, { error: "misconfigured" })
 			: reply(400, {
@@ -119,8 +149,11 @@ export async function handle(
 						error_description: answer.error_description,
 					}),
 				});
-	if (typeof answer.access_token !== "string")
+	}
+	if (typeof answer.access_token !== "string") {
+		console.log("no access_token", path, Object.keys(answer));
 		return reply(502, { error: "upstream" });
+	}
 	return reply(
 		200,
 		Object.fromEntries(
