@@ -3,7 +3,7 @@
  * here, as GitHub would serve it, so nothing reaches the network.
  */
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -13,6 +13,12 @@ import { isNoGit } from "./git.ts";
 import { readTagged } from "./remote.ts";
 
 const run = promisify(execFile);
+const AUTHOR = {
+	GIT_AUTHOR_NAME: "t",
+	GIT_AUTHOR_EMAIL: "t@example.org",
+	GIT_COMMITTER_NAME: "t",
+	GIT_COMMITTER_EMAIL: "t@example.org",
+};
 let dir: string;
 let origin: string;
 let cache: string;
@@ -31,15 +37,7 @@ beforeAll(async () => {
 		recursive: true,
 	});
 	const git = (...args: string[]) =>
-		run("git", ["-C", origin, ...args], {
-			env: {
-				...process.env,
-				GIT_AUTHOR_NAME: "t",
-				GIT_AUTHOR_EMAIL: "t@example.org",
-				GIT_COMMITTER_NAME: "t",
-				GIT_COMMITTER_EMAIL: "t@example.org",
-			},
-		});
+		run("git", ["-C", origin, ...args], { env: { ...process.env, ...AUTHOR } });
 	await run("git", ["init", "--quiet", "--initial-branch=main", origin]);
 	await git("config", "commit.gpgsign", "false");
 	await git("config", "tag.gpgsign", "false");
@@ -99,6 +97,103 @@ describe("a bank in another repository, read at its tag with git", () => {
 			urlOf: () => join(dir, "nowhere"),
 		});
 		expect(again).toEqual(read);
+	}, 30000);
+
+	it("reads a tag again when it names something new, and keeps the last read offline", async () => {
+		const git = (...args: string[]) =>
+			run("git", ["-C", origin, ...args], {
+				env: { ...process.env, ...AUTHOR },
+			});
+		await git("tag", "-a", "v7", "-m", "first");
+		const first = await readTagged(remote("o/bank/banks/hh@v7"), options());
+		await writeFile(
+			join(origin, "banks", "hh", "questions", "t", "q.yaml"),
+			"name: q2\n",
+		);
+		await git("commit", "--quiet", "-am", "moved");
+		await git("tag", "-f", "-a", "v7", "-m", "second");
+		const moved = await readTagged(remote("o/bank/banks/hh@v7"), options());
+		const commit = (await git("rev-parse", "v7^{commit}")).stdout.trim();
+		expect(moved).toMatchObject({
+			kind: "files",
+			files: { "questions/t/q.yaml": "name: q2\n" },
+			at: { commit, message: "second\n" },
+		});
+		expect(first.kind === "files" && first.at?.commit).not.toBe(commit);
+		// Unreachable: the last read serves.
+		expect(
+			await readTagged(remote("o/bank/banks/hh@v7"), {
+				root: cache,
+				urlOf: () => join(dir, "nowhere"),
+			}),
+		).toEqual(moved);
+		// Deleted: said, never served from the cache.
+		await git("tag", "-d", "v7");
+		expect(await readTagged(remote("o/bank/banks/hh@v7"), options())).toEqual({
+			kind: "unavailable",
+			reason: "`o/bank/banks/hh@v7`: o/bank has no tag `v7`.",
+		});
+	}, 30000);
+
+	it("reads the same address from another clone as that clone has it", async () => {
+		const other = join(dir, "other");
+		await run("git", ["clone", "--quiet", origin, other]);
+		const git = (...args: string[]) =>
+			run("git", ["-C", other, ...args], {
+				env: { ...process.env, ...AUTHOR },
+			});
+		await git("config", "commit.gpgsign", "false");
+		await git("config", "tag.gpgsign", "false");
+		await writeFile(
+			join(other, "banks", "hh", "questions", "t", "q.yaml"),
+			"name: elsewhere\n",
+		);
+		await git("commit", "--quiet", "-am", "elsewhere");
+		await git("tag", "-f", "-a", "v1", "-m", "elsewhere");
+		const here = await readTagged(remote("o/bank/banks/hh@v1"), options());
+		const there = await readTagged(remote("o/bank/banks/hh@v1"), {
+			root: cache,
+			urlOf: () => other,
+		});
+		expect(there).toMatchObject({
+			files: { "questions/t/q.yaml": "name: elsewhere\n" },
+			at: { commit: (await git("rev-parse", "v1^{commit}")).stdout.trim() },
+		});
+		expect(await readTagged(remote("o/bank/banks/hh@v1"), options())).toEqual(
+			here,
+		);
+	}, 30000);
+
+	it("fetches again over an entry cached before it recorded its tag", async () => {
+		const entry = join(cache, "o", "bank@v6", "whole");
+		const read = await readTagged(remote("o/bank@v6"), options());
+		await rm(join(entry, ".qretools-tag"));
+		await writeFile(join(entry, "workspace.yaml"), "agency: stale\n");
+		expect(await readTagged(remote("o/bank@v6"), options())).toEqual(read);
+	}, 30000);
+
+	it("never serves the entry of a tag that moved when fetching it again fails", async () => {
+		const git = (...args: string[]) =>
+			run("git", ["-C", origin, ...args], {
+				env: { ...process.env, ...AUTHOR },
+			});
+		await git("tag", "-a", "v8", "-m", "first");
+		expect(await readTagged(remote("o/bank@v8"), options())).toMatchObject({
+			kind: "files",
+		});
+		await git("commit", "--quiet", "--allow-empty", "-m", "moved");
+		await git("tag", "-f", "-a", "v8", "-m", "second");
+		// The fetch fails: no new entry can be made beside the old one.
+		const parent = join(cache, "o", "bank@v8");
+		await chmod(parent, 0o555);
+		try {
+			expect(await readTagged(remote("o/bank@v8"), options())).toMatchObject({
+				kind: "unavailable",
+				reason: expect.stringMatching(/^`o\/bank@v8` can't be read: /),
+			});
+		} finally {
+			await chmod(parent, 0o755);
+		}
 	}, 30000);
 
 	it("gives no message for a lightweight tag, never its commit's", async () => {
