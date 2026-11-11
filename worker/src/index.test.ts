@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type Env, handle } from "./index.js";
 
 const env: Env = {
@@ -167,5 +167,37 @@ describe("the token exchange Worker", () => {
 			headers: { Origin: ORIGIN },
 		});
 		expect((await handle(get, env, upstream)).status).toBe(405);
+	});
+
+	it("says why each 502 happened, never logging a secret, code, verifier or token", async () => {
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		const raw = (body: string, status = 200, type = "text/html") =>
+			(async () =>
+				new Response(body, {
+					status,
+					headers: { "Content-Type": type },
+				})) as unknown as typeof fetch;
+		const leaky = "access_token=ghu_x&refresh_token=ghr_y";
+		for (const upstream of [
+			github(new Error("down")).upstream,
+			raw(`<p>${leaky}</p>`, 503),
+			raw(leaky, 200, "application/x-www-form-urlencoded"),
+			raw("null", 200, "application/json"),
+			github({ refresh_token: "ghr_y" }).upstream,
+			github({ error: "incorrect_client_credentials" }).upstream,
+		]) {
+			const r = await handle(post("/exchange", exchange), env, upstream);
+			expect(r.status).toBe(502);
+		}
+		const logged = JSON.stringify(log.mock.calls);
+		log.mockRestore();
+		for (const secret of ["the-secret", "c0de", verifier, "ghu_", "ghr_"])
+			expect(logged).not.toContain(secret);
+		expect(logged).toMatch(/upstream unreachable.*down/);
+		expect(logged).toMatch(/upstream status.*503/);
+		expect(logged).toMatch(/upstream unreadable/);
+		expect(logged).toMatch(/upstream not an object/);
+		expect(logged).toMatch(/no access_token/);
+		expect(logged).toMatch(/misconfigured/);
 	});
 });

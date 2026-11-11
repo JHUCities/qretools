@@ -6,6 +6,9 @@
 	// Served at qretools-auth.<account>.workers.dev; no preview deployments are used.
 	"workers_dev": true,
 	"preview_urls": false,
+	// Workers Logs: Cloudflare keeps request metadata (URL, headers, client IP; never bodies)
+	// and console lines, then expires them.
+	"observability": { "enabled": true },
 	"vars": {
 		// The GitHub App's client id (public): fill in after creating the App.
 		"CLIENT_ID": "Iv23liuH12sNU6DhRz15",
