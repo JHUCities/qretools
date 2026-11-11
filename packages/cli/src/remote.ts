@@ -1,10 +1,11 @@
 /**
  * A bank in another repository, read at its tag with the user's own git: so whatever
  * credentials git already has reach a private repository, and nothing here handles a
- * token. The tag is resolved first (`ls-remote`), and then only `refs/tags/<tag>` is
- * fetched, shallow and without blobs it doesn't need (`clone --branch` would prefer a
- * branch of the same name), into a cache kept by tag. A tag is immutable by convention, not by guarantee: the commit it
- * resolved to is written beside the clone, for a lock to compare with one day.
+ * token. The tag is resolved on every read (`ls-remote`), and only when it names
+ * something the cache doesn't hold is `refs/tags/<tag>` fetched, shallow and without
+ * blobs it doesn't need (`clone --branch` would prefer a branch of the same name). A
+ * tag is immutable by convention, not by guarantee: a moved tag is read again, so the
+ * commit read is the one it names now, for its lock to compare with.
  */
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -52,7 +53,8 @@ const gitSaid = (e: unknown): string => {
 
 /**
  * The bank at `address`, read at its tag: its files by path in its folder, or why not.
- * Read once per tag; later reads come from the cache.
+ * Fetched when the tag names something new; otherwise, and when the repository can't
+ * be reached, read from the cache.
  */
 export async function readTagged(
 	address: RemoteAddress,
@@ -70,23 +72,36 @@ export async function readTagged(
 		`${repo.toLowerCase()}@${encodeURIComponent(ref)}`,
 		path === "" ? "whole" : `folder-${encodeURIComponent(path)}`,
 	);
-	if (!(await exists(join(clone, ".qretools-commit")))) {
-		let listed: string;
-		try {
-			listed = (
-				await run("git", ["ls-remote", "--tags", url, `refs/tags/${ref}`])
-			).stdout;
-		} catch (e) {
-			return {
-				kind: "unavailable",
-				reason: `\`${where}\` can't be read: ${gitSaid(e)}`,
-			};
-		}
-		if (listed.trim() === "")
+	// What the tag names now: the tag object of an annotated tag, else its commit. The
+	// entry records the one it was fetched at, so a moved tag, or the same address read
+	// from another clone, is fetched again rather than served from the cache.
+	let named: string | undefined;
+	try {
+		const { stdout } = await run("git", [
+			"ls-remote",
+			"--tags",
+			url,
+			`refs/tags/${ref}`,
+		]);
+		named = stdout
+			.split("\n")
+			.map((line) => line.split("\t"))
+			.find(([, name]) => name === `refs/tags/${ref}`)?.[0];
+		if (named === undefined)
 			return {
 				kind: "unavailable",
 				reason: `\`${where}\`: ${owner}/${repo} has no tag \`${ref}\`.`,
 			};
+	} catch (e) {
+		// Unreachable (offline, or access lost): the cached entry serves, as it was last
+		// read. So a moved tag shows only once the repository can be reached again.
+		if (!(await exists(join(clone, ".qretools-commit"))))
+			return {
+				kind: "unavailable",
+				reason: `\`${where}\` can't be read: ${gitSaid(e)}`,
+			};
+	}
+	if (named !== undefined && named !== (await fetchedAt(clone))) {
 		// Cloned beside, then moved into place: a clone stopped halfway is never read, and
 		// beside the cache the move stays on one filesystem.
 		const parent = dirname(clone);
@@ -108,13 +123,17 @@ export async function readTagged(
 			);
 			await git("checkout", "--quiet", `refs/tags/${ref}`);
 			const commit = (await git("rev-parse", "HEAD")).stdout.trim();
+			// What was fetched, not what ls-remote said: the tag may have moved in between.
+			const tag = (await git("rev-parse", `refs/tags/${ref}`)).stdout.trim();
 			await writeFile(join(work, ".qretools-commit"), `${commit}\n`, "utf8");
+			await writeFile(join(work, ".qretools-tag"), `${tag}\n`, "utf8");
 			await rm(clone, { recursive: true, force: true });
 			await rename(work, clone);
 		} catch (e) {
 			await rm(work, { recursive: true, force: true });
-			// Another run fetched the same tag meanwhile (a CI matrix): theirs serves.
-			if (!(await exists(join(clone, ".qretools-commit"))))
+			// Another run fetched the same tag meanwhile (a CI matrix): theirs serves. An
+			// entry fetched at what the tag named before never does.
+			if ((await fetchedAt(clone)) !== named)
 				return {
 					kind: "unavailable",
 					reason: `\`${where}\` can't be read: ${gitSaid(e)}`,
@@ -151,6 +170,13 @@ export async function readTagged(
 		};
 	}
 }
+
+/** What the tag named when the entry at `clone` was fetched; none for an entry cached before this was recorded, or no entry. */
+const fetchedAt = (clone: string): Promise<string | undefined> =>
+	readFile(join(clone, ".qretools-tag"), "utf8").then(
+		(text) => text.trim(),
+		() => undefined,
+	);
 
 /** An annotated tag's message, signature included as git keeps it; none for a lightweight tag. */
 async function tagMessageOf(
