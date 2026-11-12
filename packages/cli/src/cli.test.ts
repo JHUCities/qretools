@@ -665,7 +665,7 @@ describe("qretools export", () => {
 		// The reason once, though both questions say it.
 		expect(r.err.split("(`access` must be a list of levels)")).toHaveLength(2);
 		expect(r.err).toMatch(
-			/Not exported: a question's access level can't be read\.\n$/,
+			/Not exported: an access level can't be read, or this workspace doesn't declare one\.\n$/,
 		);
 	});
 

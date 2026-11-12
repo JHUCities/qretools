@@ -884,3 +884,76 @@ describe("an asked question's access level", () => {
 		});
 	});
 });
+
+describe("the access levels an instrument's workspace declares", () => {
+	const b = remoteScope("acme/b@v1", {
+		kind: "files",
+		files: {
+			"workspace.yaml":
+				"agency: org.bank\naccess: [public, restricted, secret]\n",
+			"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
+			"questions/a/age.yaml": q("age", "open: {}\naccess: public\n"),
+			"questions/a/ssn.yaml": q("ssn", "open: {}\naccess: secret\n"),
+		},
+	});
+	const of = (levels: readonly string[] | undefined, asks = ["zip", "age"]) =>
+		instrumentOf(
+			`name: x\nuses:\n  b: acme/b@v1\nflow:\n${asks.map((a) => `  - ask: b.${a}\n`).join("")}`,
+			{
+				banks: { b },
+				agency: "org.example",
+				...(levels !== undefined && { levels }),
+			},
+		);
+	const said = (levels: readonly string[] | undefined, asks?: string[]) =>
+		of(levels, asks)
+			.findings.filter((f) => f.code.startsWith("access-"))
+			.map((f) => [f.code, f.path, f.message]);
+
+	it("asks a workspace with no levels to declare each level its questions are asked at", () => {
+		expect(said([])).toEqual([
+			[
+				"access-undeclared",
+				"uses.b",
+				"This instrument asks `b` questions at `public` and `restricted`, and this workspace declares no access levels.",
+			],
+		]);
+		expect(exportRefusal(of([]), [])?.kind).toBe("access");
+	});
+
+	it("names a level the workspace lacks, and only the levels asked at", () => {
+		expect(said(["public"])).toEqual([
+			[
+				"access-undeclared",
+				"uses.b",
+				"This instrument asks `b` questions at `restricted`, which this workspace doesn't declare.",
+			],
+		]);
+		// `secret` is the bank's, but nothing asked stands there.
+		expect(said(["public", "restricted"])).toEqual([]);
+		expect(exportRefusal(of(["public", "restricted"]), [])).toBeUndefined();
+		// Outside a workspace there's nothing to declare them in.
+		expect(said(undefined)).toEqual([]);
+	});
+
+	it("says when the workspace orders the levels it shares with the bank otherwise", () => {
+		expect(said(["restricted", "public"])).toEqual([
+			[
+				"access-order",
+				"uses.b",
+				"`b` orders its access levels `public` and `restricted`, and this workspace orders them `restricted` and `public`.",
+			],
+		]);
+		expect(exportRefusal(of(["restricted", "public"]), [])?.kind).toBe(
+			"access",
+		);
+		// Levels out of order that nothing asked stands at aren't this instrument's to say.
+		expect(said(["public", "secret", "restricted"], ["age"])).toEqual([]);
+	});
+
+	it("leaves the question's own policy in the DDI", () => {
+		expect(JSON.stringify(of(["public", "restricted"], ["zip"]).ddi)).toContain(
+			"urn:ddi:org.bank:access-public-restricted-secret.codes:1",
+		);
+	});
+});

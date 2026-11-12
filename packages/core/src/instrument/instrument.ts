@@ -38,6 +38,12 @@ export interface InstrumentContext {
 	readonly agency?: string;
 	/** Its DDI version; "1" when nothing is known of its history. */
 	readonly version?: string;
+	/**
+	 * Its own workspace's access levels, most open first (`workspace.yaml`'s `access`): it
+	 * must declare each level it asks questions at. Absent when it's in no workspace:
+	 * then there's nothing to declare them in, and no check.
+	 */
+	readonly levels?: readonly string[];
 }
 
 export interface Instrument {
@@ -127,6 +133,24 @@ export function instrumentOf(
 			hint: `Correct the \`access\` list in the \`workspace.yaml\` of \`${q.alias}\`.`,
 		});
 	}
+	// An asked question keeps its home bank's policy; its workspace must declare each
+	// level it asks at, in the same order, so its own policy covers what it publishes.
+	const asked = new Map<string, Set<string>>();
+	for (const node of steps(parsed.draft.flow)) {
+		const q = node.kind === "ask" ? node.question : undefined;
+		if (q === undefined) continue;
+		const levels = asked.get(q.alias) ?? new Set<string>();
+		if (q.evaluation.draft.access !== undefined)
+			levels.add(q.evaluation.draft.access);
+		asked.set(q.alias, levels);
+	}
+	const host = context.levels;
+	const undeclared =
+		host === undefined
+			? []
+			: [...asked].flatMap(([alias, levels]) =>
+					hostCovers(host, alias, context.banks[alias]?.env.access, levels),
+				);
 	// A release whose manifest can't be used: its questions are published, at version 1.
 	const staleManifests: Finding[] = parsed.draft.uses.flatMap(
 		(u): Finding[] => {
@@ -155,6 +179,7 @@ export function instrumentOf(
 				...agency,
 				...banksWithout,
 				...unmarked.values(),
+				...undeclared,
 				...staleManifests,
 			],
 			parsed.ranges,
@@ -166,6 +191,56 @@ export function instrumentOf(
 		refs: instrumentRefs(parsed, source),
 		livelits: instrumentLivelits(source, parsed, checked.fills),
 	};
+}
+
+/**
+ * What the host workspace lacks to cover a bank's access policy, said at the bank's use:
+ * each level its asked questions stand at (`asked`, as held: a missing level is the
+ * last) must be declared in the host's `workspace.yaml`, and the levels both list must
+ * stand in the same order. Declaring a level only makes the host's policy cover it: the
+ * question keeps its own bank's policy, never re-ranked.
+ */
+function hostCovers(
+	host: readonly string[],
+	alias: string,
+	home: readonly string[] | undefined,
+	asked: ReadonlySet<string>,
+): readonly Finding[] {
+	if (home === undefined || home.length === 0) return [];
+	const code = (xs: readonly string[]) => andList(xs.map((x) => `\`${x}\``));
+	const missing = home.filter((l) => asked.has(l) && !host.includes(l));
+	const order = (levels: readonly string[], other: readonly string[]) =>
+		levels.filter((l) => other.includes(l));
+	const shared = order(home, host);
+	const findings: Finding[] = [];
+	if (missing.length > 0)
+		findings.push({
+			code: "access-undeclared",
+			severity: "error",
+			path: `uses.${alias}`,
+			message:
+				host.length === 0
+					? `This instrument asks \`${alias}\` questions at ${code(missing)}, and this workspace declares no access levels.`
+					: `This instrument asks \`${alias}\` questions at ${code(missing)}, which this workspace doesn't declare.`,
+			hint: `Add ${code(missing)} to the \`access\` list in this workspace's \`workspace.yaml\`, in the order \`${alias}\` gives: ${code(home)}, most open first.`,
+		});
+	// Only where an asked level stands: the order of levels nothing is asked at isn't this instrument's.
+	const before = (levels: readonly string[], a: string, b: string) =>
+		levels.indexOf(a) < levels.indexOf(b);
+	const disordered = shared.some(
+		(a) =>
+			asked.has(a) &&
+			shared.some((b) => b !== a && before(home, a, b) !== before(host, a, b)),
+	);
+	if (disordered)
+		findings.push({
+			code: "access-order",
+			severity: "error",
+			path: `uses.${alias}`,
+			message: `\`${alias}\` orders its access levels ${code(shared)}, and this workspace orders them ${code(order(host, home))}.`,
+			hint: `Put the levels in this workspace's \`workspace.yaml\` in the order \`${alias}\` gives, most open first.`,
+		});
+	return findings;
 }
 
 /** Names as a reader lists them: "a", "a and b", "a, b and c". */

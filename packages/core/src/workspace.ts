@@ -13,7 +13,7 @@ import {
 import { UNVERSIONED, type Version, type Versions } from "./ddi/version.ts";
 import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
 import { type Finding, inDocumentOrder } from "./findings.ts";
-import type { Use } from "./instrument/draft.ts";
+import { steps, type Use } from "./instrument/draft.ts";
 import {
 	type Instrument,
 	importsOf,
@@ -223,6 +223,7 @@ export function instrumentIn(
 		agency,
 		locks = {},
 		version,
+		levels,
 	}: {
 		/** The workspace's own bank; needed only when a use is local (`resolveUses`). */
 		readonly bank: BankScope | undefined;
@@ -234,6 +235,8 @@ export function instrumentIn(
 		readonly locks?: Locks;
 		/** The instrument's DDI version, from its history; every item it makes carries it. */
 		readonly version?: string;
+		/** The access levels `workspace.yaml` declares; absent, no check (`InstrumentContext.levels`). */
+		readonly levels?: readonly string[];
 	},
 ): InstrumentIn {
 	const uses = resolveUses(importsOf(source), remote);
@@ -253,6 +256,7 @@ export function instrumentIn(
 	const instrument = instrumentOf(source, {
 		banks: given,
 		unresolved,
+		...(levels !== undefined && { levels }),
 		...(agency !== undefined && { agency }),
 		...(version !== undefined && { version }),
 	});
@@ -332,6 +336,7 @@ export function workspaceOf(
 			remoteBanks,
 			agency,
 			locks,
+			levels: bank.env.access,
 			...(version !== undefined && { version }),
 		});
 		// The workspace as committed, as `check` reads it: a tag no lock holds got here
@@ -352,7 +357,40 @@ export function workspaceOf(
 						},
 					};
 	}
-	return { bank, remote: remoteBanks, instruments, ignored: ignored.sort() };
+	// A level declared for questions the instruments ask from other banks is named there:
+	// `unused-level` would tell the author to remove what `access-undeclared` asks for.
+	const asked = new Set(
+		Object.values(instruments).flatMap(({ instrument }) =>
+			[...steps(instrument.draft.flow)].flatMap((node) => {
+				const level =
+					node.kind === "ask"
+						? node.question?.evaluation.draft.access
+						: undefined;
+				return level === undefined ? [] : [level];
+			}),
+		),
+	);
+	const settingsFindings = bank.findings[ROOT.workspace];
+	const used =
+		settingsFindings === undefined
+			? bank
+			: {
+					...bank,
+					findings: {
+						...bank.findings,
+						[ROOT.workspace]: settingsFindings.filter(
+							(f) =>
+								f.code !== "unused-level" ||
+								!asked.has(bank.env.access[Number(f.path.split(".")[1])] ?? ""),
+						),
+					},
+				};
+	return {
+		bank: used,
+		remote: remoteBanks,
+		instruments,
+		ignored: ignored.sort(),
+	};
 }
 
 /**

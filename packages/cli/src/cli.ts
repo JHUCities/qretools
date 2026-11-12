@@ -47,6 +47,7 @@ import {
 	makeValidator,
 	movedTags,
 	notHere,
+	parseSettingsFile,
 	placeFindings,
 	questionItems,
 	type Range,
@@ -1067,7 +1068,9 @@ function refused(r: Refusal, io: Io): number {
 			// Every question says it; the reason is said once.
 			for (const m of new Set(r.findings.map((f) => f.message)))
 				io.err(`${m}\n`);
-			io.err("Not exported: a question's access level can't be read.\n");
+			io.err(
+				"Not exported: an access level can't be read, or this workspace doesn't declare one.\n",
+			);
 			break;
 		case "collisions":
 			for (const c of r.collisions)
@@ -1230,6 +1233,10 @@ async function instrument(
 	const result = instrumentOf(source, {
 		banks,
 		...(agency !== undefined && { agency }),
+		// The levels its workspace declares; outside a workspace, there's none to check.
+		...(settings !== undefined && {
+			levels: parseSettingsFile(settings).access,
+		}),
 	});
 	// In a workspace, `check` says a tag no lock holds, as the workspace's check does; an
 	// export locks it instead, and says so.

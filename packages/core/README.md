@@ -130,6 +130,14 @@ A question names its level with `access: restricted`. These rules apply:
   without one has a hole ("to fill in"). Until you add the line, the question is at the
   last level, the most closed one.
 - A level that the list has but that no question names is a warning on workspace.yaml.
+  A level at which an instrument of the workspace asks a question from another bank
+  counts as named.
+- An instrument that asks a question from another bank keeps the level and the policy
+  of that bank. The workspace of the instrument must declare each level at which the
+  instrument asks questions from that bank, in the same order as that bank. If not, the
+  `uses` entry of the bank has an error (`access-undeclared` or `access-order`), and the
+  export stops. Declare the level in `workspace.yaml`. This does not change the level of
+  the question.
 - An `access` value that is not in the list is an error. An empty value is a hole.
   Until you correct it, the question is at the last level.
 - An `access` line in a workspace without levels is an error.

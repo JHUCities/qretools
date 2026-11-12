@@ -26,6 +26,9 @@ export interface Exportable {
 export const ACCESS_REFUSING: readonly Finding["code"][] = [
 	"access-unreadable",
 	"no-access-levels",
+	// An instrument's workspace that doesn't cover the levels it asks at.
+	"access-undeclared",
+	"access-order",
 ];
 
 export type Refusal =
@@ -73,7 +76,7 @@ export function refusalReason(r: Refusal): string {
 		case "invalidAgency":
 			return "A DDI agency is missing or wrong. See Findings.";
 		case "access":
-			return "An access level can't be read from workspace.yaml. See Findings.";
+			return "An access level can't be read from workspace.yaml, or it doesn't declare one. See Findings.";
 		case "collisions":
 			return "Two things would share one DDI name. See Findings.";
 		case "unchecked":

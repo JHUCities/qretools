@@ -111,7 +111,11 @@ export type InstrumentCode =
 	/** Advice, in `check`: a tag read with no lock in `workspace.yaml`. */
 	| "unlocked-tag"
 	/** A release: an instrument that reads its own workspace as its files are (`../`), not at a tag. */
-	| "untagged-use";
+	| "untagged-use"
+	/** An asked question's bank lists an access level its host workspace doesn't declare. */
+	| "access-undeclared"
+	/** A bank and its host workspace list shared access levels in different orders. */
+	| "access-order";
 
 export type FindingCode =
 	| ParseCode
