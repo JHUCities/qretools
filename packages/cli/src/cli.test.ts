@@ -441,7 +441,8 @@ describe("qretools build", () => {
 			// Its Qualtrics survey, and the map of the survey's columns to that DDI.
 			const json = r.written[join(ws, "dist", "instruments", "x.json")] ?? "";
 			const map = JSON.parse(
-				r.written[join(ws, "dist", "instruments", "x.columns.json")] ?? "{}",
+				r.written[join(ws, "dist", "instruments", "x-ddi-qsf.columns.json")] ??
+					"{}",
 			);
 			expect(map).toEqual({
 				qretools: expect.any(String),
@@ -500,7 +501,7 @@ describe("qretools build", () => {
 			const dist = (file: string) => join(ws, "dist", "instruments", file);
 			const first = await runWith(bank, "build", ws);
 			expect(first.written[dist("x.qsf")]).toBeDefined();
-			expect(first.written[dist("x.columns.json")]).toBeDefined();
+			expect(first.written[dist("x-ddi-qsf.columns.json")]).toBeDefined();
 			// An input named like a field Qualtrics surveys get: a release allows it, a survey can't.
 			await writeFile(
 				join(ws, "instruments/x.yaml"),

@@ -103,7 +103,7 @@ const USAGE = `Usage:
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist),
                                     and each instrument's to outdir/instruments/<name>.json, with its Qualtrics
                                     survey (<name>.qsf) and the map of that survey's response columns to its DDI
-                                    variables (<name>.columns.json); an instrument Qualtrics can't run gets a
+                                    variables (<name>-ddi-qsf.columns.json); an instrument Qualtrics can't run gets a
                                     warning instead of those two. Refused while an instrument is incomplete, reads
                                     this workspace as \`../\`, or reads a tag it hasn't locked or that has moved
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
@@ -600,7 +600,7 @@ async function exportBank(
  * `qretools build [dir]`: the workspace as committed at HEAD, each file at the version its
  * first-parent history gives (`versionsOf`), exported as `export` does to `out/ddi.json`;
  * and each instrument to `out/instruments/<name>.json`, with its Qualtrics survey
- * (`<name>.qsf`) and column map (`<name>.columns.json`), or a warning where Qualtrics can't
+ * (`<name>.qsf`) and column map (`<name>-ddi-qsf.columns.json`), or a warning where Qualtrics can't
  * run it. Uncommitted changes are left out, and said to be.
  */
 async function build(
@@ -680,7 +680,7 @@ async function build(
 		if (made?.kind !== "made") {
 			// A release goes ahead without its survey; one an earlier build left isn't this one.
 			await io.removeFile(file(".qsf"));
-			await io.removeFile(file(".columns.json"));
+			await io.removeFile(file("-ddi-qsf.columns.json"));
 			io.err(
 				`[WARNING] ${join(dir, path)}: not built as a Qualtrics survey. ${
 					made === undefined
@@ -699,7 +699,7 @@ async function build(
 			);
 		await io.writeFile(file(".qsf"), `${JSON.stringify(made.qsf, null, 2)}\n`);
 		await io.writeFile(
-			file(".columns.json"),
+			file("-ddi-qsf.columns.json"),
 			`${JSON.stringify(made.columns, null, 2)}\n`,
 		);
 	}
