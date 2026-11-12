@@ -87,6 +87,16 @@ export const OptionSchema = z
 	})
 	.describe("An option with its own notes.");
 
+export const LlmSchema = z
+	.strictObject({
+		context: z
+			.string()
+			.describe(
+				"What a person would see or hear that the words don't say, such as a showcard, the layout, or an interviewer's gesture, written for an LLM answering the survey. People never see it.",
+			),
+	})
+	.describe("What an LLM answering the survey is given with this question.");
+
 /** What a fill holds: a number, or words. The one list; the parser reads it too. */
 export const FILL_TYPES = ["number", "text"] as const;
 
@@ -165,6 +175,9 @@ export const QuestionSchema = z
 			.string()
 			.optional()
 			.describe("Notes respondents don't see, such as its history."),
+		llm: LlmSchema.optional().describe(
+			"What an LLM answering the survey is given with this question, under `context`. People never see it.",
+		),
 		fills: z
 			.record(
 				z.string().regex(NAME_PATTERN, NAME_RULE_TEXT),
@@ -408,7 +421,7 @@ export const selectAllFileJsonSchema = (): Record<string, unknown> =>
 export const describe = (key: SurfaceKey): string =>
 	QuestionSchema.shape[key].description ?? "";
 
-/** The description of the field at a path: a part of `number` or `open`, else the top field. */
+/** The description of the field at a path: a part of `number`, `open` or `llm`, else the top field. */
 export function describePath(path: string, key: SurfaceKey): string {
 	const sub = path.split(".")[1];
 	const part =
@@ -418,6 +431,8 @@ export function describePath(path: string, key: SurfaceKey): string {
 				? (NumberDomainSchema.shape as Record<string, z.ZodType>)[sub]
 				: key === "open"
 					? (OpenDomainSchema.shape as Record<string, z.ZodType>)[sub]
-					: undefined;
+					: key === "llm"
+						? (LlmSchema.shape as Record<string, z.ZodType>)[sub]
+						: undefined;
 	return part?.description ?? describe(key);
 }

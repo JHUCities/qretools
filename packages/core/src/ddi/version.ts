@@ -54,7 +54,7 @@ const ORIGIN_KEYS = {
 	commit: "git-commit",
 } as const;
 
-const pair = (key: string, value: string): JsonObject => ({
+export const pair = (key: string, value: string): JsonObject => ({
 	AttributeKey: { StringValue: key },
 	AttributeValue: { StringValue: value },
 });

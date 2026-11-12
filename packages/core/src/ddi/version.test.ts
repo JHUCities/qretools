@@ -156,6 +156,29 @@ describe("DDI versions", () => {
 		expect(only(doc, "Variable")[0]).not.toHaveProperty("UserAttributePair");
 	});
 
+	it("keeps a question's llm.context beside its origin", () => {
+		const origin = {
+			repository: "org/bank",
+			path: "q.yaml",
+			tag: "v1",
+			commit: "c0ffee",
+		};
+		const doc = ddi(`${QUESTION}llm:\n  context: A card shows the scale.\n`, {
+			own: { number: "1", origin },
+		});
+		expect(validate(doc)).toEqual([]);
+		const keys = (
+			(only(doc, "QuestionItem")[0]?.UserAttributePair ?? []) as JsonObject[]
+		).map((p) => (p.AttributeKey as JsonObject).StringValue);
+		expect(keys).toEqual([
+			"llm-context",
+			"git-repository",
+			"git-path",
+			"git-tag",
+			"git-commit",
+		]);
+	});
+
 	it("an unmerged preview is said to be unpublished", () => {
 		const doc = ddi(QUESTION, { own: { number: "5", published: false } });
 		expect(only(doc, "QuestionItem")[0]?.IsPublished).toBe(false);

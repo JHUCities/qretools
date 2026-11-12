@@ -64,6 +64,8 @@ export interface Draft {
 	readonly instruction?: Named<TextEntry>;
 	readonly source?: string;
 	readonly note?: string;
+	/** `llm.context`: what an LLM respondent is given that a person sees, such as a showcard. */
+	readonly llmContext?: string;
 	/** Names of fields carried over verbatim from an older format; their values are never read. */
 	readonly legacy?: readonly string[];
 	/** Absent means a hole: no response domain yet. */

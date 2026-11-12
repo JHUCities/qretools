@@ -13,6 +13,7 @@ import { parseScale } from "../surface/scales.ts";
 import type { DdiDocument, ItemType, JsonObject } from "./document.ts";
 import {
 	elaborate as elaborateWith,
+	LLM_CONTEXT_KEY,
 	NOT_TICKED,
 	TICKED,
 	type Versioning,
@@ -49,6 +50,32 @@ const question = (doc: DdiDocument, id: string): JsonObject =>
 describe("elaborate", () => {
 	it("compiles the official schema", () => {
 		expect(validator.ok).toBe(true);
+	});
+
+	it("publishes llm.context as a UserAttributePair on the question only", () => {
+		const { draft } = parseSurface(
+			`${example("nhd_sat")}llm:\n  context: A card shows the five options.\n`,
+			WITH_UNITS,
+		);
+		const doc = elaborate(draft, AGENCY, [{ code: "-8", label: "Refused" }]);
+		expect(validate(doc)).toEqual([]);
+		expect(question(doc, "nhd_sat").UserAttributePair).toEqual([
+			{
+				AttributeKey: { StringValue: LLM_CONTEXT_KEY },
+				AttributeValue: { StringValue: "A card shows the five options." },
+			},
+		]);
+		expect(itemOf(doc, "Variable", "variable-nhd_sat")).not.toHaveProperty(
+			"UserAttributePair",
+		);
+		const without = elaborate(
+			parseSurface(example("nhd_sat"), WITH_UNITS).draft,
+			AGENCY,
+			[],
+		);
+		expect(question(without, "nhd_sat")).not.toHaveProperty(
+			"UserAttributePair",
+		);
 	});
 
 	it.each(["nhd_sat", "nhd_nyrs"])(

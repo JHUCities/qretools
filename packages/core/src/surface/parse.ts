@@ -48,6 +48,7 @@ import {
 	DOMAIN_KEYS,
 	describe,
 	KNOWN_KEYS,
+	LlmSchema,
 	NAME_PATTERN,
 	NumberDomainSchema,
 	OpenDomainSchema,
@@ -160,6 +161,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	const variants = readVariants(data.variant_of);
 	const domain = readDomain(doc, data, ranges, env);
 	const access = readAccess(data.access, env);
+	const llm = readLlm(data.llm);
 	const draft: Draft = compact({
 		...plain,
 		concept: concept.value,
@@ -169,6 +171,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		domain: domain.value,
 		fills: fills.value,
 		access: access.value,
+		llmContext: llm.value,
 	});
 
 	const findings = withSpacing(
@@ -187,6 +190,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			...domain.findings,
 			...fills.findings,
 			...access.findings,
+			...llm.findings,
 			...fillFindings(text, ranges.text, fills.value ?? []),
 		].map(pointAt(empties)),
 	);
@@ -659,7 +663,38 @@ export function readOpen(value: unknown): Read<Domain> {
 	);
 }
 
-function issueFindings(kind: "number" | "open", zodError: ZodError): Finding[] {
+/**
+ * `llm`: a map with one field, `context`. Written empty, or without `context`, it's a
+ * hole, as any opened key is.
+ */
+function readLlm(value: unknown): Read<string> {
+	if (value === undefined) return fail();
+	if (value === null || value === "")
+		return fail(hole("llm", "`llm` is empty.", EMPTY_HINT));
+	const { rest, holes } = opened(value, "llm");
+	// Partial: a missing `context` is a hole, not the schema's "must be text".
+	const result = LlmSchema.partial().safeParse(rest);
+	if (!result.success)
+		return fail(...issueFindings("llm", result.error), ...holes);
+	const { context } = result.data;
+	if (context !== undefined) return ok(context, ...holes);
+	return fail(
+		...(holes.length > 0
+			? holes
+			: [
+					hole(
+						"llm.context",
+						"`llm` has no `context`.",
+						"Add `context:` under `llm`, or remove `llm`.",
+					),
+				]),
+	);
+}
+
+function issueFindings(
+	kind: "number" | "open" | "llm",
+	zodError: ZodError,
+): Finding[] {
 	return zodError.issues.flatMap((issue) => {
 		if (issue.code === "unrecognized_keys") {
 			return issue.keys.map((k) =>

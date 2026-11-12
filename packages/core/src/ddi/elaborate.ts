@@ -44,6 +44,7 @@ import {
 	identity,
 	intl,
 	item,
+	type Json,
 	type JsonObject,
 	literalText,
 	obj,
@@ -52,11 +53,19 @@ import {
 } from "./document.ts";
 import { itemKeyOf } from "./read.ts";
 import {
+	pair,
 	UNVERSIONED,
 	type Version,
 	type Versions,
 	versionFields,
 } from "./version.ts";
+
+/**
+ * The UserAttributePair key a question's `llm.context` is published under. DDI has no
+ * way to say who a text is for, so this is our own key; a UserAttributePair keeps it
+ * out of what DDI tools show people, and a harness finds it by this key.
+ */
+export const LLM_CONTEXT_KEY = "llm-context";
 
 /** ID used while `name` is still a hole. Never leaks into QuestionItemName. */
 const UNTITLED = "untitled-question";
@@ -157,11 +166,23 @@ const versioned = (
 	version: Version,
 	body: JsonObject,
 	principal = false,
-): Item =>
-	item(type, identity(ctx.agency, id, version.number), {
-		...body,
-		...versionFields(version, principal),
-	});
+): Item => {
+	const fields = versionFields(version, principal);
+	// Both may carry UserAttributePairs (the body's own, the version's origin): keep both.
+	const pairs = [
+		...((body.UserAttributePair ?? []) as readonly Json[]),
+		...((fields.UserAttributePair ?? []) as readonly Json[]),
+	];
+	return item(
+		type,
+		identity(ctx.agency, id, version.number),
+		obj({
+			...body,
+			...fields,
+			UserAttributePair: pairs.length > 0 ? pairs : undefined,
+		}),
+	);
+};
 
 /**
  * A question's DDI items, unkeyed: an export of many questions (an instrument, a
@@ -264,6 +285,9 @@ export function elaborateItems(
 			BasedOnObject: maybe(draft.source, (s) => ({
 				BasedOnRationaleDescription: intl(s),
 			})),
+			UserAttributePair: maybe(draft.llmContext, (c) => [
+				pair(LLM_CONTEXT_KEY, c),
+			]),
 		}),
 		true,
 	);

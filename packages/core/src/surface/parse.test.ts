@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Finding } from "../findings.ts";
 import { EMPTY_ENV, type Env } from "./env.ts";
 import { parseSurface } from "./parse.ts";
+import { describePath } from "./schema.ts";
 
 const WITH_UNITS = { ...EMPTY_ENV, units: { years: { label: "years" } } };
 
@@ -86,11 +87,56 @@ describe("parseSurface", () => {
 			["error:wrong-type@name"],
 		],
 		["not a map", "- a\n- b\n", ["error:not-a-map@"]],
+		["llm written empty is a hole", `${complete}llm:\n`, ["hole:hole@llm"]],
+		[
+			"llm context written empty is a hole",
+			`${complete}llm:\n  context:\n`,
+			["hole:hole@llm.context"],
+		],
+		[
+			"llm without a context is a hole",
+			`${complete}llm: {}\n`,
+			["hole:hole@llm.context"],
+		],
+		[
+			"an unknown key under llm",
+			`${complete}llm:\n  context: A card shows the options.\n  model: x\n`,
+			["error:unknown-key@llm.model"],
+		],
+		[
+			"an empty unknown key under llm is a hole, the context still read",
+			`${complete}llm:\n  context: A card shows the options.\n  model:\n`,
+			["hole:hole@llm.model"],
+		],
+		[
+			"llm written as words",
+			`${complete}llm: A card shows the options.\n`,
+			["error:wrong-type@llm"],
+		],
 	];
 
 	it.each(table)("%s", (_title, input, expected) => {
 		const { findings } = parseSurface(input, EMPTY_ENV);
 		expect(findings.map(brief).sort()).toEqual(expected.sort());
+	});
+
+	it("reads llm.context into the draft, a block of text kept as written", () => {
+		const { draft, findings } = parseSurface(
+			`${complete}llm:\n  context: |\n    The card lists the options.\n    Very satisfied is green.\n`,
+			EMPTY_ENV,
+		);
+		expect(findings).toEqual([]);
+		expect(draft.llmContext).toBe(
+			"The card lists the options.\nVery satisfied is green.\n",
+		);
+		expect(parseSurface(complete, EMPTY_ENV).draft).not.toHaveProperty(
+			"llmContext",
+		);
+		// An empty context's hole sits just after its colon, where the author types.
+		const empty = `${complete}llm:\n  context:\n`;
+		const at = empty.length - 1;
+		expect(parseSurface(empty, EMPTY_ENV).findings[0]?.range).toEqual([at, at]);
+		expect(describePath("llm.context", "llm")).toMatch(/showcard/);
 	});
 
 	it("keeps the author's spelling of codes", () => {
