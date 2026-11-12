@@ -36,7 +36,13 @@ describe("links", () => {
 	});
 
 	it("anything the app did not write is no link", () => {
-		for (const hash of ["", "#", "#top", "#repo=o&branch=b", "#repo=o/r"])
+		for (const hash of ["", "#", "#top", "#repo=o&branch=b", "#repo=o"])
 			expect(parseLink(hash)).toBeUndefined();
+	});
+
+	it("a bank alone is a link to it, however often its name was encoded", () => {
+		for (const hash of ["#repo=o/r", "#repo=o%2Fr", "#repo=o%252Fr"])
+			expect(parseLink(hash)).toEqual({ repo: "o/r" });
+		expect(formatLink({ repo: "o/r" })).toBe("#repo=o%2Fr");
 	});
 });

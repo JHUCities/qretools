@@ -100,7 +100,7 @@ export interface BankRef extends Repo {
 const SEGMENT = /^[^/\s]+$/;
 
 /** A URL segment decoded, or as it is when it isn't valid percent-encoding. */
-const safeDecode = (s: string): string => {
+export const safeDecode = (s: string): string => {
 	try {
 		return decodeURIComponent(s);
 	} catch {

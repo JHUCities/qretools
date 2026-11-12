@@ -4,20 +4,23 @@
  * since branch names and paths both contain `/`. The browser keeps the history.
  */
 
-import { parseBank } from "./storage.ts";
+import { parseBank, safeDecode } from "./storage.ts";
 
 export interface Link {
 	/** The bank: `owner/repo`, or `owner/repo/folder` for a bank in a folder. */
 	readonly repo: string;
-	readonly branch: string;
-	/** A path in the bank; absent for a link to the branch alone. */
+	/** Absent for a link to the bank alone (`#repo=owner/name`), as one written by hand. */
+	readonly branch?: string;
+	/** A path in the bank, on `branch`; absent for a link to the branch alone. */
 	readonly file?: string;
 	/** A place in the file, in its own terms (a path such as `flow.3.ask`): opened there. */
 	readonly at?: string;
 }
 
 export function formatLink(link: Link): string {
-	const params = new URLSearchParams({ repo: link.repo, branch: link.branch });
+	const params = new URLSearchParams({ repo: link.repo });
+	if (link.branch === undefined) return `#${params.toString()}`;
+	params.set("branch", link.branch);
 	if (link.file !== undefined) params.set("file", link.file);
 	if (link.file !== undefined && link.at !== undefined)
 		params.set("at", link.at);
@@ -27,11 +30,14 @@ export function formatLink(link: Link): string {
 /** A hash the app wrote, or undefined for anything else (including an empty hash). */
 export function parseLink(hash: string): Link | undefined {
 	const params = new URLSearchParams(hash.replace(/^#/, ""));
-	const repo = params.get("repo");
+	const written = params.get("repo");
+	// Encoded twice (`owner%252Frepo`), as a link pasted through another encoder arrives.
+	const repo = written?.includes("%") ? safeDecode(written) : written;
 	const branch = params.get("branch");
 	const file = params.get("file");
 	const at = params.get("at");
-	if (!repo || !branch || !parseBank(repo).ok) return undefined;
+	if (!repo || !parseBank(repo).ok) return undefined;
+	if (!branch) return { repo };
 	if (!file) return { repo, branch };
 	return at ? { repo, branch, file, at } : { repo, branch, file };
 }

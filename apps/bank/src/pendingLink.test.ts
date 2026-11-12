@@ -30,6 +30,31 @@ function waiting(): Model {
 	return m;
 }
 
+describe("a link to a bank alone, signed out", () => {
+	it("is the bank the sign-in form offers, even encoded twice", () => {
+		const [start] = init({
+			work: ok(undefined),
+			hasToken: false,
+			settings: settings("old"),
+		});
+		const [m] = update(start, {
+			kind: "hashChanged",
+			hash: "#repo=JHUCities%252Fqretools-gss",
+		});
+		expect(m.pendingLink).toEqual({ repo: "JHUCities/qretools-gss" });
+	});
+
+	it("waits for nothing once that bank is the one signed in to", () => {
+		const [start] = init({
+			work: ok(undefined),
+			hasToken: false,
+			settings: settings("linked"),
+		});
+		const [m] = update(start, { kind: "hashChanged", hash: "#repo=o/linked" });
+		expect(m.pendingLink).toBeUndefined();
+	});
+});
+
 describe("a link waiting for sign-in", () => {
 	it("is dropped, and out of the address first, when another bank is chosen", () => {
 		for (const kind of ["signInRequested", "connectRequested"] as const) {
