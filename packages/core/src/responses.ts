@@ -25,6 +25,11 @@ export interface ResponseColumn {
 	readonly values?: Readonly<Record<string, string | null>>;
 	/** Only the values in `values` are read; any other is a finding (a tick, say). */
 	readonly only?: true;
+	/**
+	 * Values that stand for a range, not themselves (a top code: 6 for "6 or more"), each
+	 * with what it means. They give no answer, and a note.
+	 */
+	readonly censored?: Readonly<Record<string, string>>;
 }
 
 /** How a source's columns record DDI variables. */
@@ -81,7 +86,11 @@ export type ResponseCode =
 	/** Columns of the data file that the map doesn't name. */
 	| "responses-unmapped-column"
 	/** A header the map names that the data file has more than once. */
-	| "responses-header";
+	| "responses-header"
+	/** A column whose values the source doesn't hold: none is read. */
+	| "responses-filtered"
+	/** A value that stands for a range (a top or bottom code): it gives no answer. */
+	| "responses-censored";
 
 /**
  * Where a finding is: the first line it's on and how many rows share it, and the column by
@@ -179,6 +188,16 @@ export function readResponses(
 		for (const c of readable) {
 			const cell = cells[c.column] ?? "";
 			if (cell === "") continue;
+			if (c.censored !== undefined && Object.hasOwn(c.censored, cell)) {
+				note(
+					"responses-censored",
+					"info",
+					censoredMessage(c.censored),
+					line,
+					c.column,
+				);
+				continue;
+			}
 			// Own keys only: a cell such as `toString` isn't a translation.
 			const translated =
 				c.values !== undefined && Object.hasOwn(c.values, cell)
@@ -227,6 +246,20 @@ export function readResponses(
 		}
 	}
 	return { answers, findings: [...found.values()] };
+}
+
+/** What a column's censored values mean, as one note: the values are the map's, not a response's. */
+function censoredMessage(censored: Readonly<Record<string, string>>): string {
+	const entries = Object.entries(censored);
+	const and = (xs: readonly string[]) =>
+		xs.length < 2
+			? xs.join("")
+			: `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+	const values = and(entries.map(([v]) => v));
+	const meanings = and(entries.map(([, m]) => `"${m}"`));
+	return entries.length === 1
+		? `Its value ${values} means ${meanings}, so it isn't read as a number.`
+		: `Its values ${values} mean ${meanings}, so they aren't read as numbers.`;
 }
 
 /** Whether a variable can hold a value. */
@@ -336,6 +369,10 @@ export interface DataMap {
 		readonly column: string;
 		readonly variable: string;
 		readonly values?: Values;
+		/** The source doesn't hold this variable's values: none is read. */
+		readonly filtered?: true;
+		/** Values that stand for a range, with what each means: no answer, and a note. */
+		readonly censored?: Readonly<Record<string, string>>;
 	}[];
 }
 
@@ -362,7 +399,13 @@ export function dataMapOf(json: unknown): DataMap | undefined {
 	const named = new Set<string>();
 	for (const c of columns as unknown[]) {
 		if (typeof c !== "object" || c === null) return undefined;
-		const { column, variable, values: own } = c as Record<string, unknown>;
+		const {
+			column,
+			variable,
+			values: own,
+			filtered,
+			censored,
+		} = c as Record<string, unknown>;
 		if (typeof column !== "string" || typeof variable !== "string")
 			return undefined;
 		// A header named twice would be a guess at which entry is meant.
@@ -370,7 +413,22 @@ export function dataMapOf(json: unknown): DataMap | undefined {
 		named.add(column);
 		const v = own === undefined ? undefined : valuesOf(own);
 		if (own !== undefined && v === undefined) return undefined;
-		read.push({ column, variable, ...(v !== undefined && { values: v }) });
+		if (filtered !== undefined && filtered !== true) return undefined;
+		const ranges = censored === undefined ? undefined : valuesOf(censored);
+		if (
+			censored !== undefined &&
+			(ranges === undefined || Object.values(ranges).some((m) => m === null))
+		)
+			return undefined;
+		read.push({
+			column,
+			variable,
+			...(v !== undefined && { values: v }),
+			...(filtered === true && { filtered }),
+			...(ranges !== undefined && {
+				censored: ranges as Readonly<Record<string, string>>,
+			}),
+		});
 	}
 	return {
 		...(typeof ddi === "string" && { ddi }),
@@ -433,6 +491,16 @@ export function dataFileMap(
 	const columns: ResponseColumn[] = [];
 	const absent: string[] = [];
 	for (const c of map.columns) {
+		// Said whether or not the file has the column: there's nothing in it to read.
+		if (c.filtered) {
+			note(
+				"responses-filtered",
+				"info",
+				"Filtered from this source, so its values aren't read.",
+				{ column: c.column },
+			);
+			continue;
+		}
 		const found = at.get(c.column) ?? [];
 		const [i] = found;
 		if (i === undefined) {
@@ -456,6 +524,7 @@ export function dataFileMap(
 			column: i,
 			variable: c.variable,
 			...(values !== undefined && { values }),
+			...(c.censored !== undefined && { censored: c.censored }),
 		});
 	}
 	// One finding for them all: a map written in another case misses every column.

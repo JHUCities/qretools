@@ -253,3 +253,65 @@ describe("dataFileMap", () => {
 		}
 	});
 });
+
+describe("filtered and censored columns", () => {
+	it("reads no value that stands for a range, with one note per column, and every other value", () => {
+		const r = readResponses(
+			["id", "age"],
+			rows(["a", "17"], ["b", "30"], ["c", "45"], ["d", "45"]),
+			{
+				respondent: 0,
+				columns: [
+					{
+						column: 1,
+						variable: "urn:age",
+						censored: { "17": "17 or younger", "45": "45 or older" },
+					},
+				],
+			},
+			REPRESENTATIONS,
+		);
+		expect(r.answers.map((a) => a.value)).toEqual(["30"]);
+		expect(r.findings).toEqual([
+			{
+				code: "responses-censored",
+				severity: "info",
+				message:
+					'Its values 17 and 45 mean "17 or younger" and "45 or older", so they aren\'t read as numbers.',
+				line: 2,
+				column: "age",
+				count: 3,
+			},
+		]);
+	});
+
+	it("reads nothing from a filtered column, with one note, whether or not the file has it", () => {
+		const map = dataMapOf({
+			respondent: "id",
+			columns: [
+				{ column: "happy", variable: "urn:happy", filtered: true },
+				{ column: "gone", variable: "urn:note", filtered: true },
+				{ column: "age", variable: "urn:age", censored: { "6": "6 or more" } },
+			],
+		});
+		if (map === undefined) throw new Error("the map isn't read");
+		const made = dataFileMap("id,happy,age\na,1,6\n", map);
+		expect(made.map?.columns).toEqual([
+			{ column: 2, variable: "urn:age", censored: { "6": "6 or more" } },
+		]);
+		expect(made.findings.map((f) => [f.code, f.severity, f.column])).toEqual([
+			["responses-filtered", "info", "happy"],
+			["responses-filtered", "info", "gone"],
+		]);
+		expect(made.findings[0]?.message).toBe(
+			"Filtered from this source, so its values aren't read.",
+		);
+		for (const bad of [{ filtered: false }, { censored: { "6": null } }])
+			expect(
+				dataMapOf({
+					respondent: "id",
+					columns: [{ column: "age", variable: "urn:age", ...bad }],
+				}),
+			).toBeUndefined();
+	});
+});

@@ -12,7 +12,13 @@ import { NAME_KIND } from "../copy.ts";
 import type { Range } from "../findings.ts";
 import { ROOT, schemePath } from "../kinds.ts";
 import { DEFAULT_SELECT_ALL } from "../selectAll.ts";
-import type { Cond, Named, Node, Placeholder } from "./draft.ts";
+import {
+	type Cond,
+	type Named,
+	type Node,
+	type Placeholder,
+	steps,
+} from "./draft.ts";
 import type { ParsedInstrument } from "./parse.ts";
 
 export type InstrumentRef =
@@ -68,23 +74,6 @@ function valueAt(
 	const written = source.slice(colon + 1, to);
 	const start = colon + 1 + (written.length - written.trimStart().length);
 	return start < to ? [start, to] : undefined;
-}
-
-/** Every step of a flow, at any depth. */
-function* steps(flow: readonly Node[]): Generator<Node> {
-	for (const node of flow) {
-		yield node;
-		if (
-			node.kind === "section" ||
-			node.kind === "roster" ||
-			node.kind === "each"
-		)
-			yield* steps(node.flow);
-		else if (node.kind === "if") {
-			for (const b of node.branches) yield* steps(b.then);
-			if (node.else !== undefined) yield* steps(node.else);
-		}
-	}
 }
 
 /** What a name the instrument declares is, as its hover says it. */

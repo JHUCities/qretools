@@ -227,7 +227,9 @@ reads all other names as the map of a data file:
   "columns": [
     { "column": "TENURE", "variable": "urn:ddi:org.example:instrument-wave1.var-tenure:3" },
     { "column": "AGE", "variable": "urn:ddi:org.example:instrument-wave1.var-age:3" },
-    { "column": "MODE", "variable": "urn:ddi:org.example:instrument-wave1.var-mode:3", "values": { "9": "4" } }
+    { "column": "MODE", "variable": "urn:ddi:org.example:instrument-wave1.var-mode:3", "values": { "9": "4" } },
+    { "column": "INCOME", "variable": "urn:ddi:org.example:instrument-wave1.var-income:3", "filtered": true },
+    { "column": "PERSONS", "variable": "urn:ddi:org.example:instrument-wave1.var-persons:3", "censored": { "8": "8 or more" } }
   ]
 }
 ```
@@ -242,6 +244,20 @@ reads all other names as the map of a data file:
   its own `values`. A translation in a column's `values` replaces the same translation in
   the map's `values`. To read a value as it is in one column only, translate it to itself
   (`"-98": "-98"`).
+- `filtered`: `true` if the variable is filtered from the data file (see below). The
+  command reads no value from the column. It writes one note for the column. The file
+  does not have to have the column.
+- `censored`: the values that mean a range, not a number, each with what it means. For
+  example, `8` can mean "8 or more" (a top code), and `17` can mean "17 or younger" (a
+  bottom code). The command writes no line for such a value. It writes one note for the
+  column, and reads all other values of the column.
+
+**Filtered.** A variable is filtered from a data file when the data file does not hold
+its values at the level of access that you have. The publisher can filter a variable, for
+example to protect respondents. You can filter a variable too, for example when the data
+file holds the values in a different form (broad groups, not the codes of the variable).
+Mark a filtered variable `"filtered": true`. Do not remove it from the map: the note
+shows that the variable has no values from this file.
 
 To read a data file, do these steps:
 
@@ -263,7 +279,7 @@ If `build` changes the DDI, the digest of the DDI changes. Then write the new di
 the map.
 
 The output is the same as in "Read the responses". A number is read only if it is in the
-range that the DDI gives. The command writes these findings, in addition to those of
+range that the DDI gives. This check applies to a Qualtrics export too. The command writes these findings, in addition to those of
 "Read the responses":
 
 - `responses-missing-column` (warning): the file has no column with a header that the map
@@ -274,6 +290,13 @@ range that the DDI gives. The command writes these findings, in addition to thos
   command writes one note for all of these columns.
 - `responses-unreadable` (error): the file has no header row, or it does not have exactly
   one column with the header in `respondent`.
+- `responses-filtered` (note): the map marks the column `filtered`. The command reads no
+  value from it.
+- `responses-censored` (note): a value of the column is in its `censored` list. The command
+  writes no line for it.
+
+An input of an instrument has the missing values of the questions that the instrument
+asks. Thus, a data file can give "Don't know" (or another missing value) for an input.
 
 ## Codebook
 

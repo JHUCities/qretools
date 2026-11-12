@@ -226,3 +226,20 @@ export type Named =
 			readonly question?: QuestionRef;
 			readonly type: Type;
 	  };
+
+/** Every step of a flow, at any depth. */
+export function* steps(flow: readonly Node[]): Generator<Node> {
+	for (const node of flow) {
+		yield node;
+		if (
+			node.kind === "section" ||
+			node.kind === "roster" ||
+			node.kind === "each"
+		)
+			yield* steps(node.flow);
+		else if (node.kind === "if") {
+			for (const b of node.branches) yield* steps(b.then);
+			if (node.else !== undefined) yield* steps(node.else);
+		}
+	}
+}
