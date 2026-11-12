@@ -28,6 +28,17 @@ agency:
 #  questions/example:
 #    - universe
 
+# The access levels of this workspace, from the most open to the most closed.
+# A question names its level in an access line, such as access: restricted. A
+# question without an access line is at the first level. In the DDI, each
+# variable of a question above the first level gets an embargo with the name of
+# its level. Without this list, no question is restricted. To use these three
+# levels, remove the # at the start of these four lines:
+#access:
+#  - public
+#  - restricted
+#  - secure
+
 # Which version each tag used by this workspace's instruments (owner/name@v1)
 # pointed to when it was recorded. A tag can be moved to a new version, so this
 # shows when another workspace's questions may have changed under the same tag.

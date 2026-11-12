@@ -180,6 +180,12 @@ export const QuestionSchema = z
 			.describe(
 				"Questions this one is meant to be like, each with why they differ, such as dem_inclo: split ballot, lower range. Stops the findings that call them duplicates.",
 			),
+		access: z
+			.string()
+			.optional()
+			.describe(
+				"Who may see the answers: one of the access levels in workspace.yaml. Leave out for the most open level.",
+			),
 		legacy: z
 			.record(z.string(), z.unknown())
 			.optional()
@@ -270,6 +276,12 @@ export function questionJsonSchema(
 				...env.required,
 			]),
 		];
+	// The bank's levels as constants; with none, the field would only be a finding.
+	if (env.access.length === 0) delete props.access;
+	else if (props.access !== undefined)
+		props.access = withNames(props.access, env.access, (n) =>
+			n === env.access[0] ? "The most open level" : "Access level",
+		);
 	const responses = props.responses;
 	const branches = responses?.anyOf;
 	if (responses && Array.isArray(branches)) {
@@ -366,6 +378,12 @@ export const WorkspaceFileSchema = z.strictObject({
 		.optional()
 		.describe(
 			"Each tag this workspace's instruments use, with the commit it named when locked, such as `owner/repo@v1: <the commit's full sha>`. Saving or exporting an instrument fills this in. If a tag moves, you get a warning.",
+		),
+	access: z
+		.array(z.string().regex(NAME_PATTERN))
+		.optional()
+		.describe(
+			"The access levels a question can name with `access:`, most open first, such as `public`, then `restricted`. A question without `access:` is at the first level.",
 		),
 });
 export const workspaceFileJsonSchema = (): Record<string, unknown> =>

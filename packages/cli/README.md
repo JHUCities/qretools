@@ -26,7 +26,8 @@ A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/
 shared folders (`scales/` and so on), `missing.yaml`, `select_all.yaml` and
 `instruments/`. `check` reports findings for its questions, its shared files and every
 instrument. An instrument reads its own workspace as `../`, under the agency in
-`workspace.yaml`. `check` also notes YAML files it ignores.
+`workspace.yaml`. `check` also notes YAML files it ignores. The fields of `workspace.yaml`,
+the access levels among them, are in the [core README](../core/README.md).
 
 ## Workspaces in other repositories
 

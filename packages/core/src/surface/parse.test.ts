@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Finding } from "../findings.ts";
-import { EMPTY_ENV } from "./env.ts";
+import { EMPTY_ENV, type Env } from "./env.ts";
 import { parseSurface } from "./parse.ts";
 
 const WITH_UNITS = { ...EMPTY_ENV, units: { years: { label: "years" } } };
@@ -380,5 +380,47 @@ describe("unit", () => {
 		expect(at("times per week").draft.domain).toMatchObject({
 			unit: { kind: "text", text: "times per week" },
 		});
+	});
+});
+
+describe("access", () => {
+	const env: Env = { ...EMPTY_ENV, access: ["public", "restricted", "secure"] };
+	const read = (line: string, e = env) =>
+		parseSurface(`name: q\ntext: Q?\nintent: i\nopen: {}\n${line}`, e);
+	const codes = (line: string, e = env) =>
+		read(line, e).findings.map((f) => [f.severity, f.code, f.path]);
+
+	it("holds a level above the first; the first, or no line, is open", () => {
+		expect(read("access: restricted\n").draft.access).toBe("restricted");
+		expect(read("access: secure\n").draft.access).toBe("secure");
+		expect(read("access: public\n").draft.access).toBeUndefined();
+		expect(read("").draft.access).toBeUndefined();
+		expect(codes("access: restricted\n")).toEqual([]);
+	});
+
+	it("holds a question at the last level while its level can't be read", () => {
+		for (const line of ["access: secrue\n", "access: 3\n", "access:\n"])
+			expect([line, read(line).draft.access]).toEqual([line, "secure"]);
+		expect(codes("access: secrue\n")).toEqual([
+			["error", "unknown-access", "access"],
+		]);
+		expect(codes("access:\n")).toEqual([["hole", "hole", "access"]]);
+		expect(read("access: secrue\n").findings[0]?.hint).toContain(
+			"held at `secure`",
+		);
+	});
+
+	it("restricts nothing in a workspace with no levels, and says so", () => {
+		const r = read("access: restricted\n", EMPTY_ENV);
+		expect(r.draft.access).toBeUndefined();
+		expect(r.findings.map((f) => [f.severity, f.code])).toEqual([
+			["error", "no-access-levels"],
+		]);
+	});
+
+	it("takes a typo in the field's name as an unknown field", () => {
+		expect(codes("acess: restricted\n")).toEqual([
+			["error", "unknown-key", "acess"],
+		]);
 	});
 });

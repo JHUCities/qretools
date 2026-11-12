@@ -31,7 +31,13 @@ export type ParseCode =
 	| "fill-name"
 	| "fill-type"
 	/** Advice: a declared fill the text never uses. */
-	| "fill-unused";
+	| "fill-unused"
+	/** An access level the workspace doesn't list: the question is held at its last level. */
+	| "unknown-access"
+	/** A level `workspace.yaml`'s `access` lists twice. */
+	| "duplicate-level"
+	/** `access` on a question in a workspace that lists no access levels. */
+	| "no-access-levels";
 
 /** Survey-craft advice. Always `warning` or `info`, never a blocker. */
 export type LintCode =

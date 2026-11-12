@@ -159,6 +159,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	const fills = readFills(doc);
 	const variants = readVariants(data.variant_of);
 	const domain = readDomain(doc, data, ranges, env);
+	const access = readAccess(data.access, env.access);
 	const draft: Draft = compact({
 		...plain,
 		concept: concept.value,
@@ -167,6 +168,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		legacy: legacy.value,
 		domain: domain.value,
 		fills: fills.value,
+		access: access.value,
 	});
 
 	const findings = withSpacing(
@@ -184,6 +186,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			...variants.findings,
 			...domain.findings,
 			...fills.findings,
+			...access.findings,
 			...fillFindings(text, ranges.text, fills.value ?? []),
 		].map(pointAt(empties)),
 	);
@@ -312,6 +315,49 @@ function readVariants(value: unknown): Read<readonly Variant[]> {
 		else variants.push({ name, path, why });
 	}
 	return { value: variants, findings };
+}
+
+/**
+ * `access`: one of the bank's levels, most open first. The Draft holds a level only above
+ * the first. Written but unreadable (empty, not a level) it fails closed: the question is
+ * held at the last level until it's fixed, since an export doesn't stop for a finding.
+ * With no levels in the bank there's nothing to restrict.
+ */
+function readAccess(value: unknown, levels: readonly string[]): Read<string> {
+	if (value === undefined) return fail();
+	const listed = `The levels are ${levels.map((l) => `\`${l}\``).join(", ")}, most open first.`;
+	const last = levels.at(-1);
+	const above = (level: string | undefined) =>
+		level === undefined || level === levels[0] ? undefined : level;
+	const held = (finding: Finding): Read<string> => {
+		const value = above(last);
+		const hint = `${finding.hint === undefined ? "" : `${finding.hint} `}Until it's fixed, it's held at \`${last}\`.`;
+		return value === undefined
+			? fail(finding)
+			: ok(value, { ...finding, hint });
+	};
+	if (levels.length === 0)
+		return fail(
+			error(
+				"no-access-levels",
+				"access",
+				"This workspace has no access levels, so `access` restricts nothing.",
+				"List the levels under `access:` in workspace.yaml, or remove the line.",
+			),
+		);
+	if (value === null || (typeof value === "string" && value.trim() === ""))
+		return held(hole("access", "`access` is empty.", listed));
+	if (typeof value !== "string" || !levels.includes(value))
+		return held(
+			error(
+				"unknown-access",
+				"access",
+				`\`${String(value)}\` isn't an access level in this workspace.`,
+				listed,
+			),
+		);
+	const level = above(value);
+	return level === undefined ? fail() : ok(level);
 }
 
 /** Legacy values are never read; only the field names are kept, so a lint can say they're there. */

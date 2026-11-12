@@ -775,3 +775,42 @@ flow:
 		for (const c of commands) expect(c).not.toMatch(/\?|\bbas\./);
 	});
 });
+
+describe("an asked question's access level", () => {
+	it("goes with each variable the instrument records, under the instrument's identity", () => {
+		const bank = bankOf({
+			"workspace.yaml": "agency: org.bank\naccess: [public, restricted]\n",
+			"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
+			"questions/a/modes.yaml": q(
+				"modes",
+				'select: many\nresponses:\n  "b": Bus\n  "w": Walk\naccess: restricted\n',
+			),
+			"questions/a/why.yaml": q("why", "open: {}\n"),
+		});
+		const parsed = parseInstrument(
+			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.zip\n  - ask: bas.modes\n  - ask: bas.why\n",
+			{ bas: bank },
+		);
+		expect(parsed.findings.filter((f) => f.severity !== "info")).toEqual([]);
+		const { document } = instrumentDocument(
+			elaborateInstrument(parsed, { agency: "org.example", version: "4" }),
+		);
+		expect(validator.ok && validator.value(document)).toEqual([]);
+		const embargo = Object.fromEntries(
+			Object.values(document.Variable ?? {})
+				.filter((v) => String(v.ID).startsWith("instrument-x.var-"))
+				.map((v) => [
+					String(v.ID),
+					(v.EmbargoReference as JsonObject | undefined)?.URN,
+				]),
+		);
+		expect(embargo).toEqual({
+			"instrument-x.var-zip": "urn:ddi:org.example:instrument-x.embargo-zip:4",
+			"instrument-x.var-modes_b":
+				"urn:ddi:org.example:instrument-x.embargo-modes_b:4",
+			"instrument-x.var-modes_w":
+				"urn:ddi:org.example:instrument-x.embargo-modes_w:4",
+			"instrument-x.var-why": undefined,
+		});
+	});
+});

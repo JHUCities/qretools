@@ -235,9 +235,10 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 	let required: readonly RequirableKey[] = EMPTY_ENV.required;
 	let requiredIn: Env["requiredIn"] = EMPTY_ENV.requiredIn;
 	let selectAll: SelectAll = EMPTY_ENV.selectAll;
+	let access: Env["access"] = EMPTY_ENV.access;
 	for (const f of files) {
 		if (f.kind === "workspace") {
-			({ required, requiredIn } = parseSettingsFile(f.text));
+			({ required, requiredIn, access } = parseSettingsFile(f.text));
 			continue;
 		}
 		if (f.kind === "select_all") {
@@ -272,6 +273,7 @@ export function schemeEnv(files: readonly SchemeFile[]): Env {
 		required,
 		requiredIn,
 		selectAll,
+		access,
 	};
 }
 

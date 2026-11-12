@@ -31,6 +31,7 @@ describe("the workspace's settings file", () => {
 			required: [],
 			requiredIn: {},
 			locked: {},
+			access: [],
 			findings: [],
 		});
 	});
@@ -512,5 +513,53 @@ describe("the locks in the workspace's settings file", () => {
 	it("write nothing into a file they can't read", () => {
 		expect(withLocks("locked: x\n", { "o/c@v1": B })).toBeUndefined();
 		expect(withLocks("- a list\n", { "o/c@v1": B })).toBeUndefined();
+	});
+});
+
+describe("the access levels in the workspace's settings file", () => {
+	it("reads the levels in order, most open first", () => {
+		const read = parseSettingsFile(
+			"agency: org.example\naccess:\n  - public\n  - restricted\n  - secure\n",
+		);
+		expect(read.access).toEqual(["public", "restricted", "secure"]);
+		expect(read.findings).toEqual([]);
+		expect(
+			schemeEnv([
+				{
+					kind: "workspace",
+					name: "workspace",
+					text: "agency: org.example\naccess: [open, closed]\n",
+				},
+			]).access,
+		).toEqual(["open", "closed"]);
+	});
+
+	it("keeps every level in its place, and says where one is wrong", () => {
+		expect(found("agency: x\naccess: public\n")).toEqual([
+			["error", "wrong-type", "access"],
+		]);
+		expect(found("agency: x\naccess:\n")).toEqual([["hole", "hole", "access"]]);
+		const read = parseSettingsFile(
+			"agency: x\naccess:\n  - public\n  - Not A Name\n  - public\n  - secure\n",
+		);
+		expect(read.access).toEqual(["public", "Not A Name", "secure"]);
+		expect(read.findings.map((f) => [f.code, f.path])).toEqual([
+			["wrong-type", "access.1"],
+			["duplicate-level", "access.2"],
+		]);
+		// A bad first name doesn't make the next level the open one.
+		const env = schemeEnv([
+			{
+				kind: "workspace",
+				name: "workspace",
+				text: "agency: x\naccess: [Public, restricted]\n",
+			},
+		]);
+		expect(
+			parseSurface(
+				"name: q\ntext: Q?\nintent: i\nopen: {}\naccess: restricted\n",
+				env,
+			).draft.access,
+		).toBe("restricted");
 	});
 });

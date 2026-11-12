@@ -1,8 +1,8 @@
 /**
  * The workspace details, `workspace.yaml`: what the workspace says about itself, so
  * everyone who reads or imports it reads the same. It holds the DDI agency for
- * everything in the workspace, and the fields every question (or every question in
- * one folder) must have. `select_all.yaml` is read here too: moving its reader beside
+ * everything in the workspace, the fields every question (or every question in
+ * one folder) must have, and its access levels. `select_all.yaml` is read here too: moving its reader beside
  * `SelectAll` would make an import cycle (env.ts reads the usual coding).
  */
 import { isMap, isScalar, parseDocument } from "yaml";
@@ -18,6 +18,7 @@ import { keyText } from "./codes.ts";
 import type { Code } from "./draft.ts";
 import { error, hole, isPlainObject, yamlError, yamlErrors } from "./read.ts";
 import {
+	NAME_PATTERN,
 	REQUIRABLE_KEYS,
 	REQUIRED_KEYS,
 	type RequirableKey,
@@ -45,6 +46,11 @@ export interface ParsedSettingsFile {
 	readonly requiredIn: RequiredIn;
 	/** The commit each tag its instruments use was locked at (`locked`), valid entries only. */
 	readonly locked: Locks;
+	/**
+	 * Its access levels (`access`), most open first, valid entries only; empty when it
+	 * lists none, and then no question is restricted.
+	 */
+	readonly access: readonly string[];
 	readonly findings: readonly Finding[];
 }
 
@@ -55,6 +61,7 @@ const FIELDS: readonly string[] = [
 	"required",
 	"required_in",
 	"locked",
+	"access",
 ];
 
 /** Reads `workspace.yaml`. An empty or broken file gives findings, never a throw. */
@@ -69,6 +76,7 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 			required: [],
 			requiredIn: {},
 			locked: {},
+			access: [],
 			findings: [
 				...syntax,
 				yamlError(e instanceof Error ? e.message : String(e)),
@@ -80,6 +88,7 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 			required: [],
 			requiredIn: {},
 			locked: {},
+			access: [],
 			findings: [
 				...syntax,
 				error(
@@ -107,12 +116,15 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 			: { value: {}, findings: [] };
 	const locked =
 		"locked" in js ? readLocked(js.locked) : { value: {}, findings: [] };
+	const access =
+		"access" in js ? readAccess(js.access) : { value: [], findings: [] };
 	const agency = readAgency(doc);
 	return {
 		...(agency.value !== undefined && { agency: agency.value }),
 		required: required.value,
 		requiredIn: requiredIn.value,
 		locked: locked.value,
+		access: access.value,
 		findings: [
 			...syntax,
 			...unknown,
@@ -120,8 +132,75 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 			...required.findings,
 			...requiredIn.findings,
 			...locked.findings,
+			...access.findings,
 		],
 	};
+}
+
+const ACCESS_EXAMPLE =
+	"List the levels, most open first, one per line, such as `- public` then `- restricted`.";
+
+/**
+ * `access:`: the workspace's access levels, most open first. Each is a name; one that
+ * isn't is an error at its place but keeps it, so no level moves. One listed twice is an
+ * error, and only its first place counts.
+ */
+function readAccess(value: unknown): {
+	value: readonly string[];
+	findings: readonly Finding[];
+} {
+	if (value === null)
+		return {
+			value: [],
+			findings: [
+				hole(
+					"access",
+					"`access` is empty.",
+					`${ACCESS_EXAMPLE} Or remove the line.`,
+				),
+			],
+		};
+	if (!Array.isArray(value))
+		return {
+			value: [],
+			findings: [
+				error(
+					"wrong-type",
+					"access",
+					"`access` must be a list of levels.",
+					ACCESS_EXAMPLE,
+				),
+			],
+		};
+	const levels: string[] = [];
+	const findings: Finding[] = [];
+	value.forEach((written, i) => {
+		const path = `access.${i}`;
+		const level = String(written);
+		if (levels.includes(level))
+			findings.push(
+				error(
+					"duplicate-level",
+					path,
+					`\`${level}\` is listed twice.`,
+					`Remove one \`${level}\` line.`,
+				),
+			);
+		else {
+			// A bad name keeps its place, or the levels after it would move one more open.
+			if (typeof written !== "string" || !NAME_PATTERN.test(written))
+				findings.push(
+					error(
+						"wrong-type",
+						path,
+						`\`${level}\` isn't a level's name.`,
+						"A level's name is lowercase letters, digits and underscores, such as `restricted`.",
+					),
+				);
+			levels.push(level);
+		}
+	});
+	return { value: levels, findings };
 }
 
 const SELECT_ALL_EXAMPLE =
