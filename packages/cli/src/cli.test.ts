@@ -906,6 +906,77 @@ describe("qretools responses", () => {
 			/`--map` isn't an option of `check`/,
 		);
 	});
+
+	it("reads a data file with a map that names its columns by header, beside the DDI or with --ddi", async () => {
+		const { map: qsfMap } = await files();
+		const dir = dirname(qsfMap);
+		const ddi = join(dir, "t.json");
+		const digest = `sha256:${createHash("sha256")
+			.update(await readFile(ddi, "utf8"))
+			.digest("hex")}`;
+		const data = join(dir, "data.csv");
+		await writeFile(
+			data,
+			"ID,TENURE,RENT,OTHER\n7,2,-98,x\n8,-100,-100,y\n9,5,1200,z\n",
+		);
+		const json = JSON.stringify({
+			ddi: digest,
+			respondent: "ID",
+			values: { "-98": "D", "-100": null },
+			columns: [
+				{ column: "TENURE", variable: v("tenure") },
+				{ column: "RENT", variable: v("rent") },
+			],
+		});
+		const beside = join(dir, "t-ddi-survey.columns.json");
+		await writeFile(beside, json);
+		const r = await run("responses", data, "--map", beside);
+		expect(r.out).toBe(
+			[
+				"respondent,variable,row,value",
+				`7,${v("tenure")},,2`,
+				`7,${v("rent")},,D`,
+				`9,${v("rent")},,1200`,
+				"",
+			].join("\n"),
+		);
+		expect(r.err).toBe(
+			[
+				`${data}: note: column \`OTHER\`: The map names no variable for this column, so it isn't read. [responses-unmapped-column]`,
+				`${data}:4: error: column \`TENURE\`: This value isn't one \`${v("tenure")}\` can hold, so it isn't read. [responses-not-a-code]`,
+				"",
+			].join("\n"),
+		);
+		expect(r.code).toBe(1);
+
+		// A map kept elsewhere reads the DDI --ddi names, still by its digest.
+		const elsewhere = join(dir, "maps");
+		await mkdir(elsewhere);
+		const apart = join(elsewhere, "t-ddi-survey.columns.json");
+		await writeFile(apart, json);
+		expect((await run("responses", data, "--map", apart)).code).toBe(2);
+		expect(
+			(await run("responses", data, "--map", apart, "--ddi", ddi)).out,
+		).toBe(r.out);
+		await writeFile(ddi, " ");
+		expect(
+			(await run("responses", data, "--map", apart, "--ddi", ddi)).err,
+		).toMatch(/isn't the DDI the map was made from.*\[responses-provenance\]/);
+
+		// Each kind of map is read only under its own name.
+		await writeFile(join(dir, "t-ddi-qsf.columns.json"), json);
+		expect(
+			(
+				await run(
+					"responses",
+					data,
+					"--map",
+					join(dir, "t-ddi-qsf.columns.json"),
+				)
+			).err,
+		).toMatch(/isn't a QSF column map/);
+		expect((await run("responses", data, "--map", ddi)).code).toBe(2);
+	});
 });
 
 describe("the command under real Node", () => {
