@@ -88,9 +88,10 @@ blob is a UserID.
 - It needs the whole history. A shallow clone is refused; in CI, use `fetch-depth: 0`.
 - It writes `<outdir>/ddi.json`. `-o` names the folder (default `<dir>/dist`).
 - It writes the DDI of each instrument to `<outdir>/instruments/<name>.json`. In the same
-  folder, it writes the Qualtrics survey of the instrument, `<name>.qsf`, and its column
-  map, `<name>-ddi-qsf.columns.json`. If Qualtrics cannot run an instrument, `build` gives
-  a warning. It then writes no survey and no column map for that instrument.
+  folder, it writes the Qualtrics survey of the instrument, `<name>.qsf`, and its QSF
+  column map, `<name>-ddi-qsf.columns.json`. If Qualtrics cannot run an instrument,
+  `build` gives a warning. It then writes no survey and no QSF column map for that
+  instrument.
 
 `--tag-message <file>` also writes the text for a release's tag: a line, a blank line,
 then each file's version, date and blob as JSON. Tag the built commit with it, verbatim,
@@ -100,9 +101,9 @@ is one). The tag points at the default branch's own commit, and only the tag is 
 
 ## Export from Qualtrics
 
-The column map gives the DDI variable of each column in a Qualtrics response export. To
-get an export that the column map can read, do these steps. The labels are those of
-Qualtrics in November 2026.
+The QSF column map gives the DDI variable of each column in a Qualtrics response
+export. To get an export that the QSF column map can read, do these steps. The labels
+are those of Qualtrics in November 2026.
 
 1. In Qualtrics, import `<name>.qsf` under Projects → Create project → Survey.
 2. Collect the responses.
@@ -111,18 +112,18 @@ Qualtrics in November 2026.
 5. Select the CSV tab.
 6. Select "Export values".
 7. **Caution: do step 8. If you do not, all the options of a select-all question go into
-   one column. The column map cannot read that column.**
+   one column. The QSF column map cannot read that column.**
 8. Select "Split multi-value fields into columns".
 9. Download the file.
 
 Row 3 of the file gives the ImportId of the column of each choice question as JSON. An
-example is `{"ImportId":"QID3","choiceId":"10"}`. In the column map, `importId` matches
-`ImportId`, and `choice` matches `choiceId`.
+example is `{"ImportId":"QID3","choiceId":"10"}`. In the QSF column map, `importId`
+matches `ImportId`, and `choice` matches `choiceId`.
 
 Qualtrics names the column of a select-all option with the code of the option, if the
 code is a number. It removes leading zeros: `010` becomes `10`. If the code is not a
 number, Qualtrics uses the position of the option. If two options get the same name, the
-export has one column for the two options. The column map does not include those
+export has one column for the two options. The QSF column map does not include those
 options, and `build` gives a `qsf-unmapped` warning. `build` also gives this warning for
 a code form that qretools has not tested in Qualtrics, for example `1.50`, `+1` or `opt1`.
 
