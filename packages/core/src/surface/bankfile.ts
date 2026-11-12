@@ -51,6 +51,8 @@ export interface ParsedSettingsFile {
 	 * lists none, and then no question is restricted.
 	 */
 	readonly access: readonly string[];
+	/** What's wrong with the `access` list, in a sentence; absent when nothing is. */
+	readonly accessProblem?: string;
 	readonly findings: readonly Finding[];
 }
 
@@ -119,8 +121,10 @@ export function parseSettingsFile(source: string): ParsedSettingsFile {
 	const access =
 		"access" in js ? readAccess(js.access) : { value: [], findings: [] };
 	const agency = readAgency(doc);
+	const accessProblem = access.findings[0]?.message;
 	return {
 		...(agency.value !== undefined && { agency: agency.value }),
+		...(accessProblem !== undefined && { accessProblem }),
 		required: required.value,
 		requiredIn: requiredIn.value,
 		locked: locked.value,

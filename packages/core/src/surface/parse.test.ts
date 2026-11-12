@@ -418,6 +418,20 @@ describe("access", () => {
 		]);
 	});
 
+	it("says a level can't be exported while the workspace's list can't be read", () => {
+		const broken: Env = {
+			...env,
+			accessProblem: "`Public` isn't a level's name.",
+		};
+		const r = read("access: restricted\n", broken);
+		expect(r.findings.map((f) => [f.severity, f.code])).toEqual([
+			["error", "access-unreadable"],
+		]);
+		expect(r.findings[0]?.message).toContain("(`Public` isn't a level's name)");
+		expect(r.draft.access).toBe("secure");
+		expect(read("", broken).findings).toEqual([]);
+	});
+
 	it("takes a typo in the field's name as an unknown field", () => {
 		expect(codes("acess: restricted\n")).toEqual([
 			["error", "unknown-key", "acess"],

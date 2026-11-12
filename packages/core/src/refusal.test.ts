@@ -42,6 +42,23 @@ describe("when an export is refused", () => {
 		]);
 	});
 
+	it("refuses while an access level can't be read, but not for a level held at the last", () => {
+		const finding = (code: Finding["code"]): Finding => ({
+			code,
+			severity: "error",
+			path: "access",
+			message: "m",
+		});
+		const kind = (code: Finding["code"]) =>
+			exportRefusal(
+				{ agency: "a", findings: [finding(code)], collisions: [] },
+				[],
+			)?.kind;
+		expect(kind("access-unreadable")).toBe("access");
+		expect(kind("no-access-levels")).toBe("access");
+		expect(kind("unknown-access")).toBeUndefined();
+	});
+
 	it("doesn't refuse for holes: they leave elements out, and the findings say so", () => {
 		expect(
 			exportRefusal({ agency: "a", findings: [hole], collisions: [] }, []),

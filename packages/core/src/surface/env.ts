@@ -65,6 +65,11 @@ export interface Env {
 	 * it lists none, and then no question is restricted.
 	 */
 	readonly access: readonly string[];
+	/**
+	 * What's wrong with `workspace.yaml`'s `access` list, in a sentence; absent when it
+	 * reads. While it's there, no question's level can be trusted, so none exports.
+	 */
+	readonly accessProblem?: string;
 }
 
 /** A kind of shared file a question can name. Not `missing`: it's a list, never named. */

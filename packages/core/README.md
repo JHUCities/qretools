@@ -133,7 +133,14 @@ A question names its level with `access: restricted`. These rules apply:
   embargo on its own variable.
 - An `access` value that is not in the list is an error. An empty value is a hole.
   Until you correct it, the question is at the last level.
-- An `access` line in a workspace without levels is an error, and restricts nothing.
+- An `access` line in a workspace without levels is an error.
+- If a question has an `access` line, the export stops in these conditions:
+  - the workspace has no `access` list;
+  - the `access` list is empty, or is not a list;
+  - the list has a level name that is not correct, or a level two times.
+
+  The export of an instrument that asks such a question also stops. Correct the
+  `access` list in workspace.yaml, then export again.
 - A level is a mark in the DDI. It does not remove data from an export.
 
 `envAt(env, path)` is the environment the question at a path is read against; `bankOf`

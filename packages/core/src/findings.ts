@@ -36,7 +36,9 @@ export type ParseCode =
 	| "unknown-access"
 	/** A level `workspace.yaml`'s `access` lists twice. */
 	| "duplicate-level"
-	/** `access` on a question in a workspace that lists no access levels. */
+	/** `access` on a question while `workspace.yaml`'s `access` list can't be read: refuses an export. */
+	| "access-unreadable"
+	/** `access` on a question in a workspace that lists no access levels: refuses an export. */
 	| "no-access-levels";
 
 /** Survey-craft advice. Always `warning` or `info`, never a blocker. */

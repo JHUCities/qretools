@@ -159,7 +159,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	const fills = readFills(doc);
 	const variants = readVariants(data.variant_of);
 	const domain = readDomain(doc, data, ranges, env);
-	const access = readAccess(data.access, env.access);
+	const access = readAccess(data.access, env);
 	const draft: Draft = compact({
 		...plain,
 		concept: concept.value,
@@ -321,9 +321,13 @@ function readVariants(value: unknown): Read<readonly Variant[]> {
  * `access`: one of the bank's levels, most open first. The Draft holds a level only above
  * the first. Written but unreadable (empty, not a level) it fails closed: the question is
  * held at the last level until it's fixed, since an export doesn't stop for a finding.
- * With no levels in the bank there's nothing to restrict.
+ * With no levels in the bank, or levels that can't be read, the level can't be trusted:
+ * an error that refuses an export (`exportRefusal`).
  */
-function readAccess(value: unknown, levels: readonly string[]): Read<string> {
+function readAccess(
+	value: unknown,
+	{ access: levels, accessProblem }: Pick<Env, "access" | "accessProblem">,
+): Read<string> {
 	if (value === undefined) return fail();
 	const listed = `The levels are ${levels.map((l) => `\`${l}\``).join(", ")}, most open first.`;
 	const last = levels.at(-1);
@@ -336,12 +340,21 @@ function readAccess(value: unknown, levels: readonly string[]): Read<string> {
 			? fail(finding)
 			: ok(value, { ...finding, hint });
 	};
+	if (accessProblem !== undefined)
+		return held(
+			error(
+				"access-unreadable",
+				"access",
+				`workspace.yaml's \`access\` list can't be read (${accessProblem.replace(/\.$/, "")}), so this question's access level can't be exported.`,
+				"Correct the `access` list in workspace.yaml.",
+			),
+		);
 	if (levels.length === 0)
 		return fail(
 			error(
 				"no-access-levels",
 				"access",
-				"This workspace has no access levels, so `access` restricts nothing.",
+				"workspace.yaml lists no access levels, so this question's access level can't be exported.",
 				"List the levels under `access:` in workspace.yaml, or remove the line.",
 			),
 		);

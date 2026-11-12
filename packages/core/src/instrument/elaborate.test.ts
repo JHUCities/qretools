@@ -3,8 +3,11 @@ import schemaText from "../../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
 import type { JsonObject } from "../ddi/document.ts";
 import { makeValidator } from "../ddi/validate.ts";
 import { bankOf } from "../evaluate.ts";
+import { exportRefusal } from "../refusal.ts";
+import { remoteScope } from "../workspace.ts";
 import { checkInstrument } from "./check.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
+import { instrumentOf } from "./instrument.ts";
 import { parseInstrument } from "./parse.ts";
 
 const schema = JSON.parse(schemaText) as {
@@ -777,6 +780,46 @@ flow:
 });
 
 describe("an asked question's access level", () => {
+	it("stops the export, said at the bank's use, while the bank can't read its levels", () => {
+		const bank = bankOf({
+			"workspace.yaml": "agency: org.bank\naccess: [Public, restricted]\n",
+			"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
+			"questions/a/why.yaml": q("why", "open: {}\n"),
+		});
+		const of = (ask: string) =>
+			instrumentOf(
+				`name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.${ask}\n`,
+				{ banks: { bas: bank }, unresolved: {}, agency: "org.example" },
+			);
+		const zip = of("zip");
+		expect(
+			zip.findings
+				.filter((f) => f.path === "uses.bas")
+				.map((f) => [f.code, f.message]),
+		).toEqual([
+			[
+				"access-unreadable",
+				expect.stringMatching(/^`bas\.zip`: workspace\.yaml's `access` list/),
+			],
+		]);
+		expect(exportRefusal(zip, [])?.kind).toBe("access");
+		// Asking only a question with no level, the bank's list doesn't matter.
+		expect(exportRefusal(of("why"), [])).toBeUndefined();
+		// A bank in another repository, read at its tag, says it the same way.
+		const remote = remoteScope("acme/bank@v1", {
+			kind: "files",
+			files: {
+				"workspace.yaml": "agency: org.bank\naccess:\n",
+				"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
+			},
+		});
+		const far = instrumentOf(
+			"name: x\nuses:\n  bas: acme/bank@v1\nflow:\n  - ask: bas.zip\n",
+			{ banks: { bas: remote }, unresolved: {}, agency: "org.example" },
+		);
+		expect(exportRefusal(far, [])?.kind).toBe("access");
+	});
+
 	it("goes with each variable the instrument records, under the instrument's identity", () => {
 		const bank = bankOf({
 			"workspace.yaml": "agency: org.bank\naccess: [public, restricted]\n",

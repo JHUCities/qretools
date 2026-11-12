@@ -71,7 +71,7 @@ function valueAt(
 }
 
 /** Every step of a flow, at any depth. */
-function* steps(flow: readonly Node[]): Generator<Node> {
+export function* steps(flow: readonly Node[]): Generator<Node> {
 	for (const node of flow) {
 		yield node;
 		if (
