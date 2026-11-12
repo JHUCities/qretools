@@ -4,7 +4,8 @@
  * write their `codebook` (an HTML page of that DDI, or of any DDI document), write an
  * instrument's test `form` (an HTML page that runs its routing, from its DDI), report its
  * `paths` (an HTML page of how many ways through its routing, and what each reaches),
- * or `build` it: the DDI of its last commit, each item at the version its history gives. `main` takes its
+ * or `build` it: the DDI of its last commit, each item at the version its history gives,
+ * with each instrument's Qualtrics survey and the map of its columns to that DDI. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
@@ -70,6 +71,8 @@ export interface Io {
 	readonly out: (text: string) => void;
 	readonly err: (text: string) => void;
 	readonly writeFile: (path: string, text: string) => Promise<void>;
+	/** Removes a file the command wrote before, if it's there. */
+	readonly removeFile: (path: string) => Promise<void>;
 	/**
 	 * A workspace in another repository, read at its tag (the command uses git:
 	 * `readTagged`); `from` is a local clone to read it from in place of GitHub.
@@ -98,9 +101,11 @@ const USAGE = `Usage:
                                     its DDI (as \`instrument export\` writes it)
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist),
-                                    and each instrument's to outdir/instruments/<name>.json. Refused while an
-                                    instrument is incomplete, reads this workspace as \`../\`, or reads a tag it
-                                    hasn't locked or that has moved
+                                    and each instrument's to outdir/instruments/<name>.json, with its Qualtrics
+                                    survey (<name>.qsf) and the map of that survey's response columns to its DDI
+                                    variables (<name>.columns.json); an instrument Qualtrics can't run gets a
+                                    warning instead of those two. Refused while an instrument is incomplete, reads
+                                    this workspace as \`../\`, or reads a tag it hasn't locked or that has moved
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -593,8 +598,10 @@ async function exportBank(
 
 /**
  * `qretools build [dir]`: the workspace as committed at HEAD, each file at the version its
- * first-parent history gives (`versionsOf`), exported as `export` does to `out/ddi.json`.
- * Uncommitted changes are left out, and said to be.
+ * first-parent history gives (`versionsOf`), exported as `export` does to `out/ddi.json`;
+ * and each instrument to `out/instruments/<name>.json`, with its Qualtrics survey
+ * (`<name>.qsf`) and column map (`<name>.columns.json`), or a warning where Qualtrics can't
+ * run it. Uncommitted changes are left out, and said to be.
  */
 async function build(
 	dir: string,
@@ -649,12 +656,53 @@ async function build(
 	}
 	const code = await exportBank(bank, join(out, "ddi.json"), io, asJson);
 	if (code !== OK) return code;
-	for (const [path, { instrument }] of Object.entries(instruments))
-		await emit(
-			asJson(instrument.ddi),
-			join(out, WORKSPACE.instruments, `${instrumentAt(path)}.json`),
-			io,
+	for (const [path, { instrument }] of Object.entries(instruments)) {
+		const name = instrumentAt(path) ?? path;
+		const file = (ext: string) =>
+			join(out, WORKSPACE.instruments, `${name}${ext}`);
+		const ddi = asJson(instrument.ddi);
+		await emit(ddi, file(".json"), io);
+		// Its Qualtrics survey and column map, from that DDI: dated when the instrument last
+		// changed (never now), so a commit always builds the same bytes.
+		const date = versions[path]?.date;
+		const made =
+			date === undefined
+				? undefined
+				: qsfOf(instrument.ddi, {
+						name: instrument.draft.name ?? name,
+						created: qsfTime(new Date(date)),
+						// Of the bytes `<name>.json` holds, so `shasum -a 256` on that file agrees.
+						digest: `sha256:${createHash("sha256")
+							.update(ddi.text ?? "")
+							.digest("hex")}`,
+						version: pkg.version,
+					});
+		if (made?.kind !== "made") {
+			// A release goes ahead without its survey; one an earlier build left isn't this one.
+			await io.removeFile(file(".qsf"));
+			await io.removeFile(file(".columns.json"));
+			io.err(
+				`[WARNING] ${join(dir, path)}: not built as a Qualtrics survey. ${
+					made === undefined
+						? "Its history gives it no date to make the survey with."
+						: `${qsfRefusalReason(made.errors)} \`qretools instrument export --qsf\` says what.`
+				}\n`,
+			);
+			continue;
+		}
+		for (const f of placeFindings(
+			made.findings.filter((f) => f.code === "qsf-unmapped"),
+			instrument.places,
+		))
+			io.err(
+				`${findingLine(join(dir, path), read.files[path] ?? "", instrument.ranges, f)}\n`,
+			);
+		await io.writeFile(file(".qsf"), `${JSON.stringify(made.qsf, null, 2)}\n`);
+		await io.writeFile(
+			file(".columns.json"),
+			`${JSON.stringify(made.columns, null, 2)}\n`,
 		);
+	}
 	// Only for a build that exported: a refused one is no release. Workspaces that use this
 	// release read banks from the message, never instruments, so it lists the bank's files.
 	if (message !== undefined)
@@ -941,7 +989,11 @@ async function exportQsf(
 		digest: `sha256:${createHash("sha256").update(ddiText(result.ddi)).digest("hex")}`,
 		version: pkg.version,
 	});
-	for (const f of placeFindings(made.findings, result.places))
+	// Not the column map's: it's written by `build`, never here.
+	for (const f of placeFindings(
+		made.findings.filter((f) => f.code !== "qsf-unmapped"),
+		result.places,
+	))
 		io.err(`${findingLine(file, source, result.ranges, f)}\n`);
 	if (made.kind === "refused") {
 		io.err(`Not exported: ${qsfRefusalReason(made.errors)}\n`);

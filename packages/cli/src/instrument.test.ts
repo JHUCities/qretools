@@ -198,6 +198,9 @@ describe("qretools instrument", () => {
 			writeFile: async (p, t) => {
 				written[p] = t;
 			},
+			removeFile: async (p) => {
+				delete written[p];
+			},
 			ownRepository,
 			readHistory: async () => ({
 				kind: "unavailable",

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	cp,
 	glob,
@@ -34,14 +35,26 @@ const unreachable: Io["readRemote"] = async (a) => ({
 
 /** The same, with banks in other repositories read by `readRemote`. */
 async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
+	return runOver({}, readRemote, ...argv);
+}
+
+/** `runWith`, over files an earlier run wrote: a second build into the same folder. */
+async function runOver(
+	files: Readonly<Record<string, string>>,
+	readRemote: Io["readRemote"],
+	...argv: string[]
+) {
 	const out: string[] = [];
 	const err: string[] = [];
-	const written: Record<string, string> = {};
+	const written: Record<string, string> = { ...files };
 	const io: Io = {
 		out: (t) => out.push(t),
 		err: (t) => err.push(t),
 		writeFile: async (path, text) => {
 			written[path] = text;
+		},
+		removeFile: async (path) => {
+			delete written[path];
 		},
 		readRemote,
 		readHistory,
@@ -425,6 +438,86 @@ describe("qretools build", () => {
 				"org.example:instrument-x:2",
 			]);
 			expect(r.written[join(ws, "dist", "ddi.json")]).toBeDefined();
+			// Its Qualtrics survey, and the map of the survey's columns to that DDI.
+			const json = r.written[join(ws, "dist", "instruments", "x.json")] ?? "";
+			const map = JSON.parse(
+				r.written[join(ws, "dist", "instruments", "x.columns.json")] ?? "{}",
+			);
+			expect(map).toEqual({
+				qretools: expect.any(String),
+				instrument: "urn:ddi:org.example:instrument-x:2",
+				ddi: `sha256:${createHash("sha256").update(json).digest("hex")}`,
+				columns: [
+					{
+						importId: "QID1_TEXT",
+						variable: "urn:ddi:org.example:instrument-x.var-q:2",
+					},
+				],
+			});
+			const qsf = r.written[join(ws, "dist", "instruments", "x.qsf")] ?? "";
+			// Dated when the instrument last changed, never now: a commit builds the same bytes.
+			const changed = (
+				await git(
+					root,
+					"log",
+					"-1",
+					"--format=%cI",
+					"--",
+					"sub/instruments/x.yaml",
+				)
+			).stdout.trim();
+			expect(JSON.parse(qsf).SurveyEntry.SurveyCreationDate).toBe(
+				new Date(changed).toISOString().slice(0, 19).replace("T", " "),
+			);
+			const again = await runWith(
+				async () => ({
+					kind: "files",
+					files: {
+						"workspace.yaml": "agency: org.example\n",
+						"questions/t/q.yaml": OPEN,
+					},
+					at: { commit: A, blobs: { "questions/t/q.yaml": "b1" } },
+				}),
+				"build",
+				ws,
+			);
+			expect(again.written).toEqual(r.written);
+		});
+
+		it("releases one Qualtrics can't run without its survey, and removes the one an earlier build wrote", async () => {
+			const { ws } = await withInstrument(
+				"acme/ws/sub@v1",
+				`agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n`,
+			);
+			const bank: Io["readRemote"] = async () => ({
+				kind: "files",
+				files: {
+					"workspace.yaml": "agency: org.example\n",
+					"questions/t/q.yaml": OPEN,
+				},
+				at: { commit: A, blobs: { "questions/t/q.yaml": "b1" } },
+			});
+			const dist = (file: string) => join(ws, "dist", "instruments", file);
+			const first = await runWith(bank, "build", ws);
+			expect(first.written[dist("x.qsf")]).toBeDefined();
+			expect(first.written[dist("x.columns.json")]).toBeDefined();
+			// An input named like a field Qualtrics surveys get: a release allows it, a survey can't.
+			await writeFile(
+				join(ws, "instruments/x.yaml"),
+				"name: x\nuses:\n  b: acme/ws/sub@v1\ninputs:\n  qretools_version:\n    number: {}\nflow:\n  - ask: b.q\n",
+			);
+			await git(dirname(ws), "commit", "-q", "-am", "an input");
+			const r = await runOver(first.written, bank, "build", ws);
+			expect(r.code).toBe(0);
+			expect(
+				Object.keys(r.written)
+					.map((p) => p.slice(ws.length + 1))
+					.sort(),
+			).toEqual(["dist/ddi.json", "dist/instruments/x.json"]);
+			expect(r.written[dist("x.json")]).not.toBe(first.written[dist("x.json")]);
+			expect(r.err).toMatch(
+				/\[WARNING\] .*instruments\/x\.yaml: not built as a Qualtrics survey\./,
+			);
 		});
 
 		it("refuses one whose bank can't be read, rather than release it with questions missing", async () => {
