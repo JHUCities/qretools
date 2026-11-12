@@ -1,6 +1,6 @@
 import type { DdiDocument } from "@qretools/core";
 import { describe, expect, it } from "vitest";
-import { type Column, choiceSuffixes } from "./columns.ts";
+import { type Column, exportedCodes } from "./columns.ts";
 import { readInstrument } from "./read.ts";
 import { ddiOf } from "./testing.ts";
 import { writeQsf } from "./write.ts";
@@ -66,22 +66,66 @@ describe("the column map", () => {
 			["1", "01", "2"],
 			[undefined, undefined, "2"],
 		],
+		// Measured in Qualtrics, 2026-11-12 (CSV and JSON exports): `parseFloat`, and a
+		// code that isn't a number is its position.
 		[
-			[
-				"-0",
-				"1.50",
-				"+1",
-				"1e2",
-				" 1",
-				"opt1",
-				"00",
-				"0.5",
-				"1234567890123456",
-			],
-			Array(9).fill(undefined),
+			["a", "b", "DK"],
+			["1", "2", "3"],
 		],
-	])("gives codes %j the column suffixes %j", (codes, suffixes) => {
-		expect(choiceSuffixes(codes)).toEqual(suffixes);
+		[
+			["-0", "1.5", "+1"],
+			["0", "1.5", "1"],
+		],
+		[
+			["1.50", "opt1", "010"],
+			["1.5", "2", "10"],
+		],
+		[
+			["00", "-01", ".5", "5."],
+			["0", "-1", "0.5", "5"],
+		],
+		[
+			["1e2", "1e-1", " 1"],
+			["100", "0.1", "1"],
+		],
+		[["1E2"], ["100"]],
+		[["1 "], ["1"]],
+		[["0x10"], ["0"]],
+		[["1,5"], ["1"]],
+		[
+			["NaN", "\u0661"],
+			["1", "2"],
+		],
+		[["12345678901234567890"], ["12345678901234567000"]],
+		[["0.1000000000000000055511151231257827"], ["0.1"]],
+		// Qualtrics writes nothing for a code that reads as infinity: the answer is lost.
+		[
+			["Infinity", "-Infinity", "1e999", "2"],
+			[undefined, undefined, undefined, "2"],
+		],
+		// Two options written the same: neither is read.
+		[
+			["+1", "1", "2"],
+			[undefined, undefined, "2"],
+		],
+		[
+			["1.50", "1.5", "2"],
+			[undefined, undefined, "2"],
+		],
+		[
+			["-0", "0", "2"],
+			[undefined, undefined, "2"],
+		],
+		[
+			["1e2", "100", "2"],
+			[undefined, undefined, "2"],
+		],
+		[
+			["2", "opt1", "9"],
+			[undefined, undefined, "9"],
+		],
+	])("gives codes %j the exported forms %j", (codes, suffixes) => {
+		expect(exportedCodes(codes)).toEqual(suffixes);
 	});
 
 	it("says so when it can't tell a select-all option's column", () => {
@@ -92,7 +136,7 @@ describe("the column map", () => {
 		const domain = ask.question.domain;
 		// A code no measured form covers.
 		const choices = domain.choices.map((c) =>
-			c.code === "2" ? { ...c, code: "1.0" } : c,
+			c.code === "2" ? { ...c, code: "Infinity" } : c,
 		);
 		const { columns, findings } = writeQsf(
 			{
@@ -114,7 +158,74 @@ describe("the column map", () => {
 		expect(
 			findings.filter((f) => f.code === "qsf-unmapped").map((f) => f.message),
 		).toEqual([
-			"The QSF column map can't tell which column records option `1.0` of `trips`: Qualtrics' name for it isn't known for this code.",
+			"The QSF column map can't tell which column records option `Infinity` of `trips`: Qualtrics gives it no name, or the same name as another option.",
+		]);
+	});
+
+	/** The map and its warnings for `bas.consent` (select one) asked with `codes`. */
+	const selectOne = (codes: readonly string[]) => {
+		const { instrument } = readInstrument(ddiOf(src("  - ask: bas.consent\n")));
+		const [ask] = instrument.flow;
+		if (ask?.kind !== "ask" || ask.question.domain.kind !== "choice")
+			throw new Error("a choice first");
+		const domain = ask.question.domain;
+		const choices = codes.map((code, i) => ({
+			...domain.choices[0],
+			code,
+			label: `option ${i}`,
+		}));
+		const { columns, findings } = writeQsf(
+			{
+				...instrument,
+				flow: [
+					{
+						...ask,
+						question: { ...ask.question, domain: { ...domain, choices } },
+					},
+				],
+			},
+			OPTIONS,
+		);
+		return {
+			column: columns.columns[0],
+			unmapped: findings
+				.filter((f) => f.code === "qsf-unmapped")
+				.map((f) => f.message),
+		};
+	};
+
+	it("gives a single-choice question's exported values, as Qualtrics drops leading zeros", () => {
+		const { column, unmapped } = selectOne(["010", "02", "3"]);
+		expect(column?.values).toEqual({ "10": "010", "2": "02", "3": "3" });
+		expect(unmapped).toEqual([]);
+	});
+
+	it("reads neither of two single-choice codes Qualtrics exports the same", () => {
+		const { column, unmapped } = selectOne(["1", "01", "2"]);
+		expect(column?.values).toEqual({ "2": "2" });
+		expect(unmapped).toEqual([
+			"The QSF column map can't read options `1`, `01` of `consent`: Qualtrics writes no value for each, or the same value as for another option.",
+		]);
+	});
+
+	it("gives no values for a single-choice question whose codes export as written", () => {
+		const { column, unmapped } = selectOne(["1", "2", "9"]);
+		expect(column).toBeDefined();
+		expect(column?.values).toBeUndefined();
+		expect(unmapped).toEqual([]);
+	});
+
+	it("reads a single-choice code of letters by its position", () => {
+		const { column, unmapped } = selectOne(["a", "b", "DK"]);
+		expect(column?.values).toEqual({ "1": "a", "2": "b", "3": "DK" });
+		expect(unmapped).toEqual([]);
+	});
+
+	it("reads no single-choice code Qualtrics writes nothing for", () => {
+		const { column, unmapped } = selectOne(["1", "Infinity"]);
+		expect(column?.values).toEqual({ "1": "1" });
+		expect(unmapped).toEqual([
+			"The QSF column map can't read option `Infinity` of `consent`: Qualtrics writes no value for it, or the same value as for another option.",
 		]);
 	});
 

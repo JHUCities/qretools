@@ -123,12 +123,29 @@ Row 3 of the file gives the ImportId of the column of each choice question as JS
 example is `{"ImportId":"QID3","choiceId":"10"}`. In the QSF column map, `importId`
 matches `ImportId`, and `choice` matches `choiceId`.
 
-Qualtrics names the column of a select-all option with the code of the option, if the
-code is a number. It removes leading zeros: `010` becomes `10`. If the code is not a
-number, Qualtrics uses the position of the option. If two options get the same name, the
-export has one column for the two options. The QSF column map does not include those
-options, and `build` gives a `qsf-unmapped` warning. `build` also gives this warning for
-a code form that qretools has not tested in Qualtrics, for example `1.50`, `+1` or `opt1`.
+Qualtrics does not always write the code of an option as the code is in the DDI. It
+uses one rule for the name of the column of a select-all option, and for the value of a
+single-choice question:
+
+- If the code starts with a number, Qualtrics writes that number in its shortest form.
+  Spaces, a sign or a decimal point can come before the number. For example, `010`
+  becomes `10`, `+1` becomes `1`, `1.50` becomes `1.5`, `1e2` becomes `100`, and
+  `1,5` becomes `1`.
+- If the code does not start with a number (for example `DK` or `opt1`), Qualtrics
+  writes the position of the option, from 1.
+
+The QSF column map gives the code for each name or value that Qualtrics writes
+differently. If two options of one question get the same name or value (for example `1`
+and `01`), the QSF column map does not read the two options, and `build` gives a
+`qsf-unmapped` warning.
+
+**Caution: do not use the code `Infinity`, or a number that is too large for Qualtrics
+(for example `1e999`). Qualtrics writes nothing for this option, and the answer is
+lost.** `build` gives a `qsf-unmapped` warning for this code.
+
+A QSF column map from qretools 2.0.0-alpha.9 or earlier does not give these values. To
+get them, run `build` again. The QSF and its QIDs do not change, so a survey that
+collects responses can use the new map.
 
 ## Read the responses
 

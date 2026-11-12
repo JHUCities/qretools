@@ -2,8 +2,9 @@
  * The column map: every column of the Qualtrics response export that records a DDI
  * variable, with that variable's URN. Made beside the survey, from the same numbering, so
  * a column and its QID never disagree. It holds only what Qualtrics adds (the ImportId, a
- * select-all option's column suffix, a roster's rounds or row); how to read a cell is the
- * variable's representation in the DDI.
+ * select-all option's column suffix, a single-choice value it writes differently from its
+ * code, a roster's rounds or row); how to read a cell is the variable's representation in
+ * the DDI.
  */
 import { logical } from "./computes.ts";
 import type { Ctx } from "./number.ts";
@@ -15,11 +16,15 @@ export interface Column {
 	/** Its ImportId: `QIDn` (a choice), `QIDn_TEXT` (typed), or an embedded data field's name. */
 	readonly importId: string;
 	/**
-	 * A select-all option's column suffix, the ImportId's `choiceId`: the option's code as a
-	 * number (`010` is `10`), or its position from 1 when the code is letters (experiments 12
-	 * and 13).
+	 * A select-all option's column suffix, the ImportId's `choiceId`: the option's code as
+	 * Qualtrics writes it (`exportedCodes`).
 	 */
 	readonly choice?: string;
+	/**
+	 * A single-choice question's exported value for each code it reads (`exportedCodes`),
+	 * where some code isn't written as itself: exported value to code. Only these are read.
+	 */
+	readonly values?: Readonly<Record<string, string>>;
 	/** A question Qualtrics loops: columns `1_<importId>` to `<rounds>_<importId>`. */
 	readonly rounds?: number;
 	/** A roster written out row by row: the row this column is. */
@@ -29,30 +34,33 @@ export interface Column {
 }
 
 /**
- * Each select-all option's suffix, from its code and position, or undefined where Qualtrics'
- * name for it isn't known. Only forms experiment 13 measured are named: a whole number
- * (leading zeros dropped: `010` is `10`), a decimal as written (`1.5`), and letters, which
- * fall back to the position (the choice key the QSF writer gives it). Two options with one
- * suffix share one column in the export, so neither is named. Numbers stop at 15 digits,
- * where a float would print differently.
+ * How Qualtrics writes the code (the recode) of the option at `position` (from 1), both as a
+ * select-all option's column suffix and as a single-choice answer's exported value, or
+ * undefined where it writes nothing. Measured in Qualtrics, 2026-11-12, in CSV and JSON
+ * exports, and it is JavaScript's `parseFloat` exactly: a code that starts with a number is
+ * that number as it prints (`010` is `10`, `1.50` is `1.5`, `1e2` is `100`, `1,5` is `1`);
+ * any other code is its position, the choice key the QSF writer gives it. A code that
+ * reads as `Infinity` is written as nothing: the answer is lost.
  */
-export function choiceSuffixes(
+const exported = (code: string, position: number): string | undefined => {
+	const n = Number.parseFloat(code);
+	return Number.isNaN(n)
+		? String(position)
+		: Number.isFinite(n)
+			? String(n)
+			: undefined;
+};
+
+/**
+ * What Qualtrics writes for each option's code, from the codes in order (see `exported`),
+ * or undefined where it writes nothing, or the same as for another option: two options
+ * written the same can't be told apart, so neither is read.
+ */
+export function exportedCodes(
 	codes: readonly string[],
 ): readonly (string | undefined)[] {
-	const suffixes = codes.map((code, i) =>
-		/^(0|-?[1-9]\d{0,14})$/.test(code)
-			? code
-			: /^0+[1-9]\d{0,14}$/.test(code)
-				? code.replace(/^0+/, "")
-				: /^[1-9]\d{0,13}\.\d{0,13}[1-9]$/.test(code)
-					? code
-					: /^[A-Za-z]+$/.test(code)
-						? String(i + 1)
-						: undefined,
-	);
-	return suffixes.map((s) =>
-		suffixes.filter((t) => t === s).length > 1 ? undefined : s,
-	);
+	const xs = codes.map((code, i) => exported(code, i + 1));
+	return xs.map((x) => (xs.filter((y) => y === x).length > 1 ? undefined : x));
 }
 
 /** The map, with what the survey's `qretools_*` fields carry, so a response can be matched to it. */
@@ -111,7 +119,7 @@ export function columnsOf(
 					const qid = ctx.qidOf(s.id);
 					const domain = s.question.domain;
 					if (domain.kind === "choice" && domain.many) {
-						const suffixes = choiceSuffixes(domain.choices.map((c) => c.code));
+						const suffixes = exportedCodes(domain.choices.map((c) => c.code));
 						domain.choices.forEach((c, i) => {
 							const choice = suffixes[i];
 							if (choice === undefined)
@@ -119,7 +127,7 @@ export function columnsOf(
 									"qsf-unmapped",
 									"warning",
 									s.id,
-									`The QSF column map can't tell which column records option \`${c.code}\` of \`${s.question.name}\`: Qualtrics' name for it isn't known for this code.`,
+									`The QSF column map can't tell which column records option \`${c.code}\` of \`${s.question.name}\`: Qualtrics gives it no name, or the same name as another option.`,
 								);
 							else
 								add(
@@ -130,9 +138,36 @@ export function columnsOf(
 									rounds,
 								);
 						});
+					} else if (domain.kind === "choice") {
+						const codes = domain.choices.map((c) => c.code);
+						const exports = exportedCodes(codes);
+						const unknown = codes.filter((_, i) => exports[i] === undefined);
+						if (unknown.length > 0)
+							ctx.note(
+								"qsf-unmapped",
+								"warning",
+								s.id,
+								`The QSF column map can't read option${unknown.length > 1 ? "s" : ""} ${unknown.map((c) => `\`${c}\``).join(", ")} of \`${s.question.name}\`: Qualtrics writes no value for ${unknown.length > 1 ? "each" : "it"}, or the same value as for another option.`,
+							);
+						const values = Object.fromEntries(
+							codes.flatMap((c, i) => {
+								const e = exports[i];
+								return e === undefined ? [] : [[e, c]];
+							}),
+						);
+						add(
+							{
+								importId: qid,
+								...(codes.some((c, i) => exports[i] !== c) && { values }),
+							},
+							s.records[0]?.urn,
+							s.id,
+							`for \`${s.question.name}\``,
+							rounds,
+						);
 					} else
 						add(
-							{ importId: domain.kind === "choice" ? qid : `${qid}_TEXT` },
+							{ importId: `${qid}_TEXT` },
 							s.records[0]?.urn,
 							s.id,
 							`for \`${s.question.name}\``,
