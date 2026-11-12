@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** The `qretools` command, wired to the process: see src/cli.ts. */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { main } from "../src/cli.ts";
 import { ownRepository, readHistory } from "../src/history.ts";
@@ -21,6 +21,7 @@ process.exitCode = await main(process.argv.slice(2), {
 		await mkdir(dirname(path), { recursive: true });
 		await writeFile(path, text, "utf8");
 	},
+	removeFile: (path) => rm(path, { force: true }),
 	readRemote: (address, from) =>
 		readTagged(address, from === undefined ? {} : { urlOf: () => from }),
 	readHistory,
