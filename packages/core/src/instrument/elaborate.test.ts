@@ -894,6 +894,8 @@ describe("the access levels an instrument's workspace declares", () => {
 			"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
 			"questions/a/age.yaml": q("age", "open: {}\naccess: public\n"),
 			"questions/a/ssn.yaml": q("ssn", "open: {}\naccess: secret\n"),
+			// No line: held at the last level.
+			"questions/a/why.yaml": q("why", "open: {}\n"),
 		},
 	});
 	const of = (levels: readonly string[] | undefined, asks = ["zip", "age"]) =>
@@ -910,25 +912,59 @@ describe("the access levels an instrument's workspace declares", () => {
 			.findings.filter((f) => f.code.startsWith("access-"))
 			.map((f) => [f.code, f.path, f.message]);
 
-	it("asks a workspace with no levels to declare each level its questions are asked at", () => {
+	it("says each question asked at a level a workspace with no levels lacks, where it's asked", () => {
 		expect(said([])).toEqual([
 			[
 				"access-undeclared",
-				"uses.b",
-				"This instrument asks `b` questions at `public` and `restricted`, and this workspace declares no access levels.",
+				"flow.0.ask",
+				"`b.zip` is asked at `restricted`, and this workspace declares no access levels.",
+			],
+			[
+				"access-undeclared",
+				"flow.1.ask",
+				"`b.age` is asked at `public`, and this workspace declares no access levels.",
 			],
 		]);
 		expect(exportRefusal(of([]), [])?.kind).toBe("access");
 	});
 
-	it("names a level the workspace lacks, and only the levels asked at", () => {
-		expect(said(["public"])).toEqual([
+	it("names each question asked at a level the workspace lacks, and only those", () => {
+		expect(said(["public"], ["zip", "age", "zip"])).toEqual([
 			[
 				"access-undeclared",
-				"uses.b",
-				"This instrument asks `b` questions at `restricted`, which this workspace doesn't declare.",
+				"flow.0.ask",
+				"`b.zip` is asked at `restricted`, which this workspace doesn't declare.",
+			],
+			// Asked twice: said at each.
+			[
+				"access-undeclared",
+				"flow.2.ask",
+				"`b.zip` is asked at `restricted`, which this workspace doesn't declare.",
 			],
 		]);
+		expect(
+			of(["public"]).findings.find((f) => f.code === "access-undeclared")?.hint,
+		).toBe(
+			"Add `restricted` to the `access` list in this workspace's `workspace.yaml`, in the order `b` gives: `public`, `restricted` and `secret`, most open first.",
+		);
+		// A question whose own line is missing is held, and says so.
+		expect(said(["public", "restricted"], ["why"])).toEqual([
+			[
+				"access-undeclared",
+				"flow.0.ask",
+				"`b.why` is held at `secret` (its own `access` line is missing or unreadable), which this workspace doesn't declare.",
+			],
+		]);
+		// Inside a section too.
+		const nested = instrumentOf(
+			"name: x\nuses:\n  b: acme/b@v1\nflow:\n  - section: s\n    flow:\n      - ask: b.zip\n",
+			{ banks: { b }, agency: "org.example", levels: ["public"] },
+		);
+		expect(
+			nested.findings
+				.filter((f) => f.code === "access-undeclared")
+				.map((f) => f.path),
+		).toEqual(["flow.0.flow.0.ask"]);
 		// `secret` is the bank's, but nothing asked stands there.
 		expect(said(["public", "restricted"])).toEqual([]);
 		expect(exportRefusal(of(["public", "restricted"]), [])).toBeUndefined();
@@ -941,7 +977,8 @@ describe("the access levels an instrument's workspace declares", () => {
 			[
 				"access-order",
 				"uses.b",
-				"`b` orders its access levels `public` and `restricted`, and this workspace orders them `restricted` and `public`.",
+				// Names the first ask the order touches: another, if that one goes.
+				"`b` orders its access levels `public` and `restricted`, and this workspace orders them `restricted` and `public`. `b.zip` is asked at `restricted`.",
 			],
 		]);
 		expect(exportRefusal(of(["restricted", "public"]), [])?.kind).toBe(

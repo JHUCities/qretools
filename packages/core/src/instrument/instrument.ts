@@ -135,13 +135,23 @@ export function instrumentOf(
 	}
 	// An asked question keeps its home bank's policy; its workspace must declare each
 	// level it asks at, in the same order, so its own policy covers what it publishes.
-	const asked = levelsAskedBy(parsed.draft);
 	const host = context.levels;
 	const undeclared =
 		host === undefined
 			? []
-			: [...asked].flatMap(([alias, levels]) =>
-					hostCovers(host, alias, context.banks[alias]?.env.access, levels),
+			: [...asksByBank(parsed.draft)].flatMap(([alias, asks]) =>
+					hostCovers(
+						host,
+						alias,
+						context.banks[alias]?.env.access,
+						// shortcut: an ask the text can't place is said on its bank's `uses` line; unreachable
+						// through `parseInstrument` today, so untested: test it if a draft can lack an ask's range.
+						asks.map((a) =>
+							parsed.ranges[a.path] === undefined
+								? { ...a, path: `uses.${alias}` }
+								: a,
+						),
+					),
 				);
 	// A release whose manifest can't be used: its questions are published, at version 1.
 	const staleManifests: Finding[] = parsed.draft.uses.flatMap(
@@ -185,20 +195,38 @@ export function instrumentOf(
 	};
 }
 
-/** The levels an instrument asks each bank's questions at, by alias, as held (a missing level is the last). */
-function levelsAskedBy(
+/** One place an instrument asks a bank question at a level. */
+interface Ask {
+	/** Where it's asked: the `ask` field of its step. */
+	readonly path: string;
+	/** As written: `alias.name`. */
+	readonly question: string;
+	/** As held: a missing or unreadable level is the bank's last. */
+	readonly level: string;
+	/** The level is held, not written: the question's own `access` line is missing or unreadable. */
+	readonly held: boolean;
+}
+
+/** Every ask of a question with a level, anywhere in the flow, by its bank's alias. */
+function asksByBank(
 	draft: InstrumentDraft,
-): ReadonlyMap<string, ReadonlySet<string>> {
-	const asked = new Map<string, Set<string>>();
+): ReadonlyMap<string, readonly Ask[]> {
+	const asks = new Map<string, Ask[]>();
 	for (const node of steps(draft.flow)) {
 		const q = node.kind === "ask" ? node.question : undefined;
-		if (q === undefined) continue;
-		const levels = asked.get(q.alias) ?? new Set<string>();
-		if (q.evaluation.draft.access !== undefined)
-			levels.add(q.evaluation.draft.access);
-		asked.set(q.alias, levels);
+		const level = q?.evaluation.draft.access;
+		if (q === undefined || level === undefined) continue;
+		asks.set(q.alias, [
+			...(asks.get(q.alias) ?? []),
+			{
+				path: `${node.path}.ask`,
+				question: `${q.alias}.${q.name}`,
+				level,
+				held: q.evaluation.findings.some((f) => f.path === "access"),
+			},
+		]);
 	}
-	return asked;
+	return asks;
 }
 
 /**
@@ -212,55 +240,62 @@ export const levelsAsked = (
 ): ReadonlySet<string> =>
 	new Set(
 		[...drafts].flatMap((d) =>
-			[...levelsAskedBy(d).values()].flatMap((s) => [...s]),
+			[...asksByBank(d).values()].flatMap((asks) => asks.map((a) => a.level)),
 		),
 	);
 
 /**
- * What the host workspace lacks to cover a bank's access policy, said at the bank's use:
- * each level its asked questions stand at (`asked`, as held: a missing level is the
- * last) must be declared in the host's `workspace.yaml`, and the levels both list must
- * stand in the same order. Declaring a level only makes the host's policy cover it: the
- * question keeps its own bank's policy, never re-ranked.
+ * What the host workspace lacks to cover a bank's access policy. Each ask at a level the
+ * host's `workspace.yaml` doesn't declare is said where it's asked; levels both list in
+ * different orders are said at the bank's use, naming an ask they touch (the first). A
+ * level is declared to make the host's policy cover it: the question keeps its own
+ * bank's policy, never re-ranked.
  */
 function hostCovers(
 	host: readonly string[],
 	alias: string,
 	home: readonly string[] | undefined,
-	asked: ReadonlySet<string>,
+	asks: readonly Ask[],
 ): readonly Finding[] {
 	if (home === undefined || home.length === 0) return [];
 	const code = (xs: readonly string[]) => andList(xs.map((x) => `\`${x}\``));
-	const missing = home.filter((l) => asked.has(l) && !host.includes(l));
+	const at = (a: Ask) =>
+		a.held
+			? `\`${a.question}\` is held at \`${a.level}\` (its own \`access\` line is missing or unreadable)`
+			: `\`${a.question}\` is asked at \`${a.level}\``;
+	const findings: Finding[] = asks
+		.filter((a) => !host.includes(a.level))
+		.map((a) => ({
+			code: "access-undeclared",
+			severity: "error",
+			path: a.path,
+			message:
+				host.length === 0
+					? `${at(a)}, and this workspace declares no access levels.`
+					: `${at(a)}, which this workspace doesn't declare.`,
+			hint: `Add \`${a.level}\` to the \`access\` list in this workspace's \`workspace.yaml\`, in the order \`${alias}\` gives: ${code(home)}, most open first.`,
+		}));
 	const order = (levels: readonly string[], other: readonly string[]) =>
 		levels.filter((l) => other.includes(l));
 	const shared = order(home, host);
-	const findings: Finding[] = [];
-	if (missing.length > 0)
-		findings.push({
-			code: "access-undeclared",
-			severity: "error",
-			path: `uses.${alias}`,
-			message:
-				host.length === 0
-					? `This instrument asks \`${alias}\` questions at ${code(missing)}, and this workspace declares no access levels.`
-					: `This instrument asks \`${alias}\` questions at ${code(missing)}, which this workspace doesn't declare.`,
-			hint: `Add ${code(missing)} to the \`access\` list in this workspace's \`workspace.yaml\`, in the order \`${alias}\` gives: ${code(home)}, most open first.`,
-		});
 	// Only where an asked level stands: the order of levels nothing is asked at isn't this instrument's.
 	const before = (levels: readonly string[], a: string, b: string) =>
 		levels.indexOf(a) < levels.indexOf(b);
-	const disordered = shared.some(
+	const touched = asks.find(
 		(a) =>
-			asked.has(a) &&
-			shared.some((b) => b !== a && before(home, a, b) !== before(host, a, b)),
+			shared.includes(a.level) &&
+			shared.some(
+				(b) =>
+					b !== a.level &&
+					before(home, a.level, b) !== before(host, a.level, b),
+			),
 	);
-	if (disordered)
+	if (touched !== undefined)
 		findings.push({
 			code: "access-order",
 			severity: "error",
 			path: `uses.${alias}`,
-			message: `\`${alias}\` orders its access levels ${code(shared)}, and this workspace orders them ${code(order(host, home))}.`,
+			message: `\`${alias}\` orders its access levels ${code(shared)}, and this workspace orders them ${code(order(host, home))}. ${at(touched)}.`,
 			hint: `Put the levels in this workspace's \`workspace.yaml\` in the order \`${alias}\` gives, most open first.`,
 		});
 	return findings;

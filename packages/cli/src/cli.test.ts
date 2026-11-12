@@ -1059,7 +1059,8 @@ describe("access levels, through the commands", () => {
 		);
 		expect(undeclared.code).toBe(1);
 		expect(undeclared.out).toMatch(
-			/asks `b` questions at `restricted`, which this workspace doesn't declare\. \[access-undeclared\]/,
+			// At the ask's own line (5), naming the question as written.
+			/x\.yaml:5:\d+: error: `b\.zip` is asked at `restricted`, which this workspace doesn't declare\. \[access-undeclared\]/,
 		);
 		const refused = await run(
 			"instrument",
