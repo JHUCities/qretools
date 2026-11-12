@@ -1063,10 +1063,11 @@ describe("access levels, through the commands", () => {
 			// At the ask's own line (5), naming the question as written.
 			/x\.yaml:5:\d+: error: `b\.zip` is asked at `restricted`, which this workspace doesn't declare\. \[access-undeclared\]/,
 		);
-		// Missing values coded otherwise than this workspace's: a warning at the same ask.
+		// Missing values coded otherwise than this workspace's: one warning, on the bank's use.
 		expect(undeclared.out).toMatch(
-			/x\.yaml:5:\d+: warning: `b\.zip` codes missing values as `D`, and this workspace declares none\. \[missing-differs\]/,
+			/x\.yaml:3:\d+: warning: `b` codes missing values as `D`, and this workspace declares none\. It affects the one question this instrument asks from `b`\. \[missing-differs\]/,
 		);
+		expect(undeclared.out).not.toMatch(/x\.yaml:5:\d+: warning/);
 		const refused = await run(
 			"instrument",
 			"export",
