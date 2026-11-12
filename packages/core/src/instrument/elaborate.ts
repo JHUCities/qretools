@@ -27,6 +27,7 @@ import {
 	identity,
 	intl,
 	item,
+	type Json,
 	type JsonObject,
 	obj,
 	ref,
@@ -49,7 +50,7 @@ import type {
 	UniverseRef,
 	ValueDomain,
 } from "./draft.ts";
-import { SEVERITIES, type Severity, STOP } from "./draft.ts";
+import { SEVERITIES, type Severity, STOP, steps } from "./draft.ts";
 import type { ParsedInstrument } from "./parse.ts";
 
 export interface InstrumentOptions {
@@ -892,6 +893,22 @@ export function elaborateInstrument(
 		];
 	};
 
+	// An input comes from outside, often from data, which has its missing values too: it
+	// takes the missing values its questions' variables take, when they all take one list.
+	// shortcut: banks with different missing lists give inputs none; choose one when an instrument needs it.
+	const missingLists = new Map<string, Json>();
+	for (const node of steps(draft.flow))
+		if (node.kind === "ask" && node.question !== undefined)
+			for (const it of itemsOf(node.question)) {
+				const missing = (
+					it.body.VariableRepresentation as JsonObject | undefined
+				)?.MissingValuesReference;
+				if (it.type === "Variable" && missing !== undefined)
+					missingLists.set(JSON.stringify(missing), missing);
+			}
+	const inputMissing =
+		missingLists.size === 1 ? [...missingLists.values()][0] : undefined;
+
 	// Inputs: Variables received from outside, each with its OutParameter.
 	for (const input of draft.inputs) {
 		const value =
@@ -914,7 +931,12 @@ export function elaborateInstrument(
 						ValueRepresentation: value,
 					}),
 					VariableRepresentation:
-						value === undefined ? undefined : { ValueRepresentation: value },
+						value === undefined
+							? undefined
+							: obj({
+									ValueRepresentation: value,
+									MissingValuesReference: inputMissing,
+								}),
 				}),
 			),
 		);

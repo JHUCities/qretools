@@ -7,26 +7,7 @@ import {
 import { describe, expect, it } from "vitest";
 import type { ColumnMap } from "./columns.ts";
 import { qsfOf } from "./qsf.ts";
-import { columnMapOf, exportMap, parseCsv } from "./responses.ts";
-
-describe("parseCsv", () => {
-	it("reads quoted fields, doubled quotes, line breaks in quotes, CRLF and a byte-order mark", () => {
-		const { rows, unclosed } = parseCsv(
-			'﻿a,b,c\r\n"x, y","say ""hi""","two\nlines"\r\n\r\nlast,,\n',
-		);
-		expect(unclosed).toBeUndefined();
-		expect(rows).toEqual([
-			{ line: 1, cells: ["a", "b", "c"] },
-			{ line: 2, cells: ["x, y", 'say "hi"', "two\nlines"] },
-			// A record that starts after a line break inside quotes is placed on its own line.
-			{ line: 5, cells: ["last", "", ""] },
-		]);
-	});
-
-	it("says where a quote that never closes opened", () => {
-		expect(parseCsv('a,b\nc,"d\ne,f\n').unclosed).toBe(2);
-	});
-});
+import { columnMapOf, exportMap } from "./responses.ts";
 
 const q = (name: string, rest: string) =>
 	`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;

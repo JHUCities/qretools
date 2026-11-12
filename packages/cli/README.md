@@ -20,6 +20,7 @@ qretools codebook path/to/workspace -o codebook.html  # its questions' codebook,
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
+qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -204,7 +205,8 @@ command exit with 1. The command still writes the values that it can read.
 
 - `responses-unmapped-column` (warning): the map does not name the column of a question.
 - `responses-missing-column` (warning): the export has no column for an entry of the map.
-- `responses-not-a-code` (error): the value is not a code of the variable, or not a number.
+- `responses-not-a-code` (error): the value is not a code of the variable, or not a number
+  in the range that the DDI gives.
 - `responses-not-a-tick` (error): a select-all cell is not `1` and is not blank.
 - `responses-provenance`: the `qretools_instrument` or `qretools_ddi` field of a response is
   not the same as in the map (error). A different `qretools_version` is a note.
@@ -218,6 +220,100 @@ command exit with 1. The command still writes the values that it can read.
 
 The command reads the columns of a Qualtrics loop as `1_<ImportId>` to
 `<rounds>_<ImportId>`. This form is not yet tested with a real export of a loop.
+
+## Read a data file
+
+`responses` also reads a data file, for example a published data release. The data file
+must be CSV, with one header row. A column map tells the command which DDI variable each
+column records. Thus, the answers of a data file and the answers of a Qualtrics export have
+the same form: one line for each value, with the URN of the variable.
+
+```sh
+qretools responses data.csv --map maps/wave1-ddi-release.columns.json --ddi dist/instruments/wave1.json -o wave1-answers.csv
+```
+
+The map is JSON. Its name ends in `-ddi-<source>.columns.json`, where `<source>` is a short
+name for the data (letters and digits). The command reads `qsf` as a QSF column map. It
+reads all other names as the map of a data file:
+
+```json
+{
+  "ddi": "sha256:3f5a…",
+  "respondent": "ID",
+  "values": { "-98": "D", "-99": "N", "-100": null },
+  "columns": [
+    { "column": "TENURE", "variable": "urn:ddi:org.example:instrument-wave1.var-tenure:3" },
+    { "column": "AGE", "variable": "urn:ddi:org.example:instrument-wave1.var-age:3" },
+    { "column": "MODE", "variable": "urn:ddi:org.example:instrument-wave1.var-mode:3", "values": { "9": "4" } },
+    { "column": "INCOME", "variable": "urn:ddi:org.example:instrument-wave1.var-income:3", "filtered": true },
+    { "column": "PERSONS", "variable": "urn:ddi:org.example:instrument-wave1.var-persons:3", "censored": { "8": "8 or more" } }
+  ]
+}
+```
+
+- `ddi`: the SHA-256 digest of the DDI that the map was made from. If the map has a digest,
+  the command refuses a different DDI.
+- `respondent`: the header of the column that identifies each respondent.
+- `values`: the translations for all columns, from a value in the data file to a code of
+  the variable. `null` means "no answer": the command writes no line for the value, as
+  for a blank cell. Use `null` for a code that means "not asked".
+- `columns`: for each column, its header, the URN of its DDI variable and, if necessary,
+  its own `values`. A translation in a column's `values` replaces the same translation in
+  the map's `values`. To read a value as it is in one column only, translate it to itself
+  (`"-98": "-98"`).
+- `filtered`: `true` if the variable is filtered from the data file (see below). The
+  command reads no value from the column. It writes one note for the column. The file
+  does not have to have the column.
+- `censored`: the values that mean a range, not a number, each with what it means. For
+  example, `8` can mean "8 or more" (a top code), and `17` can mean "17 or younger" (a
+  bottom code). The command writes no line for such a value. It writes one note for the
+  column, and reads all other values of the column.
+
+**Filtered.** A variable is filtered from a data file when the data file does not hold
+its values at the level of access that you have. The publisher can filter a variable, for
+example to protect respondents. You can filter a variable too, for example when the data
+file holds the values in a different form (broad groups, not the codes of the variable).
+Mark a filtered variable `"filtered": true`. Do not remove it from the map: the note
+shows that the variable has no values from this file.
+
+To read a data file, do these steps:
+
+1. Convert the data file to CSV, with one header row. Write each code as the variable
+   writes it, for example `1`, not `1.0`.
+2. Keep only the rows of one instrument, for example the rows of one year. The command
+   reads all rows of the file.
+3. Run `build` to get the DDI of the instrument.
+4. Write the map. Write each header as it is in the CSV: the command does not change the
+   case of a header.
+5. Put the digest of the DDI in `ddi` (`shasum -a 256 <name>.json`, then add `sha256:`
+   before it).
+6. Run `qretools responses <data.csv> --map <the map>`. If `<name>.json` is not in the
+   folder of the map, add `--ddi <the DDI>`.
+7. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
+   The output holds the responses.**
+
+If `build` changes the DDI, the digest of the DDI changes. Then write the new digest in
+the map.
+
+The output is the same as in "Read the responses". A number is read only if it is in the
+range that the DDI gives. This check applies to a Qualtrics export too. The command writes these findings, in addition to those of
+"Read the responses":
+
+- `responses-missing-column` (warning): the file has no column with a header that the map
+  names. The command writes one warning for all of these columns.
+- `responses-header` (error): the file has two or more columns with a header that the map
+  names. The command reads none of them.
+- `responses-unmapped-column` (note): the map does not name a column of the file. The
+  command writes one note for all of these columns.
+- `responses-unreadable` (error): the file has no header row, or it does not have exactly
+  one column with the header in `respondent`.
+- `responses-filtered` (note): the map marks the column `filtered`. The command reads no
+  value from it.
+- `responses-censored` (note): a value of the column is in its `censored` list. The command
+  writes no line for it.
+
+An input of an instrument has the missing values of the questions that the instrument
+asks. Thus, a data file can give "Don't know" (or another missing value) for an input.
 
 ## Codebook
 

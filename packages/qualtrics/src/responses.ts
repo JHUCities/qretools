@@ -6,7 +6,12 @@
  * reads into answers keyed by DDI Variable URN. Pure: text in, values out.
  */
 
-import type { ResponseFinding, ResponseMap, ResponseRow } from "@qretools/core";
+import {
+	parseCsv,
+	type ResponseFinding,
+	type ResponseMap,
+	type ResponseRow,
+} from "@qretools/core";
 import type { Column, ColumnMap } from "./columns.ts";
 import { PROVENANCE } from "./skeleton.ts";
 
@@ -25,57 +30,6 @@ export type ExportCode =
 	| "responses-provenance";
 
 export type ExportFinding = ResponseFinding<ExportCode>;
-
-/**
- * A CSV's records (RFC 4180: quoted fields, doubled quotes, line breaks in quotes, CRLF,
- * a byte-order mark), each with the line it starts on. Blank lines are skipped. Total: an
- * unclosed quote runs to the end of the text, and `unclosed` is the line it opened on.
- */
-export function parseCsv(text: string): {
-	readonly rows: readonly ResponseRow[];
-	readonly unclosed?: number;
-} {
-	const rows: ResponseRow[] = [];
-	const s = text.startsWith("﻿") ? text.slice(1) : text;
-	let line = 1;
-	let start = 1;
-	let cells: string[] = [];
-	let cell = "";
-	let quoted = false;
-	let opened = 0;
-	const end = () => {
-		cells.push(cell);
-		if (cells.length > 1 || cell !== "") rows.push({ line: start, cells });
-		cells = [];
-		cell = "";
-	};
-	for (let i = 0; i < s.length; i++) {
-		const ch = s[i];
-		if (quoted) {
-			if (ch === '"' && s[i + 1] === '"') {
-				cell += '"';
-				i++;
-			} else if (ch === '"') quoted = false;
-			else {
-				if (ch === "\n") line++;
-				cell += ch;
-			}
-		} else if (ch === '"') {
-			quoted = true;
-			opened = line;
-		} else if (ch === ",") {
-			cells.push(cell);
-			cell = "";
-		} else if (ch === "\n" || ch === "\r") {
-			if (ch === "\r" && s[i + 1] === "\n") i++;
-			end();
-			line++;
-			start = line;
-		} else cell += ch;
-	}
-	if (cell !== "" || cells.length > 0) end();
-	return quoted ? { rows, unclosed: opened } : { rows };
-}
 
 /** A column's key: its ImportId and, for a select-all option, its choiceId. */
 const keyOf = (importId: string, choice: string | undefined): string =>
