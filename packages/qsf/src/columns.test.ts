@@ -114,7 +114,7 @@ describe("the column map", () => {
 		expect(
 			findings.filter((f) => f.code === "qsf-unmapped").map((f) => f.message),
 		).toEqual([
-			"The column map can't tell which column records option `1.0` of `trips`: Qualtrics' name for it isn't known for this code.",
+			"The QSF column map can't tell which column records option `1.0` of `trips`: Qualtrics' name for it isn't known for this code.",
 		]);
 	});
 
@@ -132,7 +132,7 @@ describe("the column map", () => {
 		expect(
 			findings.filter((f) => f.code === "qsf-unmapped").map((f) => f.message),
 		).toEqual([
-			"The column map can't name the DDI variable for option `w` of `modes`.",
+			"The QSF column map can't name the DDI variable for option `w` of `modes`.",
 		]);
 	});
 
@@ -213,7 +213,7 @@ describe("the column map", () => {
 				.filter((f) => f.code === "qsf-unmapped")
 				.map((f) => `${f.severity}: ${f.message}`),
 		).toEqual([
-			"warning: The column map can't name the DDI variable of the computed value `total`.",
+			"warning: The QSF column map can't name the DDI variable of the computed value `total`.",
 		]);
 	});
 

@@ -102,7 +102,7 @@ const USAGE = `Usage:
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist),
                                     and each instrument's to outdir/instruments/<name>.json, with its Qualtrics
-                                    survey (<name>.qsf) and the map of that survey's response columns to its DDI
+                                    survey (<name>.qsf) and its QSF column map, from the survey's response columns to its DDI
                                     variables (<name>-ddi-qsf.columns.json); an instrument Qualtrics can't run gets a
                                     warning instead of those two. Refused while an instrument is incomplete, reads
                                     this workspace as \`../\`, or reads a tag it hasn't locked or that has moved

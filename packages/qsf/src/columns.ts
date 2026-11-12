@@ -77,7 +77,7 @@ export function columnsOf(
 			"qsf-unmapped",
 			"warning",
 			id,
-			`The column map can't name the DDI variable ${what}.`,
+			`The QSF column map can't name the DDI variable ${what}.`,
 		);
 	const add = (
 		column: Omit<Column, "variable" | "row">,
@@ -119,7 +119,7 @@ export function columnsOf(
 									"qsf-unmapped",
 									"warning",
 									s.id,
-									`The column map can't tell which column records option \`${c.code}\` of \`${s.question.name}\`: Qualtrics' name for it isn't known for this code.`,
+									`The QSF column map can't tell which column records option \`${c.code}\` of \`${s.question.name}\`: Qualtrics' name for it isn't known for this code.`,
 								);
 							else
 								add(
