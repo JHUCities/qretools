@@ -2,7 +2,7 @@
  * The column map: every column of the Qualtrics response export that records a DDI
  * variable, with that variable's URN. Made beside the survey, from the same numbering, so
  * a column and its QID never disagree. It holds only what Qualtrics adds (the ImportId, a
- * select-all option's position, a roster's rounds or row); how to read a cell is the
+ * select-all option's column suffix, a roster's rounds or row); how to read a cell is the
  * variable's representation in the DDI.
  */
 import { logical } from "./computes.ts";
@@ -14,7 +14,11 @@ import { rowOf } from "./unroll.ts";
 export interface Column {
 	/** Its ImportId: `QIDn` (a choice), `QIDn_TEXT` (typed), or an embedded data field's name. */
 	readonly importId: string;
-	/** A select-all option's column: the option's position, from 1 (never its code). */
+	/**
+	 * A select-all option's column suffix, the ImportId's `choiceId`: the option's code as a
+	 * number (`010` is `10`), or its position from 1 when the code is letters (experiments 12
+	 * and 13).
+	 */
 	readonly choice?: string;
 	/** A question Qualtrics loops: columns `1_<importId>` to `<rounds>_<importId>`. */
 	readonly rounds?: number;
@@ -22,6 +26,33 @@ export interface Column {
 	readonly row?: number;
 	/** The URN of the DDI variable the column records. */
 	readonly variable: string;
+}
+
+/**
+ * Each select-all option's suffix, from its code and position, or undefined where Qualtrics'
+ * name for it isn't known. Only forms experiment 13 measured are named: a whole number
+ * (leading zeros dropped: `010` is `10`), a decimal as written (`1.5`), and letters, which
+ * fall back to the position (the choice key the QSF writer gives it). Two options with one
+ * suffix share one column in the export, so neither is named. Numbers stop at 15 digits,
+ * where a float would print differently.
+ */
+export function choiceSuffixes(
+	codes: readonly string[],
+): readonly (string | undefined)[] {
+	const suffixes = codes.map((code, i) =>
+		/^(0|-?[1-9]\d{0,14})$/.test(code)
+			? code
+			: /^0+[1-9]\d{0,14}$/.test(code)
+				? code.replace(/^0+/, "")
+				: /^[1-9]\d{0,13}\.\d{0,13}[1-9]$/.test(code)
+					? code
+					: /^[A-Za-z]+$/.test(code)
+						? String(i + 1)
+						: undefined,
+	);
+	return suffixes.map((s) =>
+		suffixes.filter((t) => t === s).length > 1 ? undefined : s,
+	);
 }
 
 /** The map, with what the survey's `qretools_*` fields carry, so a response can be matched to it. */
@@ -79,18 +110,27 @@ export function columnsOf(
 				case "ask": {
 					const qid = ctx.qidOf(s.id);
 					const domain = s.question.domain;
-					if (domain.kind === "choice" && domain.many)
+					if (domain.kind === "choice" && domain.many) {
+						const suffixes = choiceSuffixes(domain.choices.map((c) => c.code));
 						domain.choices.forEach((c, i) => {
-							const record = s.records.find((r) => r.code === c.code);
-							add(
-								{ importId: qid, choice: String(i + 1) },
-								record?.urn,
-								s.id,
-								`for option \`${c.code}\` of \`${s.question.name}\``,
-								rounds,
-							);
+							const choice = suffixes[i];
+							if (choice === undefined)
+								ctx.note(
+									"qsf-unmapped",
+									"warning",
+									s.id,
+									`The column map can't tell which column records option \`${c.code}\` of \`${s.question.name}\`: Qualtrics' name for it isn't known for this code.`,
+								);
+							else
+								add(
+									{ importId: qid, choice },
+									s.records.find((r) => r.code === c.code)?.urn,
+									s.id,
+									`for option \`${c.code}\` of \`${s.question.name}\``,
+									rounds,
+								);
 						});
-					else
+					} else
 						add(
 							{ importId: domain.kind === "choice" ? qid : `${qid}_TEXT` },
 							s.records[0]?.urn,

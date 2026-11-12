@@ -1,6 +1,6 @@
 import type { DdiDocument } from "@qretools/core";
 import { describe, expect, it } from "vitest";
-import type { Column } from "./columns.ts";
+import { type Column, choiceSuffixes } from "./columns.ts";
 import { readInstrument } from "./read.ts";
 import { ddiOf } from "./testing.ts";
 import { writeQsf } from "./write.ts";
@@ -14,11 +14,107 @@ const shown = (c: Column) =>
 const src = (flow: string) => `name: t\nuses:\n  bas: here\nflow:\n${flow}`;
 
 describe("the column map", () => {
-	it("gives a select-all option its position, never its code", () => {
+	it("names a select-all option whose code is letters by its position", () => {
 		const { columns } = write(ddiOf(src("  - ask: bas.modes\n")));
 		expect(columns.columns.map(shown)).toEqual([
 			"QID1[1] -> instrument-t.var-modes_b",
 			"QID1[2] -> instrument-t.var-modes_w",
+		]);
+	});
+
+	it("names a select-all option whose code is a number by that number", () => {
+		const { columns } = write(ddiOf(src("  - ask: bas.trips\n")));
+		expect(columns.columns.map(shown)).toEqual([
+			"QID1[1] -> instrument-t.var-trips_1",
+			"QID1[2] -> instrument-t.var-trips_2",
+			"QID1[3] -> instrument-t.var-trips_3",
+			"QID1[9] -> instrument-t.var-trips_9",
+		]);
+	});
+
+	// As experiment 13 measured; anything else, or a suffix two options share, is unnamed.
+	it.each([
+		[
+			["0", "1", "2"],
+			["0", "1", "2"],
+		],
+		[
+			["-1", "1", "2"],
+			["-1", "1", "2"],
+		],
+		[
+			["010", "01", "3"],
+			["10", "1", "3"],
+		],
+		[
+			["1.5", "2", "3"],
+			["1.5", "2", "3"],
+		],
+		[
+			["100", "1", "2"],
+			["100", "1", "2"],
+		],
+		[
+			["1", "b", "3"],
+			["1", "2", "3"],
+		],
+		[
+			["2", "b", "9"],
+			[undefined, undefined, "9"],
+		],
+		[
+			["1", "01", "2"],
+			[undefined, undefined, "2"],
+		],
+		[
+			[
+				"-0",
+				"1.50",
+				"+1",
+				"1e2",
+				" 1",
+				"opt1",
+				"00",
+				"0.5",
+				"1234567890123456",
+			],
+			Array(9).fill(undefined),
+		],
+	])("gives codes %j the column suffixes %j", (codes, suffixes) => {
+		expect(choiceSuffixes(codes)).toEqual(suffixes);
+	});
+
+	it("says so when it can't tell a select-all option's column", () => {
+		const { instrument } = readInstrument(ddiOf(src("  - ask: bas.trips\n")));
+		const [ask] = instrument.flow;
+		if (ask?.kind !== "ask" || ask.question.domain.kind !== "choice")
+			throw new Error("a choice first");
+		const domain = ask.question.domain;
+		// A code no measured form covers.
+		const choices = domain.choices.map((c) =>
+			c.code === "2" ? { ...c, code: "1.0" } : c,
+		);
+		const { columns, findings } = writeQsf(
+			{
+				...instrument,
+				flow: [
+					{
+						...ask,
+						question: { ...ask.question, domain: { ...domain, choices } },
+					},
+				],
+			},
+			OPTIONS,
+		);
+		expect(columns.columns.map(shown)).toEqual([
+			"QID1[1] -> instrument-t.var-trips_1",
+			"QID1[3] -> instrument-t.var-trips_3",
+			"QID1[9] -> instrument-t.var-trips_9",
+		]);
+		expect(
+			findings.filter((f) => f.code === "qsf-unmapped").map((f) => f.message),
+		).toEqual([
+			"The column map can't tell which column records option `1.0` of `trips`: Qualtrics' name for it isn't known for this code.",
 		]);
 	});
 
