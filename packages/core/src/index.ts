@@ -188,6 +188,10 @@ export {
 export {
 	type Answer,
 	answersCsv,
+	type DataMap,
+	dataFileMap,
+	dataMapOf,
+	parseCsv,
 	type Representation,
 	type ResponseCode,
 	type ResponseColumn,
@@ -195,6 +199,7 @@ export {
 	type ResponseMap,
 	type ResponseRow,
 	readResponses,
+	type Values,
 } from "./responses.ts";
 export { err, ok, type Result } from "./result.ts";
 export {
