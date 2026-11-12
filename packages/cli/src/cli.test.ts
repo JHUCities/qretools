@@ -248,10 +248,16 @@ describe("qretools check", () => {
 });
 
 describe("qretools build", () => {
+	// Not the user's own git: no signing or hooks, which made each commit here 0.3s.
 	const git = (cwd: string, ...args: string[]) =>
 		promisify(execFile)(
 			"git",
-			["-c", "user.name=t", "-c", "user.email=t@example.org", ...args],
+			[
+				...["-c", "user.name=t", "-c", "user.email=t@example.org"],
+				...["-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"],
+				...["-c", "core.hooksPath=/dev/null"],
+				...args,
+			],
 			{ cwd },
 		);
 	const QUESTION =
@@ -506,23 +512,27 @@ describe("qretools build", () => {
 				at: { commit: A, blobs: { "questions/t/q.yaml": "b1" } },
 			});
 			const dist = (file: string) => join(ws, "dist", "instruments", file);
-			const first = await runWith(bank, "build", ws);
-			expect(first.written[dist("x.qsf")]).toBeDefined();
-			expect(first.written[dist("x-ddi-qsf.columns.json")]).toBeDefined();
+			// What an earlier build wrote: that a release writes these is the test above.
+			const earlier = Object.fromEntries(
+				["x.json", "x.qsf", "x-ddi-qsf.columns.json"].map((f) => [
+					dist(f),
+					"earlier",
+				]),
+			);
 			// An input named like a field Qualtrics surveys get: a release allows it, a survey can't.
 			await writeFile(
 				join(ws, "instruments/x.yaml"),
 				"name: x\nuses:\n  b: acme/ws/sub@v1\ninputs:\n  qretools_version:\n    number: {}\nflow:\n  - ask: b.q\n",
 			);
 			await git(dirname(ws), "commit", "-q", "-am", "an input");
-			const r = await runOver(first.written, bank, "build", ws);
+			const r = await runOver(earlier, bank, "build", ws);
 			expect(r.code).toBe(0);
 			expect(
 				Object.keys(r.written)
 					.map((p) => p.slice(ws.length + 1))
 					.sort(),
 			).toEqual(["dist/ddi.json", "dist/instruments/x.json"]);
-			expect(r.written[dist("x.json")]).not.toBe(first.written[dist("x.json")]);
+			expect(r.written[dist("x.json")]).not.toBe("earlier");
 			expect(r.err).toMatch(
 				/\[WARNING\] .*instruments\/x\.yaml: not built as a Qualtrics survey\./,
 			);
