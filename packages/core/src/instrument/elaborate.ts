@@ -137,6 +137,11 @@ export function elaborateInstrument(
 						: named.name;
 		return defined.has(v) ? v : undefined;
 	};
+	/** Each computed value's ComputationItems, in flow order, for the Variable it gets. */
+	const computed = new Map<
+		string,
+		{ steps: Item[]; value: Cond | undefined }
+	>();
 	/** Where a row number is read from: the Loop or count over the rows a step is within. */
 	const rowParams = new Map<string, Identity>();
 	const outOf = (variable: string): Identity =>
@@ -560,21 +565,24 @@ export function elaborateInstrument(
 			case "compute": {
 				if (node.name === undefined) return [];
 				const at = local("compute", node.name);
-				return [
-					emit(
-						item(
-							"ComputationItem",
-							id(at),
-							obj({
-								CommandCode: command(node.value, at),
-								AssignedVariableReference: {
-									...outOf(node.name),
-									ParameterName: [intl(node.name)],
-								},
-							}),
-						),
+				const step = emit(
+					item(
+						"ComputationItem",
+						id(at),
+						obj({
+							CommandCode: command(node.value, at),
+							AssignedVariableReference: {
+								...outOf(node.name),
+								ParameterName: [intl(node.name)],
+							},
+						}),
 					),
-				];
+				);
+				const seen = computed.get(node.name);
+				if (seen === undefined)
+					computed.set(node.name, { steps: [step], value: node.value });
+				else seen.steps.push(step);
+				return [step];
 			}
 			case "roster":
 				return roster(node);
@@ -913,6 +921,69 @@ export function elaborateInstrument(
 	}
 
 	const top = sequence(draft.flow, "flow");
+
+	// After the flow, which emits the answers' Variables and the ComputationItems.
+	// Computed values: one Variable each, made by a GenerationInstruction that lists every
+	// ComputationItem giving it its value, so data in a column for it has a variable.
+	const variableIds = new Set(
+		own.filter((it) => it.type === "Variable").map((it) => it.identity.ID),
+	);
+	const computedIds = new Set(
+		[...computed.keys()].map((name) => id(`var-${name}`).ID),
+	);
+	for (const [name, { steps, value }] of computed) {
+		const generation = emit(
+			item("GenerationInstruction", id(`generation-${name}`), {
+				ControlConstructReference: steps.map(ref),
+				IsDerived: true,
+			}),
+		);
+		// What it reads, as variables this instrument has: an index or a label has none.
+		const sources =
+			value === undefined
+				? []
+				: [
+						...new Set(
+							namesOf(value.expr).flatMap((n) => {
+								const v = exported(n.name);
+								return v === undefined ? [] : [v];
+							}),
+						),
+					].flatMap((v) => {
+						const source = id(`var-${v}`);
+						return variableIds.has(source.ID) || computedIds.has(source.ID)
+							? [ref({ type: "Variable", identity: source })]
+							: [];
+					});
+		const type = parsed.scope.get(name)?.type;
+		// A number or text says its domain; a code or a truth value would need its own list.
+		const domain =
+			type?.kind === "number"
+				? { $type: "NumericDomain" }
+				: type?.kind === "string"
+					? { $type: "TextDomain" }
+					: undefined;
+		emit(
+			item(
+				"Variable",
+				id(`var-${name}`),
+				obj({
+					VariableName: [intl(name)],
+					SourceVariableReference: sources.length === 0 ? undefined : sources,
+					VariableRepresentation: obj({
+						ProcessingInstructionReference: ref(generation),
+						ValueRepresentation: domain,
+					}),
+					OutParameter: obj({
+						...outOf(name),
+						ParameterName: [intl(name)],
+						ValueRepresentation: domain,
+					}),
+				}),
+			),
+		);
+	}
+
 	emit(
 		item(
 			"Instrument",

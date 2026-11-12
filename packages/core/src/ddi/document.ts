@@ -28,7 +28,8 @@ export type ItemType =
 	| "Loop"
 	| "RepeatUntil"
 	| "StatementItem"
-	| "ComputationItem";
+	| "ComputationItem"
+	| "GenerationInstruction";
 
 export interface Identity {
 	readonly URN: string;
