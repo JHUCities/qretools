@@ -74,6 +74,13 @@ export const NOT_TICKED = "not selected";
 export const SELECT_ALL_ID = "select-all";
 
 /**
+ * The bank's access levels as a code list: each level a category, its code its rank from
+ * 1, the most open. An embargo names its level but not where the level stands, so a
+ * reader of the DDI alone (`filterAnswers`) takes the order from here.
+ */
+export const ACCESS_LEVELS_ID = "access-levels";
+
+/**
  * How a bank's named shared file is published: its items' ID, or the base its list's
  * items hang off (`scale-agree4.codes`), is its name after its kind's prefix. One
  * spelling, read both ways (`sharedOf`). A name has no hyphen (`NAME_PATTERN`), so
@@ -106,6 +113,8 @@ export function sharedOf(
 	const base = list ? id.slice(0, -".codes".length) : id;
 	if (base === MISSING_ID) return { kind: "missing", name: "missing" };
 	if (base === SELECT_ALL_ID) return { kind: "select_all", name: "select_all" };
+	if (base === ACCESS_LEVELS_ID)
+		return { kind: "workspace", name: "workspace" };
 	for (const [kind, prefix] of Object.entries(SHARED_PREFIX) as [
 		keyof typeof SHARED_PREFIX,
 		string,
@@ -138,8 +147,11 @@ export const elaborate = (
 	missing: readonly Code[],
 	selectAll: SelectAll,
 	versioning: Versioning = {},
+	levels: readonly string[] = [],
 ): DdiDocument =>
-	documentOf(elaborateItems(draft, agency, missing, selectAll, versioning));
+	documentOf(
+		elaborateItems(draft, agency, missing, selectAll, versioning, levels),
+	);
 
 /** Who publishes the items, and at which version each file's items are. */
 interface Ctx {
@@ -173,6 +185,8 @@ export function elaborateItems(
 	missing: readonly Code[],
 	selectAll: SelectAll,
 	versioning: Versioning = {},
+	/** The bank's access levels, most open first: published beside a restricted question. */
+	levels: readonly string[] = [],
 ): readonly Item[] {
 	const ctx: Ctx = {
 		agency,
@@ -289,6 +303,17 @@ export function elaborateItems(
 			access: draft.access,
 		}),
 	);
+	// Only beside an embargo: a DDI without one has nothing to filter.
+	const accessLevels =
+		draft.access !== undefined && variables.length > 0 && levels.length > 0
+			? codeListItems(
+					ctx,
+					ctx.shared("workspace", "workspace"),
+					ACCESS_LEVELS_ID,
+					levels.map((label, i) => ({ code: String(i + 1), label })),
+					{ principal: true, name: ACCESS_LEVELS_ID },
+				)
+			: undefined;
 
 	return [
 		question,
@@ -299,6 +324,8 @@ export function elaborateItems(
 		instruction,
 		universe,
 		...(missingItems?.items ?? []),
+		accessLevels?.codeList,
+		...(accessLevels?.categories ?? []),
 	].filter((it) => it !== undefined);
 }
 

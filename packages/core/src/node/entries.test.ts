@@ -13,6 +13,7 @@ describe("the entry points", () => {
 		}).toMatchInlineSnapshot(`
 			{
 			  "core": [
+			    "ACCESS_LEVELS_ID",
 			    "AGENCY_PATTERN",
 			    "DDI_DEPTH",
 			    "DDI_FUNCTIONS",
@@ -42,10 +43,13 @@ describe("the entry points", () => {
 			    "UNVERSIONED",
 			    "WORKSPACE",
 			    "WORKSPACE_DETAILS",
+			    "aboveLevel",
 			    "absentRoot",
+			    "accessLevelsOf",
 			    "addressOf",
 			    "agencyWritten",
 			    "answersCsv",
+			    "answersOf",
 			    "asList",
 			    "asObj",
 			    "bankAgency",
@@ -74,6 +78,7 @@ describe("the entry points", () => {
 			    "exampleInstrument",
 			    "exportRefusal",
 			    "fileFindings",
+			    "filterAnswers",
 			    "holesOf",
 			    "importsOf",
 			    "inDocumentOrder",

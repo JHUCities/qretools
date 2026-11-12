@@ -17,9 +17,11 @@ import { parseArgs } from "node:util";
 import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
 	type Address,
+	accessLevelsOf,
 	addressOf,
 	agencyWritten,
 	answersCsv,
+	answersOf,
 	type Bank,
 	type BankScope,
 	bankOf,
@@ -30,7 +32,9 @@ import {
 	ddiIndexOf,
 	documentOf,
 	exportRefusal,
+	type FilterRefusal,
 	type Finding,
+	filterAnswers,
 	HERE,
 	type Item,
 	importsOf,
@@ -132,6 +136,12 @@ const USAGE = `Usage:
                                     Read a data file (CSV, one header row) the same way, with a map
                                     that names each column by its header, with its DDI variable and
                                     any translations of its values. Every row is read
+  qretools filter <answers.csv> --ddi <file.json> --access <level> [-o file]
+                                    Keep the answers (long CSV, as \`responses\` writes it) to
+                                    variables at that access level or a more open one, by the DDI's
+                                    levels; name each variable removed on stderr, never a value.
+                                    Refused, with nothing written, when a variable's level can't be told
+  qretools filter --ddi <file.json> List the DDI's access levels, most open first
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -149,7 +159,9 @@ moves after that, check warns until the next export records it again.
           workspaces that use this release can read them.
 --agency  the instrument's DDI agency, in place of its workspace's (workspace.yaml).
           Needed for a file outside a workspace's instruments/.
---ddi     the DDI a column map was made from, in place of <name>.json beside the map.
+--ddi     the DDI a column map was made from, in place of <name>.json beside the map;
+          for filter, the DDI the answers refer to.
+--access  for filter, the access level to keep, with every more open one.
 --qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
           if any part of it can't work in Qualtrics as the DDI says.`;
 
@@ -186,7 +198,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "build" &&
 		command !== "codebook" &&
 		command !== "paths" &&
-		command !== "responses"
+		command !== "responses" &&
+		command !== "filter"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -195,21 +208,26 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	const stray =
 		command !== "responses" && args.values.map !== undefined
 			? "--map"
-			: command !== "responses" && args.values.ddi !== undefined
+			: command !== "responses" &&
+					command !== "filter" &&
+					args.values.ddi !== undefined
 				? "--ddi"
-				: args.values.bank !== undefined
-					? "--bank"
-					: args.values.agency !== undefined
-						? "--agency"
-						: args.values.qsf === true
-							? "--qsf"
-							: command !== "build" && args.values["tag-message"] !== undefined
-								? "--tag-message"
-								: command === "check"
-									? args.values.output !== undefined && "--output"
-									: command !== "codebook" &&
-										args.values.strict === true &&
-										"--strict";
+				: command !== "filter" && args.values.access !== undefined
+					? "--access"
+					: args.values.bank !== undefined
+						? "--bank"
+						: args.values.agency !== undefined
+							? "--agency"
+							: args.values.qsf === true
+								? "--qsf"
+								: command !== "build" &&
+										args.values["tag-message"] !== undefined
+									? "--tag-message"
+									: command === "check"
+										? args.values.output !== undefined && "--output"
+										: command !== "codebook" &&
+											args.values.strict === true &&
+											"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -232,6 +250,19 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			dir,
 			args.values.map,
 			args.values.ddi,
+			args.values.output,
+			io,
+		);
+	}
+	if (command === "filter") {
+		if (args.values.ddi === undefined) {
+			io.err(`${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return writeFiltered(
+			args.positionals[1],
+			args.values.ddi,
+			args.values.access,
 			args.values.output,
 			io,
 		);
@@ -546,6 +577,114 @@ async function writeResponses(
 	return findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
 }
 
+/**
+ * Answers (long CSV, as `responses` writes them) filtered to an access level and every
+ * more open one, by the DDI alone (`filterAnswers`); without a level, the DDI's levels,
+ * one a line. Says which variables it removed, never a value. Refused, with nothing
+ * written, whenever a level can't be told (`FilterRefusal`).
+ */
+async function writeFiltered(
+	file: string | undefined,
+	ddiFile: string,
+	level: string | undefined,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	if (level !== undefined && file === undefined) {
+		io.err(`${USAGE}\n`);
+		return USAGE_ERROR;
+	}
+	const texts: string[] = [];
+	for (const f of level === undefined ? [ddiFile] : [ddiFile, file ?? ""])
+		try {
+			texts.push(await readFile(f, "utf8"));
+		} catch (e) {
+			io.err(
+				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return USAGE_ERROR;
+		}
+	const [ddiText = "", csv = ""] = texts;
+	const ddiJson = jsonOf(ddiText);
+	const read = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
+	if (read?.ok !== true) {
+		io.err(
+			`${ddiFile}: error: this isn't DDI-Lifecycle 4.0 JSON. [filter-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const index = read.value;
+	const refuse = (lines: readonly string[]) => {
+		for (const l of lines) io.err(`${l} Nothing is written.\n`);
+		return PROBLEMS;
+	};
+	const levels = accessLevelsOf(index);
+	if (!levels.ok) return refuse(filterRefusal(levels.error, ddiFile, ddiFile));
+	if (levels.value.length === 0)
+		io.err(
+			`${ddiFile}: note: this DDI defines no access levels, so nothing is restricted. [filter-no-levels]\n`,
+		);
+	if (level === undefined) {
+		for (const l of levels.value) io.out(`${l}\n`);
+		return OK;
+	}
+	const answers = answersOf(csv);
+	if (!answers.ok)
+		return refuse([
+			`${file}${answers.error.line === undefined ? "" : `:${answers.error.line}`}: error: ${answers.error.message} [filter-unreadable]`,
+		]);
+	const filtered = filterAnswers(index, answers.value, level);
+	if (!filtered.ok)
+		return refuse(filterRefusal(filtered.error, ddiFile, file ?? ""));
+	const code = await emit(
+		{ text: answersCsv(filtered.value.kept), lines: [], problems: false },
+		output,
+		io,
+	);
+	// Said once the answers are written: a write that fails has removed nothing.
+	for (const r of filtered.value.removed)
+		io.err(
+			`${file}: note: removed \`${r.name}\` (${r.urn}), at \`${r.level}\`. [filter-removed]\n`,
+		);
+	return code;
+}
+
+/** Why answers weren't filtered, a line each, as `check` writes findings: URNs and levels, never a value. */
+function filterRefusal(
+	r: FilterRefusal,
+	ddiFile: string,
+	file: string,
+): readonly string[] {
+	const named = (xs: readonly string[]) => xs.map((x) => `\`${x}\``).join(", ");
+	switch (r.kind) {
+		case "unreadable-levels":
+			return [
+				`${ddiFile}: error: The DDI's access levels can't be read: ${r.reason}. [filter-levels]`,
+			];
+		case "unknown-level":
+			return [
+				`${ddiFile}: error: The DDI has no access level \`${r.level}\`. Its levels are ${named(r.levels)}, most open first. [filter-unknown-level]`,
+			];
+		case "unknown-variables":
+			return r.urns.map(
+				(u) =>
+					`${file}: error: The DDI has no variable \`${u}\`, so its access level isn't known. [filter-unknown-variable]`,
+			);
+		case "unlisted-level":
+			return r.urns.map(
+				(u) =>
+					`${ddiFile}: error: The embargo of \`${u}\` names a level the DDI doesn't list. [filter-levels]`,
+			);
+		case "leak":
+			return r.urns.map(
+				(u) =>
+					`${file}: error: Answers to \`${u}\`, above the level, remained after filtering: a bug in QREtools. [filter-leak]`,
+			);
+		default:
+			return r satisfies never;
+	}
+}
+
 function parse(argv: readonly string[]) {
 	return parseArgs({
 		args: [...argv],
@@ -559,6 +698,7 @@ function parse(argv: readonly string[]) {
 			qsf: { type: "boolean" },
 			map: { type: "string" },
 			ddi: { type: "string" },
+			access: { type: "string" },
 			"tag-message": { type: "string" },
 			help: { type: "boolean", short: "h" },
 		},

@@ -21,6 +21,7 @@ qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
+qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -315,6 +316,51 @@ range that the DDI gives. This check applies to a Qualtrics export too. The comm
 
 An input of an instrument has the missing values of the questions that the instrument
 asks. Thus, a data file can give "Don't know" (or another missing value) for an input.
+
+## Filter the answers by access level
+
+`filter` keeps the answers that a person at one access level can see. It reads the
+answers as `responses` writes them, and the DDI that the answers refer to:
+
+```sh
+qretools filter wave1-answers.csv --ddi dist/instruments/wave1.json --access public -o wave1-public.csv
+qretools filter --ddi dist/instruments/wave1.json   # list the levels, most open first
+```
+
+The command keeps the answers to the variables at the level and at each more open level.
+It removes the other answers, by the URN of the variable. The output has the same form as
+the input. Thus, real answers and synthetic answers are filtered in the same way.
+
+The command uses only the DDI. Each variable above the first level has an embargo with
+the name of its level. The DDI also has the code list `access-levels`: the levels in
+their order, with the most open level as code 1. `export` and `build` write this list
+with each question that has an `access` line.
+
+To filter answers, do these steps:
+
+1. Run `qretools filter --ddi <file.json>` to see the levels.
+2. Run `qretools filter <answers.csv> --ddi <file.json> --access <level> -o <file>`.
+3. Read the notes on stderr. Each `filter-removed` note gives the name and the URN of one
+   variable that the command removed. A note never shows a value.
+
+The command refuses, writes nothing and exits with 1, in these conditions:
+
+- `filter-unknown-level`: the DDI has no level with that name. The message gives the
+  levels.
+- `filter-unknown-variable`: the answers have a variable that the DDI does not have. The
+  level of that variable is not known.
+- `filter-levels`: the command cannot read the levels of the DDI. For example, two lists
+  of levels are different, a variable has an embargo but the DDI has no list, or an
+  embargo has a level that the list does not have.
+- `filter-unreadable`: the answers are not in the form that `responses` writes.
+- `filter-leak`: after the filter, an answer above the level is still in the output. This
+  is a bug in QREtools. Please report it.
+
+A DDI without levels restricts nothing. The command writes a `filter-no-levels` note and
+keeps all the answers.
+
+**Caution: a computed value (for example, a value that an instrument computes from a
+restricted answer) has no level. The command does not remove it.**
 
 ## Codebook
 

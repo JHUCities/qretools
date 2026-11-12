@@ -135,6 +135,7 @@ export const questionItems = (
 					own: path === undefined ? undefined : p.versions[path],
 					shared: p.versions,
 				}),
+		p.env.access,
 	);
 
 /** A whole bank, evaluated: each file by its path. */

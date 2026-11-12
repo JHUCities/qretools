@@ -55,6 +55,7 @@ export type {
 } from "./ddi/document.ts";
 export { collisions, documentOf } from "./ddi/document.ts";
 export {
+	ACCESS_LEVELS_ID,
 	elaborate,
 	elaborateItems,
 	NOT_TICKED,
@@ -99,6 +100,13 @@ export {
 	scopeOf,
 	UNDECLARED_AGENCY,
 } from "./evaluate.ts";
+export {
+	aboveLevel,
+	accessLevelsOf,
+	type FilterRefusal,
+	filterAnswers,
+	type Removed,
+} from "./filter.ts";
 export {
 	type Edit,
 	type Finding,
@@ -188,6 +196,7 @@ export {
 export {
 	type Answer,
 	answersCsv,
+	answersOf,
 	type DataMap,
 	dataFileMap,
 	dataMapOf,
