@@ -48,9 +48,10 @@ export function useInstrumentUses(): InstrumentUses {
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
 	const remoteBanks = useModel((m) => m.remoteBanks);
+	const settings = useModel((m) => m.settings);
 	return useMemo(
-		() => instrumentUses({ local, remote, remoteBanks }, evaluations),
-		[local, remote, remoteBanks, evaluations],
+		() => instrumentUses({ local, remote, remoteBanks, settings }, evaluations),
+		[local, remote, remoteBanks, settings, evaluations],
 	);
 }
 

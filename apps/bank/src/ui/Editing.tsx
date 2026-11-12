@@ -339,7 +339,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 							) : pane === "codebook" ? (
 								<CodebookPane read={codebook} follow={follow} />
 							) : pane === "usedBy" ? (
-								<InstrumentsUsing uses={instruments} />
+								<InstrumentsUsing uses={instruments} source={q.source} />
 							) : null
 						}
 					/>
@@ -360,9 +360,10 @@ function useSlices() {
 	const local = useModel((m) => m.local);
 	const remote = useModel((m) => m.remote);
 	const remoteBanks = useModel((m) => m.remoteBanks);
+	const settings = useModel((m) => m.settings);
 	return useMemo(
-		() => ({ local, remote, remoteBanks }),
-		[local, remote, remoteBanks],
+		() => ({ local, remote, remoteBanks, settings }),
+		[local, remote, remoteBanks, settings],
 	);
 }
 
@@ -401,7 +402,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 						range: r.range,
 						about: r.about,
 					};
-				const href = externalUrl(read, r, slices.remoteBanks);
+				const href = externalUrl(read, r, slices);
 				if (r.kind === "code")
 					return {
 						kind: "codeRef",
@@ -413,7 +414,7 @@ function InstrumentEditing({ e }: { e: InstrumentEntry }) {
 					? { kind: "ref", range: r.range }
 					: { kind: "external", range: r.range, href };
 			}),
-		[instrument.refs, read, slices.remoteBanks],
+		[instrument.refs, read, slices],
 	);
 	// What the workspace's details say, beside the DDI they publish it under.
 	const details = detailsOf(slices.local.schemes);
@@ -834,7 +835,10 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 									{instrumentUsers.length > 0 && (
 										<>
 											<h4 className="browser-heading">Instruments</h4>
-											<InstrumentsUsing uses={instrumentUsers} />
+											<InstrumentsUsing
+												uses={instrumentUsers}
+												source={e.source}
+											/>
 										</>
 									)}
 								</>
@@ -1322,9 +1326,17 @@ export function ForeignView({
  */
 /**
  * The instruments here that use a file, each once, with each step that names it as a
- * link that opens the instrument there (as its outline's items go to their steps).
+ * link that opens the instrument there (as its outline's items go to their steps). One
+ * that names this workspace by its address at a version says when that version differs.
  */
-function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
+function InstrumentsUsing({
+	uses,
+	source,
+}: {
+	uses: readonly InstrumentUse[];
+	/** The file's working text: an instrument reading another version of it says so. */
+	source: string;
+}) {
 	const { dispatch } = useApp();
 	return uses.length === 0 ? (
 		<p className="quiet">No instrument in this workspace uses it.</p>
@@ -1339,6 +1351,15 @@ function InstrumentsUsing({ uses }: { uses: readonly InstrumentUse[] }) {
 					>
 						{u.name}
 					</FileLink>
+					{u.tagged?.text !== undefined && u.tagged.text !== source && (
+						<p className="quiet used-by-note">
+							Reads it at <code className="code">{u.tagged.ref}</code>, which
+							differs from this copy.{" "}
+							<ExternalLink href={u.tagged.url}>
+								See {u.tagged.ref} on GitHub
+							</ExternalLink>
+						</p>
+					)}
 					<ul className="outline">
 						{u.places.map((p) => (
 							<li key={p.at}>
