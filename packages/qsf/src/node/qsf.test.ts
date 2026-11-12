@@ -196,7 +196,7 @@ describe("the households survey's column map", () => {
 		);
 		expect(findings.filter((f) => f.code === "qsf-unmapped")).toEqual([]);
 		await expect(`${JSON.stringify(columns, null, 2)}\n`).toMatchFileSnapshot(
-			"../../fixtures/households.columns.json",
+			"../../fixtures/households-ddi-qsf.columns.json",
 		);
 		// Against the survey itself: each question that records an answer, and each
 		// embedded data field but QREtools' own, has a column in the map.
