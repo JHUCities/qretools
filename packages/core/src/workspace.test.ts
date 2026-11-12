@@ -342,3 +342,39 @@ describe("releasing an instrument", () => {
 		expect(Object.keys(ddi.QuestionItem ?? {})).toEqual(["org.example:q:1"]);
 	});
 });
+
+describe("access levels an instrument asks from another bank", () => {
+	it("counts them as named, so the workspace is not told to remove what it must declare", () => {
+		const q = (name: string, level: string) =>
+			`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\naccess: ${level}\n`;
+		const ws = workspaceOf(
+			{
+				"workspace.yaml":
+					"agency: org.example\naccess: [public, restricted, secret]\n",
+				"questions/t/own.yaml": q("own", "public"),
+				"instruments/x.yaml":
+					"name: x\nuses:\n  b: org/bank@v1\nflow:\n  - ask: b.zip\n",
+			},
+			{
+				remote: {
+					"org/bank@v1": {
+						kind: "files",
+						files: {
+							"workspace.yaml":
+								"agency: org.bank\naccess: [public, restricted]\n",
+							"questions/t/zip.yaml": q("zip", "restricted"),
+						},
+					},
+				},
+			},
+		);
+		expect(
+			ws.bank.findings["workspace.yaml"]?.map((f) => [f.code, f.path]),
+		).toEqual([["unused-level", "access.2"]]);
+		expect(
+			ws.instruments["instruments/x.yaml"]?.instrument.findings.filter((f) =>
+				f.code.startsWith("access-"),
+			),
+		).toEqual([]);
+	});
+});

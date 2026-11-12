@@ -150,6 +150,7 @@ export function createEvaluations(): Evaluations {
 			agency: string | undefined;
 			locks: Locks | undefined;
 			bank: BankScope | undefined;
+			levels: readonly string[];
 			read: InstrumentIn;
 		}
 	>();
@@ -282,13 +283,16 @@ export function createEvaluations(): Evaluations {
 				};
 			const agency = written?.agency;
 			const locks = written?.locks;
+			// The levels this workspace declares: it must declare each level the instrument asks at.
+			const levels = self.env(model).access;
 			if (
 				hit &&
 				hit.source === e.source &&
 				hit.agency === agency &&
 				hit.locks === locks &&
 				hit.remote === remote &&
-				hit.bank === bank
+				hit.bank === bank &&
+				hit.levels === levels
 			)
 				return hit.read;
 			const read = instrumentIn(e.source, {
@@ -296,6 +300,7 @@ export function createEvaluations(): Evaluations {
 				remote,
 				remoteBanks,
 				agency,
+				levels,
 				...(locks !== undefined && { locks }),
 			});
 			instruments.set(e.id, {
@@ -304,6 +309,7 @@ export function createEvaluations(): Evaluations {
 				agency,
 				locks,
 				bank,
+				levels,
 				read,
 			});
 			return read;
