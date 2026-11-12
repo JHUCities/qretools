@@ -198,4 +198,4 @@ newest (npm requires the tag named for a prerelease). A published version can't 
 replaced: fix forward with the next one.
 
 This is the one package that knows both the core (`@qretools/core`) and the Qualtrics
-export (`@qretools/qsf`). The core knows nothing of any export target.
+export (`@qretools/qualtrics`). The core knows nothing of any export target.

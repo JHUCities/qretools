@@ -62,7 +62,7 @@ import {
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { pathsPageOf } from "@qretools/paths";
-import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
+import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qualtrics";
 import pkg from "../package.json" with { type: "json" };
 import type { HistoryRead, OwnRepository } from "./history.ts";
 

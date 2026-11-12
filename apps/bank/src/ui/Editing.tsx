@@ -64,7 +64,7 @@ import {
 	workspaceFileJsonSchema,
 } from "@qretools/core/editor";
 import { PICK_KEY, toDiagnostics } from "@qretools/editor";
-import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qsf";
+import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qualtrics";
 import { bankText, formatLink } from "@qretools/shell";
 import {
 	Ddi,

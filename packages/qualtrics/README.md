@@ -1,4 +1,4 @@
-# @qretools/qsf
+# @qretools/qualtrics
 
 Turns an instrument's DDI-Lifecycle 4.0 into a Qualtrics survey (QSF). It reads only the
 DDI, never the instrument, so the DDI stays the record of the survey that was fielded.
@@ -6,7 +6,7 @@ Only this package knows Qualtrics; the core doesn't.
 
 ```ts
 import { placeFindings } from "@qretools/core";
-import { qsfOf, qsfTime } from "@qretools/qsf";
+import { qsfOf, qsfTime } from "@qretools/qualtrics";
 
 const made = qsfOf(instrument.ddi, { name: "households", created: qsfTime(new Date()) });
 // made.kind is "made" (made.qsf, to import into Qualtrics) or "refused" (made.errors)
