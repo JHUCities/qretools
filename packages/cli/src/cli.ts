@@ -5,7 +5,8 @@
  * instrument's test `form` (an HTML page that runs its routing, from its DDI), report its
  * `paths` (an HTML page of how many ways through its routing, and what each reaches),
  * or `build` it: the DDI of its last commit, each item at the version its history gives,
- * with each instrument's Qualtrics survey and the map of its columns to that DDI. `main` takes its
+ * with each instrument's Qualtrics survey and the map of its columns to that DDI; and read
+ * that survey's `responses` back, keyed by DDI Variable URN. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
@@ -18,6 +19,7 @@ import {
 	type Address,
 	addressOf,
 	agencyWritten,
+	answersCsv,
 	type Bank,
 	type BankScope,
 	bankOf,
@@ -44,8 +46,10 @@ import {
 	type Range,
 	type Refusal,
 	type RemoteBank,
+	type Representation,
 	ROOT,
 	readInstruments,
+	readResponses,
 	releaseFindings,
 	remoteScope,
 	remotesOf,
@@ -54,6 +58,7 @@ import {
 	shortCommit,
 	status,
 	tagMessage,
+	tickCodes,
 	unlockedTags,
 	versionsOf,
 	WORKSPACE,
@@ -62,7 +67,13 @@ import {
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { pathsPageOf } from "@qretools/paths";
-import { qsfOf, qsfRefusalReason, qsfTime } from "@qretools/qualtrics";
+import {
+	columnMapOf,
+	exportMap,
+	qsfOf,
+	qsfRefusalReason,
+	qsfTime,
+} from "@qretools/qualtrics";
 import pkg from "../package.json" with { type: "json" };
 import type { HistoryRead, OwnRepository } from "./history.ts";
 
@@ -106,6 +117,13 @@ const USAGE = `Usage:
                                     variables (<name>-ddi-qsf.columns.json); an instrument Qualtrics can't run gets a
                                     warning instead of those two. Refused while an instrument is incomplete, reads
                                     this workspace as \`../\`, or reads a tag it hasn't locked or that has moved
+  qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [-o file]
+                                    Read a Qualtrics response export (CSV, export values, multi-value
+                                    fields split into columns) into long CSV, one line per value:
+                                    respondent,variable,row,value, each variable by its DDI URN. Reads
+                                    the DDI <name>.json beside the map. Survey Preview and test
+                                    responses are kept. Writes to stdout unless -o names a file:
+                                    keep it out of anything published (dist/ goes to Pages)
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -158,26 +176,29 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "export" &&
 		command !== "build" &&
 		command !== "codebook" &&
-		command !== "paths"
+		command !== "paths" &&
+		command !== "responses"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
 	// Each option belongs to one command; given to the other, it's a mistake, not ignored.
 	const stray =
-		args.values.bank !== undefined
-			? "--bank"
-			: args.values.agency !== undefined
-				? "--agency"
-				: args.values.qsf === true
-					? "--qsf"
-					: command !== "build" && args.values["tag-message"] !== undefined
-						? "--tag-message"
-						: command === "check"
-							? args.values.output !== undefined && "--output"
-							: command !== "codebook" &&
-								args.values.strict === true &&
-								"--strict";
+		command !== "responses" && args.values.map !== undefined
+			? "--map"
+			: args.values.bank !== undefined
+				? "--bank"
+				: args.values.agency !== undefined
+					? "--agency"
+					: args.values.qsf === true
+						? "--qsf"
+						: command !== "build" && args.values["tag-message"] !== undefined
+							? "--tag-message"
+							: command === "check"
+								? args.values.output !== undefined && "--output"
+								: command !== "codebook" &&
+									args.values.strict === true &&
+									"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -191,6 +212,13 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values["tag-message"],
 			io,
 		);
+	if (command === "responses") {
+		if (args.positionals[1] === undefined || args.values.map === undefined) {
+			io.err(`${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return writeResponses(dir, args.values.map, args.values.output, io);
+	}
 	if (command === "paths") {
 		// A file, always: there's no workspace default to fall back on.
 		if (args.positionals[1] === undefined) {
@@ -383,6 +411,107 @@ async function writePaths(
 	);
 }
 
+/** The DDI a QSF column map was built beside: `<name>.json` for `<name>-ddi-qsf.columns.json`. */
+const MAP_SUFFIX = "-ddi-qsf.columns.json";
+
+/**
+ * A Qualtrics response export read with its QSF column map, as long CSV: one line per
+ * value, keyed by DDI Variable URN (`answersCsv`). The DDI beside the map gives each
+ * variable's codes and a select-all option's tick, and must be the DDI the map was made
+ * from (its digest). Findings place what can't be read by line and column, never by a
+ * response's value. Local files only.
+ */
+async function writeResponses(
+	file: string,
+	mapFile: string,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	if (!mapFile.endsWith(MAP_SUFFIX)) {
+		io.err(
+			`${mapFile}: the QSF column map's name ends in \`${MAP_SUFFIX}\`, as \`build\` writes it beside the instrument's DDI.\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const ddiFile = `${mapFile.slice(0, -MAP_SUFFIX.length)}.json`;
+	const texts: string[] = [];
+	for (const f of [file, mapFile, ddiFile])
+		try {
+			texts.push(await readFile(f, "utf8"));
+		} catch (e) {
+			io.err(
+				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return USAGE_ERROR;
+		}
+	const [csv = "", mapText = "", ddiText = ""] = texts;
+	const mapJson = jsonOf(mapText);
+	const columns = mapJson.ok ? columnMapOf(mapJson.value) : undefined;
+	if (columns === undefined) {
+		io.err(
+			`${mapFile}: error: this isn't a QSF column map. [responses-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const digest = `sha256:${createHash("sha256").update(ddiText).digest("hex")}`;
+	if (columns.ddi !== undefined && columns.ddi !== digest) {
+		io.err(
+			`${ddiFile}: error: this isn't the DDI the map was made from (its digest differs). Use the files one \`build\` wrote. [responses-provenance]\n`,
+		);
+		return PROBLEMS;
+	}
+	if (columns.ddi === undefined)
+		io.err(
+			`${mapFile}: note: the map names no DDI digest, so ${ddiFile} isn't checked against it. [responses-provenance]\n`,
+		);
+	const ddiJson = jsonOf(ddiText);
+	const read = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
+	if (read?.ok !== true) {
+		io.err(
+			`${ddiFile}: error: this isn't DDI-Lifecycle 4.0 JSON. [responses-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const index = read.value;
+	// Each variable's codes or format, and each select-all option's tick, as the DDI says.
+	const ticks = tickCodes(index, [...index.byUrn.values()]);
+	const representations = new Map<string, Representation>();
+	const ticked = new Map<string, string>();
+	for (const e of codebookOf(index).entries) {
+		if (e.type !== "Variable") continue;
+		const codes = (e.responses?.rows ?? []).map((r) => r.code);
+		// shortcut: missing values written as ranges aren't read (the codebook reads codes only), so a number in one is a finding.
+		if (e.format?.kind === "number")
+			representations.set(e.urn, { kind: "number", missing: codes });
+		else if (e.format?.kind === "text")
+			representations.set(e.urn, { kind: "text" });
+		else if (e.responses !== undefined)
+			representations.set(e.urn, { kind: "codes", codes });
+		// Anything else (a date, say) isn't read: its column is a finding, never taken as text.
+		const tick = e.responses?.from
+			.map((f) => (f.kind === "ref" ? ticks.get(f.urn)?.ticked : undefined))
+			.find((t) => t !== undefined);
+		if (tick !== undefined) ticked.set(e.urn, tick);
+	}
+	const made = exportMap(csv, columns, ticked);
+	const answered =
+		made.map === undefined
+			? undefined
+			: readResponses(made.header, made.rows, made.map, representations);
+	const findings = [...made.findings, ...(answered?.findings ?? [])];
+	for (const f of findings)
+		io.err(
+			`${file}${f.line === undefined ? "" : `:${f.line}`}: ${LEVEL[f.severity]}: ${f.column === undefined ? "" : `column \`${f.column}\`: `}${f.message}${f.count > 1 ? ` (${f.count} rows)` : ""} [${f.code}]\n`,
+		);
+	if (answered !== undefined)
+		await emit(
+			{ text: answersCsv(answered.answers), lines: [], problems: false },
+			output,
+			io,
+		);
+	return findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
+}
+
 function parse(argv: readonly string[]) {
 	return parseArgs({
 		args: [...argv],
@@ -394,6 +523,7 @@ function parse(argv: readonly string[]) {
 			bank: { type: "string", multiple: true },
 			agency: { type: "string" },
 			qsf: { type: "boolean" },
+			map: { type: "string" },
 			"tag-message": { type: "string" },
 			help: { type: "boolean", short: "h" },
 		},

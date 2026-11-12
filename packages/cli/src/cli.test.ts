@@ -13,8 +13,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { addressOf, bankOf, questionItems, remoteScope } from "@qretools/core";
+import {
+	addressOf,
+	bankOf,
+	instrumentOf,
+	questionItems,
+	remoteScope,
+} from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
+import { qsfOf } from "@qretools/qualtrics";
 import { describe, expect, it } from "vitest";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
 import { ownRepository, readHistory } from "./history.ts";
@@ -797,6 +804,107 @@ describe("qretools paths", () => {
 		expect(none.err).toMatch(/^Usage:/);
 		const s = await run("paths", file, "--strict");
 		expect(s.err).toMatch(/`--strict` isn't an option of `paths`/);
+	});
+});
+
+describe("qretools responses", () => {
+	const q = (name: string, rest: string) =>
+		`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
+	const bank = bankOf({
+		"workspace.yaml": "agency: org.bank\n",
+		"missing.yaml": 'labels:\n  "D": Don\'t know\n',
+		"scales/yesno01.yaml": 'labels:\n  "0": No\n  "1": Yes\n',
+		"questions/a/tenure.yaml": q(
+			"tenure",
+			'responses:\n  "1": Own\n  "2": Rent\n',
+		),
+		"questions/a/modes.yaml": q(
+			"modes",
+			'select: many\nresponses:\n  "b": Bus\n  "9": None\n',
+		),
+		"questions/a/rent.yaml": q("rent", "number: {}\n"),
+	});
+	const v = (name: string) => `urn:ddi:org.example:instrument-t.var-${name}:1`;
+	const id = (o: object) => `"${JSON.stringify(o).replaceAll('"', '""')}"`;
+
+	/** What `build` writes for an instrument, and an export of its survey. */
+	async function files(digestOf = (ddi: string) => ddi) {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-responses-"));
+		const { ddi } = instrumentOf(
+			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n  - ask: b.modes\n  - ask: b.rent\n",
+			{ banks: { b: bank }, agency: "org.example" },
+		);
+		const text = `${JSON.stringify(ddi, null, 2)}\n`;
+		const digest = `sha256:${createHash("sha256").update(digestOf(text)).digest("hex")}`;
+		const made = qsfOf(ddi, {
+			name: "t",
+			created: "2026-11-12 00:00:00",
+			digest,
+			version: "9",
+		});
+		if (made.kind !== "made") throw new Error("the survey isn't made");
+		await writeFile(join(dir, "t.json"), text);
+		const map = join(dir, "t-ddi-qsf.columns.json");
+		await writeFile(map, JSON.stringify(made.columns));
+		const csv = join(dir, "export.csv");
+		await writeFile(
+			csv,
+			[
+				"ResponseId,qretools_instrument,qretools_ddi,qretools_version,tenure,modes_1,modes_9,rent",
+				"Response ID,qretools_instrument,qretools_ddi,qretools_version,tenure?,modes? - Bus,modes? - None,rent?",
+				[
+					id({ ImportId: "_recordId" }),
+					id({ ImportId: "qretools_instrument" }),
+					id({ ImportId: "qretools_ddi" }),
+					id({ ImportId: "qretools_version" }),
+					id({ ImportId: "QID1" }),
+					id({ ImportId: "QID2", choiceId: "1" }),
+					id({ ImportId: "QID2", choiceId: "9" }),
+					id({ ImportId: "QID3_TEXT" }),
+				].join(","),
+				`R_1,urn:ddi:org.example:instrument-t:1,${digest},9,2,1,,1200`,
+				`R_2,urn:ddi:org.example:instrument-t:1,${digest},9,3,,1,D`,
+				"",
+			].join("\r\n"),
+		);
+		return { csv, map };
+	}
+
+	it("reads an export with its map and the DDI beside it, into one line per value", async () => {
+		const { csv, map } = await files();
+		const r = await run("responses", csv, "--map", map);
+		expect(r.out).toBe(
+			[
+				"respondent,variable,row,value",
+				`R_1,${v("tenure")},,2`,
+				`R_1,${v("modes_b")},,1`,
+				`R_1,${v("rent")},,1200`,
+				`R_2,${v("modes_9")},,1`,
+				`R_2,${v("rent")},,D`,
+				"",
+			].join("\n"),
+		);
+		// R_2's tenure isn't one of its codes: placed, never shown.
+		expect(r.err).toBe(
+			`${csv}:5: error: column \`tenure\`: This value isn't one \`${v("tenure")}\` can hold, so it isn't read. [responses-not-a-code]\n`,
+		);
+		expect(r.code).toBe(1);
+		expect(
+			(await run("responses", csv, "--map", map, "-o", "a.csv")).written,
+		).toEqual({ "a.csv": r.out });
+	});
+
+	it("refuses a DDI the map wasn't made from, and needs --map", async () => {
+		const { csv, map } = await files((ddi) => `${ddi} `);
+		const r = await run("responses", csv, "--map", map);
+		expect(r).toMatchObject({ code: 1, out: "" });
+		expect(r.err).toMatch(
+			/isn't the DDI the map was made from.*\[responses-provenance\]/,
+		);
+		expect((await run("responses", csv)).code).toBe(2);
+		expect((await run("check", ".", "--map", map)).err).toMatch(
+			/`--map` isn't an option of `check`/,
+		);
 	});
 });
 

@@ -3,7 +3,7 @@
 	"version": "2.0.0-alpha.0",
 	"private": true,
 	"type": "module",
-	"description": "An instrument's DDI-Lifecycle 4.0 read back and written as a Qualtrics survey (QSF)",
+	"description": "An instrument's DDI-Lifecycle 4.0 written as a Qualtrics survey (QSF), and its response export read back",
 	"exports": {
 		".": "./src/index.ts"
 	},
