@@ -72,7 +72,7 @@ describe("writing a survey as QSF", () => {
 		);
 	});
 
-	it("writes a select-all question with each option's variable, and pipes an answer's words", () => {
+	it("writes a select-all question with each option's words and code, and pipes an answer's words", () => {
 		const { sq, findings } = payloads({
 			inputs: [],
 			flow: [
@@ -96,8 +96,9 @@ describe("writing a survey as QSF", () => {
 			DataExportTag: "modes",
 			Choices: { "1": { Display: "Bus &amp; tram" }, "2": { Display: "Walk" } },
 			RecodeValues: { "1": "b", "2": "w" },
-			VariableNaming: { "1": "modes_bus", "2": "modes_walk" },
 		});
+		// It names no column, only replaces the option's words in the export (experiment 12).
+		expect(sq[0]).not.toHaveProperty("VariableNaming");
 	});
 
 	it("meets the survey header rules Qualtrics' import checks (experiment 5a)", () => {

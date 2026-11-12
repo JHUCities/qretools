@@ -182,14 +182,6 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 				...(s.options !== undefined && {
 					Randomization: { Type: "All", Advanced: null, TotalRandSubset: "" },
 				}),
-				...(domain.many && {
-					VariableNaming: Object.fromEntries(
-						domain.choices.map((c, i) => [
-							keys[i] ?? "",
-							s.records.find((r) => r.code === c.code)?.variable ?? c.code,
-						]),
-					),
-				}),
 			};
 		}
 		const variable = s.records[0]?.variable ?? qid;
