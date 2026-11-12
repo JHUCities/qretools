@@ -376,7 +376,9 @@ describe("qretools build", () => {
 		expect(s.err).toMatch(/shallow clone/);
 	});
 
-	describe("releasing its instruments", () => {
+	// Each test makes git repositories and runs a real build: on a CI runner one took just
+	// over the default 5s (2026-11-12), so the group has the 30s the other slow tests have.
+	describe("releasing its instruments", { timeout: 30_000 }, () => {
 		const A = "a".repeat(40);
 		const OPEN = "name: q\ntext: Q?\nintent: i\nopen: {}\n";
 		const instrument = (title: string, use: string) =>
