@@ -93,6 +93,10 @@ const BAS = bankOf({
 		"modes",
 		'select: many\nresponses:\n  "b": Bus\n  "w": Walk\n',
 	),
+	"questions/a/trips.yaml": q(
+		"trips",
+		'select: many\nresponses:\n  "1": Work\n  "2": School\n  "3": Shops\n  "9": None\n',
+	),
 	"questions/a/pets.yaml": q("pets", 'select: many\nresponses:\n  "d": Dog\n'),
 	"questions/a/size.yaml": q("size", "number: { max: 9 }\n"),
 	"questions/a/nick.yaml": q("nick", "open: {}\n"),

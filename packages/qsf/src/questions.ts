@@ -151,6 +151,7 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 				"Qualtrics can't rotate options, so they're shuffled instead.",
 			);
 		if (domain.kind === "choice") {
+			// Position from 1: the column map names a select-all option by it when its code is letters.
 			const keys = domain.choices.map((_, i) => String(i + 1));
 			const exportTag = domain.many
 				? tag(q.name, `m:${s.records.map((r) => r.variable).join()}`, qid, s.id)
