@@ -151,6 +151,7 @@ describe("an instrument as DDI", () => {
 			  "Category": 15,
 			  "CodeList": 7,
 			  "ComputationItem": 1,
+			  "GenerationInstruction": 1,
 			  "IfThenElse": 4,
 			  "Instrument": 1,
 			  "ManagedMissingValuesRepresentation": 1,
@@ -160,7 +161,7 @@ describe("an instrument as DDI", () => {
 			  "Sequence": 10,
 			  "StatementItem": 5,
 			  "Universe": 1,
-			  "Variable": 10,
+			  "Variable": 11,
 			}
 		`);
 		expect(findings).toEqual([]);
@@ -372,6 +373,7 @@ describe("an instrument as DDI", () => {
 				"modes_b",
 				"modes_w",
 				"rent",
+				"renter",
 				"tenure",
 				"util",
 				"wave",
@@ -379,6 +381,94 @@ describe("an instrument as DDI", () => {
 				"why_end",
 			].map((n) => `instrument-demo.var-${n}`),
 		);
+	});
+
+	it("gives a computed value a Variable, made by a GenerationInstruction over its ComputationItems", () => {
+		const { document } = build();
+		const v = document.Variable?.["org.example:instrument-demo.var-renter:1"];
+		const generation =
+			document.GenerationInstruction?.[
+				"org.example:instrument-demo.generation-renter:1"
+			];
+		expect(generation).toMatchObject({
+			IsDerived: true,
+			ControlConstructReference: [
+				{
+					$type: "ComputationItem",
+					value: ["org.example", "instrument-demo.compute-renter", "1"],
+				},
+			],
+		});
+		expect(v).toMatchObject({
+			VariableName: [
+				{ String: [{ MultilingualStringValue: { Value: "renter" } }] },
+			],
+			// What it reads: the answer it's computed from.
+			SourceVariableReference: [
+				{
+					$type: "Variable",
+					value: ["org.example", "instrument-demo.var-tenure", "1"],
+				},
+			],
+			VariableRepresentation: {
+				ProcessingInstructionReference: {
+					$type: "GenerationInstruction",
+					value: ["org.example", "instrument-demo.generation-renter", "1"],
+				},
+			},
+		});
+		// A truth value has no DDI domain: none is guessed.
+		expect(v?.VariableRepresentation).not.toHaveProperty("ValueRepresentation");
+	});
+
+	it("gives a computed number its domain, and refers only to the variables it reads", () => {
+		const parsed = parseInstrument(
+			`name: totals
+uses:
+  bas: here
+inputs:
+  wave:
+    number: {}
+flow:
+  - ask: bas.rent
+  - compute: base
+    value: wave + 1
+  - roster: members
+    count: bas.rent
+    max: 3
+    flow:
+      - compute: score
+        value: base + index
+`,
+			{ bas: BAS },
+		);
+		expect(
+			[...parsed.findings, ...checkInstrument(parsed)].filter(
+				(f) => f.severity !== "info",
+			),
+		).toEqual([]);
+		const { document, collisions } = instrumentDocument(
+			elaborateInstrument(parsed, { agency: "org.example" }),
+		);
+		expect(validator.ok && validator.value(document)).toEqual([]);
+		expect(collisions).toEqual([]);
+		const variable = (name: string) =>
+			document.Variable?.[`org.example:instrument-totals.var-${name}:1`];
+		const reads = (name: string) =>
+			(
+				(variable(name)?.SourceVariableReference ?? []) as { value: string[] }[]
+			).map((r) => r.value[1]);
+		for (const name of ["base", "score"]) {
+			expect(variable(name)).toMatchObject({
+				VariableRepresentation: {
+					ValueRepresentation: { $type: "NumericDomain" },
+				},
+				OutParameter: { ValueRepresentation: { $type: "NumericDomain" } },
+			});
+		}
+		// An input, and another compute; a row's number has no Variable, so none is named.
+		expect(reads("base")).toEqual(["instrument-totals.var-wave"]);
+		expect(reads("score")).toEqual(["instrument-totals.var-base"]);
 	});
 
 	it("lowers label(source) to an instrument-owned text variable before its ask", () => {

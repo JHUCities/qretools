@@ -356,6 +356,9 @@ export function readInstruments(
 		const representation = asObj(
 			asObj(v.item.VariableRepresentation)?.ValueRepresentation,
 		);
+		// A computed value's Variable: its ComputationItems define it (below), never an input.
+		if (asObj(v.item.VariableRepresentation)?.ProcessingInstructionReference)
+			continue;
 		if (reference === undefined) {
 			const domain = domainOf(asObj(out?.ValueRepresentation));
 			const input = {

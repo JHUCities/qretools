@@ -248,6 +248,8 @@ describe("an instrument's codebook", () => {
 			  "Variable county",
 			  "  codes 1=North County, 2=South County",
 			  "  notes From the sample file.",
+			  "Variable renter",
+			  "  derived VTL:tenure = "2" from tenure",
 			]
 		`);
 	});
