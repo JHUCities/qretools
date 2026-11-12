@@ -51,6 +51,8 @@ export type Source =
 	  }
 	| {
 			readonly kind: "input";
+			/** The Variable's URN. */
+			readonly urn?: string;
 			readonly variable: string;
 			readonly domain?: FlowDomain;
 	  }
@@ -86,9 +88,10 @@ export type Step =
 			readonly kind: "ask";
 			readonly id: string;
 			readonly question: Question;
-			/** What it records: each variable, and an option's code for a select-all. */
+			/** What it records: each variable and its URN, and an option's code for a select-all. */
 			readonly records: readonly {
 				readonly variable: string;
+				readonly urn?: string;
 				readonly code?: string;
 			}[];
 			/** The question's text with its fills piped in. */
@@ -105,6 +108,8 @@ export type Step =
 			readonly kind: "compute";
 			readonly id: string;
 			readonly variable: string;
+			/** The URN of the Variable it sets, when the DDI has one. */
+			readonly variableUrn?: string;
 			readonly value: Cond;
 	  }
 	| {
@@ -231,7 +236,17 @@ export function readInstrument(ddi: DdiDocument): {
 				const value = cond(s.value, id);
 				return value === undefined
 					? []
-					: [{ kind: "compute", id, variable: s.variable, value }];
+					: [
+							{
+								kind: "compute",
+								id,
+								variable: s.variable,
+								...(s.variableUrn !== undefined && {
+									variableUrn: s.variableUrn,
+								}),
+								value,
+							},
+						];
 			}
 			case "if": {
 				if (s.type !== undefined) {

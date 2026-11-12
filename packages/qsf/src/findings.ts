@@ -10,6 +10,8 @@ export type QsfCode =
 	/** A condition too large to write as Qualtrics logic. */
 	| "qsf-too-large"
 	/** How the export wrote something, for the author to know: nothing the DDI says is lost. */
-	| "qsf-note";
+	| "qsf-note"
+	/** A column of the response export that the column map can't give a DDI variable. */
+	| "qsf-unmapped";
 
 export type Finding = CoreFinding<QsfCode>;

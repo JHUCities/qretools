@@ -1,0 +1,83 @@
+{
+  "instrument": "urn:ddi:org.example:instrument-households:1",
+  "columns": [
+    {
+      "importId": "county",
+      "variable": "urn:ddi:org.example:instrument-households.var-county:1"
+    },
+    {
+      "importId": "QID2",
+      "variable": "urn:ddi:org.example:instrument-households.var-consent:1"
+    },
+    {
+      "importId": "QID4_TEXT",
+      "variable": "urn:ddi:org.example:instrument-households.var-size:1"
+    },
+    {
+      "importId": "QID6_TEXT",
+      "rounds": 20,
+      "variable": "urn:ddi:org.example:instrument-households.var-age:1"
+    },
+    {
+      "importId": "QID7",
+      "rounds": 20,
+      "variable": "urn:ddi:org.example:instrument-households.var-works:1"
+    },
+    {
+      "importId": "QID8",
+      "variable": "urn:ddi:org.example:instrument-households.var-tenure:1"
+    },
+    {
+      "importId": "QID9_TEXT",
+      "variable": "urn:ddi:org.example:instrument-households.var-rent:1"
+    },
+    {
+      "importId": "QID11",
+      "variable": "urn:ddi:org.example:instrument-households.var-utilities:1"
+    },
+    {
+      "importId": "QID12",
+      "row": 1,
+      "variable": "urn:ddi:org.example:instrument-households.var-vehicle:1"
+    },
+    {
+      "importId": "QID13",
+      "row": 1,
+      "variable": "urn:ddi:org.example:instrument-households.var-more_vehicles:1"
+    },
+    {
+      "importId": "QID14",
+      "row": 2,
+      "variable": "urn:ddi:org.example:instrument-households.var-vehicle:1"
+    },
+    {
+      "importId": "QID15",
+      "row": 2,
+      "variable": "urn:ddi:org.example:instrument-households.var-more_vehicles:1"
+    },
+    {
+      "importId": "QID16",
+      "row": 3,
+      "variable": "urn:ddi:org.example:instrument-households.var-vehicle:1"
+    },
+    {
+      "importId": "QID17",
+      "row": 3,
+      "variable": "urn:ddi:org.example:instrument-households.var-more_vehicles:1"
+    },
+    {
+      "importId": "QID18",
+      "row": 4,
+      "variable": "urn:ddi:org.example:instrument-households.var-vehicle:1"
+    },
+    {
+      "importId": "QID19",
+      "row": 4,
+      "variable": "urn:ddi:org.example:instrument-households.var-more_vehicles:1"
+    },
+    {
+      "importId": "QID40_TEXT",
+      "variable": "urn:ddi:org.example:instrument-households.var-comments:1"
+    }
+  ]
+}
