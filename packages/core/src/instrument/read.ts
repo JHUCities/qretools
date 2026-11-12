@@ -153,6 +153,8 @@ export type Step =
 			/** What it records: each variable, and an option's code for a select-all. */
 			readonly records: readonly {
 				readonly variable: string;
+				/** The Variable's URN. */
+				readonly urn: string;
 				readonly code?: string;
 			}[];
 			/** The question's text with its fills piped in. */
@@ -165,6 +167,8 @@ export type Step =
 	| (At & {
 			readonly kind: "compute";
 			readonly variable: string;
+			/** The URN of the Variable it sets (`At.urn` is the ComputationItem's); none in DDI that has none. */
+			readonly variableUrn?: string;
 			readonly value: Condition;
 	  })
 	| (At & {
@@ -346,6 +350,8 @@ export function readInstruments(
 
 	// What each parameter stands for, by key: the definitions only.
 	const params = new Map<string, Source>();
+	/** Each computed value's Variable URN, by the key of the parameter it's set through. */
+	const computedVariables = new Map<string, string>();
 	const inputs: [string, Extract<Source, { kind: "input" }>][] = [];
 	for (const v of ofType("Variable")) {
 		const out = asObj(v.item.OutParameter);
@@ -357,8 +363,10 @@ export function readInstruments(
 			asObj(v.item.VariableRepresentation)?.ValueRepresentation,
 		);
 		// A computed value's Variable: its ComputationItems define it (below), never an input.
-		if (asObj(v.item.VariableRepresentation)?.ProcessingInstructionReference)
+		if (asObj(v.item.VariableRepresentation)?.ProcessingInstructionReference) {
+			computedVariables.set(key, v.urn);
 			continue;
+		}
 		if (reference === undefined) {
 			const domain = domainOf(asObj(out?.ValueRepresentation));
 			const input = {
@@ -590,7 +598,7 @@ export function readInstruments(
 			return [];
 		}
 		const fills = new Map<string, Part>();
-		const records: { variable: string; code?: string }[] = [];
+		const records: { variable: string; urn: string; code?: string }[] = [];
 		for (const b of asList(c.Binding)) {
 			const source = keyOf(b.SourceParameterReference);
 			const target = keyOf(b.TargetParameterReference);
@@ -599,6 +607,7 @@ export function readInstruments(
 				const code = outputs.get(source)?.code;
 				records.push({
 					variable: recorded.variable,
+					urn: recorded.urn,
 					...(code !== undefined && { code }),
 				});
 				continue;
@@ -698,9 +707,18 @@ export function readInstruments(
 				const variable = said(assigned?.ParameterName) ?? str(assigned?.Alias);
 				if (variable === undefined)
 					unread(id, "The value computed here has no name.");
+				const variableUrn = computedVariables.get(keyOf(assigned));
 				return value === undefined || variable === undefined
 					? []
-					: [{ kind: "compute", ...at, variable, value }];
+					: [
+							{
+								kind: "compute",
+								...at,
+								variable,
+								...(variableUrn !== undefined && { variableUrn }),
+								value,
+							},
+						];
 			}
 			case "Sequence": {
 				if (adapters.has(it)) return [];

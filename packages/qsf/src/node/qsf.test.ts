@@ -187,3 +187,49 @@ describe("the households survey against its golden file", () => {
 		);
 	});
 });
+
+describe("the households survey's column map", () => {
+	it("names a DDI variable for every column the survey records, and only those", async () => {
+		const { qsf, columns, findings } = writeQsf(
+			readInstrument(await households()).instrument,
+			{ name: "households", created: "2026-10-18 12:00:00" },
+		);
+		expect(findings.filter((f) => f.code === "qsf-unmapped")).toEqual([]);
+		await expect(`${JSON.stringify(columns, null, 2)}\n`).toMatchFileSnapshot(
+			"../../fixtures/households.columns.json",
+		);
+		// Against the survey itself: each question that records an answer, and each
+		// embedded data field but QREtools' own, has a column in the map.
+		const elements = qsf.SurveyElements as {
+			Element: string;
+			Payload: unknown;
+		}[];
+		const questions = elements
+			.filter((e) => e.Element === "SQ")
+			.map((e) => e.Payload as { QuestionID: string; QuestionType: string })
+			.filter((q) => q.QuestionType !== "DB");
+		const asked = questions.map((q) => q.QuestionID);
+		// A typed answer's column is `QIDn_TEXT`; a choice's is `QIDn`.
+		const typed = new Set(
+			questions.filter((q) => q.QuestionType === "TE").map((q) => q.QuestionID),
+		);
+		for (const c of columns.columns.filter((c) => c.importId.startsWith("QID")))
+			expect([c.importId, c.importId.endsWith("_TEXT")]).toEqual([
+				c.importId,
+				typed.has(c.importId.replace(/_TEXT$/, "")),
+			]);
+		const fields = [...JSON.stringify(qsf).matchAll(/"Field":"([^"]+)"/g)]
+			.map((m) => m[1] ?? "")
+			.filter((f) => !f.startsWith("qretools_"));
+		// No column twice: an ImportId, a choice and a row together name one column.
+		const keys = columns.columns.map(
+			(c) => `${c.importId} ${c.choice ?? ""} ${c.row ?? ""}`,
+		);
+		expect(keys.length).toBe(new Set(keys).size);
+		const mapped = new Set(
+			columns.columns.map((c) => c.importId.replace(/_TEXT$/, "")),
+		);
+		expect(asked.filter((qid) => !mapped.has(qid))).toEqual([]);
+		expect([...new Set(fields)].filter((f) => !mapped.has(f))).toEqual([]);
+	});
+});

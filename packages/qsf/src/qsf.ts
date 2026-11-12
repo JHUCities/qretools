@@ -5,7 +5,9 @@
  * error stops the export: otherwise a survey that differs from its DDI would be fielded
  * without a word.
  */
+
 import type { DdiDocument } from "@qretools/core";
+import type { ColumnMap } from "./columns.ts";
 import type { Finding } from "./findings.ts";
 import { readInstrument } from "./read.ts";
 import type { QsfObject, QsfOptions } from "./skeleton.ts";
@@ -18,6 +20,8 @@ export type QsfResult =
 	| {
 			readonly kind: "made";
 			readonly qsf: QsfObject;
+			/** Every column of its response export, with the DDI variable each records. */
+			readonly columns: ColumnMap;
 			readonly findings: readonly Finding[];
 	  }
 	| {
@@ -37,7 +41,12 @@ export function qsfOf(ddi: DdiDocument, options: QsfOptions): QsfResult {
 	const all = findings ?? [...read.findings, ...(written?.findings ?? [])];
 	const errors = all.filter((f) => f.severity === "error").length;
 	return errors === 0 && written !== undefined
-		? { kind: "made", qsf: written.qsf, findings: all }
+		? {
+				kind: "made",
+				qsf: written.qsf,
+				columns: written.columns,
+				findings: all,
+			}
 		: { kind: "refused", errors, findings: all };
 }
 

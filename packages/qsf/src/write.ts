@@ -9,6 +9,7 @@
  */
 import type { Expr } from "@qretools/core";
 import { printCondition } from "@qretools/core";
+import { type ColumnMap, columnsOf } from "./columns.ts";
 import {
 	answeredAll,
 	arithmetic,
@@ -90,7 +91,11 @@ const numberRange = (
 export function writeQsf(
 	read: ReadInstrument,
 	options: QsfOptions,
-): { readonly qsf: QsfObject; readonly findings: readonly Finding[] } {
+): {
+	readonly qsf: QsfObject;
+	readonly columns: ColumnMap;
+	readonly findings: readonly Finding[];
+} {
 	const unrolled = unroll(read);
 	const instrument = unrolled.instrument;
 	const findings: Finding[] = [...unrolled.findings];
@@ -733,8 +738,13 @@ export function writeQsf(
 	};
 
 	const nodes = layout(instrument.flow);
-	return {
-		qsf: toQsf(nodes, instrument, options),
-		findings,
+	const qsf = toQsf(nodes, instrument, options);
+	// The map's header: what the survey's own `qretools_*` fields say, so the two agree.
+	const columns: ColumnMap = {
+		...(options.version !== undefined && { qretools: options.version }),
+		...(read.urn !== undefined && { instrument: read.urn }),
+		...(options.digest !== undefined && { ddi: options.digest }),
+		columns: columnsOf(instrument, ctx),
 	};
+	return { qsf, columns, findings };
 }

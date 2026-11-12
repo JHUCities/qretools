@@ -10,7 +10,16 @@ import type {
 	Step,
 } from "./read.ts";
 import { flowOutline } from "./testing.ts";
-import { writeQsf } from "./write.ts";
+import { writeQsf as writeAll } from "./write.ts";
+
+/** The writer, without the column map's findings: these steps are built by hand, with no URNs (columns.test.ts covers the map). */
+const writeQsf = (...args: Parameters<typeof writeAll>) => {
+	const written = writeAll(...args);
+	return {
+		...written,
+		findings: written.findings.filter((f) => f.code !== "qsf-unmapped"),
+	};
+};
 
 const modes: Question = {
 	id: "q-modes",

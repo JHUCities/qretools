@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { readInstrument } from "./read.ts";
 import { ddiOf, outline } from "./testing.ts";
 import { unroll } from "./unroll.ts";
-import { writeQsf } from "./write.ts";
+import { writeQsf as writeAll } from "./write.ts";
+
+/** The writer, without the column map's findings: these steps are built by hand, with no URNs (columns.test.ts covers the map). */
+const writeQsf = (...args: Parameters<typeof writeAll>) => {
+	const written = writeAll(...args);
+	return {
+		...written,
+		findings: written.findings.filter((f) => f.code !== "qsf-unmapped"),
+	};
+};
 
 const ROSTERS = `name: rows
 uses:

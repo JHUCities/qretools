@@ -20,6 +20,11 @@ export const rowVariable = (k: number, variable: string): string =>
 const rowId = (id: string, k: number) => `${id}#${k}`;
 /** The step a row's copy was made from, for findings: they're the author's, not the copy's. */
 export const baseId = (id: string): string => id.split("#")[0] ?? id;
+/** Which row a row's copy is (rosters don't nest, so an ID has one `#` at most). */
+export const rowOf = (id: string): number | undefined => {
+	const k = id.split("#")[1];
+	return k === undefined ? undefined : Number(k);
+};
 
 /** The same expression with some names replaced. */
 const mapNames = (e: Expr, f: (name: string) => Expr | undefined): Expr => {
