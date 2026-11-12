@@ -135,15 +135,7 @@ export function instrumentOf(
 	}
 	// An asked question keeps its home bank's policy; its workspace must declare each
 	// level it asks at, in the same order, so its own policy covers what it publishes.
-	const asked = new Map<string, Set<string>>();
-	for (const node of steps(parsed.draft.flow)) {
-		const q = node.kind === "ask" ? node.question : undefined;
-		if (q === undefined) continue;
-		const levels = asked.get(q.alias) ?? new Set<string>();
-		if (q.evaluation.draft.access !== undefined)
-			levels.add(q.evaluation.draft.access);
-		asked.set(q.alias, levels);
-	}
+	const asked = levelsAskedBy(parsed.draft);
 	const host = context.levels;
 	const undeclared =
 		host === undefined
@@ -192,6 +184,37 @@ export function instrumentOf(
 		livelits: instrumentLivelits(source, parsed, checked.fills),
 	};
 }
+
+/** The levels an instrument asks each bank's questions at, by alias, as held (a missing level is the last). */
+function levelsAskedBy(
+	draft: InstrumentDraft,
+): ReadonlyMap<string, ReadonlySet<string>> {
+	const asked = new Map<string, Set<string>>();
+	for (const node of steps(draft.flow)) {
+		const q = node.kind === "ask" ? node.question : undefined;
+		if (q === undefined) continue;
+		const levels = asked.get(q.alias) ?? new Set<string>();
+		if (q.evaluation.draft.access !== undefined)
+			levels.add(q.evaluation.draft.access);
+		asked.set(q.alias, levels);
+	}
+	return asked;
+}
+
+/**
+ * The levels instruments ask questions at, whatever bank they come from: their
+ * workspace declares them (`access-undeclared`), so they're used (`unusedLevels`). A
+ * level held because a question's own is missing counts here, unlike in `levelsNamed`:
+ * `access-undeclared` asks for it, so it is used.
+ */
+export const levelsAsked = (
+	drafts: Iterable<InstrumentDraft>,
+): ReadonlySet<string> =>
+	new Set(
+		[...drafts].flatMap((d) =>
+			[...levelsAskedBy(d).values()].flatMap((s) => [...s]),
+		),
+	);
 
 /**
  * What the host workspace lacks to cover a bank's access policy, said at the bank's use:

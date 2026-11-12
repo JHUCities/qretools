@@ -401,6 +401,7 @@ function Particulars({
 					/>
 				)}
 			</Pair>
+			<Pair term="Access">{e.access}</Pair>
 			<Pair term="Intent">{e.intent && <Paragraphs text={e.intent} />}</Pair>
 			<Pair term="Answers">
 				{e.responses?.many === true && "Select all that apply"}

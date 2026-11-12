@@ -118,6 +118,8 @@ export interface Entry {
 	readonly format?: Format;
 	readonly universes: readonly Ref[];
 	readonly concepts: readonly Ref[];
+	/** Who may see the variable's answers: its embargo's name, its access level. */
+	readonly access?: string;
 	readonly intent?: Text;
 	/** The Descriptions of the variable and its question. */
 	readonly notes?: Text;
@@ -558,6 +560,10 @@ export function codebookOf(
 								}),
 						};
 					})();
+		const access =
+			v === undefined
+				? undefined
+				: words(asList(v.item.EmbargoReference)[0]?.EmbargoName, lang);
 		return {
 			urn: principal.urn,
 			type: principal.type,
@@ -585,6 +591,7 @@ export function codebookOf(
 					...(q === undefined ? [] : followAll(q.item.ConceptReference)),
 				]),
 			),
+			...(access !== undefined && { access }),
 			...(intent !== undefined && { intent }),
 			...(notes.length > 0 && { notes }),
 			...((why !== undefined || basedOn.length > 0) && {
