@@ -980,7 +980,7 @@ const isCheck = (it: Indexed | undefined): it is Indexed => {
 };
 
 /** For each select-all list (by URN), the value that is a tick, as its categories say. */
-function tickCodes(
+export function tickCodes(
 	index: DdiIndex,
 	items: readonly Indexed[],
 ): ReadonlyMap<string, { ticked: string; unticked: string }> {

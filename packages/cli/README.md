@@ -19,6 +19,7 @@ qretools build path/to/workspace             # its last commit's DDI, versioned 
 qretools codebook path/to/workspace -o codebook.html  # its questions' codebook, one HTML page
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
+qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -127,6 +128,80 @@ export has one column for the two options. The QSF column map does not include t
 options, and `build` gives a `qsf-unmapped` warning. `build` also gives this warning for
 a code form that qretools has not tested in Qualtrics, for example `1.50`, `+1` or `opt1`.
 
+## Read the responses
+
+`responses` reads a Qualtrics response export with its QSF column map. It writes one line
+for each value, with the DDI variable that records the value:
+
+```sh
+qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json -o wave1-responses.csv
+```
+
+```csv
+respondent,variable,row,value
+R_1,urn:ddi:org.example:instrument-wave1.var-tenure:3,,2
+R_1,urn:ddi:org.example:instrument-wave1.var-modes_b:3,,1
+R_1,urn:ddi:org.example:instrument-wave1.var-age:3,1,40
+R_1,urn:ddi:org.example:instrument-wave1.var-age:3,2,D
+```
+
+To read an export, do these steps:
+
+1. Do the steps in "Export from Qualtrics" to get the export.
+2. Find the QSF column map of the survey. `build` writes it in `<outdir>/instruments/`.
+3. Make sure that `<name>.json` is in the same folder as the map. `build` writes the two
+   files together.
+4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json`.
+5. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
+   The output holds the responses.** Use `-o` to write the output to a file. Without `-o`,
+   the command writes it to stdout.
+
+The output is long CSV (one value on one line), in four columns:
+
+- `respondent`: the ResponseId of the response.
+- `variable`: the URN of the DDI variable.
+- `row`: the row of a roster or a loop, from 1. The column is empty for other variables.
+- `value`: a code of the variable, a number or text. A ticked select-all option has the
+  code that the DDI gives to a tick.
+
+A blank cell gives no line, because the export cannot tell "not asked" from "not ticked".
+A long file does not need a column for each round of each loop. Thus, a tool can compare
+two files (for example real and synthetic responses) one variable at a time. The format is
+our own.
+
+**Caution: open the output as data (in R, Python or a spreadsheet's import), not with a
+double click. A text answer can hold a formula, and a spreadsheet can run it.**
+
+The command reads the DDI in `<name>.json` to get the codes of each variable. It refuses a
+`<name>.json` that is not the DDI that the map was made from. It reads local files only.
+
+The command matches each column by the ImportId in row 3, not by the column name. Thus, a
+column that you rename in Qualtrics is still read. The command keeps Survey Preview
+responses and test responses. Remove them in Qualtrics before you export, if you do not
+want them.
+
+The command writes findings on stderr, at their line in the export and their column. A
+finding never shows a response value. If a column has the same problem in many rows, the
+command writes one finding with the first line and the number of rows. Each error makes the
+command exit with 1. The command still writes the values that it can read.
+
+- `responses-unmapped-column` (warning): the map does not name the column of a question.
+- `responses-missing-column` (warning): the export has no column for an entry of the map.
+- `responses-not-a-code` (error): the value is not a code of the variable, or not a number.
+- `responses-not-a-tick` (error): a select-all cell is not `1` and is not blank.
+- `responses-provenance`: the `qretools_instrument` or `qretools_ddi` field of a response is
+  not the same as in the map (error). A different `qretools_version` is a note.
+- `responses-respondent` (error): a row has no ResponseId, or has the ResponseId of an
+  earlier row.
+- `responses-row` (error): a row has more or fewer cells than the header.
+- `responses-duplicate` (error): two columns give one variable, in one row, for one
+  respondent.
+- `responses-import-id`, `responses-unknown-variable` and `responses-unreadable`: the
+  command cannot read a header, a variable or the file.
+
+The command reads the columns of a Qualtrics loop as `1_<ImportId>` to
+`<rounds>_<ImportId>`. This form is not yet tested with a real export of a loop.
+
 ## Codebook
 
 `codebook` writes the codebook of the DDI that `export` writes, and refuses when `export`
@@ -197,5 +272,5 @@ version goes to the dist-tag `latest`, prereleases included, so `npx qretools` r
 newest (npm requires the tag named for a prerelease). A published version can't be
 replaced: fix forward with the next one.
 
-This is the one package that knows both the core (`@qretools/core`) and the Qualtrics
-export (`@qretools/qualtrics`). The core knows nothing of any export target.
+This is the one package that knows both the core (`@qretools/core`) and Qualtrics
+(`@qretools/qualtrics`). The core knows nothing of any export target.

@@ -153,6 +153,7 @@ export {
 	readInstruments,
 	type Source,
 	type Step as FlowStep,
+	tickCodes,
 } from "./instrument/read.ts";
 export {
 	type InstrumentRef,
@@ -183,6 +184,18 @@ export {
 	type Slot,
 	type TextSlot,
 } from "./render.ts";
+// Responses from any source, read into answers keyed by DDI Variable URN.
+export {
+	type Answer,
+	answersCsv,
+	type Representation,
+	type ResponseCode,
+	type ResponseColumn,
+	type ResponseFinding,
+	type ResponseMap,
+	type ResponseRow,
+	readResponses,
+} from "./responses.ts";
 export { err, ok, type Result } from "./result.ts";
 export {
 	absentRoot,
