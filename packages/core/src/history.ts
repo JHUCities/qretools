@@ -7,7 +7,8 @@
  * A shared file's key is its own blob. A question's is its blob and the blobs of every
  * shared file it names, so a question's version moves when its scale (or universe, or
  * `missing.yaml`) does, as a reference carries the referenced item's version; one that
- * names an access level also takes `workspace.yaml`'s list of levels. An
+ * names an access level also takes `workspace.yaml`'s list of levels. `workspace.yaml`'s
+ * own key is that list, its published code list: it has no version while it lists none. An
  * instrument's is its blob and the commit `workspace.yaml` locks each tag it names at:
  * it is versioned whole, and what it pins is part of it, so a moved and re-locked tag is
  * a new version even when the file is the same.
@@ -109,31 +110,49 @@ export function versionsOf(history: History): Versions {
 		for (const [path, blob] of Object.entries(blobs)) {
 			const instrument = instrumentAt(path) !== undefined;
 			const at = kindAt(path);
-			if (!instrument && (at === undefined || at.kind === "workspace"))
-				continue;
+			if (!instrument && at === undefined) continue;
+			// `workspace.yaml` is versioned as its access levels, the one item it publishes.
+			const workspace = at?.kind === "workspace";
+			if (workspace && levelsOf(blob) === "") continue;
 			const locked = instrument ? locksAt(blobs[ROOT.workspace]) : {};
-			const key = instrument
-				? [blob, ...pinsOf(blob).map((k) => `${k}=${locked[k] ?? ""}`)].join(
-						" ",
-					)
-				: at?.kind === "question"
-					? [
-							blob,
-							...depsOf(blob).map(
-								(d) =>
-									`${d}=${d === ROOT.workspace ? levelsOf(blobs[d]) : (blobs[d] ?? "")}`,
-							),
-						].join(" ")
-					: blob;
+			const key = workspace
+				? levelsOf(blob)
+				: instrument
+					? [blob, ...pinsOf(blob).map((k) => `${k}=${locked[k] ?? ""}`)].join(
+							" ",
+						)
+					: at?.kind === "question"
+						? [
+								blob,
+								...depsOf(blob).map(
+									(d) =>
+										`${d}=${d === ROOT.workspace ? levelsOf(blobs[d]) : (blobs[d] ?? "")}`,
+								),
+							].join(" ")
+						: blob;
 			const was = state.get(path);
 			if (was?.key === key) continue;
 			const n = was === undefined ? 1 : Number(was.version.number) + 1;
-			state.set(path, { key, version: { number: String(n), date, blob } });
+			// No blob for `workspace.yaml`: its other lines change it without a new version, so
+			// a blob would go stale. A tag's manifest leaves it out (`tagMessage`).
+			// shortcut: a workspace read at a tag publishes its levels at version 1, so two tags
+			// with different levels give one URN two bodies; give the manifest a blob-free
+			// `workspace.yaml` entry when instruments start reading banks at several tags.
+			state.set(path, {
+				key,
+				version: {
+					number: String(n),
+					date,
+					...(!workspace && { blob }),
+				},
+			});
 		}
 	const last = history.snapshots.at(-1)?.blobs ?? {};
 	return Object.fromEntries(
 		[...state].flatMap(([path, { version }]) =>
-			path in last ? [[path, version]] : [],
+			path in last && (path !== ROOT.workspace || levelsOf(last[path]) !== "")
+				? [[path, version]]
+				: [],
 		),
 	);
 }

@@ -1011,6 +1011,89 @@ describe("qretools responses", () => {
 	});
 });
 
+describe("qretools filter", () => {
+	it("keeps a level and the more open ones, names what it removed, lists levels, and writes nothing when refused", async () => {
+		const q = (name: string, rest = "") =>
+			`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
+		const { ddi } = instrumentOf(
+			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n  - ask: b.zip\n",
+			{
+				banks: {
+					b: bankOf({
+						"workspace.yaml":
+							"agency: org.bank\naccess: [public, restricted]\n",
+						"questions/a/tenure.yaml": q("tenure"),
+						"questions/a/zip.yaml": q("zip", "access: restricted\n"),
+					}),
+				},
+				agency: "org.example",
+			},
+		);
+		const dir = await mkdtemp(join(tmpdir(), "qretools-filter-"));
+		const file = join(dir, "t.json");
+		await writeFile(file, JSON.stringify(ddi));
+		const v = (name: string) =>
+			`urn:ddi:org.example:instrument-t.var-${name}:1`;
+		const answers = join(dir, "answers.csv");
+		await writeFile(
+			answers,
+			`respondent,variable,row,value\nr1,${v("tenure")},,own\nr1,${v("zip")},,21218\n`,
+		);
+
+		const r = await run("filter", answers, "--ddi", file, "--access", "public");
+		expect(r.out).toBe(
+			`respondent,variable,row,value\nr1,${v("tenure")},,own\n`,
+		);
+		expect(r.err).toBe(
+			`${answers}: note: removed \`zip\` (${v("zip")}), at \`restricted\`. [filter-removed]\n`,
+		);
+		expect(r.code).toBe(0);
+		expect(
+			(await run("filter", answers, "--ddi", file, "--access", "restricted"))
+				.out,
+		).toMatch(/21218/);
+		expect(await run("filter", "--ddi", file)).toMatchObject({
+			code: 0,
+			out: "public\nrestricted\n",
+		});
+
+		// Refused: nothing written, and no value said.
+		const unknown = await run(
+			"filter",
+			answers,
+			"--ddi",
+			file,
+			"--access",
+			"secret",
+			"-o",
+			"kept.csv",
+		);
+		expect(unknown).toMatchObject({ code: 1, out: "", written: {} });
+		expect(unknown.err).toMatch(
+			/no access level `secret`.*\[filter-unknown-level\]/,
+		);
+		await writeFile(
+			answers,
+			"respondent,variable,row,value\nr1,urn:ddi:org.example:gone:1,,21218\n",
+		);
+		const gone = await run(
+			"filter",
+			answers,
+			"--ddi",
+			file,
+			"--access",
+			"public",
+		);
+		expect(gone).toMatchObject({ code: 1, out: "" });
+		expect(gone.err).toMatch(/\[filter-unknown-variable\]/);
+		expect(gone.err).not.toMatch(/21218/);
+		expect((await run("filter", answers, "--access", "public")).code).toBe(2);
+		expect((await run("check", ".", "--access", "public")).err).toMatch(
+			/`--access` isn't an option of `check`/,
+		);
+	});
+});
+
 describe("the command under real Node", () => {
 	it("runs from source with no build or loader", async () => {
 		const exec = promisify(execFile);

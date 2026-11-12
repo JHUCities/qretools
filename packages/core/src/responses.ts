@@ -9,6 +9,7 @@
  */
 
 import type { Severity } from "./findings.ts";
+import { err, ok, type Result } from "./result.ts";
 
 /** One column of a source, and the variable it records. */
 export interface ResponseColumn {
@@ -299,6 +300,55 @@ export const answersCsv = (answers: readonly Answer[]): string =>
 	]
 		.map((l) => `${l}\n`)
 		.join("");
+
+const ANSWERS_HEADER = "respondent,variable,row,value";
+
+/**
+ * Answers read back from long CSV as `answersCsv` writes them, all or none: a file with
+ * another header, a row of another width, a row that isn't a number from 1, or a blank
+ * respondent or variable is refused, by its line, never by a value.
+ */
+export function answersOf(
+	text: string,
+): Result<
+	readonly Answer[],
+	{ readonly line?: number; readonly message: string }
+> {
+	const { rows, unclosed } = parseCsv(text);
+	if (unclosed !== undefined)
+		return err({
+			line: unclosed,
+			message: "A quote opened here is never closed.",
+		});
+	const [header, ...records] = rows;
+	if (header?.cells.join(",") !== ANSWERS_HEADER)
+		return err({
+			line: 1,
+			message: `The header isn't \`${ANSWERS_HEADER}\`, as \`responses\` writes it.`,
+		});
+	const answers: Answer[] = [];
+	for (const { line, cells } of records) {
+		const [respondent = "", variable = "", row = "", value = ""] = cells;
+		if (
+			cells.length !== 4 ||
+			respondent === "" ||
+			variable === "" ||
+			(row !== "" && !/^[1-9]\d*$/.test(row))
+		)
+			return err({
+				line,
+				message:
+					"This line isn't an answer: four cells, a respondent, a variable, and a row that is empty or a number from 1.",
+			});
+		answers.push({
+			respondent,
+			variable,
+			...(row !== "" && { row: Number(row) }),
+			value,
+		});
+	}
+	return ok(answers);
+}
 
 /**
  * A CSV's records (RFC 4180: quoted fields, doubled quotes, line breaks in quotes, CRLF,

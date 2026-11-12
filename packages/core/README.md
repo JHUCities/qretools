@@ -141,7 +141,15 @@ A question names its level with `access: restricted`. These rules apply:
 
   The export of an instrument that asks such a question also stops. Correct the
   `access` list in workspace.yaml, then export again.
-- A level is a mark in the DDI. It does not remove data from an export.
+- A question above the first level also gets the code list `access-levels` in the DDI:
+  each level is a category, and its code is its rank, from 1 for the most open level.
+  Thus, a program that has only the DDI knows the order of the levels. The list has the
+  version of the levels in `workspace.yaml`: `build` counts only the changes to the
+  `access` list.
+- A level is a mark in the DDI. It does not remove data from an export. To remove the
+  answers above a level, use `filterAnswers(index, answers, level)` (the command
+  `qretools filter`). `accessLevelsOf(index)` gives the levels, and `aboveLevel(index,
+  answers, level)` gives the variables of an answer set that a level must not see.
 
 `envAt(env, path)` is the environment the question at a path is read against; `bankOf`
 uses it for each question. `select_all.yaml` holds the two values stored for each

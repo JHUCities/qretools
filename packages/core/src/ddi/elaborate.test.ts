@@ -637,6 +637,41 @@ describe("access levels", () => {
 		).toEqual(["variable-m_a.embargo", "variable-m_b.embargo"]);
 	});
 
+	it("publishes the levels' order beside an embargo, a code list at workspace.yaml's version, and validates", () => {
+		const levelsOf = (text: string) => {
+			const doc = elaborateWith(
+				parseSurface(text, env).draft,
+				AGENCY,
+				[],
+				DEFAULT_SELECT_ALL,
+				{ shared: { "workspace.yaml": { number: "4", date: "d" } } },
+				env.access,
+			);
+			expect(validate(doc)).toEqual([]);
+			return doc;
+		};
+		const doc = levelsOf(
+			"name: zip\ntext: ZIP?\nintent: i\nopen: {}\naccess: restricted\n",
+		);
+		const list = doc.CodeList?.[`${AGENCY}:access-levels.codes:4`];
+		expect(
+			((list?.Code ?? []) as JsonObject[]).map(
+				(c) => (c.Value as JsonObject).StringValue,
+			),
+		).toEqual(["1", "2"]);
+		expect(
+			[0, 1].map(
+				(i) =>
+					JSON.stringify(
+						doc.Category?.[`${AGENCY}:access-levels.cat-${i}:4`]?.Label,
+					).match(/"Value":"(\w+)"/)?.[1],
+			),
+		).toEqual(["public", "restricted"]);
+		expect(
+			levelsOf("name: q\ntext: Q?\nintent: i\nopen: {}\n").CodeList,
+		).toBeUndefined();
+	});
+
 	it("leaves a question at the most open level without an embargo", () => {
 		expect(
 			embargoes("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: public\n"),
