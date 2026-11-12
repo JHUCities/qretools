@@ -386,6 +386,17 @@ describe("an instrument as DDI", () => {
 		);
 	});
 
+	it("gives an input the missing values its questions' variables take: data can say Don't know there too", () => {
+		const { document } = build();
+		const variable = (name: string) =>
+			document.Variable?.[`org.example:instrument-demo.var-${name}:1`]
+				?.VariableRepresentation as JsonObject | undefined;
+		const missing = variable("consent")?.MissingValuesReference;
+		expect(missing).toBeDefined();
+		expect(variable("jurisdiction")?.MissingValuesReference).toEqual(missing);
+		expect(variable("wave")?.MissingValuesReference).toEqual(missing);
+	});
+
 	it("gives a computed value a Variable, made by a GenerationInstruction over its ComputationItems", () => {
 		const { document } = build();
 		const v = document.Variable?.["org.example:instrument-demo.var-renter:1"];

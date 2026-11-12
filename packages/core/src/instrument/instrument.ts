@@ -15,11 +15,11 @@ import { DEFAULT_SELECT_ALL, selectAllText } from "../selectAll.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
 import type { Livelit } from "../surface/livelits.ts";
 import { inspectInstrument } from "./check.ts";
-import type { InstrumentDraft, Use } from "./draft.ts";
+import { type InstrumentDraft, steps, type Use } from "./draft.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
 import { instrumentLivelits } from "./livelits.ts";
 import { parseInstrument, type Unread } from "./parse.ts";
-import { type InstrumentRef, instrumentRefs, steps } from "./refs.ts";
+import { type InstrumentRef, instrumentRefs } from "./refs.ts";
 
 export interface InstrumentContext {
 	/** The banks it uses, each already evaluated (`bankOf`), by the alias `uses` gives it. */
