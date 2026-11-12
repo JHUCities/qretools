@@ -2,8 +2,9 @@
  * The column map: every column of the Qualtrics response export that records a DDI
  * variable, with that variable's URN. Made beside the survey, from the same numbering, so
  * a column and its QID never disagree. It holds only what Qualtrics adds (the ImportId, a
- * select-all option's column suffix, a roster's rounds or row); how to read a cell is the
- * variable's representation in the DDI.
+ * select-all option's column suffix, a single-choice value it writes differently from its
+ * code, a roster's rounds or row); how to read a cell is the variable's representation in
+ * the DDI.
  */
 import { logical } from "./computes.ts";
 import type { Ctx } from "./number.ts";
@@ -20,6 +21,11 @@ export interface Column {
 	 * and 13).
 	 */
 	readonly choice?: string;
+	/**
+	 * A single-choice question's exported value for each code it reads, where some code isn't
+	 * written as itself: exported value to code. Only these values are read.
+	 */
+	readonly values?: Readonly<Record<string, string>>;
 	/** A question Qualtrics loops: columns `1_<importId>` to `<rounds>_<importId>`. */
 	readonly rounds?: number;
 	/** A roster written out row by row: the row this column is. */
@@ -29,30 +35,54 @@ export interface Column {
 }
 
 /**
+ * How Qualtrics writes a numeric code (a recode), or undefined where it isn't known. Only
+ * forms experiment 13 measured in select-all column names: a whole number (leading zeros
+ * dropped: `010` is `10`) and a decimal as written (`1.5`). Measured in Qualtrics,
+ * 2026-11-12, in a single-choice answer's exported value too, for leading zeros only.
+ * Numbers stop at 15 digits, where a float would print differently.
+ */
+const exported = (code: string): string | undefined =>
+	/^(0|-?[1-9]\d{0,14})$/.test(code)
+		? code
+		: /^0+[1-9]\d{0,14}$/.test(code)
+			? code.replace(/^0+/, "")
+			: /^[1-9]\d{0,13}\.\d{0,13}[1-9]$/.test(code)
+				? code
+				: undefined;
+
+/** Each one, or undefined where another is the same: Qualtrics can't tell them apart. */
+const unique = (
+	xs: readonly (string | undefined)[],
+): readonly (string | undefined)[] =>
+	xs.map((x) => (xs.filter((y) => y === x).length > 1 ? undefined : x));
+
+/**
  * Each select-all option's suffix, from its code and position, or undefined where Qualtrics'
- * name for it isn't known. Only forms experiment 13 measured are named: a whole number
- * (leading zeros dropped: `010` is `10`), a decimal as written (`1.5`), and letters, which
- * fall back to the position (the choice key the QSF writer gives it). Two options with one
- * suffix share one column in the export, so neither is named. Numbers stop at 15 digits,
- * where a float would print differently.
+ * name for it isn't known: as `exported`, and letters fall back to the position (the choice
+ * key the QSF writer gives it). Two options with one suffix share one column in the
+ * export, so neither is named.
  */
 export function choiceSuffixes(
 	codes: readonly string[],
 ): readonly (string | undefined)[] {
-	const suffixes = codes.map((code, i) =>
-		/^(0|-?[1-9]\d{0,14})$/.test(code)
-			? code
-			: /^0+[1-9]\d{0,14}$/.test(code)
-				? code.replace(/^0+/, "")
-				: /^[1-9]\d{0,13}\.\d{0,13}[1-9]$/.test(code)
-					? code
-					: /^[A-Za-z]+$/.test(code)
-						? String(i + 1)
-						: undefined,
+	return unique(
+		codes.map(
+			(code, i) =>
+				exported(code) ??
+				(/^[A-Za-z]+$/.test(code) ? String(i + 1) : undefined),
+		),
 	);
-	return suffixes.map((s) =>
-		suffixes.filter((t) => t === s).length > 1 ? undefined : s,
-	);
+}
+
+/**
+ * What a single-choice question's export writes for each code, or undefined where it isn't
+ * known: as `exported`. Letters weren't measured in a value, so they aren't known. Two codes
+ * written the same can't be told apart, so neither is known.
+ */
+export function choiceValues(
+	codes: readonly string[],
+): readonly (string | undefined)[] {
+	return unique(codes.map(exported));
 }
 
 /** The map, with what the survey's `qretools_*` fields carry, so a response can be matched to it. */
@@ -130,9 +160,36 @@ export function columnsOf(
 									rounds,
 								);
 						});
+					} else if (domain.kind === "choice") {
+						const codes = domain.choices.map((c) => c.code);
+						const exports = choiceValues(codes);
+						const unknown = codes.filter((_, i) => exports[i] === undefined);
+						if (unknown.length > 0)
+							ctx.note(
+								"qsf-unmapped",
+								"warning",
+								s.id,
+								`The QSF column map can't read option${unknown.length > 1 ? "s" : ""} ${unknown.map((c) => `\`${c}\``).join(", ")} of \`${s.question.name}\`: Qualtrics' value for ${unknown.length > 1 ? "each" : "it"} isn't known, or another option has the same one.`,
+							);
+						const values = Object.fromEntries(
+							codes.flatMap((c, i) => {
+								const e = exports[i];
+								return e === undefined ? [] : [[e, c]];
+							}),
+						);
+						add(
+							{
+								importId: qid,
+								...(codes.some((c, i) => exports[i] !== c) && { values }),
+							},
+							s.records[0]?.urn,
+							s.id,
+							`for \`${s.question.name}\``,
+							rounds,
+						);
 					} else
 						add(
-							{ importId: domain.kind === "choice" ? qid : `${qid}_TEXT` },
+							{ importId: `${qid}_TEXT` },
 							s.records[0]?.urn,
 							s.id,
 							`for \`${s.question.name}\``,

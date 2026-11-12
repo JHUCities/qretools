@@ -128,6 +128,19 @@ export has one column for the two options. The QSF column map does not include t
 options, and `build` gives a `qsf-unmapped` warning. `build` also gives this warning for
 a code form that qretools has not tested in Qualtrics, for example `1.50`, `+1` or `opt1`.
 
+Qualtrics writes the code of the selected option of a single-choice question as a
+number. It removes leading zeros: `010` becomes `10`. The QSF column map gives the
+code for each value that Qualtrics writes differently. If two options get the same value
+(for example `1` and `01`), the QSF column map does not read the two options, and
+`build` gives a `qsf-unmapped` warning. `build` also gives this warning for a code
+form that qretools has not tested in Qualtrics, for example `1.50`, `+1` or `opt1`.
+For a single-choice question, a code of letters is also a form that qretools has not
+tested.
+
+A QSF column map from qretools 2.0.0-alpha.9 or earlier does not give these values. To
+get them, run `build` again. The QSF and its QIDs do not change, so a survey that
+collects responses can use the new map.
+
 ## Read the responses
 
 `responses` reads a Qualtrics response export with its QSF column map. It writes one line

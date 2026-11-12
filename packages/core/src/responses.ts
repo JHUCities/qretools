@@ -163,7 +163,12 @@ export function readResponses(
 		for (const c of readable) {
 			const cell = cells[c.column] ?? "";
 			if (cell === "") continue;
-			const value = c.values?.[cell] ?? (c.only ? undefined : cell);
+			const value =
+				c.values !== undefined && Object.hasOwn(c.values, cell)
+					? c.values[cell]
+					: c.only
+						? undefined
+						: cell;
 			if (value === undefined) {
 				note(
 					"responses-not-a-tick",

@@ -236,6 +236,68 @@ describe("a Qualtrics response export", () => {
 	});
 });
 
+describe("a single-choice column", () => {
+	// Measured in Qualtrics, 2026-11-12: a recode's leading zeros are dropped in the value.
+	const bank = bankOf({
+		"workspace.yaml": "agency: org.bank\n",
+		"questions/a/zeros.yaml": q(
+			"zeros",
+			'responses:\n  "010": A\n  "02": B\n  "3": C\n',
+		),
+		"questions/a/clash.yaml": q(
+			"clash",
+			'responses:\n  "1": A\n  "01": B\n  "2": C\n',
+		),
+	});
+	const survey = qsfOf(
+		instrumentOf(
+			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.zeros\n  - ask: b.clash\n",
+			{
+				banks: { b: bank },
+				agency: "org.example",
+			},
+		).ddi,
+		{ name: "t", created: "2026-11-12 00:00:00" },
+	);
+	if (survey.kind !== "made") throw new Error("the test survey isn't made");
+	const reps = new Map<string, Representation>([
+		[v("zeros"), { kind: "codes", codes: ["010", "02", "3"] }],
+		[v("clash"), { kind: "codes", codes: ["1", "01", "2"] }],
+	]);
+	const readOf = (...responses: string[]) => {
+		const text = [
+			"ResponseId,zeros,clash",
+			"Response ID,zeros?,clash?",
+			[
+				id({ ImportId: "_recordId" }),
+				id({ ImportId: "QID1" }),
+				id({ ImportId: "QID2" }),
+			].join(","),
+			...responses,
+		].join("\r\n");
+		const e = exportMap(text, survey.columns, new Map());
+		if (e.map === undefined) throw new Error("the export isn't read");
+		return readResponses(e.header, e.rows, e.map, reps);
+	};
+
+	it("reads a value Qualtrics wrote without its leading zeros as the DDI's code", () => {
+		const r = readOf("R_1,10,2", "R_2,2,", "R_3,3,");
+		expect(r.answers).toEqual([
+			{ respondent: "R_1", variable: v("zeros"), value: "010" },
+			{ respondent: "R_1", variable: v("clash"), value: "2" },
+			{ respondent: "R_2", variable: v("zeros"), value: "02" },
+			{ respondent: "R_3", variable: v("zeros"), value: "3" },
+		]);
+		expect(r.findings).toEqual([]);
+	});
+
+	it("reads neither of two codes Qualtrics writes the same", () => {
+		const r = readOf("R_1,,1");
+		expect(r.answers).toEqual([]);
+		expect(r.findings.map((f) => f.code)).toEqual(["responses-not-a-tick"]);
+	});
+});
+
 describe("columnMapOf", () => {
 	it("reads the map `build` writes, and nothing else", () => {
 		expect(columnMapOf(JSON.parse(JSON.stringify(MAP)))).toEqual(MAP);
@@ -244,6 +306,11 @@ describe("columnMapOf", () => {
 			columnMapOf({
 				columns: [{ importId: "QID1", variable: "v", rounds: 0 }],
 			}),
+		).toBeUndefined();
+		const values = { importId: "QID1", variable: "v", values: { "10": "010" } };
+		expect(columnMapOf({ columns: [values] })).toEqual({ columns: [values] });
+		expect(
+			columnMapOf({ columns: [{ ...values, values: { "10": 10 } }] }),
 		).toBeUndefined();
 	});
 });

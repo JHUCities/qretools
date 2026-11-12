@@ -118,6 +118,67 @@ describe("the column map", () => {
 		]);
 	});
 
+	/** The map and its warnings for `bas.consent` (select one) asked with `codes`. */
+	const selectOne = (codes: readonly string[]) => {
+		const { instrument } = readInstrument(ddiOf(src("  - ask: bas.consent\n")));
+		const [ask] = instrument.flow;
+		if (ask?.kind !== "ask" || ask.question.domain.kind !== "choice")
+			throw new Error("a choice first");
+		const domain = ask.question.domain;
+		const choices = codes.map((code, i) => ({
+			...domain.choices[0],
+			code,
+			label: `option ${i}`,
+		}));
+		const { columns, findings } = writeQsf(
+			{
+				...instrument,
+				flow: [
+					{
+						...ask,
+						question: { ...ask.question, domain: { ...domain, choices } },
+					},
+				],
+			},
+			OPTIONS,
+		);
+		return {
+			column: columns.columns[0],
+			unmapped: findings
+				.filter((f) => f.code === "qsf-unmapped")
+				.map((f) => f.message),
+		};
+	};
+
+	it("gives a single-choice question's exported values, as Qualtrics drops leading zeros", () => {
+		const { column, unmapped } = selectOne(["010", "02", "3"]);
+		expect(column?.values).toEqual({ "10": "010", "2": "02", "3": "3" });
+		expect(unmapped).toEqual([]);
+	});
+
+	it("reads neither of two single-choice codes Qualtrics exports the same", () => {
+		const { column, unmapped } = selectOne(["1", "01", "2"]);
+		expect(column?.values).toEqual({ "2": "2" });
+		expect(unmapped).toEqual([
+			"The QSF column map can't read options `1`, `01` of `consent`: Qualtrics' value for each isn't known, or another option has the same one.",
+		]);
+	});
+
+	it("gives no values for a single-choice question whose codes export as written", () => {
+		const { column, unmapped } = selectOne(["1", "2", "9"]);
+		expect(column).toBeDefined();
+		expect(column?.values).toBeUndefined();
+		expect(unmapped).toEqual([]);
+	});
+
+	it("reads no single-choice code in a form not measured, letters included", () => {
+		const { column, unmapped } = selectOne(["1", "b", "1.50"]);
+		expect(column?.values).toEqual({ "1": "1" });
+		expect(unmapped).toEqual([
+			"The QSF column map can't read options `b`, `1.50` of `consent`: Qualtrics' value for each isn't known, or another option has the same one.",
+		]);
+	});
+
 	it("says so when a select-all option records no variable", () => {
 		const { instrument } = readInstrument(ddiOf(src("  - ask: bas.modes\n")));
 		const [ask] = instrument.flow;

@@ -244,6 +244,7 @@ export function exportMap(
 				...(row !== undefined && { row }),
 				...(c.choice !== undefined &&
 					tick !== undefined && { values: { [TICK]: tick }, only: true }),
+				...(c.values !== undefined && { values: c.values, only: true }),
 			});
 		}
 		const [first] = absent;
@@ -322,7 +323,7 @@ export function columnMapOf(json: unknown): ColumnMap | undefined {
 	const read: Column[] = [];
 	for (const c of columns as unknown[]) {
 		if (typeof c !== "object" || c === null) return undefined;
-		const { importId, choice, rounds, row, variable } = c as Record<
+		const { importId, choice, values, rounds, row, variable } = c as Record<
 			string,
 			unknown
 		>;
@@ -332,6 +333,13 @@ export function columnMapOf(json: unknown): ColumnMap | undefined {
 			typeof importId !== "string" ||
 			typeof variable !== "string" ||
 			!optional(choice) ||
+			!(
+				values === undefined ||
+				(typeof values === "object" &&
+					values !== null &&
+					!Array.isArray(values) &&
+					Object.values(values).every((x) => typeof x === "string"))
+			) ||
 			!count(rounds) ||
 			!count(row)
 		)
@@ -340,6 +348,9 @@ export function columnMapOf(json: unknown): ColumnMap | undefined {
 			importId,
 			variable,
 			...(typeof choice === "string" && { choice }),
+			...(values !== undefined && {
+				values: values as Readonly<Record<string, string>>,
+			}),
 			...(typeof rounds === "number" && { rounds }),
 			...(typeof row === "number" && { row }),
 		});
