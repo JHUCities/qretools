@@ -2281,6 +2281,10 @@ function openLink(model: Model, link: Link): Step {
 			[],
 		];
 	}
+	// A link to the bank alone: this is the bank, so there's nothing more to open.
+	const { branch } = link;
+	if (branch === undefined)
+		return [compact({ ...model, pendingLink: undefined }), []];
 	const loaded = model.loading.kind === "loaded";
 	const session =
 		model.session.kind === "connected" ? model.session : undefined;
@@ -2298,21 +2302,21 @@ function openLink(model: Model, link: Link): Step {
 	// Your own copy answers a link to your own branch at once, even before the load;
 	// any other branch (the default one included) waits, since whose version it is
 	// cannot be known until their blob is.
-	if (own !== undefined && ownBranches.includes(link.branch))
+	if (own !== undefined && ownBranches.includes(branch))
 		return openOwn(model, own, link.at);
 	if (!loaded || session === undefined)
 		return [{ ...model, pendingLink: link }, []];
 	// The bank's version is where your copy started, never someone else's: a link to the
 	// default branch (one written before your first save, say) opens your copy too.
-	if (own !== undefined && link.branch === session.defaultBranch)
+	if (own !== undefined && branch === session.defaultBranch)
 		return openOwn(model, own, link.at);
-	if (ownBranches.includes(link.branch))
+	if (ownBranches.includes(branch))
 		return link.file === undefined
 			? [{ ...model, screen: { kind: "blank" } }, []]
 			: [
 					refused(
 						model,
-						`\`${link.file}\` isn't on ${link.branch}.`,
+						`\`${link.file}\` isn't on ${branch}.`,
 						`\`${link.file}\` may have been moved, renamed or deleted.`,
 					),
 					[],
@@ -2322,12 +2326,12 @@ function openLink(model: Model, link: Link): Step {
 	return [
 		{
 			...model,
-			screen: { kind: "foreign", branch: link.branch, path: link.file },
+			screen: { kind: "foreign", branch: branch, path: link.file },
 		},
 		[
 			{
 				kind: "readAt",
-				target: { ...targetOf(model.settings, session), branch: link.branch },
+				target: { ...targetOf(model.settings, session), branch: branch },
 				path: link.file,
 			},
 		],
