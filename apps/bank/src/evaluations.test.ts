@@ -19,10 +19,16 @@ import {
 } from "./model.js";
 import { update } from "./update.js";
 
-// The settings' agency is counted as it is read; everything else is the core's own.
+// The settings' agency and the evaluations are counted as they are read; everything
+// else is the core's own.
 vi.mock("@qretools/core", async (original) => {
 	const actual = await original<typeof import("@qretools/core")>();
-	return { ...actual, agencyWritten: vi.fn(actual.agencyWritten) };
+	return {
+		...actual,
+		agencyWritten: vi.fn(actual.agencyWritten),
+		evaluate: vi.fn(actual.evaluate),
+		evaluateScheme: vi.fn(actual.evaluateScheme),
+	};
 });
 
 /** An instrument on its own workspace's bank, one in another repository, and a folder that is neither. */
@@ -293,12 +299,19 @@ describe("an instrument read live", () => {
 		const evaluations = createEvaluations();
 		evaluations.instrument(m, instrument(m, "households"));
 		const q = questionAt(m, "questions/household/age.yaml");
-		const start = performance.now();
+		// Counted, not timed: a keystroke reads only the question typed in, and the rest
+		// of the bank comes from the cache. A time limit failed at random on CI.
+		const read = vi.mocked(core.evaluate);
+		read.mockClear();
+		vi.mocked(core.evaluateScheme).mockClear();
 		for (let i = 0; i < 20; i++) {
 			const edited = typed(m, q, `${q.source}# ${i}\n`);
 			evaluations.instrument(edited, instrument(edited, "households"));
 		}
-		expect((performance.now() - start) / 20).toBeLessThan(20);
+		expect(read.mock.calls.map(([source]) => source)).toEqual(
+			Array.from({ length: 20 }, (_, i) => `${q.source}# ${i}\n`),
+		);
+		expect(core.evaluateScheme).not.toHaveBeenCalled();
 	});
 });
 
