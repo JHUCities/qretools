@@ -1026,6 +1026,7 @@ describe("access levels, through the commands", () => {
 		);
 		await put("bank/questions/a/zip.yaml", q("zip", "access: restricted\n"));
 		await put("bank/questions/a/age.yaml", q("age"));
+		await put("bank/missing.yaml", 'labels:\n  "D": Don\x27t know\n');
 		await put("host/workspace.yaml", "agency: org.host\naccess: [public]\n");
 		await put("host/questions/a/own.yaml", q("own", "access: public\n"));
 		await put(
@@ -1061,6 +1062,10 @@ describe("access levels, through the commands", () => {
 		expect(undeclared.out).toMatch(
 			// At the ask's own line (5), naming the question as written.
 			/x\.yaml:5:\d+: error: `b\.zip` is asked at `restricted`, which this workspace doesn't declare\. \[access-undeclared\]/,
+		);
+		// Missing values coded otherwise than this workspace's: a warning at the same ask.
+		expect(undeclared.out).toMatch(
+			/x\.yaml:5:\d+: warning: `b\.zip` codes missing values as `D`, and this workspace declares none\. \[missing-differs\]/,
 		);
 		const refused = await run(
 			"instrument",

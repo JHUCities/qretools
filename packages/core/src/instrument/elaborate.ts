@@ -33,8 +33,8 @@ import {
 	ref,
 	structured,
 } from "../ddi/document.ts";
-import { sharedUniverseItem } from "../ddi/elaborate.ts";
-import { UNVERSIONED } from "../ddi/version.ts";
+import { inputMissingItems, sharedUniverseItem } from "../ddi/elaborate.ts";
+import { UNVERSIONED, type Version } from "../ddi/version.ts";
 import { questionItems } from "../evaluate.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import type { Code } from "../surface/draft.ts";
@@ -58,6 +58,14 @@ export interface InstrumentOptions {
 	readonly agency: string;
 	/** Its DDI version; "1" when nothing is known of its history. */
 	readonly version?: string;
+	/**
+	 * Its own workspace's missing values (`missing.yaml`), which its inputs take, at that
+	 * file's version; absent outside a workspace.
+	 */
+	readonly missing?: {
+		readonly codes: readonly Code[];
+		readonly version?: Version;
+	};
 }
 
 /** The items of an instrument, keyed by who emitted them, for `collisions` and `documentOf`. */
@@ -903,20 +911,24 @@ export function elaborateInstrument(
 	};
 
 	// An input comes from outside, often from data, which has its missing values too: it
-	// takes the missing values its questions' variables take, when they all take one list.
-	// shortcut: banks with different missing lists give inputs none; choose one when an instrument needs it.
-	const missingLists = new Map<string, Json>();
-	for (const node of steps(draft.flow))
-		if (node.kind === "ask" && node.question !== undefined)
-			for (const it of itemsOf(node.question)) {
-				const missing = (
-					it.body.VariableRepresentation as JsonObject | undefined
-				)?.MissingValuesReference;
-				if (it.type === "Variable" && missing !== undefined)
-					missingLists.set(JSON.stringify(missing), missing);
-			}
+	// takes its own workspace's list (`missing.yaml`), whichever banks the questions come
+	// from. Outside a workspace, or with no list there, it takes none.
+	// shortcut: a host `missing.yaml` that can't be read gives what parsed (often none), with
+	// no word here; its own findings say why. Skip it here when the env can say it's broken.
+	const hostMissing =
+		draft.inputs.length === 0 ||
+		options.missing === undefined ||
+		options.missing.codes.length === 0
+			? undefined
+			: inputMissingItems(
+					agency,
+					base,
+					options.missing.version ?? UNVERSIONED,
+					options.missing.codes,
+				);
+	for (const it of hostMissing?.items ?? []) emit(it);
 	const inputMissing =
-		missingLists.size === 1 ? [...missingLists.values()][0] : undefined;
+		hostMissing === undefined ? undefined : ref(hostMissing.representation);
 
 	// Inputs: Variables received from outside, each with its OutParameter.
 	for (const input of draft.inputs) {

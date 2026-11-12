@@ -36,11 +36,15 @@ const bank = async () => {
 };
 
 /** An instrument's DDI, its source using the households workspace as `hh`. */
-const instrument = async (source: string) =>
-	instrumentOf(source, {
-		banks: { hh: bankOf(await readWorkspace(fixture("households"))) },
+const instrument = async (source: string) => {
+	// Its own workspace: its inputs take its missing values.
+	const hh = bankOf(await readWorkspace(fixture("households")));
+	return instrumentOf(source, {
+		banks: { hh },
 		agency: "org.example",
+		host: hh.env,
 	}).ddi;
+};
 
 describe("the example bank's codebook", () => {
 	it("has an entry per variable, an option of a select-all grouped under its question", async () => {

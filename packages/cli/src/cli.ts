@@ -36,6 +36,7 @@ import {
 	type Finding,
 	filterAnswers,
 	HERE,
+	type Host,
 	type Item,
 	importsOf,
 	inDocumentOrder,
@@ -47,7 +48,6 @@ import {
 	makeValidator,
 	movedTags,
 	notHere,
-	parseSettingsFile,
 	placeFindings,
 	questionItems,
 	type Range,
@@ -1230,13 +1230,22 @@ async function instrument(
 	const agency =
 		args.values.agency ??
 		(settings === undefined ? undefined : agencyWritten(settings));
+	// Its own workspace's settings, which imported questions are checked against; outside a
+	// workspace, there are none to check, and its inputs take no missing values.
+	let host: Host | undefined;
+	if (settingsPath !== undefined)
+		try {
+			host = scopeOf(await readWorkspace(join(dirname(file), HERE))).env;
+		} catch (e) {
+			io.err(
+				`Can't read the workspace of ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return USAGE_ERROR;
+		}
 	const result = instrumentOf(source, {
 		banks,
 		...(agency !== undefined && { agency }),
-		// The levels its workspace declares; outside a workspace, there's none to check.
-		...(settings !== undefined && {
-			levels: parseSettingsFile(settings).access,
-		}),
+		...(host !== undefined && { host }),
 	});
 	// In a workspace, `check` says a tag no lock holds, as the workspace's check does; an
 	// export locks it instead, and says so.
