@@ -246,7 +246,7 @@ describe("an instrument's codebook", () => {
 			  "  format {"kind":"text","maxLength":500}",
 			  "  asked after stop always",
 			  "Variable county",
-			  "  codes 1=North County, 2=South County",
+			  "  codes 1=North County, 2=South County, -8!=Refused, -9!=Don't know",
 			  "  notes From the sample file.",
 			  "Variable renter",
 			  "  derived VTL:tenure = "2" from tenure",
