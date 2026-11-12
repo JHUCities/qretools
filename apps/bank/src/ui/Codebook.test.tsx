@@ -118,6 +118,26 @@ describe("the codebook pane", () => {
 		expect(c.textContent).not.toMatch(/untitled|urn:|fill in/i);
 	});
 
+	it("says the access level of a variable in a workspace that lists levels", () => {
+		const env = { ...ENV, access: ["public", "restricted"] };
+		const at = (line: string) => {
+			const { draft } = evaluate(`${QUESTION}${line}`, env);
+			const read = parse(
+				documentOf(questionItems(draft, { env, agency: "org.example" })),
+			);
+			if (!read.ok) throw new Error("unread");
+			const c = render(
+				<Codebook codebook={codebookOf(read.value)} />,
+			).container;
+			return [...c.querySelectorAll("dt")].find(
+				(dt) => dt.textContent === "Access",
+			)?.nextElementSibling?.textContent;
+		};
+		expect(at("access: restricted\n")).toBe("restricted");
+		// No line yet: held at the most closed level, as the DDI says.
+		expect(at("")).toBe("restricted");
+	});
+
 	it("draws no Concept row for a concept name nothing has", () => {
 		const c = pane(
 			QUESTION.replace("concept: trust", "concept: nobody_has_this"),

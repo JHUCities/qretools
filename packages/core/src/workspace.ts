@@ -13,11 +13,12 @@ import {
 import { UNVERSIONED, type Version, type Versions } from "./ddi/version.ts";
 import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
 import { type Finding, inDocumentOrder } from "./findings.ts";
-import { steps, type Use } from "./instrument/draft.ts";
+import type { Use } from "./instrument/draft.ts";
 import {
 	type Instrument,
 	importsOf,
 	instrumentOf,
+	levelsAsked,
 } from "./instrument/instrument.ts";
 import type { Unread } from "./instrument/parse.ts";
 import { type Locks, movedTags, unlockedTags } from "./lock.ts";
@@ -359,34 +360,13 @@ export function workspaceOf(
 	}
 	// A level declared for questions the instruments ask from other banks is named there:
 	// `unused-level` would tell the author to remove what `access-undeclared` asks for.
-	const asked = new Set(
-		Object.values(instruments).flatMap(({ instrument }) =>
-			[...steps(instrument.draft.flow)].flatMap((node) => {
-				const level =
-					node.kind === "ask"
-						? node.question?.evaluation.draft.access
-						: undefined;
-				return level === undefined ? [] : [level];
-			}),
-		),
+	// The instruments read the bank, so the bank is told what they ask after them: read
+	// once more with those levels, only when there are any (`settingsFindings`).
+	const asked = levelsAsked(
+		Object.values(instruments).map(({ instrument }) => instrument.draft),
 	);
-	const settingsFindings = bank.findings[ROOT.workspace];
-	const used =
-		settingsFindings === undefined
-			? bank
-			: {
-					...bank,
-					findings: {
-						...bank.findings,
-						[ROOT.workspace]: settingsFindings.filter(
-							(f) =>
-								f.code !== "unused-level" ||
-								!asked.has(bank.env.access[Number(f.path.split(".")[1])] ?? ""),
-						),
-					},
-				};
 	return {
-		bank: used,
+		bank: asked.size === 0 ? bank : bankOf(held, versions, asked),
 		remote: remoteBanks,
 		instruments,
 		ignored: ignored.sort(),

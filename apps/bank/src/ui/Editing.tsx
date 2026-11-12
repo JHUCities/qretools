@@ -32,6 +32,8 @@ import {
 	inScope,
 	isRoot,
 	kindAt,
+	levelsAsked,
+	levelsNamed,
 	type Mark,
 	ok,
 	othersOf,
@@ -47,10 +49,10 @@ import {
 	type Shape,
 	type Symbols,
 	selectAllText,
+	settingsFindings,
 	status,
 	type Target,
 	UNNAMED,
-	unknownFolders,
 	usedBy,
 } from "@qretools/core";
 import {
@@ -674,24 +676,49 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	// question: only the workspace knows its folders (`unknownFolders`). Not while it
 	// loads: the questions aren't here yet, so every folder would read as unknown.
 	const loading = useModel(bankLoading);
-	const own = useMemo(
-		() =>
-			e.kind === "workspace" && !loading
-				? inDocumentOrder(
-						[
-							...ev.findings,
-							...unknownFolders(
-								env.requiredIn,
-								Object.values(questions).flatMap((q) =>
-									q.base === undefined ? [] : [q.base.path],
-								),
-							),
-						],
-						ev.ranges,
-					)
-				: ev.findings,
-		[e.kind, loading, ev.findings, ev.ranges, env.requiredIn, questions],
-	);
+	const local = useModel((m) => m.local);
+	const remote = useModel((m) => m.remote);
+	const remoteBanks = useModel((m) => m.remoteBanks);
+	const own = useMemo(() => {
+		if (e.kind !== "workspace" || loading) return ev.findings;
+		// What `qretools check` tells it about the workspace (`settingsFindings`): levels are
+		// named by its questions and asked at by its instruments.
+		const slices = { local, remote, remoteBanks };
+		const named = new Set([
+			...levelsNamed(
+				Object.values(questions).map((q) => evaluations.get(q, env)),
+			),
+			...levelsAsked(
+				Object.values(local.workspace).map(
+					(i) => evaluations.instrument(slices, i).instrument.draft,
+				),
+			),
+		]);
+		return inDocumentOrder(
+			[
+				...ev.findings,
+				...settingsFindings(
+					env,
+					Object.values(questions).flatMap((q) =>
+						q.base === undefined ? [] : [q.base.path],
+					),
+					named,
+				),
+			],
+			ev.ranges,
+		);
+	}, [
+		e.kind,
+		loading,
+		ev.findings,
+		ev.ranges,
+		env,
+		questions,
+		local,
+		remote,
+		remoteBanks,
+		evaluations,
+	]);
 	const { findings, related } = useBankFindings(
 		e.id,
 		own,

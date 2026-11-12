@@ -1011,6 +1011,69 @@ describe("qretools responses", () => {
 	});
 });
 
+describe("access levels, through the commands", () => {
+	it("checks, exports and refuses as the core decides", async () => {
+		const root = await mkdtemp(join(tmpdir(), "qretools-access-"));
+		const q = (name: string, line = "") =>
+			`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${line}`;
+		const put = async (path: string, text: string) => {
+			await mkdir(dirname(join(root, path)), { recursive: true });
+			await writeFile(join(root, path), text);
+		};
+		await put(
+			"bank/workspace.yaml",
+			"agency: org.bank\naccess: [public, restricted, secret]\n",
+		);
+		await put("bank/questions/a/zip.yaml", q("zip", "access: restricted\n"));
+		await put("bank/questions/a/age.yaml", q("age"));
+		await put("host/workspace.yaml", "agency: org.host\naccess: [public]\n");
+		await put("host/questions/a/own.yaml", q("own", "access: public\n"));
+		await put(
+			"host/instruments/x.yaml",
+			"name: x\nuses:\n  b: acme/b@v1\nflow:\n  - ask: b.zip\n",
+		);
+		const bank = join(root, "bank");
+
+		// check: the missing line is to fill in; a level no question names is a warning.
+		const checked = await run("check", bank);
+		expect(checked.code).toBe(1);
+		expect(checked.out).toMatch(
+			/age\.yaml.*`access` is required.*\[to fill in\]/,
+		);
+		expect(checked.out).toMatch(
+			/workspace\.yaml.*warning: No question names the access level `secret`\. \[unused-level\]/,
+		);
+		// export: the missing level is held at the most closed one, never refused for it.
+		const exported = await run("export", bank);
+		expect(exported.code).toBe(0);
+		expect(exported.out).toContain("access-public-restricted-secret.codes");
+
+		// An instrument whose workspace doesn't declare a level it asks at.
+		const instrument = join(root, "host/instruments/x.yaml");
+		const undeclared = await run(
+			"instrument",
+			"check",
+			instrument,
+			"--bank",
+			`b=${bank}`,
+		);
+		expect(undeclared.code).toBe(1);
+		expect(undeclared.out).toMatch(
+			/asks `b` questions at `restricted`, which this workspace doesn't declare\. \[access-undeclared\]/,
+		);
+		const refused = await run(
+			"instrument",
+			"export",
+			instrument,
+			"--bank",
+			`b=${bank}`,
+			"--qsf",
+		);
+		expect(refused).toMatchObject({ code: 1, out: "" });
+		expect(refused.err).toMatch(/Not exported/);
+	});
+});
+
 describe("qretools filter", () => {
 	it("keeps a level and the more open ones, names what it removed, lists levels, and writes nothing when refused", async () => {
 		const q = (name: string, rest = "") =>

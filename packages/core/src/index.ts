@@ -138,6 +138,7 @@ export {
 	type InstrumentContext,
 	importsOf,
 	instrumentOf,
+	levelsAsked,
 } from "./instrument/instrument.ts";
 export type { Unread } from "./instrument/parse.ts";
 export {
@@ -222,6 +223,7 @@ export {
 	isRoot,
 	type Kind,
 	kindAt,
+	levelsNamed,
 	REQUIRED_ROOTS,
 	ROOT,
 	type RootKind,
@@ -234,7 +236,9 @@ export {
 	type Shape,
 	schemeEnv,
 	schemePath,
+	settingsFindings,
 	unknownFolders,
+	unusedLevels,
 } from "./schemes.ts";
 export {
 	DEFAULT_SELECT_ALL,
