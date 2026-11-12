@@ -59,6 +59,7 @@ describe("a workspace", () => {
 		const direct = instrumentOf(households, {
 			banks: { hh: bank },
 			agency: "org.one",
+			host: bank.env,
 		});
 		expect(read?.instrument.findings).toEqual(direct.findings);
 		expect(read?.instrument.ddi).toEqual(direct.ddi);
@@ -191,7 +192,8 @@ flow:
 		const read = given.instruments["instruments/remote.yaml"];
 		expect(read?.uses.bas).toEqual({ kind: "remote", key: "owner/bank@v1" });
 		expect(read?.instrument.findings).toEqual(
-			instrumentOf(remote, { banks: { bas: bankOf(hh) } }).findings,
+			instrumentOf(remote, { banks: { bas: bankOf(hh) }, host: given.bank.env })
+				.findings,
 		);
 		expect(Object.keys(given.remote)).toEqual(["owner/bank@v1"]);
 	});

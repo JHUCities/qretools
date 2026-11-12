@@ -134,6 +134,7 @@ export {
 } from "./instrument/draft.ts";
 export { exampleInstrument } from "./instrument/example.ts";
 export {
+	type Host,
 	type Instrument,
 	type InstrumentContext,
 	importsOf,

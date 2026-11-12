@@ -15,6 +15,7 @@ import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
 import { type Finding, inDocumentOrder } from "./findings.ts";
 import type { Use } from "./instrument/draft.ts";
 import {
+	type Host,
 	type Instrument,
 	importsOf,
 	instrumentOf,
@@ -224,7 +225,7 @@ export function instrumentIn(
 		agency,
 		locks = {},
 		version,
-		levels,
+		host,
 	}: {
 		/** The workspace's own bank; needed only when a use is local (`resolveUses`). */
 		readonly bank: BankScope | undefined;
@@ -236,8 +237,8 @@ export function instrumentIn(
 		readonly locks?: Locks;
 		/** The instrument's DDI version, from its history; every item it makes carries it. */
 		readonly version?: string;
-		/** The access levels `workspace.yaml` declares; absent, no check (`InstrumentContext.levels`). */
-		readonly levels?: readonly string[];
+		/** Its own workspace's settings; absent, it's in none (`InstrumentContext.host`). */
+		readonly host?: Host;
 	},
 ): InstrumentIn {
 	const uses = resolveUses(importsOf(source), remote);
@@ -257,7 +258,7 @@ export function instrumentIn(
 	const instrument = instrumentOf(source, {
 		banks: given,
 		unresolved,
-		...(levels !== undefined && { levels }),
+		...(host !== undefined && { host }),
 		...(agency !== undefined && { agency }),
 		...(version !== undefined && { version }),
 	});
@@ -331,13 +332,17 @@ export function workspaceOf(
 			continue;
 		}
 		const version = versions?.[path]?.number;
+		const missingVersion = versions?.[ROOT.missing];
 		const read = instrumentIn(outside[path] ?? "", {
 			bank,
 			remote,
 			remoteBanks,
 			agency,
 			locks,
-			levels: bank.env.access,
+			host: {
+				...bank.env,
+				...(missingVersion !== undefined && { missingVersion }),
+			},
 			...(version !== undefined && { version }),
 		});
 		// The workspace as committed, as `check` reads it: a tag no lock holds got here

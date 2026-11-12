@@ -115,7 +115,11 @@ export type InstrumentCode =
 	/** An asked question's bank lists an access level its host workspace doesn't declare. */
 	| "access-undeclared"
 	/** A bank and its host workspace list shared access levels in different orders. */
-	| "access-order";
+	| "access-order"
+	/** Advice: an asked question's bank codes missing values otherwise than its host workspace. */
+	| "missing-differs"
+	/** Advice: an asked select-all question's bank stores chosen and not chosen otherwise. */
+	| "select-all-differs";
 
 export type FindingCode =
 	| ParseCode

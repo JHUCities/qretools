@@ -461,6 +461,37 @@ function missingValueItems(
 	return { representation, items: [representation, codeList, ...categories] };
 }
 
+/**
+ * The missing values an instrument gives its inputs: its own workspace's list, in the
+ * instrument's namespace (`<base>.missing`, `<base>.missing-codes`, …) so no bank's list
+ * can share its identity, at `version` (the workspace's `missing.yaml`'s).
+ */
+export function inputMissingItems(
+	agency: string,
+	base: string,
+	version: Version,
+	missing: readonly Code[],
+): { readonly representation: Item; readonly items: readonly Item[] } {
+	const ctx: Ctx = {
+		agency,
+		own: version,
+		shared: () => version,
+		selectAll: DEFAULT_SELECT_ALL,
+	};
+	const { codeList, categories } = codeListItems(ctx, version, base, missing, {
+		isMissing: true,
+		part: (p) => `${base}.missing-${p}`,
+	});
+	const representation = versioned(
+		ctx,
+		"ManagedMissingValuesRepresentation",
+		`${base}.missing`,
+		version,
+		{ MissingCodeRepresentation: [{ CodeListReference: ref(codeList) }] },
+	);
+	return { representation, items: [representation, codeList, ...categories] };
+}
+
 interface ElaboratedDomain {
 	/** How the question is answered. */
 	readonly responseDomain: JsonObject;
@@ -562,6 +593,7 @@ function codeListItems(
 		principal = false,
 		name,
 		generation,
+		part = (p) => `${base}.${p}`,
 	}: {
 		/** The bank's missing-value list: its categories are marked missing. */
 		readonly isMissing?: boolean;
@@ -571,13 +603,15 @@ function codeListItems(
 		readonly name?: string;
 		/** How a respondent comes to be in a code's category, when the list says. */
 		readonly generation?: (c: Code) => JsonObject;
+		/** Each part's ID (`codes`, `cat-0`, `code-0`): hung off `base` with its one dot. */
+		readonly part?: (p: string) => string;
 	} = {},
 ): { codeList: Item; categories: Item[] } {
 	const options = codes.map((c, i) => {
 		const category = versioned(
 			ctx,
 			"Category",
-			`${base}.cat-${i}`,
+			part(`cat-${i}`),
 			version,
 			obj({
 				Label: [structured(c.label)],
@@ -586,7 +620,7 @@ function codeListItems(
 			}),
 		);
 		const code: JsonObject = {
-			...identity(ctx.agency, `${base}.code-${i}`, version.number),
+			...identity(ctx.agency, part(`code-${i}`), version.number),
 			Value: codeValue(c.code),
 			CategoryReference: ref(category),
 		};
@@ -595,7 +629,7 @@ function codeListItems(
 	const codeList = versioned(
 		ctx,
 		"CodeList",
-		`${base}.codes`,
+		part("codes"),
 		version,
 		obj({
 			CodeListName: maybe(name, (n) => [intl(n)]),

@@ -21,6 +21,7 @@ import {
 	envAt,
 	evaluate,
 	evaluateScheme,
+	type Host,
 	type InstrumentIn,
 	importsOf,
 	instrumentIn,
@@ -150,7 +151,7 @@ export function createEvaluations(): Evaluations {
 			agency: string | undefined;
 			locks: Locks | undefined;
 			bank: BankScope | undefined;
-			levels: readonly string[];
+			host: Host;
 			read: InstrumentIn;
 		}
 	>();
@@ -283,8 +284,8 @@ export function createEvaluations(): Evaluations {
 				};
 			const agency = written?.agency;
 			const locks = written?.locks;
-			// The levels this workspace declares: it must declare each level the instrument asks at.
-			const levels = self.env(model).access;
+			// This workspace's settings, which the instrument's imported questions are checked against.
+			const host = self.env(model);
 			if (
 				hit &&
 				hit.source === e.source &&
@@ -292,7 +293,7 @@ export function createEvaluations(): Evaluations {
 				hit.locks === locks &&
 				hit.remote === remote &&
 				hit.bank === bank &&
-				hit.levels === levels
+				hit.host === host
 			)
 				return hit.read;
 			const read = instrumentIn(e.source, {
@@ -300,7 +301,7 @@ export function createEvaluations(): Evaluations {
 				remote,
 				remoteBanks,
 				agency,
-				levels,
+				host,
 				...(locks !== undefined && { locks }),
 			});
 			instruments.set(e.id, {
@@ -309,7 +310,7 @@ export function createEvaluations(): Evaluations {
 				agency,
 				locks,
 				bank,
-				levels,
+				host,
 				read,
 			});
 			return read;

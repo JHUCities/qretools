@@ -4,6 +4,8 @@ import type { JsonObject } from "../ddi/document.ts";
 import { makeValidator } from "../ddi/validate.ts";
 import { bankOf } from "../evaluate.ts";
 import { exportRefusal } from "../refusal.ts";
+import type { Code } from "../surface/draft.ts";
+import { EMPTY_ENV } from "../surface/env.ts";
 import { remoteScope } from "../workspace.ts";
 import { checkInstrument } from "./check.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
@@ -386,15 +388,45 @@ describe("an instrument as DDI", () => {
 		);
 	});
 
-	it("gives an input the missing values its questions' variables take: data can say Don't know there too", () => {
-		const { document } = build();
-		const variable = (name: string) =>
-			document.Variable?.[`org.example:instrument-demo.var-${name}:1`]
-				?.VariableRepresentation as JsonObject | undefined;
-		const missing = variable("consent")?.MissingValuesReference;
-		expect(missing).toBeDefined();
-		expect(variable("jurisdiction")?.MissingValuesReference).toEqual(missing);
-		expect(variable("wave")?.MissingValuesReference).toEqual(missing);
+	it("gives an input its own workspace's missing values, whatever its banks': data can say Don't know there too", () => {
+		const parsed = parseInstrument(SOURCE, { bas: BAS });
+		const of = (missing?: { codes: Code[]; version: { number: string } }) => {
+			const { document } = instrumentDocument(
+				elaborateInstrument(parsed, {
+					agency: "org.example",
+					...(missing !== undefined && { missing }),
+				}),
+			);
+			expect(validator.ok && validator.value(document)).toEqual([]);
+			const variable = (name: string) =>
+				document.Variable?.[`org.example:instrument-demo.var-${name}:1`]
+					?.VariableRepresentation as JsonObject | undefined;
+			return { document, variable };
+		};
+		const { document, variable } = of({
+			codes: [{ code: "-98", label: "Don't know" }],
+			version: { number: "3" },
+		});
+		// In the instrument's own namespace, at missing.yaml's version: no bank's can share it.
+		const ours = {
+			$type: "ManagedMissingValuesRepresentation",
+			value: ["org.example", "instrument-demo.missing", "3"],
+		};
+		expect(variable("jurisdiction")?.MissingValuesReference).toEqual(ours);
+		expect(variable("wave")?.MissingValuesReference).toEqual(ours);
+		expect(
+			Object.keys(document.CodeList ?? {}).filter((k) =>
+				k.includes("instrument-demo.missing"),
+			),
+		).toEqual(["org.example:instrument-demo.missing-codes:3"]);
+		// A question keeps its bank's list.
+		expect(variable("consent")?.MissingValuesReference).not.toEqual(ours);
+		// Outside a workspace, or with no list there: none.
+		expect(of().variable("wave")?.MissingValuesReference).toBeUndefined();
+		expect(
+			of({ codes: [], version: { number: "1" } }).variable("wave")
+				?.MissingValuesReference,
+		).toBeUndefined();
 	});
 
 	it("gives a computed value a Variable, made by a GenerationInstruction over its ComputationItems", () => {
@@ -904,7 +936,9 @@ describe("the access levels an instrument's workspace declares", () => {
 			{
 				banks: { b },
 				agency: "org.example",
-				...(levels !== undefined && { levels }),
+				...(levels !== undefined && {
+					host: { ...EMPTY_ENV, access: levels },
+				}),
 			},
 		);
 	const said = (levels: readonly string[] | undefined, asks?: string[]) =>
@@ -958,7 +992,11 @@ describe("the access levels an instrument's workspace declares", () => {
 		// Inside a section too.
 		const nested = instrumentOf(
 			"name: x\nuses:\n  b: acme/b@v1\nflow:\n  - section: s\n    flow:\n      - ask: b.zip\n",
-			{ banks: { b }, agency: "org.example", levels: ["public"] },
+			{
+				banks: { b },
+				agency: "org.example",
+				host: { ...EMPTY_ENV, access: ["public"] },
+			},
 		);
 		expect(
 			nested.findings
@@ -992,5 +1030,120 @@ describe("the access levels an instrument's workspace declares", () => {
 		expect(JSON.stringify(of(["public", "restricted"], ["zip"]).ddi)).toContain(
 			"urn:ddi:org.bank:access-public-restricted-secret.codes:1",
 		);
+	});
+});
+
+describe("an imported question's coding, against the instrument's workspace", () => {
+	const DK = 'labels:\n  "D": Don\'t know\n  "R": Refused\n';
+	const bank = (missing?: string, selectAll?: string) =>
+		remoteScope("acme/b@v1", {
+			kind: "files",
+			files: {
+				"workspace.yaml": "agency: org.bank\n",
+				...(missing !== undefined && { "missing.yaml": missing }),
+				...(selectAll !== undefined && { "select_all.yaml": selectAll }),
+				"questions/a/zip.yaml": q("zip", "open: {}\n"),
+				"questions/a/pets.yaml": q(
+					"pets",
+					'select: many\nresponses:\n  "c": Cat\n  "d": Dog\n',
+				),
+			},
+		});
+	const host = (missing?: string, selectAll?: string) =>
+		bankOf({
+			"workspace.yaml": "agency: org.example\n",
+			...(missing !== undefined && { "missing.yaml": missing }),
+			...(selectAll !== undefined && { "select_all.yaml": selectAll }),
+		}).env;
+	const said = (b: ReturnType<typeof bank>, h: ReturnType<typeof host>) =>
+		instrumentOf(
+			"name: x\nuses:\n  b: acme/b@v1\nflow:\n  - ask: b.zip\n  - ask: b.pets\n",
+			{ banks: { b }, agency: "org.example", host: h },
+		)
+			.findings.filter((f) => f.code.endsWith("-differs"))
+			.map((f) => [f.code, f.severity, f.path, f.message]);
+
+	it.each([
+		[
+			"the same list, in another order",
+			DK,
+			'labels:\n  "R": Refused\n  "D": Don\'t know\n',
+			[],
+		],
+		[
+			"other codes",
+			DK,
+			'labels:\n  "-98": Don\'t know\n  "-90": Refused\n',
+			[
+				"`b.zip` codes missing values differently from this workspace (`D` and `R` against `-98` and `-90`).",
+			],
+		],
+		[
+			"the same codes, other labels",
+			DK,
+			'labels:\n  "D": Unknown\n  "R": Refused\n',
+			[
+				'`b.zip` labels missing values differently from this workspace (`D` "Don\'t know" against "Unknown").',
+			],
+		],
+		[
+			"none in the workspace",
+			DK,
+			undefined,
+			[
+				"`b.zip` codes missing values as `D` and `R`, and this workspace declares none.",
+			],
+		],
+		[
+			"none in the bank",
+			undefined,
+			DK,
+			[
+				"`b.zip` has no missing values, and this workspace codes them as `D` and `R`.",
+			],
+		],
+	] as const)(
+		"warns at each ask of a bank with %s",
+		(_, theirs, ours, messages) => {
+			const found = said(bank(theirs), host(ours));
+			// The select-all question is told at its own line too: once per ask.
+			expect(found.map(([, , path, m]) => [path, m])).toEqual(
+				messages.flatMap((m) => [
+					["flow.0.ask", m],
+					["flow.1.ask", m.replace("b.zip", "b.pets")],
+				]),
+			);
+			expect(found.every(([, severity]) => severity === "warning")).toBe(true);
+		},
+	);
+
+	it("warns at a select-all question whose bank stores chosen and not chosen otherwise", () => {
+		expect(
+			said(
+				bank(undefined, 'not_chosen: { "2": No }\nchosen: { "1": Yes }\n'),
+				host(),
+			),
+		).toEqual([
+			[
+				"select-all-differs",
+				"warning",
+				"flow.1.ask",
+				"`b.pets` stores select all that apply as `1` chosen and `2` not; this workspace stores `1` and `0`.",
+			],
+		]);
+		// Labels aside: the codes are what's stored.
+		expect(
+			said(
+				bank(undefined, 'not_chosen: { "0": Nope }\nchosen: { "1": Yep }\n'),
+				host(),
+			),
+		).toEqual([]);
+		// Outside a workspace there's nothing to compare with.
+		expect(
+			instrumentOf("name: x\nuses:\n  b: acme/b@v1\nflow:\n  - ask: b.zip\n", {
+				banks: { b: bank(DK) },
+				agency: "org.example",
+			}).findings.filter((f) => f.code.endsWith("-differs")),
+		).toEqual([]);
 	});
 });
