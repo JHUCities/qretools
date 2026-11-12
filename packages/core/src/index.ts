@@ -55,7 +55,7 @@ export type {
 } from "./ddi/document.ts";
 export { collisions, documentOf } from "./ddi/document.ts";
 export {
-	ACCESS_LEVELS_ID,
+	ACCESS_POLICY_KEY,
 	elaborate,
 	elaborateItems,
 	NOT_TICKED,
@@ -102,9 +102,10 @@ export {
 } from "./evaluate.ts";
 export {
 	aboveLevel,
-	accessLevelsOf,
+	accessPoliciesOf,
 	type FilterRefusal,
 	filterAnswers,
+	type Policy,
 	type Removed,
 } from "./filter.ts";
 export {

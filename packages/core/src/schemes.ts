@@ -368,6 +368,30 @@ export function unknownFolders(
 		}));
 }
 
+/**
+ * What `workspace.yaml` is told of the access levels it lists that no question names: a
+ * warning at each, since a level planned but never used is often a typo. `named` is the
+ * levels the workspace's questions name, where they name one it lists.
+ */
+export function unusedLevels(
+	levels: Env["access"],
+	named: ReadonlySet<string>,
+): readonly Finding[] {
+	return levels.flatMap((level, i) =>
+		named.has(level)
+			? []
+			: [
+					{
+						code: "unused-level" as const,
+						severity: "warning" as const,
+						path: `access.${i}`,
+						message: `No question names the access level \`${level}\`.`,
+						hint: `Name it in a question's \`access\` line, or remove it from this list.`,
+					},
+				],
+	);
+}
+
 /** A concept or unit file with its label; the definition is written in the file afterwards. */
 export const labelledSource = (label: string): string =>
 	stringify({ label: label.trim() }, { lineWidth: 0 });

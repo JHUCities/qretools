@@ -595,16 +595,36 @@ describe("a shared unit", () => {
 
 describe("access levels", () => {
 	const env = { ...EMPTY_ENV, access: ["public", "restricted"] };
-	const embargoes = (text: string) => {
-		const { draft } = parseSurface(text, env);
-		const doc = elaborate(draft, AGENCY, [], {
-			own: { number: "3", date: "2026-01-01", blob: "b" },
-		});
+	const POLICY = `urn:ddi:${AGENCY}:access-public-restricted.codes:1`;
+	const docOf = (text: string, levels: readonly string[] = env.access) => {
+		const doc = elaborateWith(
+			parseSurface(text, { ...env, access: levels }).draft,
+			AGENCY,
+			[],
+			DEFAULT_SELECT_ALL,
+			{ own: { number: "3", date: "2026-01-01", blob: "b" } },
+			levels,
+		);
 		expect(validate(doc)).toEqual([]);
-		return Object.values(doc.Variable ?? {}).map((v) => v.EmbargoReference);
+		return doc;
 	};
+	const embargoes = (text: string) =>
+		Object.values(docOf(text).Variable ?? {}).map((v) => v.EmbargoReference);
+	const policyPair = [
+		{
+			AttributeKey: { StringValue: "access-policy" },
+			AttributeValue: { StringValue: POLICY },
+		},
+	];
+	const name = (level: string) => [
+		{
+			String: [
+				{ MultilingualStringValue: { LanguageTag: "en", Value: level } },
+			],
+		},
+	];
 
-	it("puts every variable of a restricted question under an embargo named by its level, and validates", () => {
+	it("puts every variable under an embargo named by its level, naming its bank's policy, and validates", () => {
 		expect(
 			embargoes(
 				"name: zip\ntext: ZIP?\nintent: i\nopen: {}\naccess: restricted\n",
@@ -615,18 +635,8 @@ describe("access levels", () => {
 				Agency: AGENCY,
 				ID: "variable-zip.embargo",
 				Version: "3",
-				EmbargoName: [
-					{
-						String: [
-							{
-								MultilingualStringValue: {
-									LanguageTag: "en",
-									Value: "restricted",
-								},
-							},
-						],
-					},
-				],
+				UserAttributePair: policyPair,
+				EmbargoName: name("restricted"),
 			},
 		]);
 		// Select all that apply: each option's variable, under its own identity.
@@ -637,23 +647,22 @@ describe("access levels", () => {
 		).toEqual(["variable-m_a.embargo", "variable-m_b.embargo"]);
 	});
 
-	it("publishes the levels' order beside an embargo, a code list at workspace.yaml's version, and validates", () => {
-		const levelsOf = (text: string) => {
-			const doc = elaborateWith(
-				parseSurface(text, env).draft,
-				AGENCY,
-				[],
-				DEFAULT_SELECT_ALL,
-				{ shared: { "workspace.yaml": { number: "4", date: "d" } } },
-				env.access,
-			);
-			expect(validate(doc)).toEqual([]);
-			return doc;
-		};
-		const doc = levelsOf(
+	it("embargoes the most open level too, said to restrict nothing", () => {
+		const [e] = embargoes(
+			"name: q\ntext: Q?\nintent: i\nopen: {}\naccess: public\n",
+		) as JsonObject[];
+		expect(e?.EmbargoName).toEqual(name("public"));
+		expect(e?.UserAttributePair).toEqual(policyPair);
+		expect(JSON.stringify(e?.Description)).toMatch(/restricts nothing/);
+	});
+
+	it("publishes the policy once, its ID spelling the levels in order, at version 1", () => {
+		const doc = docOf(
 			"name: zip\ntext: ZIP?\nintent: i\nopen: {}\naccess: restricted\n",
 		);
-		const list = doc.CodeList?.[`${AGENCY}:access-levels.codes:4`];
+		const list = doc.CodeList?.[`${AGENCY}:access-public-restricted.codes:1`];
+		expect(list?.URN).toBe(POLICY);
+		expect(list?.UserID).toBeUndefined();
 		expect(
 			((list?.Code ?? []) as JsonObject[]).map(
 				(c) => (c.Value as JsonObject).StringValue,
@@ -663,26 +672,37 @@ describe("access levels", () => {
 			[0, 1].map(
 				(i) =>
 					JSON.stringify(
-						doc.Category?.[`${AGENCY}:access-levels.cat-${i}:4`]?.Label,
+						doc.Category?.[`${AGENCY}:access-public-restricted.cat-${i}:1`]
+							?.Label,
 					).match(/"Value":"(\w+)"/)?.[1],
 			),
 		).toEqual(["public", "restricted"]);
+		// Other levels, another policy: another identity.
 		expect(
-			levelsOf("name: q\ntext: Q?\nintent: i\nopen: {}\n").CodeList,
-		).toBeUndefined();
-	});
-
-	it("leaves a question at the most open level without an embargo", () => {
-		expect(
-			embargoes("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: public\n"),
-		).toEqual([undefined]);
-	});
-
-	it("embargoes a question whose level the list doesn't have, held at the last", () => {
-		expect(
-			embargoes("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: secret\n").map(
-				(e) => (e as JsonObject | undefined)?.ID,
+			Object.keys(
+				docOf("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: open\n", [
+					"open",
+					"public",
+					"restricted",
+				]).CodeList ?? {},
 			),
-		).toEqual(["variable-q.embargo"]);
+		).toEqual([`${AGENCY}:access-open-public-restricted.codes:1`]);
+	});
+
+	it("embargoes a question with no level, or one the list doesn't have, at the last", () => {
+		for (const line of ["access: secret\n", ""])
+			expect(
+				embargoes(`name: q\ntext: Q?\nintent: i\nopen: {}\n${line}`).map(
+					(e) => (e as JsonObject | undefined)?.EmbargoName,
+				),
+			).toEqual([name("restricted")]);
+	});
+
+	it("publishes no policy and no embargo where the bank lists no levels", () => {
+		const doc = docOf("name: q\ntext: Q?\nintent: i\nopen: {}\n", []);
+		expect(doc.CodeList).toBeUndefined();
+		expect(
+			Object.values(doc.Variable ?? {})[0]?.EmbargoReference,
+		).toBeUndefined();
 	});
 });

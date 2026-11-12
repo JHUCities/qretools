@@ -73,6 +73,8 @@ export type LintCode =
 	| "unknown-variant"
 	/** Bank-level: `required_in` names a folder no saved question is in. */
 	| "unknown-folder"
+	/** Bank-level: `access` lists a level no question names. */
+	| "unused-level"
 	/** Bank-level: another question has the same name, so the same DDI identity. */
 	| "duplicate-name";
 

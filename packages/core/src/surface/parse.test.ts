@@ -390,12 +390,21 @@ describe("access", () => {
 	const codes = (line: string, e = env) =>
 		read(line, e).findings.map((f) => [f.severity, f.code, f.path]);
 
-	it("holds a level above the first; the first, or no line, is open", () => {
+	it("holds the level written, the first included", () => {
 		expect(read("access: restricted\n").draft.access).toBe("restricted");
 		expect(read("access: secure\n").draft.access).toBe("secure");
-		expect(read("access: public\n").draft.access).toBeUndefined();
-		expect(read("").draft.access).toBeUndefined();
+		expect(read("access: public\n").draft.access).toBe("public");
 		expect(codes("access: restricted\n")).toEqual([]);
+	});
+
+	it("needs a level once the workspace lists levels, held at the last until it has one", () => {
+		const r = read("");
+		expect(r.draft.access).toBe("secure");
+		expect(codes("")).toEqual([["hole", "hole", "access"]]);
+		expect(r.findings[0]?.hint).toContain("held at `secure`");
+		// No levels in the workspace: nothing to name.
+		expect(read("", EMPTY_ENV).findings).toEqual([]);
+		expect(read("", EMPTY_ENV).draft.access).toBeUndefined();
 	});
 
 	it("holds a question at the last level while its level can't be read", () => {
@@ -429,12 +438,15 @@ describe("access", () => {
 		]);
 		expect(r.findings[0]?.message).toContain("(`Public` isn't a level's name)");
 		expect(r.draft.access).toBe("secure");
-		expect(read("", broken).findings).toEqual([]);
+		expect(codes("", broken)).toEqual([
+			["error", "access-unreadable", "access"],
+		]);
 	});
 
 	it("takes a typo in the field's name as an unknown field", () => {
 		expect(codes("acess: restricted\n")).toEqual([
 			["error", "unknown-key", "acess"],
+			["hole", "hole", "access"],
 		]);
 	});
 });

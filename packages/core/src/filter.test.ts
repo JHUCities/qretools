@@ -1,32 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { documentOf } from "./ddi/document.ts";
+import {
+	type DdiDocument,
+	documentOf,
+	type JsonObject,
+} from "./ddi/document.ts";
 import { ddiIndexOf } from "./ddi/read.ts";
 import { bankOf, questionItems } from "./evaluate.ts";
-import { aboveLevel, accessLevelsOf, filterAnswers } from "./filter.ts";
+import { aboveLevel, accessPoliciesOf, filterAnswers } from "./filter.ts";
 import { instrumentOf } from "./instrument/instrument.ts";
 import { type Answer, answersCsv, answersOf } from "./responses.ts";
+import { remoteScope } from "./workspace.ts";
 
 const q = (name: string, rest = "") =>
 	`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
 const LEVELS = "access: [public, restricted, secret]\n";
-const files = (workspace: string) => ({
+const files = (workspace: string, open = false) => ({
 	"workspace.yaml": `agency: org.bank\n${workspace}`,
-	"questions/a/tenure.yaml": q("tenure"),
-	"questions/a/zip.yaml": q("zip", "access: restricted\n"),
-	"questions/a/ssn.yaml": q("ssn", "access: secret\n"),
+	"questions/a/tenure.yaml": q("tenure", open ? "" : "access: public\n"),
+	"questions/a/zip.yaml": q("zip", open ? "" : "access: restricted\n"),
+	"questions/a/ssn.yaml": q("ssn", open ? "" : "access: secret\n"),
 });
 
-/** A bank's DDI as `export` writes it, read back as any program reads DDI. */
-const indexOf = (f: Record<string, string>) => {
+/** A bank's DDI as `export` writes it. */
+const docOf = (f: Record<string, string>): DdiDocument => {
 	const bank = bankOf(f);
-	const doc = documentOf(
+	return documentOf(
 		Object.entries(bank.questions).flatMap(([path, ev]) =>
 			questionItems(ev.draft, bank, path),
 		),
 	);
-	return { doc, index: ddiIndexOf(doc) };
 };
-const { doc, index } = indexOf(files(LEVELS));
+const doc = docOf(files(LEVELS));
+const index = ddiIndexOf(doc);
+const POLICY = "urn:ddi:org.bank:access-public-restricted-secret.codes:1";
 const v = (name: string) => `urn:ddi:org.bank:variable-${name}:1`;
 const answer = (respondent: string, name: string, value: string): Answer => ({
 	respondent,
@@ -40,56 +46,67 @@ const ANSWERS = [
 	answer("r2", "tenure", "rent"),
 ];
 
-describe("accessLevelsOf", () => {
-	it("reads the levels in order from the code list a restricted question publishes", () => {
-		expect(accessLevelsOf(index)).toEqual({
+/** The document with one variable's embargo changed. */
+const withEmbargo = (name: string, change: (e: JsonObject) => JsonObject) => {
+	const key = `org.bank:variable-${name}:1`;
+	const variable = doc.Variable?.[key] ?? {};
+	return ddiIndexOf({
+		...doc,
+		Variable: {
+			...doc.Variable,
+			[key]: {
+				...variable,
+				EmbargoReference: change(variable.EmbargoReference as JsonObject),
+			},
+		},
+	});
+};
+
+describe("accessPoliciesOf", () => {
+	it("reads each policy's levels in order, with how many variables stand at each", () => {
+		expect(accessPoliciesOf(index)).toEqual({
 			ok: true,
-			value: ["public", "restricted", "secret"],
+			value: {
+				policies: [
+					{
+						urn: POLICY,
+						levels: ["public", "restricted", "secret"],
+						counts: [1, 1, 1],
+					},
+				],
+				untraced: [],
+			},
 		});
 	});
 
-	it("finds no levels in a DDI with no embargo", () => {
-		expect(accessLevelsOf(indexOf({ ...files(""), ...open }).index)).toEqual({
+	it("finds no policy in a DDI from a bank with no levels", () => {
+		expect(accessPoliciesOf(ddiIndexOf(docOf(files("", true))))).toEqual({
 			ok: true,
-			value: [],
+			value: { policies: [], untraced: [] },
 		});
 	});
 
-	it("refuses an embargo with no list, and two lists that differ", () => {
-		const { CodeList, Category, ...rest } = doc;
-		expect(accessLevelsOf(ddiIndexOf(rest)).ok).toBe(false);
-		// Another bank's list: the same levels, ranked the other way round.
-		const list = Object.values(doc.CodeList ?? {}).find(
-			(l) => l.ID === "access-levels.codes",
-		);
-		const codes = (list?.Code ?? []) as readonly Record<string, unknown>[];
-		const both = ddiIndexOf({
+	it("refuses a policy whose list can't be read", () => {
+		const list =
+			doc.CodeList?.["org.bank:access-public-restricted-secret.codes:1"];
+		const broken = ddiIndexOf({
 			...doc,
 			CodeList: {
-				...doc.CodeList,
-				"org.other:access-levels.codes:1": {
-					URN: "urn:ddi:org.other:access-levels.codes:1",
-					Code: codes.map((c, i) => ({
+				[String(list?.ID)]: {
+					...list,
+					Code: ((list?.Code ?? []) as JsonObject[]).map((c) => ({
 						...c,
-						URN: `urn:ddi:org.other:access-levels.code-${i}:1`,
-						Value: { StringValue: String(codes.length - i) },
+						Value: { StringValue: "1" },
 					})),
 				},
 			},
 		});
-		expect(accessLevelsOf(ddiIndexOf({ ...doc })).ok).toBe(true);
-		expect(accessLevelsOf(both)).toMatchObject({
+		expect(accessPoliciesOf(broken)).toMatchObject({
 			ok: false,
 			error: { kind: "unreadable-levels" },
 		});
 	});
 });
-
-/** The bank with every question at the most open level. */
-const open = {
-	"questions/a/zip.yaml": q("zip"),
-	"questions/a/ssn.yaml": q("ssn"),
-};
 
 describe("filterAnswers", () => {
 	it("keeps the level and every more open one, and names each variable removed, never a value", () => {
@@ -111,33 +128,61 @@ describe("filterAnswers", () => {
 		expect(all.ok && all.value).toEqual({ kept: ANSWERS, removed: [] });
 	});
 
-	it("filters an instrument's answers by the levels its bank publishes", () => {
-		const { ddi } = instrumentOf(
-			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n  - ask: b.zip\n",
-			{ banks: { b: bankOf(files(LEVELS)) }, agency: "org.example" },
-		);
-		const t = (name: string) =>
-			`urn:ddi:org.example:instrument-t.var-${name}:1`;
-		const r = filterAnswers(
-			ddiIndexOf(ddi),
-			[
-				{ respondent: "r", variable: t("tenure"), value: "1" },
-				{ respondent: "r", variable: t("zip"), value: "2" },
-			],
-			"public",
-		);
-		expect(r.ok && r.value.removed.map((x) => x.urn)).toEqual([t("zip")]);
-	});
-
-	it("refuses a level the DDI doesn't list, and answers to a variable it doesn't have", () => {
-		expect(filterAnswers(index, ANSWERS, "Public")).toEqual({
-			ok: false,
-			error: {
-				kind: "unknown-level",
-				level: "Public",
-				levels: ["public", "restricted", "secret"],
+	it("reads an imported question's level against its home bank's policy, never the instrument's", () => {
+		// Workspace A (the instrument's) lists other levels than bank B, read at its tag.
+		const a = bankOf({
+			"workspace.yaml": "agency: org.a\naccess: [public, secret]\n",
+			"questions/a/mood.yaml": q("mood", "access: secret\n"),
+		});
+		const b = remoteScope("acme/b@v1", {
+			kind: "files",
+			files: {
+				"workspace.yaml": "agency: org.bank\naccess: [public, restricted]\n",
+				"questions/a/zip.yaml": q("zip", "access: restricted\n"),
+				"questions/a/tenure.yaml": q("tenure", "access: public\n"),
 			},
 		});
+		const { ddi } = instrumentOf(
+			"name: t\nuses:\n  a: here\n  b: acme/b@v1\nflow:\n  - ask: b.zip\n  - ask: b.tenure\n  - ask: a.mood\n",
+			{ banks: { a, b }, agency: "org.a" },
+		);
+		const t = (name: string) => `urn:ddi:org.a:instrument-t.var-${name}:1`;
+		const embargo = (name: string) =>
+			JSON.stringify(ddi.Variable?.[`org.a:instrument-t.var-${name}:1`]);
+		expect(embargo("zip")).toContain(
+			"urn:ddi:org.bank:access-public-restricted.codes:1",
+		);
+		expect(embargo("mood")).toContain(
+			"urn:ddi:org.a:access-public-secret.codes:1",
+		);
+		const answers = ["zip", "tenure", "mood"].map(
+			(n): Answer => ({ respondent: "r", variable: t(n), value: "1" }),
+		);
+		const r = filterAnswers(ddiIndexOf(ddi), answers, "public");
+		expect(r.ok && r.value.removed).toEqual([
+			{ urn: t("mood"), name: "mood", level: "secret" },
+			{ urn: t("zip"), name: "zip", level: "restricted" },
+		]);
+		// `restricted` is B's alone: A's policy doesn't list it, so the set is refused.
+		expect(filterAnswers(ddiIndexOf(ddi), answers, "restricted")).toMatchObject(
+			{
+				ok: false,
+				error: {
+					kind: "unknown-level",
+					policies: [{ urn: "urn:ddi:org.a:access-public-secret.codes:1" }],
+				},
+			},
+		);
+	});
+
+	it("refuses a level a policy doesn't list, a DDI with no policy, and answers to a variable it doesn't have", () => {
+		expect(filterAnswers(index, ANSWERS, "Public")).toMatchObject({
+			ok: false,
+			error: { kind: "unknown-level", level: "Public" },
+		});
+		expect(
+			filterAnswers(ddiIndexOf(docOf(files("", true))), ANSWERS, "public"),
+		).toEqual({ ok: false, error: { kind: "no-levels" } });
 		expect(
 			filterAnswers(index, [...ANSWERS, answer("r1", "gone", "x")], "secret"),
 		).toEqual({
@@ -146,44 +191,44 @@ describe("filterAnswers", () => {
 		});
 	});
 
-	it("refuses an embargo whose level the list doesn't name", () => {
-		const zip = `org.bank:variable-zip:1`;
-		const odd = ddiIndexOf({
-			...doc,
-			Variable: {
-				...doc.Variable,
-				[zip]: {
-					...doc.Variable?.[zip],
-					EmbargoReference: {
-						URN: "urn:ddi:org.bank:variable-zip.embargo:1",
-						EmbargoName: [
+	it("refuses the whole set when a variable's level can't be traced to its policy", () => {
+		const untraced = (i: ReturnType<typeof ddiIndexOf>) =>
+			expect(filterAnswers(i, ANSWERS, "secret")).toEqual({
+				ok: false,
+				error: { kind: "untraced", urns: [v("zip")] },
+			});
+		// No embargo, while the DDI holds a policy.
+		untraced(withEmbargo("zip", () => undefined as unknown as JsonObject));
+		// No link to a policy, or one to a list that isn't there.
+		untraced(withEmbargo("zip", ({ UserAttributePair, ...e }) => e));
+		untraced(
+			withEmbargo("zip", (e) => ({
+				...e,
+				UserAttributePair: [
+					{
+						AttributeKey: { StringValue: "access-policy" },
+						AttributeValue: {
+							StringValue: "urn:ddi:org.bank:access-x.codes:1",
+						},
+					},
+				],
+			})),
+		);
+		// A level its policy doesn't list.
+		untraced(
+			withEmbargo("zip", (e) => ({
+				...e,
+				EmbargoName: [
+					{
+						String: [
 							{
-								String: [
-									{
-										MultilingualStringValue: {
-											LanguageTag: "en",
-											Value: "elsewhere",
-										},
-									},
-								],
+								MultilingualStringValue: { LanguageTag: "en", Value: "other" },
 							},
 						],
 					},
-				},
-			},
-		});
-		expect(filterAnswers(odd, ANSWERS, "secret")).toEqual({
-			ok: false,
-			error: { kind: "unlisted-level", urns: [v("zip")] },
-		});
-	});
-
-	it("passes every answer through a DDI that defines no levels", () => {
-		const none = indexOf({ ...files(""), ...open }).index;
-		expect(filterAnswers(none, ANSWERS, "anything")).toEqual({
-			ok: true,
-			value: { kept: ANSWERS, removed: [] },
-		});
+				],
+			})),
+		);
 	});
 });
 

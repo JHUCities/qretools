@@ -74,11 +74,19 @@ export const NOT_TICKED = "not selected";
 export const SELECT_ALL_ID = "select-all";
 
 /**
- * The bank's access levels as a code list: each level a category, its code its rank from
- * 1, the most open. An embargo names its level but not where the level stands, so a
- * reader of the DDI alone (`filterAnswers`) takes the order from here.
+ * A bank's access policy, its levels in order, as a code list: each level a category, its
+ * code its rank from 1, the most open. Its ID spells the levels (`access-public-restricted`;
+ * a level's name has no hyphen), so two different policies never share an identity and
+ * one policy is one item, at version 1, whichever bank publishes it. Every embargo names
+ * the policy its level belongs to (`ACCESS_POLICY_KEY`), so a reader of the DDI alone
+ * (`filterAnswers`) resolves a level against its own bank's order.
  */
-export const ACCESS_LEVELS_ID = "access-levels";
+export const ACCESS_POLICY_PREFIX = "access-";
+export const accessPolicyId = (levels: readonly string[]): string =>
+	`${ACCESS_POLICY_PREFIX}${levels.join("-")}`;
+/** The embargo's UserAttributePair key whose value is its policy's code list URN. */
+export const ACCESS_POLICY_KEY = "access-policy";
+const ACCESS_POLICY_NAME = "access-levels";
 
 /**
  * How a bank's named shared file is published: its items' ID, or the base its list's
@@ -113,8 +121,6 @@ export function sharedOf(
 	const base = list ? id.slice(0, -".codes".length) : id;
 	if (base === MISSING_ID) return { kind: "missing", name: "missing" };
 	if (base === SELECT_ALL_ID) return { kind: "select_all", name: "select_all" };
-	if (base === ACCESS_LEVELS_ID)
-		return { kind: "workspace", name: "workspace" };
 	for (const [kind, prefix] of Object.entries(SHARED_PREFIX) as [
 		keyof typeof SHARED_PREFIX,
 		string,
@@ -293,6 +299,19 @@ export function elaborateItems(
 		missing.length > 0 && specs.variables.length > 0
 			? missingValueItems(ctx, missing)
 			: undefined;
+	// The bank's policy, beside every variable once the bank lists levels (`Draft.access`).
+	const policy =
+		draft.access !== undefined &&
+		specs.variables.length > 0 &&
+		levels.includes(draft.access)
+			? codeListItems(
+					ctx,
+					UNVERSIONED,
+					accessPolicyId(levels),
+					levels.map((label, i) => ({ code: String(i + 1), label })),
+					{ name: ACCESS_POLICY_NAME },
+				)
+			: undefined;
 	const variables = specs.variables.map((v) =>
 		variableItem(v, ctx, {
 			question,
@@ -300,20 +319,16 @@ export function elaborateItems(
 			universe,
 			concept,
 			missing: missingItems?.representation,
-			access: draft.access,
+			access:
+				policy === undefined || draft.access === undefined
+					? undefined
+					: {
+							level: draft.access,
+							open: draft.access === levels[0],
+							policy: policy.codeList,
+						},
 		}),
 	);
-	// Only beside an embargo: a DDI without one has nothing to filter.
-	const accessLevels =
-		draft.access !== undefined && variables.length > 0 && levels.length > 0
-			? codeListItems(
-					ctx,
-					ctx.shared("workspace", "workspace"),
-					ACCESS_LEVELS_ID,
-					levels.map((label, i) => ({ code: String(i + 1), label })),
-					{ principal: true, name: ACCESS_LEVELS_ID },
-				)
-			: undefined;
 
 	return [
 		question,
@@ -324,8 +339,8 @@ export function elaborateItems(
 		instruction,
 		universe,
 		...(missingItems?.items ?? []),
-		accessLevels?.codeList,
-		...(accessLevels?.categories ?? []),
+		policy?.codeList,
+		...(policy?.categories ?? []),
 	].filter((it) => it !== undefined);
 }
 
@@ -664,8 +679,8 @@ function variableItem(
 		readonly universe: Item | undefined;
 		readonly concept: Item | undefined;
 		readonly missing: Item | undefined;
-		/** The access level above the most open one, if the question has one. */
-		readonly access: string | undefined;
+		/** The question's access level and its bank's policy, when the bank lists levels. */
+		readonly access: Access | undefined;
 	},
 ): Item {
 	const id = `variable-${v.name}`;
@@ -685,22 +700,42 @@ function variableItem(
 				ValueRepresentation: v.value,
 				MissingValuesReference: maybe(refs.missing, ref),
 			}),
-			EmbargoReference: maybe(refs.access, (level) =>
-				embargo(identity(ctx.agency, `${id}.embargo`, ctx.own.number), level),
+			EmbargoReference: maybe(refs.access, (access) =>
+				embargo(identity(ctx.agency, `${id}.embargo`, ctx.own.number), access),
 			),
 		}),
 	);
 }
 
+/** A question's access level, whether it's its policy's most open, and the policy's list. */
+interface Access {
+	readonly level: string;
+	readonly open: boolean;
+	readonly policy: Item;
+}
+
 /**
  * A variable's access level as DDI says it: an embargo named by the level, with no end
- * date. The 4.0 schema has the embargo inline on the Variable, so it has an identity of
- * its own, hung off the variable's.
+ * date, naming its bank's policy by URN (a UserAttributePair: the schema gives an
+ * Embargo no reference to a code list). The most open level is an embargo too, said to
+ * restrict nothing, so a variable without one is told apart from one open under a
+ * policy. The 4.0 schema has the embargo inline on the Variable, so it has an identity
+ * of its own, hung off the variable's.
  */
-export const embargo = (id: Identity, level: string): JsonObject => ({
-	...id,
-	EmbargoName: [intl(level)],
-});
+const embargo = (id: Identity, access: Access): JsonObject =>
+	obj({
+		...id,
+		UserAttributePair: [
+			{
+				AttributeKey: codeValue(ACCESS_POLICY_KEY),
+				AttributeValue: codeValue(access.policy.identity.URN),
+			},
+		],
+		EmbargoName: [intl(access.level)],
+		Description: access.open
+			? structured("The most open access level: it restricts nothing.")
+			: undefined,
+	});
 
 function numberRange(
 	min: number | undefined,

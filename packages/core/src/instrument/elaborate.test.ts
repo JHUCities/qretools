@@ -814,8 +814,8 @@ describe("an asked question's access level", () => {
 			],
 		]);
 		expect(exportRefusal(zip, [])?.kind).toBe("access");
-		// Asking only a question with no level, the bank's list doesn't matter.
-		expect(exportRefusal(of("why"), [])).toBeUndefined();
+		// Every question of a bank that lists levels has one, so asking any stops it.
+		expect(exportRefusal(of("why"), [])?.kind).toBe("access");
 		// A bank in another repository, read at its tag, says it the same way.
 		const remote = remoteScope("acme/bank@v1", {
 			kind: "files",
@@ -829,6 +829,21 @@ describe("an asked question's access level", () => {
 			{ banks: { bas: remote }, unresolved: {}, agency: "org.example" },
 		);
 		expect(exportRefusal(far, [])?.kind).toBe("access");
+		// An empty list leaves no valid level: a question with no line fails closed too.
+		const empty = bankOf({
+			"workspace.yaml": "agency: org.bank\naccess:\n",
+			"questions/a/why.yaml": q("why", "open: {}\n"),
+		});
+		expect(
+			exportRefusal(
+				instrumentOf("name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.why\n", {
+					banks: { bas: empty },
+					unresolved: {},
+					agency: "org.example",
+				}),
+				[],
+			)?.kind,
+		).toBe("access");
 	});
 
 	it("goes with each variable the instrument records, under the instrument's identity", () => {
@@ -839,7 +854,7 @@ describe("an asked question's access level", () => {
 				"modes",
 				'select: many\nresponses:\n  "b": Bus\n  "w": Walk\naccess: restricted\n',
 			),
-			"questions/a/why.yaml": q("why", "open: {}\n"),
+			"questions/a/why.yaml": q("why", "open: {}\naccess: public\n"),
 		});
 		const parsed = parseInstrument(
 			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.zip\n  - ask: bas.modes\n  - ask: bas.why\n",
@@ -864,7 +879,8 @@ describe("an asked question's access level", () => {
 				"urn:ddi:org.example:instrument-x.embargo-modes_b:4",
 			"instrument-x.var-modes_w":
 				"urn:ddi:org.example:instrument-x.embargo-modes_w:4",
-			"instrument-x.var-why": undefined,
+			// The most open level is an embargo too: open under the bank's policy.
+			"instrument-x.var-why": "urn:ddi:org.example:instrument-x.embargo-why:4",
 		});
 	});
 });
