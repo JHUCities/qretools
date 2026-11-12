@@ -852,7 +852,7 @@ describe("the command under real Node", () => {
 		// The command runs the packages it uses from their source too.
 		for (const root of [
 			"../../core/src",
-			"../../qsf/src",
+			"../../qualtrics/src",
 			"../../codebook/src",
 			"../../paths/src",
 			".",

@@ -74,7 +74,7 @@ Three to look at:
   and turns them into DDI. Every other package uses it.
 - **The codebook package** (`packages/codebook/`). Turns a DDI-Lifecycle 4.0 document into an
   HTML codebook. It also works as a `<ddi-codebook>` element on any web page.
-- **The Qualtrics package** (`packages/qsf/`). Turns an instrument into a Qualtrics survey.
+- **The Qualtrics package** (`packages/qualtrics/`). Turns an instrument into a Qualtrics survey.
   Use "Download QSF" in the app, or `qretools instrument export --qsf`.
 - **The paths package** (`packages/paths/`). Reports an instrument's paths from its DDI: how
   many ways there are through its routing, how many questions each asks, and which

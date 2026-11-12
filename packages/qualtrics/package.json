@@ -1,5 +1,5 @@
 {
-	"name": "@qretools/qsf",
+	"name": "@qretools/qualtrics",
 	"version": "2.0.0-alpha.0",
 	"private": true,
 	"type": "module",
