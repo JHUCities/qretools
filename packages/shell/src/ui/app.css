@@ -394,6 +394,10 @@ code,
 	margin: 0;
 	padding-left: var(--base-size-20);
 }
+.used-by-note {
+	margin: 0;
+	font-size: var(--text-body-size-small);
+}
 /* Signed out: one narrow column, as github.com's sign-in page. */
 .signin {
 	overflow: auto;

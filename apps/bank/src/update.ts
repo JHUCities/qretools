@@ -1668,7 +1668,7 @@ const nameOf = (model: Model, f: BankEntry): string =>
  * input's shared scale (`refs` doesn't hold them).
  */
 export function instrumentDependencies(
-	model: Pick<Model, "local" | "remote" | "remoteBanks">,
+	model: Pick<Model, "local" | "remote" | "remoteBanks" | "settings">,
 	read: InstrumentIn,
 	/** The names a question writes: the view passes its kept evaluations', `update` reads afresh. */
 	mentionsOf: (q: Question) => readonly Mention[],
@@ -1723,7 +1723,7 @@ export function instrumentDependencies(
  * changes, or the details can't be written into (their own findings say why).
  */
 export function lockedDetails(
-	model: Pick<Model, "local" | "remoteBanks">,
+	model: Pick<Model, "local" | "remoteBanks" | "settings">,
 	read: InstrumentIn,
 ): { readonly source: string; readonly moved: readonly TagMove[] } | undefined {
 	const source =
@@ -1787,20 +1787,33 @@ export const instrumentAlsoSaves = (
  * Where a name in a bank of another repository is, on GitHub at the commit it was read
  * at, so the page shows exactly the text the app does, whatever the tag names later;
  * at the tag the instrument names when no commit is known (a read without one).
- * Undefined for a name in a bank of this workspace.
+ * Undefined for a name in a bank of this workspace, written `../` or as this
+ * workspace's own address (colocated: it opens here, as the working copy).
  */
 export function externalUrl(
 	read: InstrumentIn,
 	ref: { readonly alias: string; readonly path: string },
-	remoteBanks: Model["remoteBanks"],
+	model: Pick<Model, "local" | "remoteBanks" | "settings">,
 ): string | undefined {
 	// A code is followed into its list as a name is into its file.
-	if (read.uses[ref.alias]?.kind !== "remote") return undefined;
-	const written = read.instrument.draft.uses.find(
-		(u) => u.alias === ref.alias,
-	)?.address;
-	const address = written === undefined ? undefined : addressOf(written);
-	if (address?.kind !== "remote") return undefined;
+	const address = remoteAddress(read, ref.alias);
+	if (address === undefined) return undefined;
+	// Colocated: open the working copy here, or GitHub if nothing here holds the path
+	// (moved or deleted since the tag), so a green name always leads somewhere.
+	if (
+		colocated(read, ref.alias, model.settings) !== undefined &&
+		bankFileClaiming(model, ref.path) !== undefined
+	)
+		return undefined;
+	return taggedUrl(address, ref.path, model.remoteBanks);
+}
+
+/** A file of a bank in a repository on GitHub, as the app read it: at the read's commit, else at the tag. */
+export function taggedUrl(
+	address: RemoteAddress,
+	path: Path,
+	remoteBanks: Model["remoteBanks"],
+): string {
 	// The read, never the lock: a moved tag's lock names text the app isn't showing.
 	const bank = remoteBanks[address.key];
 	const commit = bank?.kind === "files" ? bank.at?.commit : undefined;
@@ -1808,13 +1821,14 @@ export function externalUrl(
 		address,
 		commit ?? address.ref,
 		// In that repository, under the folder its workspace is in.
-		address.path === "" ? ref.path : `${address.path}/${ref.path}`,
+		address.path === "" ? path : `${address.path}/${path}`,
 	);
 }
 
 /**
- * Where a bank file an instrument names leads: GitHub, for a bank in another repository;
- * else the working file of this workspace that holds it; or nowhere (a bank that didn't
+ * Where a bank file an instrument names leads: GitHub, for a bank in another repository
+ * (or this one's address, when no working file holds the path); else the working file
+ * of this workspace that holds it; or nowhere (a bank that didn't
  * load). One answer for Cmd-click, F12 and the outline's links, so they can't disagree.
  */
 export type Follow =
@@ -1822,16 +1836,47 @@ export type Follow =
 	| { readonly kind: "file"; readonly file: BankEntry };
 
 export function followOf(
-	model: Pick<Model, "local" | "remoteBanks">,
+	model: Pick<Model, "local" | "remoteBanks" | "settings">,
 	read: InstrumentIn,
 	ref: { readonly alias: string; readonly path: string },
 ): Follow | undefined {
-	const url = externalUrl(read, ref, model.remoteBanks);
+	const url = externalUrl(read, ref, model);
 	if (url !== undefined) return { kind: "external", url };
-	const use = read.uses[ref.alias];
-	const file =
-		use?.kind === "local" ? bankFileClaiming(model, ref.path) : undefined;
+	// A colocated bank opens the working copy, not the version its address pins: the
+	// question's "used by" says when the two differ.
+	const here =
+		read.uses[ref.alias]?.kind === "local" ||
+		colocated(read, ref.alias, model.settings) !== undefined;
+	const file = here ? bankFileClaiming(model, ref.path) : undefined;
 	return file === undefined ? undefined : { kind: "file", file };
+}
+
+/**
+ * The address of a `uses` entry that names this workspace's own repository and folder
+ * at a version (colocated), rather than writing `../`.
+ */
+export function colocated(
+	read: InstrumentIn,
+	alias: string,
+	settings: Model["settings"],
+): RemoteAddress | undefined {
+	const address = remoteAddress(read, alias);
+	return address !== undefined && sameBank(address, settings)
+		? address
+		: undefined;
+}
+
+/** The repository address an instrument's `uses` entry names, when it names one. */
+function remoteAddress(
+	read: InstrumentIn,
+	alias: string,
+): RemoteAddress | undefined {
+	if (read.uses[alias]?.kind !== "remote") return undefined;
+	const written = read.instrument.draft.uses.find(
+		(u) => u.alias === alias,
+	)?.address;
+	const address = written === undefined ? undefined : addressOf(written);
+	return address?.kind === "remote" ? address : undefined;
 }
 
 /** The working bank file that claims a workspace path, if any. */

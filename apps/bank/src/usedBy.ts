@@ -14,13 +14,24 @@ import {
 	pathAt,
 } from "@qretools/core/editor";
 import type { Evaluations } from "./evaluations.js";
-import type { Id, InstrumentEntry, Path } from "./model.js";
+import type { Id, InstrumentEntry, Model, Path } from "./model.js";
+import { colocated, taggedUrl } from "./update.js";
 
 export interface InstrumentUse {
 	readonly id: Id;
 	readonly name: string;
 	/** Each step that names the file, once, in document order. */
 	readonly places: readonly Place[];
+	/**
+	 * When the instrument names this workspace by its own address at a version
+	 * (colocated) rather than `../`: what it reads, which may differ from the working copy.
+	 */
+	readonly tagged?: {
+		readonly ref: string;
+		/** The file's text at that version; absent until read, or when it isn't there. */
+		readonly text?: string;
+		readonly url: string;
+	};
 }
 
 /** A step of an instrument that names a file: where, and how its outline says it. */
@@ -55,7 +66,8 @@ const outside = (at: string): readonly OutlinePart[] =>
 				]
 			: [{ kind: "text", text: at }];
 
-type Slices = Parameters<Evaluations["instrument"]>[0];
+type Slices = Parameters<Evaluations["instrument"]>[0] &
+	Pick<Model, "settings">;
 
 /** Every bank file this workspace's instruments name, by its path, with the instruments naming it (by name). */
 export type InstrumentUses = ReadonlyMap<Path, readonly InstrumentUse[]>;
@@ -78,14 +90,26 @@ export function instrumentUses(
 		const read = evaluations.instrument(model, e);
 		const items = flat(outlineOf(read.instrument.draft));
 		const byPath = new Map<Path, Range[]>();
+		const tagged = new Map<Path, NonNullable<InstrumentUse["tagged"]>>();
 		for (const r of read.instrument.refs) {
 			if (r.kind !== "bank") continue;
-			const use = read.uses[r.alias];
-			if (use?.kind !== "local") continue;
 			const { path } = r;
+			const address = colocated(read, r.alias, model.settings);
+			if (address !== undefined && !tagged.has(path)) {
+				const bank = model.remoteBanks[address.key];
+				const text = bank?.kind === "files" ? bank.files[path] : undefined;
+				tagged.set(path, {
+					ref: address.ref,
+					...(text !== undefined && { text }),
+					url: taggedUrl(address, path, model.remoteBanks),
+				});
+			}
+			if (address === undefined && read.uses[r.alias]?.kind !== "local")
+				continue;
 			byPath.set(path, [...(byPath.get(path) ?? []), r.range]);
 		}
 		for (const [path, ranges] of byPath) {
+			const pinned = tagged.get(path);
 			// One place per step: a name read twice in one condition is one place. What is
 			// outside the flow (the instrument's own universe, an input) says where it is.
 			const places = new Map<string, Place>();
@@ -101,7 +125,12 @@ export function instrumentUses(
 			}
 			out.set(path, [
 				...(out.get(path) ?? []),
-				{ id: e.id, name: e.name, places: [...places.values()] },
+				{
+					id: e.id,
+					name: e.name,
+					places: [...places.values()],
+					...(pinned !== undefined && { tagged: pinned }),
+				},
 			]);
 		}
 	}

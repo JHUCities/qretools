@@ -1146,6 +1146,66 @@ describe("a name from a bank in another repository", () => {
 			},
 		]);
 	});
+
+	it("opens here when the address is this workspace's own (colocated)", () => {
+		const [m, cmds] = follow("O/R@v1", "o/r@v1");
+		expect(cmds.some((c) => c.kind === "openExternal")).toBe(false);
+		expect(m.screen).toEqual({
+			kind: "editing",
+			id: at(m, "questions/household/consent.yaml").id,
+		});
+	});
+
+	it("opens on GitHub when this workspace's own address names another folder", () => {
+		const [, cmds] = follow("o/r/sub@v1", "o/r/sub@v1");
+		expect(cmds.map((c) => c.kind)).toEqual(["openExternal"]);
+	});
+
+	it("opens on GitHub when nothing here holds the path any more", () => {
+		const [m] = follow("o/r@v1", "o/r@v1");
+		const q = at(m, "questions/household/consent.yaml");
+		const { [q.id]: _, ...questions } = m.local.questions;
+		const gone: Model = { ...m, local: { ...m.local, questions } };
+		const e = at(gone, "instruments/remote.yaml") as InstrumentEntry;
+		const [opened] = update(gone, { kind: "fileOpened", id: e.id });
+		const [, cmds] = update(opened, {
+			kind: "definitionRequested",
+			id: e.id,
+			offset: e.source.indexOf("bas.consent") + 3,
+		});
+		expect(cmds).toEqual([
+			{
+				kind: "openExternal",
+				url: "https://github.com/o/r/blob/v1/questions/household/consent.yaml",
+			},
+		]);
+	});
+
+	it("is listed as using the question, saying when its version differs", () => {
+		const [m] = follow("o/r@v1", "o/r@v1");
+		const q = at(m, "questions/household/consent.yaml");
+		const usesOf = (model: Model) =>
+			instrumentsUsing(
+				instrumentUses(model, createEvaluations()),
+				claimOf(q),
+			).find((u) => u.name === "remote")?.tagged;
+		const tagged = usesOf(m);
+		expect(tagged?.ref).toBe("v1");
+		expect(tagged?.text).toBe(q.source);
+		expect(tagged?.url).toBe(
+			"https://github.com/o/r/blob/v1/questions/household/consent.yaml",
+		);
+		const changed: Model = {
+			...m,
+			remoteBanks: {
+				"o/r@v1": {
+					kind: "files",
+					files: { ...hh(), [claimOf(q) ?? ""]: `${q.source}note: older\n` },
+				},
+			},
+		};
+		expect(usesOf(changed)?.text).toBe(`${q.source}note: older\n`);
+	});
 });
 
 describe("an instrument's pickers", () => {
