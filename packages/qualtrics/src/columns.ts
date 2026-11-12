@@ -16,14 +16,13 @@ export interface Column {
 	/** Its ImportId: `QIDn` (a choice), `QIDn_TEXT` (typed), or an embedded data field's name. */
 	readonly importId: string;
 	/**
-	 * A select-all option's column suffix, the ImportId's `choiceId`: the option's code as a
-	 * number (`010` is `10`), or its position from 1 when the code is letters (experiments 12
-	 * and 13).
+	 * A select-all option's column suffix, the ImportId's `choiceId`: the option's code as
+	 * Qualtrics writes it (`exportedCodes`).
 	 */
 	readonly choice?: string;
 	/**
-	 * A single-choice question's exported value for each code it reads, where some code isn't
-	 * written as itself: exported value to code. Only these values are read.
+	 * A single-choice question's exported value for each code it reads (`exportedCodes`),
+	 * where some code isn't written as itself: exported value to code. Only these are read.
 	 */
 	readonly values?: Readonly<Record<string, string>>;
 	/** A question Qualtrics loops: columns `1_<importId>` to `<rounds>_<importId>`. */
@@ -35,54 +34,33 @@ export interface Column {
 }
 
 /**
- * How Qualtrics writes a numeric code (a recode), or undefined where it isn't known. Only
- * forms experiment 13 measured in select-all column names: a whole number (leading zeros
- * dropped: `010` is `10`) and a decimal as written (`1.5`). Measured in Qualtrics,
- * 2026-11-12, in a single-choice answer's exported value too, for leading zeros only.
- * Numbers stop at 15 digits, where a float would print differently.
+ * How Qualtrics writes the code (the recode) of the option at `position` (from 1), both as a
+ * select-all option's column suffix and as a single-choice answer's exported value, or
+ * undefined where it writes nothing. Measured in Qualtrics, 2026-11-12, in CSV and JSON
+ * exports, and it is JavaScript's `parseFloat` exactly: a code that starts with a number is
+ * that number as it prints (`010` is `10`, `1.50` is `1.5`, `1e2` is `100`, `1,5` is `1`);
+ * any other code is its position, the choice key the QSF writer gives it. A code that
+ * reads as `Infinity` is written as nothing: the answer is lost.
  */
-const exported = (code: string): string | undefined =>
-	/^(0|-?[1-9]\d{0,14})$/.test(code)
-		? code
-		: /^0+[1-9]\d{0,14}$/.test(code)
-			? code.replace(/^0+/, "")
-			: /^[1-9]\d{0,13}\.\d{0,13}[1-9]$/.test(code)
-				? code
-				: undefined;
-
-/** Each one, or undefined where another is the same: Qualtrics can't tell them apart. */
-const unique = (
-	xs: readonly (string | undefined)[],
-): readonly (string | undefined)[] =>
-	xs.map((x) => (xs.filter((y) => y === x).length > 1 ? undefined : x));
+const exported = (code: string, position: number): string | undefined => {
+	const n = Number.parseFloat(code);
+	return Number.isNaN(n)
+		? String(position)
+		: Number.isFinite(n)
+			? String(n)
+			: undefined;
+};
 
 /**
- * Each select-all option's suffix, from its code and position, or undefined where Qualtrics'
- * name for it isn't known: as `exported`, and letters fall back to the position (the choice
- * key the QSF writer gives it). Two options with one suffix share one column in the
- * export, so neither is named.
+ * What Qualtrics writes for each option's code, from the codes in order (see `exported`),
+ * or undefined where it writes nothing, or the same as for another option: two options
+ * written the same can't be told apart, so neither is read.
  */
-export function choiceSuffixes(
+export function exportedCodes(
 	codes: readonly string[],
 ): readonly (string | undefined)[] {
-	return unique(
-		codes.map(
-			(code, i) =>
-				exported(code) ??
-				(/^[A-Za-z]+$/.test(code) ? String(i + 1) : undefined),
-		),
-	);
-}
-
-/**
- * What a single-choice question's export writes for each code, or undefined where it isn't
- * known: as `exported`. Letters weren't measured in a value, so they aren't known. Two codes
- * written the same can't be told apart, so neither is known.
- */
-export function choiceValues(
-	codes: readonly string[],
-): readonly (string | undefined)[] {
-	return unique(codes.map(exported));
+	const xs = codes.map((code, i) => exported(code, i + 1));
+	return xs.map((x) => (xs.filter((y) => y === x).length > 1 ? undefined : x));
 }
 
 /** The map, with what the survey's `qretools_*` fields carry, so a response can be matched to it. */
@@ -141,7 +119,7 @@ export function columnsOf(
 					const qid = ctx.qidOf(s.id);
 					const domain = s.question.domain;
 					if (domain.kind === "choice" && domain.many) {
-						const suffixes = choiceSuffixes(domain.choices.map((c) => c.code));
+						const suffixes = exportedCodes(domain.choices.map((c) => c.code));
 						domain.choices.forEach((c, i) => {
 							const choice = suffixes[i];
 							if (choice === undefined)
@@ -149,7 +127,7 @@ export function columnsOf(
 									"qsf-unmapped",
 									"warning",
 									s.id,
-									`The QSF column map can't tell which column records option \`${c.code}\` of \`${s.question.name}\`: Qualtrics' name for it isn't known for this code.`,
+									`The QSF column map can't tell which column records option \`${c.code}\` of \`${s.question.name}\`: Qualtrics gives it no name, or the same name as another option.`,
 								);
 							else
 								add(
@@ -162,14 +140,14 @@ export function columnsOf(
 						});
 					} else if (domain.kind === "choice") {
 						const codes = domain.choices.map((c) => c.code);
-						const exports = choiceValues(codes);
+						const exports = exportedCodes(codes);
 						const unknown = codes.filter((_, i) => exports[i] === undefined);
 						if (unknown.length > 0)
 							ctx.note(
 								"qsf-unmapped",
 								"warning",
 								s.id,
-								`The QSF column map can't read option${unknown.length > 1 ? "s" : ""} ${unknown.map((c) => `\`${c}\``).join(", ")} of \`${s.question.name}\`: Qualtrics' value for ${unknown.length > 1 ? "each" : "it"} isn't known, or another option has the same one.`,
+								`The QSF column map can't read option${unknown.length > 1 ? "s" : ""} ${unknown.map((c) => `\`${c}\``).join(", ")} of \`${s.question.name}\`: Qualtrics writes no value for ${unknown.length > 1 ? "each" : "it"}, or the same value as for another option.`,
 							);
 						const values = Object.fromEntries(
 							codes.flatMap((c, i) => {

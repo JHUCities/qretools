@@ -38,7 +38,7 @@ const BANK = bankOf({
 		"tenure",
 		'responses:\n  "1": Own\n  "2": Rent\n',
 	),
-	// Codes Qualtrics names a column by in four ways (see `choiceSuffixes`).
+	// Codes Qualtrics names a column by in four ways (see `exportedCodes`).
 	"questions/a/modes.yaml": q(
 		"modes",
 		'select: many\nresponses:\n  "010": Bus\n  "-1": Walk\n  "1.5": Car\n  "b": Bike\n',
