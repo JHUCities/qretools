@@ -13,7 +13,7 @@ describe("the entry points", () => {
 		}).toMatchInlineSnapshot(`
 			{
 			  "core": [
-			    "ACCESS_LEVELS_ID",
+			    "ACCESS_POLICY_KEY",
 			    "AGENCY_PATTERN",
 			    "DDI_DEPTH",
 			    "DDI_FUNCTIONS",
@@ -45,7 +45,7 @@ describe("the entry points", () => {
 			    "WORKSPACE_DETAILS",
 			    "aboveLevel",
 			    "absentRoot",
-			    "accessLevelsOf",
+			    "accessPoliciesOf",
 			    "addressOf",
 			    "agencyWritten",
 			    "answersCsv",

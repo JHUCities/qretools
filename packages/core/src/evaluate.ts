@@ -24,6 +24,7 @@ import {
 	schemeFilesIn,
 	UNDECLARED_AGENCY,
 	unknownFolders,
+	unusedLevels,
 } from "./schemes.ts";
 import type { Draft } from "./surface/draft.ts";
 import { type Env, envAt } from "./surface/env.ts";
@@ -255,11 +256,21 @@ export function bankOf(
 	// The settings file is also told of the folders it names that aren't there, each in
 	// its place among the file's own findings (`fileFindings` orders them).
 	const folders = unknownFolders(env.requiredIn, Object.keys(questions));
+	// A level a question holds only because its own is missing or unreadable isn't named.
+	const named = new Set(
+		Object.values(questions).flatMap((q) =>
+			q.draft.access === undefined ||
+			q.findings.some((f) => f.path === "access")
+				? []
+				: [q.draft.access],
+		),
+	);
+	const levels = unusedLevels(env.access, named);
 	for (const [path, ev] of byPath(questions, schemes))
 		findings[path] = fileFindings(
 			path,
 			path === ROOT.workspace
-				? { ...ev, findings: [...ev.findings, ...folders] }
+				? { ...ev, findings: [...ev.findings, ...folders, ...levels] }
 				: ev,
 			scope.index,
 			label,

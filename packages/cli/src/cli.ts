@@ -17,7 +17,7 @@ import { parseArgs } from "node:util";
 import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
 	type Address,
-	accessLevelsOf,
+	accessPoliciesOf,
 	addressOf,
 	agencyWritten,
 	answersCsv,
@@ -138,10 +138,13 @@ const USAGE = `Usage:
                                     any translations of its values. Every row is read
   qretools filter <answers.csv> --ddi <file.json> --access <level> [-o file]
                                     Keep the answers (long CSV, as \`responses\` writes it) to
-                                    variables at that access level or a more open one, by the DDI's
-                                    levels; name each variable removed on stderr, never a value.
-                                    Refused, with nothing written, when a variable's level can't be told
-  qretools filter --ddi <file.json> List the DDI's access levels, most open first
+                                    variables at that access level or a more open one, each by the
+                                    access policy of its own workspace, as the DDI gives it; name each
+                                    variable removed on stderr, never a value. Refused, with nothing
+                                    written, when a variable's level can't be traced to its policy, or
+                                    the DDI has no levels
+  qretools filter --ddi <file.json> List each access policy in the DDI: its levels, most open first,
+                                    and how many variables stand at each
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -579,9 +582,10 @@ async function writeResponses(
 
 /**
  * Answers (long CSV, as `responses` writes them) filtered to an access level and every
- * more open one, by the DDI alone (`filterAnswers`); without a level, the DDI's levels,
- * one a line. Says which variables it removed, never a value. Refused, with nothing
- * written, whenever a level can't be told (`FilterRefusal`).
+ * more open one of each variable's own policy, by the DDI alone (`filterAnswers`);
+ * without a level, each policy the DDI holds, its URN then its levels, most open first,
+ * each with how many variables stand at it. Says which variables it removed, never a
+ * value. Refused, with nothing written, whenever a level can't be told (`FilterRefusal`).
  */
 async function writeFiltered(
 	file: string | undefined,
@@ -618,14 +622,25 @@ async function writeFiltered(
 		for (const l of lines) io.err(`${l} Nothing is written.\n`);
 		return PROBLEMS;
 	};
-	const levels = accessLevelsOf(index);
-	if (!levels.ok) return refuse(filterRefusal(levels.error, ddiFile, ddiFile));
-	if (levels.value.length === 0)
-		io.err(
-			`${ddiFile}: note: this DDI defines no access levels, so nothing is restricted. [filter-no-levels]\n`,
-		);
 	if (level === undefined) {
-		for (const l of levels.value) io.out(`${l}\n`);
+		const listed = accessPoliciesOf(index);
+		if (!listed.ok)
+			return refuse(filterRefusal(listed.error, ddiFile, ddiFile));
+		const { policies, untraced } = listed.value;
+		if (policies.length === 0)
+			io.err(
+				`${ddiFile}: note: this DDI defines no access levels. [filter-no-levels]\n`,
+			);
+		for (const p of policies) {
+			io.out(`${p.urn}\n`);
+			p.levels.forEach((l, i) => {
+				io.out(`  ${l} ${p.counts[i] ?? 0}\n`);
+			});
+		}
+		if (untraced.length > 0)
+			io.err(
+				`${ddiFile}: warning: ${untraced.length} variables have no access level that can be traced to a policy, so \`filter\` refuses their answers. [filter-untraced]\n`,
+			);
 		return OK;
 	}
 	const answers = answersOf(csv);
@@ -662,18 +677,23 @@ function filterRefusal(
 				`${ddiFile}: error: The DDI's access levels can't be read: ${r.reason}. [filter-levels]`,
 			];
 		case "unknown-level":
+			return r.policies.map(
+				(p) =>
+					`${ddiFile}: error: The access policy ${p.urn} has no level \`${r.level}\`. Its levels are ${named(p.levels)}, most open first. [filter-unknown-level]`,
+			);
+		case "no-levels":
 			return [
-				`${ddiFile}: error: The DDI has no access level \`${r.level}\`. Its levels are ${named(r.levels)}, most open first. [filter-unknown-level]`,
+				`${ddiFile}: error: This DDI defines no access levels, so \`--access\` means nothing here. [filter-no-levels]`,
 			];
 		case "unknown-variables":
 			return r.urns.map(
 				(u) =>
 					`${file}: error: The DDI has no variable \`${u}\`, so its access level isn't known. [filter-unknown-variable]`,
 			);
-		case "unlisted-level":
+		case "untraced":
 			return r.urns.map(
 				(u) =>
-					`${ddiFile}: error: The embargo of \`${u}\` names a level the DDI doesn't list. [filter-levels]`,
+					`${ddiFile}: error: The access level of \`${u}\` can't be traced to one access policy in the DDI. [filter-untraced]`,
 			);
 		case "leak":
 			return r.urns.map(

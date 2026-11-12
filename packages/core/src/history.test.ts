@@ -156,25 +156,23 @@ describe("a question's access level", () => {
 			),
 		)[Q]?.number;
 
-	it("moves a question that names a level when the levels change, and only then", () => {
+	it("moves every question when the levels change, and only then", () => {
 		expect(versionAt("q1")).toBe("2");
+		expect(versionAt("q2")).toBe("2");
 		expect(versionAt("q3")).toBe("2");
-		expect(versionAt("q2")).toBe("1");
 	});
 
-	it("versions workspace.yaml by its levels alone, with no blob, and not while it lists none", () => {
-		const at = (...ws: string[]) =>
-			versionsOf(
-				history(
-					ws.map((w, i) => [`d${i + 1}`, { "workspace.yaml": w }] as const),
-					{ ...texts, w0: "agency: a\n" },
-				),
-			)["workspace.yaml"];
-		expect(at("w1", "w2", "w3")).toEqual({ number: "2", date: "d3" });
-		expect(at("w1", "w2")).toEqual({ number: "1", date: "d1" });
-		expect(at("w0")).toBeUndefined();
-		// Levels taken away and put back: the count goes on, so no number names two lists.
-		expect(at("w1", "w0", "w3")).toEqual({ number: "2", date: "d3" });
-		expect(at("w1", "w0")).toBeUndefined();
+	it("moves nothing in a bank without levels when workspace.yaml changes", () => {
+		const v = versionsOf(
+			history(
+				[
+					["d1", { [Q]: "q2", "workspace.yaml": "w0" }],
+					["d2", { [Q]: "q2", "workspace.yaml": "w4" }],
+				],
+				{ ...texts, w0: "agency: a\n", w4: "agency: b\n" },
+			),
+		);
+		expect(v[Q]?.number).toBe("1");
+		expect(v["workspace.yaml"]).toBeUndefined();
 	});
 });

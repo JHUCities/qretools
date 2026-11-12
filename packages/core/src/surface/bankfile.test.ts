@@ -17,6 +17,7 @@ import {
 } from "./bankfile.ts";
 import { EMPTY_ENV, envAt } from "./env.ts";
 import { parseSurface } from "./parse.ts";
+import { questionJsonSchema } from "./schema.ts";
 
 const found = (source: string) =>
 	parseSettingsFile(source).findings.map((f) => [f.severity, f.code, f.path]);
@@ -561,5 +562,35 @@ describe("the access levels in the workspace's settings file", () => {
 				env,
 			).draft.access,
 		).toBe("restricted");
+	});
+
+	it("warns, on the settings, of a level no question names", () => {
+		const level = (line: string) =>
+			`name: a\ntext: A?\nintent: i\nopen: {}\n${line}`;
+		const bank = bankOf({
+			"workspace.yaml": "agency: x\naccess: [public, restricted, secure]\n",
+			"questions/a/a.yaml": level("access: public\n"),
+			// Held at `secure` only because its own level is missing: it names none.
+			"questions/a/b.yaml": level(""),
+		});
+		expect(
+			bank.findings["workspace.yaml"]?.map((f) => [f.severity, f.code, f.path]),
+		).toEqual([
+			["warning", "unused-level", "access.1"],
+			["warning", "unused-level", "access.2"],
+		]);
+		expect(
+			bank.findings["questions/a/b.yaml"]
+				?.filter((f) => f.severity === "hole")
+				.map((f) => f.path),
+		).toEqual(["access"]);
+	});
+
+	it("marks `access` required in the editor's schema once levels are listed", () => {
+		const required = (access: readonly string[]) =>
+			(questionJsonSchema({ ...EMPTY_ENV, access }) as { required?: string[] })
+				.required ?? [];
+		expect(required(["public", "restricted"])).toContain("access");
+		expect(required([])).not.toContain("access");
 	});
 });

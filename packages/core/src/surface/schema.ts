@@ -184,7 +184,7 @@ export const QuestionSchema = z
 			.string()
 			.optional()
 			.describe(
-				"Who may see the answers: one of the access levels in workspace.yaml. Leave out for the most open level.",
+				"Who may see the answers: one of the access levels in workspace.yaml. Required once workspace.yaml lists levels.",
 			),
 		legacy: z
 			.record(z.string(), z.unknown())
@@ -278,10 +278,18 @@ export function questionJsonSchema(
 		];
 	// The bank's levels as constants; with none, the field would only be a finding.
 	if (env.access.length === 0) delete props.access;
-	else if (props.access !== undefined)
+	else if (props.access !== undefined) {
 		props.access = withNames(props.access, env.access, (n) =>
 			n === env.access[0] ? "The most open level" : "Access level",
 		);
+		// Required once the bank lists levels, as the parse says.
+		schema.required = [
+			...new Set([
+				...((schema.required as string[] | undefined) ?? []),
+				"access",
+			]),
+		];
+	}
 	const responses = props.responses;
 	const branches = responses?.anyOf;
 	if (responses && Array.isArray(branches)) {
@@ -383,7 +391,7 @@ export const WorkspaceFileSchema = z.strictObject({
 		.array(z.string().regex(NAME_PATTERN))
 		.optional()
 		.describe(
-			"The access levels a question can name with `access:`, most open first, such as `public`, then `restricted`. A question without `access:` is at the first level.",
+			"The access levels a question can name with `access:`, most open first, such as `public`, then `restricted`. Once levels are listed, every question must name one; until it does, it is held at the last level.",
 		),
 });
 export const workspaceFileJsonSchema = (): Record<string, unknown> =>

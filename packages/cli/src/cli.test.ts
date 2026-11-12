@@ -1022,7 +1022,7 @@ describe("qretools filter", () => {
 					b: bankOf({
 						"workspace.yaml":
 							"agency: org.bank\naccess: [public, restricted]\n",
-						"questions/a/tenure.yaml": q("tenure"),
+						"questions/a/tenure.yaml": q("tenure", "access: public\n"),
 						"questions/a/zip.yaml": q("zip", "access: restricted\n"),
 					}),
 				},
@@ -1052,9 +1052,10 @@ describe("qretools filter", () => {
 			(await run("filter", answers, "--ddi", file, "--access", "restricted"))
 				.out,
 		).toMatch(/21218/);
+		// The policy, then each level with how many variables stand at it.
 		expect(await run("filter", "--ddi", file)).toMatchObject({
 			code: 0,
-			out: "public\nrestricted\n",
+			out: "urn:ddi:org.bank:access-public-restricted.codes:1\n  public 1\n  restricted 1\n",
 		});
 
 		// Refused: nothing written, and no value said.
@@ -1070,8 +1071,34 @@ describe("qretools filter", () => {
 		);
 		expect(unknown).toMatchObject({ code: 1, out: "", written: {} });
 		expect(unknown.err).toMatch(
-			/no access level `secret`.*\[filter-unknown-level\]/,
+			/has no level `secret`.*\[filter-unknown-level\]/,
 		);
+		// A DDI with no levels: `--access` means nothing there, so it's refused.
+		const plain = join(dir, "plain.json");
+		await writeFile(
+			plain,
+			JSON.stringify(
+				instrumentOf("name: p\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n", {
+					banks: {
+						b: bankOf({
+							"workspace.yaml": "agency: org.bank\n",
+							"questions/a/tenure.yaml": q("tenure"),
+						}),
+					},
+					agency: "org.example",
+				}).ddi,
+			),
+		);
+		const none = await run(
+			"filter",
+			answers,
+			"--ddi",
+			plain,
+			"--access",
+			"public",
+		);
+		expect(none).toMatchObject({ code: 1, out: "" });
+		expect(none.err).toMatch(/\[filter-no-levels\]/);
 		await writeFile(
 			answers,
 			"respondent,variable,row,value\nr1,urn:ddi:org.example:gone:1,,21218\n",

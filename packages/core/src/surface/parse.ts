@@ -318,27 +318,25 @@ function readVariants(value: unknown): Read<readonly Variant[]> {
 }
 
 /**
- * `access`: one of the bank's levels, most open first. The Draft holds a level only above
- * the first. Written but unreadable (empty, not a level) it fails closed: the question is
- * held at the last level until it's fixed, since an export doesn't stop for a finding.
- * With no levels in the bank, or levels that can't be read, the level can't be trusted:
- * an error that refuses an export (`exportRefusal`).
+ * `access`: one of the bank's levels, most open first. In a bank that lists levels every
+ * question names its own: missing, it's a hole. Missing or unreadable (empty, not a
+ * level) it fails closed: the question is held at the last level until it's fixed, since
+ * an export doesn't stop for a finding. With no levels in the bank, or levels that can't
+ * be read, a written level can't be trusted: an error that refuses an export
+ * (`exportRefusal`).
  */
 function readAccess(
 	value: unknown,
 	{ access: levels, accessProblem }: Pick<Env, "access" | "accessProblem">,
 ): Read<string> {
-	if (value === undefined) return fail();
+	// A list that can't be read leaves no valid level, yet the bank meant to restrict: fail closed.
+	if (value === undefined && levels.length === 0 && accessProblem === undefined)
+		return fail();
 	const listed = `The levels are ${levels.map((l) => `\`${l}\``).join(", ")}, most open first.`;
 	const last = levels.at(-1);
-	const above = (level: string | undefined) =>
-		level === undefined || level === levels[0] ? undefined : level;
 	const held = (finding: Finding): Read<string> => {
-		const value = above(last);
 		const hint = `${finding.hint === undefined ? "" : `${finding.hint} `}Until it's fixed, it's held at \`${last}\`.`;
-		return value === undefined
-			? fail(finding)
-			: ok(value, { ...finding, hint });
+		return last === undefined ? fail(finding) : ok(last, { ...finding, hint });
 	};
 	if (accessProblem !== undefined)
 		return held(
@@ -358,6 +356,14 @@ function readAccess(
 				"List the levels under `access:` in workspace.yaml, or remove the line.",
 			),
 		);
+	if (value === undefined)
+		return held(
+			hole(
+				"access",
+				"`access` is required: this workspace lists access levels.",
+				listed,
+			),
+		);
 	if (value === null || (typeof value === "string" && value.trim() === ""))
 		return held(hole("access", "`access` is empty.", listed));
 	if (typeof value !== "string" || !levels.includes(value))
@@ -369,8 +375,7 @@ function readAccess(
 				listed,
 			),
 		);
-	const level = above(value);
-	return level === undefined ? fail() : ok(level);
+	return ok(value);
 }
 
 /** Legacy values are never read; only the field names are kept, so a lint can say they're there. */

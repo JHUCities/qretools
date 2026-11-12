@@ -126,30 +126,38 @@ preview shows `invalid` in its place).
 
 A question names its level with `access: restricted`. These rules apply:
 
-- A question without an `access` line is at the first level.
-- Each variable of a question above the first level gets `EmbargoReference` in the
-  DDI. The embargo has the name of the level. This includes each option variable of a
-  select all that apply question. An instrument that asks the question keeps the
-  embargo on its own variable.
+- If the workspace lists levels, each question must have an `access` line. A question
+  without one has a hole ("to fill in"). Until you add the line, the question is at the
+  last level, the most closed one.
+- A level that the list has but that no question names is a warning on workspace.yaml.
 - An `access` value that is not in the list is an error. An empty value is a hole.
   Until you correct it, the question is at the last level.
 - An `access` line in a workspace without levels is an error.
-- If a question has an `access` line, the export stops in these conditions:
-  - the workspace has no `access` list;
+- If the workspace lists levels, the export stops in these conditions:
   - the `access` list is empty, or is not a list;
   - the list has a level name that is not correct, or a level two times.
 
   The export of an instrument that asks such a question also stops. Correct the
   `access` list in workspace.yaml, then export again.
-- A question above the first level also gets the code list `access-levels` in the DDI:
-  each level is a category, and its code is its rank, from 1 for the most open level.
-  Thus, a program that has only the DDI knows the order of the levels. The list has the
-  version of the levels in `workspace.yaml`: `build` counts only the changes to the
-  `access` list.
+
+The levels in their order are the access policy of the workspace. In the DDI:
+
+- The policy is a code list. Its ID spells the levels, such as
+  `access-public-restricted`. Each level is a category, and its code is its rank, from 1
+  for the most open level. Two different policies cannot have the same ID, so the list
+  is always at version 1.
+- Each variable of a question gets `EmbargoReference`, at the most open level too. The
+  embargo has the name of the level and, in `UserAttributePair` (key `access-policy`),
+  the URN of the policy of the workspace of the question. This includes each option
+  variable of a select all that apply question. An instrument that asks the question
+  keeps the embargo on its own variable, with the policy of the workspace of the
+  question, not the policy of the instrument.
+- When the levels of a workspace change, the version of each of its questions changes.
 - A level is a mark in the DDI. It does not remove data from an export. To remove the
   answers above a level, use `filterAnswers(index, answers, level)` (the command
-  `qretools filter`). `accessLevelsOf(index)` gives the levels, and `aboveLevel(index,
-  answers, level)` gives the variables of an answer set that a level must not see.
+  `qretools filter`). `accessPoliciesOf(index)` gives the policies and the number of
+  variables at each level. `aboveLevel(index, answers, level)` gives the variables of an
+  answer set that a level must not see.
 
 `envAt(env, path)` is the environment the question at a path is read against; `bankOf`
 uses it for each question. `select_all.yaml` holds the two values stored for each

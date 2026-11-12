@@ -71,8 +71,8 @@ export interface Draft {
 	/** The gaps the text leaves for an instrument to fill, in the author's order. */
 	readonly fills?: readonly Fill[];
 	/**
-	 * The bank's access level over every variable the question defines, only when it's
-	 * above the most open one: absent means open.
+	 * The bank's access level over every variable the question defines, whenever the
+	 * bank lists levels (the last while it's missing or unreadable); absent when it lists none.
 	 */
 	readonly access?: string;
 }
