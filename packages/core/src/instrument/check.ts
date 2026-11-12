@@ -647,6 +647,9 @@ function variableNames(
 	};
 	for (const input of draft.inputs)
 		claim(input.name, `the input \`${input.name}\``, input.path);
+	// Answers recorded under their bank names, and the computes to keep apart from them.
+	const answers = new Set<string>();
+	const computes: { readonly name: string; readonly path: string }[] = [];
 	const walk = (nodes: readonly Node[]): void => {
 		for (const node of nodes)
 			switch (node.kind) {
@@ -657,8 +660,10 @@ function variableNames(
 					if (node.as !== undefined)
 						claim(node.as, `${by} asked again`, `${node.path}.as`);
 					else
-						for (const d of definedVariables(q.evaluation.draft))
+						for (const d of definedVariables(q.evaluation.draft)) {
 							claim(d.name, by, `${node.path}.ask`);
+							answers.add(d.name);
+						}
 					break;
 				}
 				case "section":
@@ -671,9 +676,20 @@ function variableNames(
 					if (node.else !== undefined) walk(node.else);
 					break;
 				case "compute":
-					// Computed values aren't recorded in v1.
+					if (node.name !== undefined)
+						computes.push({ name: node.name, path: `${node.path}.compute` });
 					break;
 			}
 	};
 	walk(draft.flow);
+	// Said at the compute, whichever comes first; parse says a clash with an input or `as`.
+	for (const c of computes)
+		if (answers.has(c.name))
+			say({
+				code: "name-clash",
+				severity: "error",
+				path: c.path,
+				message: `\`${c.name}\` is also an answer this instrument records.`,
+				hint: "Give the computed value another name.",
+			});
 }

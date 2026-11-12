@@ -373,6 +373,15 @@ flow:
 		]);
 	});
 
+	it("keeps a computed value's name apart from the answers it records", () => {
+		expect(
+			checked("  - ask: bas.why\n  - compute: why\n    value: 1\n"),
+		).toEqual(["error name-clash flow.1.compute"]);
+		expect(
+			checked("  - compute: why\n    value: 1\n  - ask: bas.why\n"),
+		).toEqual(["error name-clash flow.0.compute"]);
+	});
+
 	it("allows one `as` name in exclusive branches, not twice on one path", () => {
 		const branches = `  - ask: bas.consent
   - if: bas.consent = "1"
