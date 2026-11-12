@@ -637,48 +637,26 @@ describe("qretools export", () => {
 		expect(Object.keys(doc.QuestionItem ?? {})[0]).toMatch(/^org\.example:/);
 	});
 
-	it("refuses while a question's access level can't be read from workspace.yaml, and only then", async () => {
-		const ZIP =
-			"name: home_zip\ntext: ZIP?\nintent: i\nopen: {}\naccess: restricted\n";
-		const exported = async (access: string, question = ZIP) => {
-			const ws = await mkdtemp(join(tmpdir(), "qretools-access-"));
-			await cp(SAMPLE, ws, { recursive: true });
-			await writeFile(
-				join(ws, "workspace.yaml"),
-				`agency: org.example\n${access}`,
-			);
-			if (question !== "")
-				await writeFile(join(ws, "questions/example/home_zip.yaml"), question);
-			return run("export", ws, "-o", "out.json");
-		};
-		const refusals: Record<string, string> = {
-			"access:\n": "(`access` is empty)",
-			"access: public\n": "(`access` must be a list of levels)",
-			"access: [Public, restricted]\n": "(`Public` isn't a level's name)",
-			"access: [public, restricted, public]\n": "(`public` is listed twice)",
-			"": "workspace.yaml lists no access levels",
-		};
-		for (const [access, reason] of Object.entries(refusals)) {
-			const r = await exported(access);
-			expect([access, r.code, r.written]).toEqual([access, 1, {}]);
-			// The reason once, though every question that names a level says it.
-			expect(r.err.split(reason)).toHaveLength(2);
-			expect(r.err).toMatch(
-				/Not exported: a question's access level can't be read\.\n$/,
-			);
-		}
-		// A clean list exports; so does a broken one no question names a level under.
-		expect((await exported("access: [public, restricted]\n")).code).toBe(0);
-		expect((await exported("access:\n", "")).code).toBe(0);
-		// A level the list doesn't have is held at the last one, so it exports.
-		const held = await exported(
-			"access: [public, restricted]\n",
-			ZIP.replace("restricted", "secret"),
+	it("refuses while a question's access level can't be read, saying why once, and writes nothing", async () => {
+		// Which lists refuse, and why, is core's (refusal.test.ts); here, how the command says it.
+		const ws = await mkdtemp(join(tmpdir(), "qretools-access-"));
+		await mkdir(join(ws, "questions/t"), { recursive: true });
+		await writeFile(
+			join(ws, "workspace.yaml"),
+			"agency: org.example\naccess: public\n",
 		);
-		expect(held.code).toBe(0);
-		expect(
-			JSON.stringify(JSON.parse(held.written["out.json"] ?? "{}")),
-		).toMatch(/"ID":"variable-home_zip\.embargo"/);
+		for (const name of ["zip", "age"])
+			await writeFile(
+				join(ws, `questions/t/${name}.yaml`),
+				`name: ${name}\ntext: Q?\nintent: i\nopen: {}\naccess: restricted\n`,
+			);
+		const r = await run("export", ws, "-o", "out.json");
+		expect([r.code, r.written]).toEqual([1, {}]);
+		// The reason once, though both questions say it.
+		expect(r.err.split("(`access` must be a list of levels)")).toHaveLength(2);
+		expect(r.err).toMatch(
+			/Not exported: a question's access level can't be read\.\n$/,
+		);
 	});
 
 	it("exports each question's items as the bank evaluated them, versions and all", async () => {

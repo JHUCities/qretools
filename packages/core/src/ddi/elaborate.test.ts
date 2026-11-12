@@ -642,4 +642,12 @@ describe("access levels", () => {
 			embargoes("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: public\n"),
 		).toEqual([undefined]);
 	});
+
+	it("embargoes a question whose level the list doesn't have, held at the last", () => {
+		expect(
+			embargoes("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: secret\n").map(
+				(e) => (e as JsonObject | undefined)?.ID,
+			),
+		).toEqual(["variable-q.embargo"]);
+	});
 });
