@@ -286,6 +286,7 @@ export function elaborateItems(
 			universe,
 			concept,
 			missing: missingItems?.representation,
+			access: draft.access,
 		}),
 	);
 
@@ -636,12 +637,15 @@ function variableItem(
 		readonly universe: Item | undefined;
 		readonly concept: Item | undefined;
 		readonly missing: Item | undefined;
+		/** The access level above the most open one, if the question has one. */
+		readonly access: string | undefined;
 	},
 ): Item {
+	const id = `variable-${v.name}`;
 	return versioned(
 		ctx,
 		"Variable",
-		`variable-${v.name}`,
+		id,
 		ctx.own,
 		obj({
 			VariableName: [intl(v.name)],
@@ -654,9 +658,22 @@ function variableItem(
 				ValueRepresentation: v.value,
 				MissingValuesReference: maybe(refs.missing, ref),
 			}),
+			EmbargoReference: maybe(refs.access, (level) =>
+				embargo(identity(ctx.agency, `${id}.embargo`, ctx.own.number), level),
+			),
 		}),
 	);
 }
+
+/**
+ * A variable's access level as DDI says it: an embargo named by the level, with no end
+ * date. The 4.0 schema has the embargo inline on the Variable, so it has an identity of
+ * its own, hung off the variable's.
+ */
+export const embargo = (id: Identity, level: string): JsonObject => ({
+	...id,
+	EmbargoName: [intl(level)],
+});
 
 function numberRange(
 	min: number | undefined,

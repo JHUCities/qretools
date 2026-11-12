@@ -294,6 +294,7 @@ export function elaborateInstrument(
 			SourceParameterReference,
 			ConceptReference,
 			VariableRepresentation,
+			EmbargoReference,
 		} = theirs.body;
 		const representation = (VariableRepresentation ?? {}) as JsonObject;
 		emit(
@@ -313,6 +314,14 @@ export function elaborateInstrument(
 							: [ref(universe)],
 					ConceptReference,
 					VariableRepresentation,
+					// Inline, so it takes an identity of this instrument's (one dot: `<base>.embargo-<name>`).
+					EmbargoReference:
+						EmbargoReference === undefined
+							? undefined
+							: {
+									...(EmbargoReference as JsonObject),
+									...id(`embargo-${name}`),
+								},
 					OutParameter: obj({
 						...outOf(name),
 						ParameterName: [intl(name)],

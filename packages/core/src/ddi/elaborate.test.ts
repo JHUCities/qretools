@@ -592,3 +592,62 @@ describe("a shared unit", () => {
 		);
 	});
 });
+
+describe("access levels", () => {
+	const env = { ...EMPTY_ENV, access: ["public", "restricted"] };
+	const embargoes = (text: string) => {
+		const { draft } = parseSurface(text, env);
+		const doc = elaborate(draft, AGENCY, [], {
+			own: { number: "3", date: "2026-01-01", blob: "b" },
+		});
+		expect(validate(doc)).toEqual([]);
+		return Object.values(doc.Variable ?? {}).map((v) => v.EmbargoReference);
+	};
+
+	it("puts every variable of a restricted question under an embargo named by its level, and validates", () => {
+		expect(
+			embargoes(
+				"name: zip\ntext: ZIP?\nintent: i\nopen: {}\naccess: restricted\n",
+			),
+		).toEqual([
+			{
+				URN: `urn:ddi:${AGENCY}:variable-zip.embargo:3`,
+				Agency: AGENCY,
+				ID: "variable-zip.embargo",
+				Version: "3",
+				EmbargoName: [
+					{
+						String: [
+							{
+								MultilingualStringValue: {
+									LanguageTag: "en",
+									Value: "restricted",
+								},
+							},
+						],
+					},
+				],
+			},
+		]);
+		// Select all that apply: each option's variable, under its own identity.
+		expect(
+			embargoes(
+				'name: m\ntext: Which?\nintent: i\nselect: many\nresponses:\n  "a": A\n  "b": B\naccess: restricted\n',
+			).map((e) => (e as JsonObject | undefined)?.ID),
+		).toEqual(["variable-m_a.embargo", "variable-m_b.embargo"]);
+	});
+
+	it("leaves a question at the most open level without an embargo", () => {
+		expect(
+			embargoes("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: public\n"),
+		).toEqual([undefined]);
+	});
+
+	it("embargoes a question whose level the list doesn't have, held at the last", () => {
+		expect(
+			embargoes("name: q\ntext: Q?\nintent: i\nopen: {}\naccess: secret\n").map(
+				(e) => (e as JsonObject | undefined)?.ID,
+			),
+		).toEqual(["variable-q.embargo"]);
+	});
+});

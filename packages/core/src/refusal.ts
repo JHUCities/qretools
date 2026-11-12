@@ -1,7 +1,8 @@
 /**
  * When a DDI export is refused: one rule for a bank's export and an instrument's, in
  * the CLI and in the apps alike. An export is refused, with nothing written, when it
- * would be wrong: no agency, an agency that isn't valid, two things sharing one DDI
+ * would be wrong: no agency, an agency that isn't valid, an access level that can't be
+ * trusted (it would publish a restricted variable as open), two things sharing one DDI
  * name, or a document the official schema rejects (or hasn't checked yet).
  * Holes don't refuse it: they leave elements out, and the findings say so.
  */
@@ -12,15 +13,25 @@ import type { Finding } from "./findings.ts";
 export interface Exportable {
 	/** The agency it is published under; absent when none was given or declared. */
 	readonly agency?: string;
-	/** Its findings: those coded `invalid-agency` refuse it. */
+	/** Its findings: those coded `invalid-agency`, or as `ACCESS_REFUSING`, refuse it. */
 	readonly findings?: readonly Finding[];
 	/** DDI names that two different things would share. */
 	readonly collisions: readonly Collision<string>[];
 }
 
+/**
+ * The findings that say a question's access level can't be trusted. An unknown level
+ * isn't one: it's held at the most closed level, which is safe.
+ */
+export const ACCESS_REFUSING: readonly Finding["code"][] = [
+	"access-unreadable",
+	"no-access-levels",
+];
+
 export type Refusal =
 	| { readonly kind: "noAgency" }
 	| { readonly kind: "invalidAgency"; readonly findings: readonly Finding[] }
+	| { readonly kind: "access"; readonly findings: readonly Finding[] }
 	| {
 			readonly kind: "collisions";
 			readonly collisions: readonly Collision<string>[];
@@ -42,6 +53,10 @@ export function exportRefusal(
 		(f) => f.code === "invalid-agency",
 	);
 	if (agencies.length > 0) return { kind: "invalidAgency", findings: agencies };
+	const access = (x.findings ?? []).filter((f) =>
+		ACCESS_REFUSING.includes(f.code),
+	);
+	if (access.length > 0) return { kind: "access", findings: access };
 	if (x.collisions.length > 0)
 		return { kind: "collisions", collisions: x.collisions };
 	if (schemaProblems === undefined) return { kind: "unchecked" };
@@ -57,6 +72,8 @@ export function refusalReason(r: Refusal): string {
 			return "There's no DDI agency to publish it under yet.";
 		case "invalidAgency":
 			return "A DDI agency is missing or wrong. See Findings.";
+		case "access":
+			return "An access level can't be read from workspace.yaml. See Findings.";
 		case "collisions":
 			return "Two things would share one DDI name. See Findings.";
 		case "unchecked":

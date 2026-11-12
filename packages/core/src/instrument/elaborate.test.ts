@@ -3,8 +3,11 @@ import schemaText from "../../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
 import type { JsonObject } from "../ddi/document.ts";
 import { makeValidator } from "../ddi/validate.ts";
 import { bankOf } from "../evaluate.ts";
+import { exportRefusal } from "../refusal.ts";
+import { remoteScope } from "../workspace.ts";
 import { checkInstrument } from "./check.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
+import { instrumentOf } from "./instrument.ts";
 import { parseInstrument } from "./parse.ts";
 
 const schema = JSON.parse(schemaText) as {
@@ -784,5 +787,84 @@ flow:
 		);
 		expect(commands).toEqual(["null = null"]);
 		for (const c of commands) expect(c).not.toMatch(/\?|\bbas\./);
+	});
+});
+
+describe("an asked question's access level", () => {
+	it("stops the export, said at the bank's use, while the bank can't read its levels", () => {
+		const bank = bankOf({
+			"workspace.yaml": "agency: org.bank\naccess: [Public, restricted]\n",
+			"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
+			"questions/a/why.yaml": q("why", "open: {}\n"),
+		});
+		const of = (ask: string) =>
+			instrumentOf(
+				`name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.${ask}\n`,
+				{ banks: { bas: bank }, unresolved: {}, agency: "org.example" },
+			);
+		const zip = of("zip");
+		expect(
+			zip.findings
+				.filter((f) => f.path === "uses.bas")
+				.map((f) => [f.code, f.message]),
+		).toEqual([
+			[
+				"access-unreadable",
+				expect.stringMatching(/^`bas\.zip`: workspace\.yaml's `access` list/),
+			],
+		]);
+		expect(exportRefusal(zip, [])?.kind).toBe("access");
+		// Asking only a question with no level, the bank's list doesn't matter.
+		expect(exportRefusal(of("why"), [])).toBeUndefined();
+		// A bank in another repository, read at its tag, says it the same way.
+		const remote = remoteScope("acme/bank@v1", {
+			kind: "files",
+			files: {
+				"workspace.yaml": "agency: org.bank\naccess:\n",
+				"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
+			},
+		});
+		const far = instrumentOf(
+			"name: x\nuses:\n  bas: acme/bank@v1\nflow:\n  - ask: bas.zip\n",
+			{ banks: { bas: remote }, unresolved: {}, agency: "org.example" },
+		);
+		expect(exportRefusal(far, [])?.kind).toBe("access");
+	});
+
+	it("goes with each variable the instrument records, under the instrument's identity", () => {
+		const bank = bankOf({
+			"workspace.yaml": "agency: org.bank\naccess: [public, restricted]\n",
+			"questions/a/zip.yaml": q("zip", "open: {}\naccess: restricted\n"),
+			"questions/a/modes.yaml": q(
+				"modes",
+				'select: many\nresponses:\n  "b": Bus\n  "w": Walk\naccess: restricted\n',
+			),
+			"questions/a/why.yaml": q("why", "open: {}\n"),
+		});
+		const parsed = parseInstrument(
+			"name: x\nuses:\n  bas: here\nflow:\n  - ask: bas.zip\n  - ask: bas.modes\n  - ask: bas.why\n",
+			{ bas: bank },
+		);
+		expect(parsed.findings.filter((f) => f.severity !== "info")).toEqual([]);
+		const { document } = instrumentDocument(
+			elaborateInstrument(parsed, { agency: "org.example", version: "4" }),
+		);
+		expect(validator.ok && validator.value(document)).toEqual([]);
+		const embargo = Object.fromEntries(
+			Object.values(document.Variable ?? {})
+				.filter((v) => String(v.ID).startsWith("instrument-x.var-"))
+				.map((v) => [
+					String(v.ID),
+					(v.EmbargoReference as JsonObject | undefined)?.URN,
+				]),
+		);
+		expect(embargo).toEqual({
+			"instrument-x.var-zip": "urn:ddi:org.example:instrument-x.embargo-zip:4",
+			"instrument-x.var-modes_b":
+				"urn:ddi:org.example:instrument-x.embargo-modes_b:4",
+			"instrument-x.var-modes_w":
+				"urn:ddi:org.example:instrument-x.embargo-modes_w:4",
+			"instrument-x.var-why": undefined,
+		});
 	});
 });

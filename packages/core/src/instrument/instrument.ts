@@ -9,12 +9,13 @@ import type { Collision, DdiDocument } from "../ddi/document.ts";
 import { SELECT_ALL_ID } from "../ddi/elaborate.ts";
 import type { BankScope } from "../evaluate.ts";
 import { type Finding, inDocumentOrder, type Range } from "../findings.ts";
+import { ACCESS_REFUSING } from "../refusal.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import { DEFAULT_SELECT_ALL, selectAllText } from "../selectAll.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
 import type { Livelit } from "../surface/livelits.ts";
 import { inspectInstrument } from "./check.ts";
-import type { InstrumentDraft, Use } from "./draft.ts";
+import { type InstrumentDraft, steps, type Use } from "./draft.ts";
 import { elaborateInstrument, instrumentDocument } from "./elaborate.ts";
 import { instrumentLivelits } from "./livelits.ts";
 import { parseInstrument, type Unread } from "./parse.ts";
@@ -109,6 +110,23 @@ export function instrumentOf(
 				]
 			: [],
 	);
+	// An asked question whose access level its bank can't say stops the export too
+	// (`ACCESS_REFUSING`): said once per bank, at its use, naming the first such question.
+	const unmarked = new Map<string, Finding>();
+	for (const node of steps(parsed.draft.flow)) {
+		const q = node.kind === "ask" ? node.question : undefined;
+		const f = q?.evaluation.findings.find((f) =>
+			ACCESS_REFUSING.includes(f.code),
+		);
+		if (q === undefined || f === undefined || unmarked.has(q.alias)) continue;
+		unmarked.set(q.alias, {
+			code: f.code,
+			severity: "error",
+			path: `uses.${q.alias}`,
+			message: `\`${q.alias}.${q.name}\`: ${f.message}`,
+			hint: `Correct the \`access\` list in the \`workspace.yaml\` of \`${q.alias}\`.`,
+		});
+	}
 	// A release whose manifest can't be used: its questions are published, at version 1.
 	const staleManifests: Finding[] = parsed.draft.uses.flatMap(
 		(u): Finding[] => {
@@ -136,6 +154,7 @@ export function instrumentOf(
 				...clashes,
 				...agency,
 				...banksWithout,
+				...unmarked.values(),
 				...staleManifests,
 			],
 			parsed.ranges,

@@ -70,6 +70,11 @@ export interface Draft {
 	readonly domain?: Domain;
 	/** The gaps the text leaves for an instrument to fill, in the author's order. */
 	readonly fills?: readonly Fill[];
+	/**
+	 * The bank's access level over every variable the question defines, only when it's
+	 * above the most open one: absent means open.
+	 */
+	readonly access?: string;
 }
 
 /**

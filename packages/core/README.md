@@ -112,14 +112,36 @@ skipped, and the DDI agency `workspace.yaml` declares. A workspace with no agenc
 told so once, on `workspace.yaml`. Its DDI can't be exported until it has one (the
 preview shows `invalid` in its place).
 
-`workspace.yaml` has three fields:
+`workspace.yaml` has these fields:
 
 - `agency`;
 - `required`: the fields every question must have as well as `name`, `text` and
   `intent` (such as `title`);
 - `required_in`: more fields the questions in one folder must have, by the folder's
   path (`questions/health:` with a list under it). It only adds to `required`. A folder
-  named there with no questions in it is a warning on `workspace.yaml`.
+  named there with no questions in it is a warning on `workspace.yaml`;
+- `locked`: the commit of each tag that the instruments use. The tool writes it;
+- `access`: the access levels, from the most open to the most closed, such as
+  `public`, `restricted` and `secure`. The names are the workspace's own.
+
+A question names its level with `access: restricted`. These rules apply:
+
+- A question without an `access` line is at the first level.
+- Each variable of a question above the first level gets `EmbargoReference` in the
+  DDI. The embargo has the name of the level. This includes each option variable of a
+  select all that apply question. An instrument that asks the question keeps the
+  embargo on its own variable.
+- An `access` value that is not in the list is an error. An empty value is a hole.
+  Until you correct it, the question is at the last level.
+- An `access` line in a workspace without levels is an error.
+- If a question has an `access` line, the export stops in these conditions:
+  - the workspace has no `access` list;
+  - the `access` list is empty, or is not a list;
+  - the list has a level name that is not correct, or a level two times.
+
+  The export of an instrument that asks such a question also stops. Correct the
+  `access` list in workspace.yaml, then export again.
+- A level is a mark in the DDI. It does not remove data from an export.
 
 `envAt(env, path)` is the environment the question at a path is read against; `bankOf`
 uses it for each question. `select_all.yaml` holds the two values stored for each

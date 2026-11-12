@@ -60,6 +60,16 @@ export interface Env {
 	readonly requiredBy?: Readonly<Record<string, string>>;
 	/** How the bank stores the answer to a select-all-that-apply option (`select_all.yaml`). */
 	readonly selectAll: SelectAll;
+	/**
+	 * The bank's access levels, most open first (`workspace.yaml`'s `access`); empty when
+	 * it lists none, and then no question is restricted.
+	 */
+	readonly access: readonly string[];
+	/**
+	 * What's wrong with `workspace.yaml`'s `access` list, in a sentence; absent when it
+	 * reads. While it's there, no question's level can be trusted, so none exports.
+	 */
+	readonly accessProblem?: string;
 }
 
 /** A kind of shared file a question can name. Not `missing`: it's a list, never named. */
@@ -127,6 +137,7 @@ export const EMPTY_ENV: Env = {
 	required: [],
 	requiredIn: {},
 	selectAll: DEFAULT_SELECT_ALL,
+	access: [],
 };
 
 /**

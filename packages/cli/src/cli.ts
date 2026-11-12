@@ -738,6 +738,8 @@ async function exportBank(
 	const refusal = exportRefusal(
 		{
 			...(bank.agency !== undefined && { agency: bank.agency }),
+			// Only the findings that refuse are read: an access level that can't be trusted.
+			findings: Object.values(bank.findings).flat(),
 			collisions: collisions(sources),
 		},
 		await validate(document),
@@ -898,6 +900,12 @@ function refused(r: Refusal, io: Io): number {
 		case "invalidAgency":
 			for (const f of r.findings) io.err(`${f.message}\n`);
 			io.err("Not exported: a DDI agency is missing or wrong.\n");
+			break;
+		case "access":
+			// Every question says it; the reason is said once.
+			for (const m of new Set(r.findings.map((f) => f.message)))
+				io.err(`${m}\n`);
+			io.err("Not exported: a question's access level can't be read.\n");
 			break;
 		case "collisions":
 			for (const c of r.collisions)

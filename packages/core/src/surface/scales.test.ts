@@ -108,3 +108,18 @@ describe("questionJsonSchema with scales", () => {
 		);
 	});
 });
+
+describe("questionJsonSchema with access levels", () => {
+	type Props = { properties: Record<string, { oneOf?: { const: string }[] }> };
+	it("offers the bank's levels, and no field when the bank has none", () => {
+		const schema = questionJsonSchema({
+			...EMPTY_ENV,
+			access: ["public", "restricted"],
+		}) as Props;
+		expect(schema.properties.access?.oneOf?.map((o) => o.const)).toEqual([
+			"public",
+			"restricted",
+		]);
+		expect((questionJsonSchema() as Props).properties.access).toBeUndefined();
+	});
+});

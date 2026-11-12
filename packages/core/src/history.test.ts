@@ -129,3 +129,36 @@ describe("an instrument's version", () => {
 		expect(v[I]).toEqual({ number: "3", date: "d4", blob: "i2" });
 	});
 });
+
+describe("a question's access level", () => {
+	const RESTRICTED =
+		"name: q\ntext: Hi?\nintent: x\nopen: {}\naccess: restricted\n";
+	const texts = {
+		q1: RESTRICTED,
+		q2: "name: q\ntext: Hi?\nintent: x\nopen: {}\n",
+		// Written empty: held at the last level, which the levels decide.
+		q3: "name: q\ntext: Hi?\nintent: x\nopen: {}\naccess:\n",
+		w1: "agency: a\naccess: [public, restricted]\n",
+		w2: "agency: a\naccess: [public, restricted]\nlocked: {}\n",
+		w3: "agency: a\naccess: [restricted, public]\n",
+	};
+	const versionAt = (q: string) =>
+		versionsOf(
+			history(
+				[
+					["d1", { [Q]: q, "workspace.yaml": "w1" }],
+					// Other lines change: no move.
+					["d2", { [Q]: q, "workspace.yaml": "w2" }],
+					// The levels change: a move for a question that names one.
+					["d3", { [Q]: q, "workspace.yaml": "w3" }],
+				],
+				texts,
+			),
+		)[Q]?.number;
+
+	it("moves a question that names a level when the levels change, and only then", () => {
+		expect(versionAt("q1")).toBe("2");
+		expect(versionAt("q3")).toBe("2");
+		expect(versionAt("q2")).toBe("1");
+	});
+});
