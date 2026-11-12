@@ -49,6 +49,7 @@ import {
 	type Refusal,
 	type RemoteBank,
 	type Representation,
+	type Result,
 	ROOT,
 	readInstruments,
 	readResponses,
@@ -62,6 +63,7 @@ import {
 	tagMessage,
 	tickCodes,
 	unlockedTags,
+	type Validator,
 	versionsOf,
 	WORKSPACE,
 	withLocks,
@@ -926,13 +928,16 @@ function refused(r: Refusal, io: Io): number {
 	return PROBLEMS;
 }
 
+/** Compiling the schema takes about 200 ms, so a process does it once, on first use. */
+let compiled: Promise<Result<Validator, Finding>> | undefined;
+
 /** The official DDI schema's problems with a document, the schema read beside this module. */
 async function validate(document: DdiDocument): Promise<readonly Finding[]> {
 	// Imported, not read from disk, so a bundle of the command carries it.
-	const { default: schema } = await import("@qretools/core/schema.json", {
+	compiled ??= import("@qretools/core/schema.json", {
 		with: { type: "json" },
-	});
-	const validator = makeValidator(schema);
+	}).then(({ default: schema }) => makeValidator(schema));
+	const validator = await compiled;
 	return validator.ok ? validator.value(document) : [validator.error];
 }
 
