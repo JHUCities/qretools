@@ -14,6 +14,7 @@ import { ACCESS_REFUSING } from "../refusal.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import { DEFAULT_SELECT_ALL, selectAllText } from "../selectAll.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
+import { definedVariables } from "../surface/draft.ts";
 import type { Env } from "../surface/env.ts";
 import type { Livelit } from "../surface/livelits.ts";
 import { inspectInstrument } from "./check.ts";
@@ -170,21 +171,40 @@ export function instrumentOf(
 				);
 	// Its missing values and select-all coding: an imported question keeps its bank's in
 	// the DDI, which is right; the workspace is told where they differ from its own.
-	const conventions: Finding[] =
-		host === undefined
-			? []
-			: [...steps(parsed.draft.flow)].flatMap((node) => {
-					const q = node.kind === "ask" ? node.question : undefined;
-					const env = q === undefined ? undefined : context.banks[q.alias]?.env;
-					if (q === undefined || env === undefined) return [];
-					return conventionFindings(host, env, {
-						path: placed(q.alias, `${node.path}.ask`),
-						question: `${q.alias}.${q.name}`,
-						selectAll:
-							q.evaluation.draft.domain?.kind === "responses" &&
-							q.evaluation.draft.domain.select === "many",
-					});
-				});
+	// Missing values are a bank's, so said once on its `uses` line with the questions they
+	// touch; a select-all coding is said at each select-all question asked.
+	const conventions: Finding[] = [];
+	if (host !== undefined) {
+		const asked = new Map<string, Set<string>>();
+		for (const node of steps(parsed.draft.flow)) {
+			const q = node.kind === "ask" ? node.question : undefined;
+			const env = q === undefined ? undefined : context.banks[q.alias]?.env;
+			if (q === undefined || env === undefined) continue;
+			// Only a question with a variable carries missing values into the DDI.
+			if (
+				q.evaluation.draft.domain !== undefined &&
+				definedVariables(q.evaluation.draft).length > 0
+			)
+				asked.set(q.alias, (asked.get(q.alias) ?? new Set()).add(q.name));
+			if (
+				q.evaluation.draft.domain?.kind === "responses" &&
+				q.evaluation.draft.domain.select === "many"
+			)
+				conventions.push(
+					...selectAllDiffers(
+						host,
+						env,
+						placed(q.alias, `${node.path}.ask`),
+						`${q.alias}.${q.name}`,
+					),
+				);
+		}
+		for (const [alias, names] of asked) {
+			const env = context.banks[alias]?.env;
+			if (env !== undefined)
+				conventions.push(...missingDiffers(host, env, alias, names.size));
+		}
+	}
 	// A release whose manifest can't be used: its questions are published, at version 1.
 	const staleManifests: Finding[] = parsed.draft.uses.flatMap(
 		(u): Finding[] => {
@@ -335,65 +355,67 @@ function hostCovers(
 }
 
 /**
- * Where an asked question's bank codes data otherwise than the instrument's workspace: a
- * missing-value list that isn't the same codes with the same labels (order aside), and,
- * for a select-all question, other codes for chosen and not chosen (labels aside). Said
- * at the ask; the DDI keeps the bank's coding, so these are warnings, not refusals.
+ * Where a bank's missing values aren't its host workspace's: the same codes with the same
+ * labels, order aside. Said once, on the bank's `uses` line, with how many of its
+ * questions the instrument asks; the DDI keeps the bank's list, so it's a warning.
  */
-function conventionFindings(
+function missingDiffers(
 	host: Host,
-	home: Pick<Env, "missing" | "selectAll">,
-	ask: {
-		readonly path: string;
-		readonly question: string;
-		readonly selectAll: boolean;
-	},
+	home: Pick<Env, "missing">,
+	alias: string,
+	asked: number,
 ): readonly Finding[] {
-	const findings: Finding[] = [];
-	const q = `\`${ask.question}\``;
+	const labels = new Map(host.missing.map((c) => [c.code, c.label]));
+	const sameSize = home.missing.length === host.missing.length;
+	if (sameSize && home.missing.every((c) => labels.get(c.code) === c.label))
+		return [];
+	const b = `\`${alias}\``;
 	const codes = (xs: readonly { code: string }[]) =>
 		andList(xs.map((x) => `\`${x.code}\``));
-	const labels = new Map(host.missing.map((c) => [c.code, c.label]));
-	const same =
-		home.missing.length === host.missing.length &&
-		home.missing.every((c) => labels.get(c.code) === c.label);
-	if (!same) {
-		const sameCodes =
-			home.missing.length === host.missing.length &&
-			home.missing.every((c) => labels.has(c.code));
-		const relabelled = home.missing.filter(
-			(c) => labels.get(c.code) !== c.label,
-		);
-		findings.push({
+	const relabelled = home.missing.filter((c) => labels.get(c.code) !== c.label);
+	const differs =
+		host.missing.length === 0
+			? `${b} codes missing values as ${codes(home.missing)}, and this workspace declares none.`
+			: home.missing.length === 0
+				? `${b} has no missing values, and this workspace codes them as ${codes(host.missing)}.`
+				: sameSize && home.missing.every((c) => labels.has(c.code))
+					? `${b} labels missing values differently from this workspace (${relabelled.map((c) => `\`${c.code}\` "${c.label}" against "${labels.get(c.code)}"`).join(", ")}).`
+					: `${b} codes missing values differently from this workspace (${codes(home.missing)} against ${codes(host.missing)}).`;
+	return [
+		{
 			code: "missing-differs",
 			severity: "warning",
-			path: ask.path,
-			message:
-				host.missing.length === 0
-					? `${q} codes missing values as ${codes(home.missing)}, and this workspace declares none.`
-					: home.missing.length === 0
-						? `${q} has no missing values, and this workspace codes them as ${codes(host.missing)}.`
-						: sameCodes
-							? `${q} labels missing values differently from this workspace (${relabelled.map((c) => `\`${c.code}\` "${c.label}" against "${labels.get(c.code)}"`).join(", ")}).`
-							: `${q} codes missing values differently from this workspace (${codes(home.missing)} against ${codes(host.missing)}).`,
-			hint: "Make this workspace's `missing.yaml` and its bank's agree, or keep both: the DDI keeps each question's own.",
-		});
-	}
+			path: `uses.${alias}`,
+			message: `${differs} It affects ${asked === 1 ? "the one question" : `the ${asked} questions`} this instrument asks from ${b}.`,
+			hint: `Make this workspace's \`missing.yaml\` and the one of ${b} agree, or keep both: the DDI keeps each question's own.`,
+		},
+	];
+}
+
+/**
+ * Where a select-all question's bank stores chosen and not chosen as other codes than its
+ * host workspace (labels aside). Said at the ask; the DDI keeps the bank's coding.
+ */
+function selectAllDiffers(
+	host: Host,
+	home: Pick<Env, "selectAll">,
+	path: string,
+	question: string,
+): readonly Finding[] {
 	const theirs = home.selectAll;
 	const ours = host.selectAll;
-	if (
-		ask.selectAll &&
-		(theirs.chosen.code !== ours.chosen.code ||
-			theirs.notChosen.code !== ours.notChosen.code)
-	)
-		findings.push({
-			code: "select-all-differs",
-			severity: "warning",
-			path: ask.path,
-			message: `${q} stores select all that apply as \`${theirs.chosen.code}\` chosen and \`${theirs.notChosen.code}\` not; this workspace stores \`${ours.chosen.code}\` and \`${ours.notChosen.code}\`.`,
-			hint: "Make this workspace's `select_all.yaml` and its bank's agree, or keep both: the DDI keeps each question's own.",
-		});
-	return findings;
+	return theirs.chosen.code === ours.chosen.code &&
+		theirs.notChosen.code === ours.notChosen.code
+		? []
+		: [
+				{
+					code: "select-all-differs",
+					severity: "warning",
+					path,
+					message: `\`${question}\` stores select all that apply as \`${theirs.chosen.code}\` chosen and \`${theirs.notChosen.code}\` not; this workspace stores \`${ours.chosen.code}\` and \`${ours.notChosen.code}\`.`,
+					hint: "Make this workspace's `select_all.yaml` and its bank's agree, or keep both: the DDI keeps each question's own.",
+				},
+			];
 }
 
 /** Names as a reader lists them: "a", "a and b", "a, b and c". */

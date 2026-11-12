@@ -1103,14 +1103,14 @@ describe("an imported question's coding, against the instrument's workspace", ()
 			],
 		],
 	] as const)(
-		"warns at each ask of a bank with %s",
+		"warns once, on the use, of a bank with %s",
 		(_, theirs, ours, messages) => {
 			const found = said(bank(theirs), host(ours));
-			// The select-all question is told at its own line too: once per ask.
+			// Two of its questions asked: one warning for the bank, saying how many it touches.
 			expect(found.map(([, , path, m]) => [path, m])).toEqual(
-				messages.flatMap((m) => [
-					["flow.0.ask", m],
-					["flow.1.ask", m.replace("b.zip", "b.pets")],
+				messages.map((m) => [
+					"uses.b",
+					`${m.replace("`b.zip`", "`b`")} It affects the 2 questions this instrument asks from \`b\`.`,
 				]),
 			);
 			expect(found.every(([, severity]) => severity === "warning")).toBe(true);
