@@ -147,6 +147,25 @@ compares the digest of the DDI with the digest that the release recorded:
 
 Offline, the command reads a tag that it read before from the cache.
 
+## DDI by URL
+
+`next`, `qsf-map`, `responses` and `dataset export` accept an `https://` URL where they
+accept a DDI file. For example, give the DDI of a release that `build` wrote to the site
+of its workspace:
+
+```sh
+qretools next https://acme.example/survey/v3/instruments/wave1.json state.json
+```
+
+- The command reads the URL one time. It does not keep a copy.
+- A tag in the URL (`v3`) names the release. The command does not compare the DDI with
+  the tag.
+- A dataset records the URL and the SHA-256 digest of the DDI that the command read.
+- Without `-o`, the name of the output comes from the last part of the URL path, as it
+  comes from the name of a file (`wave1`).
+- The command refuses `http://` and other schemes. If it cannot read the URL, or the
+  reply is not 200, it writes nothing.
+
 ## Make the QSF column map
 
 The QSF column map gives the DDI variable of each column in the response export of a
@@ -390,7 +409,8 @@ respondent:
   and its size. It also records the DDI digests that the source names (`qretools_ddi`).
 - An `OtherMaterial` for the map and one for the DDI, each with its SHA-256 digest
   (`UserID`) and its size. The map also records the DDI digest that it names. If the DDI
-  comes from a release, its name is the tag reference.
+  comes from a release, its name is the tag reference. If the DDI comes from a URL, its
+  `ExternalURLReference` is that URL.
 - Two `VariableGroup` items: `present` (each variable with a value, also `respondent`,
   `start` and `end`) and `not-in-source` (each variable of the instrument that the map
   does not read).
