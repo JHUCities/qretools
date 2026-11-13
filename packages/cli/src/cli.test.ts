@@ -5,6 +5,7 @@ import {
 	glob,
 	mkdir,
 	mkdtemp,
+	readdir,
 	readFile,
 	realpath,
 	writeFile,
@@ -2664,5 +2665,166 @@ describe("an instrument that reads only other workspaces", () => {
 		expect(r.code).toBe(0);
 		expect(r.out).toContain('"Agency": "org.other"');
 		expect(r.out).not.toContain('"Agency": "org.example"');
+	});
+});
+
+describe("qretools responses with roster rows", () => {
+	it("holds a model's roster rows in a dataset, and exports each view of them", async () => {
+		// The households fixture, with access levels: the vehicles roster above public.
+		const ws = await mkdtemp(join(tmpdir(), "qretools-rosters-"));
+		await cp(here("../../core/fixtures/households"), ws, { recursive: true });
+		await writeFile(
+			join(ws, "workspace.yaml"),
+			"agency: org.example.households\naccess: [public, restricted]\n",
+		);
+		const folder = join(ws, "questions/household");
+		for (const f of await readdir(folder)) {
+			const path = join(folder, f);
+			// The fixture's vehicle.yaml and more_vehicles.yaml: the vehicles roster's questions.
+			const level = /vehicle/.test(f) ? "restricted" : "public";
+			await writeFile(
+				path,
+				`${await readFile(path, "utf8")}access: ${level}\n`,
+			);
+		}
+		const exported = await run(
+			"instrument",
+			"export",
+			join(ws, "instruments/households.yaml"),
+		);
+		expect(exported.code).toBe(0);
+		const ddi = join(ws, "households.json");
+		await writeFile(ddi, exported.out);
+		const v = (n: string) =>
+			`urn:ddi:org.example.households:instrument-households.var-${n}:1`;
+		const lines = [
+			`s1,${v("size")},,2`,
+			`s1,${v("age")},1,40`,
+			`s1,${v("age")},2,9`,
+			`s1,${v("works")},1,1`,
+			`s1,${v("vehicle")},1,2`,
+			`s1,${v("more_vehicles")},1,2`,
+			`s2,${v("size")},,1`,
+			`s2,${v("age")},1,70`,
+		];
+		const file = join(ws, "answers.csv");
+		const write = (...more: string[]) =>
+			writeFile(
+				file,
+				[
+					"respondent,variable,row,value",
+					"s1,start,,2026-11-12T23:14:02Z",
+					"s1,end,,2026-11-12T23:16:02Z",
+					"s2,start,,2026-11-12T23:20:00Z",
+					"s2,end,,2026-11-12T23:21:00Z",
+					...lines,
+					...more,
+					"",
+				].join("\n"),
+			);
+		await write();
+		const out = join(ws, "run1.json");
+		const made = await run(
+			"responses",
+			file,
+			"--ddi",
+			ddi,
+			"--synthetic",
+			"--runtime",
+			"model:Q8",
+			"-o",
+			out,
+		);
+		expect(made).toMatchObject({ code: 0, err: "" });
+		const text = made.written[out] ?? "";
+		const validator = makeValidator(schema);
+		expect(validator.ok && validator.value(JSON.parse(text))).toEqual([]);
+		await writeFile(out, text);
+
+		// --csv: the answers given, rows and all, sorted by respondent, variable URN and row.
+		const csv = await run(
+			"dataset",
+			"export",
+			out,
+			"--csv",
+			"--ddi",
+			ddi,
+			"--access",
+			"restricted",
+		);
+		expect(csv).toMatchObject({ code: 0, err: "" });
+		const sorted = [
+			`s1,${v("age")},1,40`,
+			`s1,${v("age")},2,9`,
+			`s1,${v("more_vehicles")},1,2`,
+			`s1,${v("size")},,2`,
+			`s1,${v("vehicle")},1,2`,
+			`s1,${v("works")},1,1`,
+			`s2,${v("age")},1,70`,
+			`s2,${v("size")},,1`,
+		];
+		expect(csv.out).toBe(
+			["respondent,variable,row,value", ...sorted, ""].join("\n"),
+		);
+
+		// --provenance: a DataSet for each roster and the record types, and no value.
+		const provenance = await run(
+			"dataset",
+			"export",
+			out,
+			"--provenance",
+			"--ddi",
+			ddi,
+			"--access",
+			"restricted",
+		);
+		expect(provenance.code).toBe(0);
+		const doc = JSON.parse(provenance.out);
+		expect(Object.keys(doc.DataSet)).toEqual([
+			"org.example.households:dataset-run1:1",
+			"org.example.households:dataset-run1.rows-members:1",
+			"org.example.households:dataset-run1.rows-vehicles:1",
+		]);
+		expect(Object.keys(doc.DataRelationship)).toEqual([
+			"org.example.households:dataset-run1.records:1",
+		]);
+		expect(provenance.out).not.toMatch(/ItemSet|"s1"|s1#/);
+		expect(validator.ok && validator.value(doc)).toEqual([]);
+
+		// --access public: the vehicles answers and every key go; the members rows stay, numbered.
+		const open = await run(
+			"dataset",
+			"export",
+			out,
+			"--csv",
+			"--ddi",
+			ddi,
+			"--access",
+			"public",
+		);
+		expect(open.code).toBe(0);
+		expect(open.out).not.toMatch(/var-vehicle|var-more_vehicles|s1|s2/);
+		expect(open.out).toMatch(/var-age:1,2,9\n/);
+		expect(open.err).toMatch(
+			/removed `members_key`.*\n.*removed `vehicles_key`/,
+		);
+
+		// A row the roster can't have: refused, and nothing written.
+		await write(`s2,${v("vehicle")},5,1`);
+		const refused = await run(
+			"responses",
+			file,
+			"--ddi",
+			ddi,
+			"--synthetic",
+			"--runtime",
+			"model:Q8",
+			"-o",
+			join(ws, "run2.json"),
+		);
+		expect(refused).toMatchObject({ code: 1, written: {} });
+		expect(refused.err).toMatch(
+			/row 5, and its roster `vehicles` has at most 4 rows.*\[responses-dataset\]/,
+		);
 	});
 });

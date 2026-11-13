@@ -628,7 +628,9 @@ s1,urn:ddi:org.example:instrument-wave1.var-rent:3,,D
 
 - `respondent`: the identifier of the respondent.
 - `variable`: the URN of a variable in the DDI of the instrument, or `start` or `end`.
-- `row`: empty. The dataset cannot hold the rows of a roster yet.
+- `row`: the row of a roster, from 1, for a variable that a roster records. Empty for
+  every other variable, and for `start` and `end`. The DDI tells which roster records
+  each variable (see "Roster rows").
 - `value`: a code of the variable, a missing code, a number or text. It is never empty:
   for no answer, write no line. A ticked select-all
   option has the code that the DDI gives to a tick. For `start` and `end`, the time of the
@@ -673,9 +675,12 @@ value. **If the command finds an error, it writes no dataset.**
 - `responses-unknown-variable` (error): the DDI has no variable with the URN.
 - `responses-time` (error): a `start` or an `end` is not a date and time with a zone, or an
   interview ends before it starts. A warning if a respondent has no `start` or no `end`.
-- `responses-duplicate` (error): the file gives one variable two times for one respondent.
-- `responses-row` (error): the line does not have four cells, a respondent and a variable,
-  or it has a roster row.
+- `responses-duplicate` (error): the file gives one variable two times for one respondent,
+  in one row.
+- `responses-row` (error): the line does not have four cells, a respondent and a variable.
+  Or its row is not a whole number from 1. Or a `start` or an `end` has a row.
+- `responses-dataset` (error): a row does not agree with the rosters in the DDI (see
+  "Read the responses").
 - `responses-unreadable` (error): the header is not `respondent,variable,row,value`, or a
   quote is not closed.
 

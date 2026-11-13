@@ -205,8 +205,9 @@ const USAGE = `Usage:
                     | --answered-by term --asked-by term) [--file path]... [-o dataset.json]
                                     Read answers already in QREtools' form (as a model harness writes
                                     them) the same way: long CSV respondent,variable,row,value, each
-                                    variable by its URN in the DDI, and each interview's times on
-                                    lines whose variable is start or end (ISO 8601 with a zone).
+                                    variable by its URN in the DDI, row a roster's row from 1 (empty
+                                    outside a roster), and each interview's times on lines whose
+                                    variable is start or end (ISO 8601 with a zone).
                                     --synthetic says a model answered, in a simulation; --runtime
                                     names the software that ran it. Each --file (a trace, a config)
                                     is cited by its digest. Any error writes nothing
