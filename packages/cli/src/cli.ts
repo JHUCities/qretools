@@ -6,7 +6,8 @@
  * `paths` (an HTML page of how many ways through its routing, and what each reaches),
  * or `build` it: the DDI of its last commit, each item at the version its history gives,
  * with each instrument's Qualtrics survey and the map of its columns to that DDI; and read
- * that survey's `responses` back, keyed by DDI Variable URN. `main` takes its
+ * that survey's `responses` back, keyed by DDI Variable URN; and write a dataset's
+ * `provenance` (where it came from) as DDI, from a harness's facts. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
@@ -28,9 +29,11 @@ import {
 	dataFileMap,
 	dataMapOf,
 	ddiIndexOf,
+	digestFindings,
 	documentOf,
 	exportRefusal,
 	type Finding,
+	filesOf,
 	HERE,
 	type Item,
 	importsOf,
@@ -43,7 +46,11 @@ import {
 	makeValidator,
 	movedTags,
 	notHere,
+	parseFacts,
 	placeFindings,
+	provenanceDocument,
+	provenanceFactsJsonSchema,
+	provenanceFindings,
 	questionItems,
 	type Range,
 	type Refusal,
@@ -132,6 +139,11 @@ const USAGE = `Usage:
                                     Read a data file (CSV, one header row) the same way, with a map
                                     that names each column by its header, with its DDI variable and
                                     any translations of its values. Every row is read
+  qretools provenance <facts.json> [-o file]
+                                    Write where one dataset (a run or an ingest) came from, as
+                                    DDI-Lifecycle 4.0 JSON, from a file of facts, validated. Each file the
+                                    facts name that is there must have the digest they give
+  qretools provenance --schema         Write the JSON Schema of the facts file
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -150,6 +162,7 @@ moves after that, check warns until the next export records it again.
 --agency  the instrument's DDI agency, in place of its workspace's (workspace.yaml).
           Needed for a file outside a workspace's instruments/.
 --ddi     the DDI a column map was made from, in place of <name>.json beside the map.
+--schema  for provenance, write the JSON Schema of the facts file instead.
 --qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
           if any part of it can't work in Qualtrics as the DDI says.`;
 
@@ -186,30 +199,34 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "build" &&
 		command !== "codebook" &&
 		command !== "paths" &&
-		command !== "responses"
+		command !== "responses" &&
+		command !== "provenance"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
 	// Each option belongs to one command; given to the other, it's a mistake, not ignored.
 	const stray =
-		command !== "responses" && args.values.map !== undefined
-			? "--map"
-			: command !== "responses" && args.values.ddi !== undefined
-				? "--ddi"
-				: args.values.bank !== undefined
-					? "--bank"
-					: args.values.agency !== undefined
-						? "--agency"
-						: args.values.qsf === true
-							? "--qsf"
-							: command !== "build" && args.values["tag-message"] !== undefined
-								? "--tag-message"
-								: command === "check"
-									? args.values.output !== undefined && "--output"
-									: command !== "codebook" &&
-										args.values.strict === true &&
-										"--strict";
+		command !== "provenance" && args.values.schema === true
+			? "--schema"
+			: command !== "responses" && args.values.map !== undefined
+				? "--map"
+				: command !== "responses" && args.values.ddi !== undefined
+					? "--ddi"
+					: args.values.bank !== undefined
+						? "--bank"
+						: args.values.agency !== undefined
+							? "--agency"
+							: args.values.qsf === true
+								? "--qsf"
+								: command !== "build" &&
+										args.values["tag-message"] !== undefined
+									? "--tag-message"
+									: command === "check"
+										? args.values.output !== undefined && "--output"
+										: command !== "codebook" &&
+											args.values.strict === true &&
+											"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -235,6 +252,21 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values.output,
 			io,
 		);
+	}
+	if (command === "provenance") {
+		if (args.values.schema === true) {
+			if (args.positionals[1] !== undefined) {
+				io.err(`${USAGE}\n`);
+				return USAGE_ERROR;
+			}
+			io.out(`${JSON.stringify(provenanceFactsJsonSchema(), null, 2)}\n`);
+			return OK;
+		}
+		if (args.positionals[1] === undefined) {
+			io.err(`${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return writeProvenance(dir, args.values.output, io);
 	}
 	if (command === "paths") {
 		// A file, always: there's no workspace default to fall back on.
@@ -546,6 +578,105 @@ async function writeResponses(
 	return findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
 }
 
+/**
+ * Where one dataset came from, as DDI: its facts read once (`parseFacts`), each file they
+ * name hashed where it is there (a digest that differs refuses: the provenance would describe
+ * another file), the instrument's DDI read to check every URN they name, then the DDI,
+ * validated. It reads no answers: a dataset is hashed, never parsed.
+ */
+async function writeProvenance(
+	file: string,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	let text: string;
+	try {
+		text = await readFile(file, "utf8");
+	} catch (e) {
+		io.err(
+			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const say = (f: Finding<string>) =>
+		io.err(
+			`${file}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]\n`,
+		);
+	const json = jsonOf(text);
+	if (!json.ok) {
+		io.err(
+			`${file}: error: Not written: this isn't JSON (${json.detail}). [provenance-facts]\n`,
+		);
+		return PROBLEMS;
+	}
+	const facts = parseFacts(json.value);
+	if (!facts.ok) {
+		for (const f of facts.error) say(f);
+		io.err(
+			"Not written: the facts don't match their schema (`qretools provenance --schema`).\n",
+		);
+		return PROBLEMS;
+	}
+	// Each file the facts name, as bytes and their digest; a file that isn't there is neither.
+	const files = await Promise.all(
+		filesOf(facts.value).map(async (f) => {
+			const bytes = await readFile(resolve(dirname(file), f.path)).catch(
+				() => undefined,
+			);
+			const read =
+				bytes === undefined
+					? undefined
+					: createHash("sha256").update(bytes).digest("hex");
+			return { ...f, bytes, read };
+		}),
+	);
+	// The instrument's DDI, only as the facts describe it (its digest checked first).
+	const ddi = files.find((f) => f.at === "instrument.ddi");
+	const ddiJson =
+		ddi?.bytes !== undefined && ddi.read === ddi.given
+			? jsonOf(ddi.bytes.toString("utf8"))
+			: undefined;
+	const findings: Finding<string>[] = [
+		...digestFindings(files),
+		...provenanceFindings(
+			facts.value,
+			ddiJson?.ok === true ? ddiIndexOf(ddiJson.value) : undefined,
+		),
+	];
+	if (ddiJson?.ok === false)
+		findings.push({
+			code: "provenance-unknown",
+			severity: "error",
+			path: "instrument.ddi",
+			message: "The instrument's DDI isn't JSON.",
+		});
+	if (ddiJson === undefined)
+		findings.push({
+			code: "provenance-unknown",
+			severity: "info",
+			path: "instrument.ddi",
+			message:
+				"The instrument's DDI isn't read, so the URNs the facts name aren't checked.",
+		});
+	for (const f of findings) say(f);
+	if (findings.some((f) => f.severity === "error")) {
+		io.err("Not written: the facts have errors.\n");
+		return PROBLEMS;
+	}
+	const document = provenanceDocument(facts.value);
+	const problems = await validate(document);
+	if (problems.length > 0) {
+		for (const p of problems) say(p);
+		io.err("Not written: the DDI doesn't match the official schema.\n");
+		return PROBLEMS;
+	}
+	return emit(
+		{ text: ddiText(document), lines: [], problems: false },
+		output,
+		io,
+	);
+}
+
 function parse(argv: readonly string[]) {
 	return parseArgs({
 		args: [...argv],
@@ -560,6 +691,7 @@ function parse(argv: readonly string[]) {
 			map: { type: "string" },
 			ddi: { type: "string" },
 			"tag-message": { type: "string" },
+			schema: { type: "boolean" },
 			help: { type: "boolean", short: "h" },
 		},
 	});

@@ -29,7 +29,18 @@ export type ItemType =
 	| "RepeatUntil"
 	| "StatementItem"
 	| "ComputationItem"
-	| "GenerationInstruction";
+	| "GenerationInstruction"
+	// A dataset's provenance (`provenance/`).
+	| "StudyUnit"
+	| "DataCollection"
+	| "Methodology"
+	| "PhysicalInstance"
+	| "OtherMaterial"
+	| "InformationClassification"
+	| "VariableGroup"
+	| "Weighting"
+	| "ProcessingEvent"
+	| "ProcessingEventScheme";
 
 export interface Identity {
 	readonly URN: string;

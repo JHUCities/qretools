@@ -21,6 +21,7 @@ qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
+qretools provenance provenance.json -o provenance-ddi.json  # where one dataset came from, as DDI, from a file of facts
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -315,6 +316,86 @@ range that the DDI gives. This check applies to a Qualtrics export too. The comm
 
 An input of an instrument has the missing values of the questions that the instrument
 asks. Thus, a data file can give "Don't know" (or another missing value) for an input.
+
+## Provenance
+
+`provenance` writes where one dataset came from, as DDI-Lifecycle 4.0 JSON. The dataset is the
+answers of one run (for example, a model or a simulated respondent answers an instrument) or
+of one ingest (for example, a published data file or a Qualtrics export). The command reads a
+JSON file of facts that a harness writes. It does not read, change or analyse the answers.
+
+```sh
+qretools provenance runs/run-2026-11-12a/provenance.json -o runs/run-2026-11-12a/provenance-ddi.json
+qretools provenance --schema > provenance.schema.json    # the JSON Schema of the facts file
+```
+
+The facts file is a public contract. `qretools provenance --schema` writes its JSON Schema.
+Write the facts file against that schema, in any language. An example:
+
+```json
+{
+  "qretools_provenance": 1,
+  "name": "run-2026-11-12a",
+  "instrument": {
+    "urn": "urn:ddi:org.example:instrument-wave1:3",
+    "ddi": { "path": "wave1.json", "sha256": "3f5a…" },
+    "workspace": "example/survey@v3"
+  },
+  "asked_by": ["Simulation"],
+  "answered_by": { "source": { "other": "Synthetic, language model" } },
+  "software": [{ "name": "example-model", "version": "2026-10-01", "accessed": "2026-11-12" }],
+  "dataset": {
+    "path": "answers.csv", "sha256": "9c1e…",
+    "present": ["urn:ddi:org.example:variable-tenure:3"],
+    "removed": [{ "urn": "urn:ddi:org.example:variable-income:3", "reason": "filtered" }]
+  },
+  "data": [{ "role": "traces", "path": "traces.jsonl", "sha256": "47d0…" }],
+  "materials": [{ "role": "config", "path": "config.yaml", "sha256": "e2b8…" }],
+  "access": { "level": "public" },
+  "prompts": [{ "question": "urn:ddi:org.example:tenure:3", "text": "…" }],
+  "planned": { "temperature": "0.7" },
+  "attributes": { "temperature": "0.7", "respondents": "100" }
+}
+```
+
+- Each URN has its version, as `build` writes it.
+- `asked_by` and `answered_by.source` are terms of the DDI vocabularies ModeOfCollection
+  and DataSourceType (for example `Simulation`, `ResearchData.Published`). If the
+  vocabulary has no term, write `{ "other": "<your term>" }`. DDI then gets `Other` and
+  your term.
+- The command writes `planned` and `attributes` as key-value pairs, and does not read them.
+  Each value is a string. Thus a model's settings and the counts (runs, respondents) are
+  written byte for byte, but their order is not kept. A count is never a sample size.
+- `dataset` is long CSV, `respondent,variable,row,value`, as `responses` writes it.
+  `removed` gives each variable of the instrument that the dataset does not have:
+  `filtered` (the access filter removed it) or `not-published` (the source did not publish
+  it).
+- `metadata` defines the per-respondent variables that no respondent is asked (mode,
+  sample phase, ballot, weight, response status). Give each one `codes`, `number` or
+  `text`. Its URN is `urn:ddi:<agency>:variable-<name>.<variable>:1`, so a column map can
+  name it. `modes` gives the mode term of each code of the mode variable.
+- Give `weighting` to every weight that the source publishes, with the publisher's advice
+  (and where and when they gave it) in `usage`. qretools never chooses a weight. If you
+  chose one, name it in `weight`.
+- The agency of the provenance's items is the instrument's, unless `agency` gives another.
+
+**Digests.** For each file that the facts name, the command reads the file, if it is there
+(paths are relative to the facts file). If its SHA-256 digest is not the digest in the
+facts, the command writes nothing and exits with 1. If the file is not there, the command
+writes the digest as the facts give it, and writes a note. If the instrument's DDI is
+there, the command also checks that each URN in the facts names an item of the correct
+type in it.
+
+The command writes findings on stderr, as `check` does: `provenance-facts` (the facts do not
+match their schema), `provenance-digest`, `provenance-unknown` (a URN that the instrument's DDI
+does not have), `provenance-weight` and `provenance-workspace`.
+
+The DDI has one `StudyUnit` with one `DataCollection` and one `CollectionEvent`. The dataset
+and the other data files are `PhysicalInstance`s with a SHA-256 `DataFingerprint`. The other
+files, the instrument's DDI and each prompt are `OtherMaterial`s. A prompt has a
+`Relationship` to its `QuestionItem`, by URN and version. The command validates the DDI
+against the official schema. That schema accepts most properties that it does not declare,
+so the tests of qretools also check the structure.
 
 ## Codebook
 

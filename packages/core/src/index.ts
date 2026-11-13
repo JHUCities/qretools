@@ -169,6 +169,22 @@ export {
 	unlockedTags,
 } from "./lock.ts";
 export { tagMessage } from "./manifest.ts";
+// The provenance of one dataset (a run or an ingest), from a harness's facts, as DDI.
+export {
+	type Digest,
+	digestFindings,
+	filesOf,
+	metadataUrn,
+	provenanceDocument,
+	provenanceFindings,
+} from "./provenance/elaborate.ts";
+export {
+	type ProvenanceCode,
+	type ProvenanceFacts,
+	parseFacts,
+	provenanceFactsJsonSchema,
+	type Term,
+} from "./provenance/facts.ts";
 export {
 	type Exportable,
 	exportRefusal,

@@ -1233,3 +1233,82 @@ describe("an instrument that reads only other workspaces", () => {
 		expect(r.out).not.toContain('"Agency": "org.example"');
 	});
 });
+
+describe("qretools provenance", () => {
+	const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+
+	/** An instrument's DDI as `build` writes it, a dataset beside it, and facts naming both. */
+	async function files(answers = "respondent,variable,row,value\n") {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-provenance-"));
+		const bank = bankOf({
+			"workspace.yaml": "agency: org.bank\n",
+			"questions/a/tenure.yaml":
+				'name: tenure\ntext: Own or rent?\nintent: i\nresponses:\n  "1": Own\n  "2": Rent\n',
+		});
+		const { ddi } = instrumentOf(
+			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n",
+			{ banks: { b: bank }, agency: "org.example" },
+		);
+		const text = `${JSON.stringify(ddi, null, 2)}\n`;
+		const urnOf = (type: string) =>
+			Object.values(
+				(ddi as Record<string, Record<string, { URN: string }>>)[type] ?? {},
+			)[0]?.URN ?? "";
+		await writeFile(join(dir, "t.json"), text);
+		await writeFile(
+			join(dir, "answers.csv"),
+			"respondent,variable,row,value\n",
+		);
+		const facts = {
+			qretools_provenance: 1,
+			name: "run1",
+			instrument: {
+				urn: urnOf("Instrument"),
+				ddi: { path: "t.json", sha256: sha(text) },
+				workspace: "example/survey@v1",
+			},
+			asked_by: ["Simulation"],
+			answered_by: { source: { other: "Synthetic, language model" } },
+			dataset: {
+				path: "answers.csv",
+				sha256: sha(answers),
+				present: [urnOf("Variable")],
+			},
+			prompts: [{ question: urnOf("QuestionItem"), text: "Answer briefly." }],
+			attributes: { respondents: "10" },
+		};
+		const path = join(dir, "provenance.json");
+		await writeFile(path, JSON.stringify(facts));
+		return path;
+	}
+
+	it("writes the provenance's DDI, its files' digests checked and its URNs found", async () => {
+		const r = await run("provenance", await files(), "-o", "out.json");
+		expect(r.err).toBe("");
+		expect(r.code).toBe(0);
+		const doc = JSON.parse(r.written["out.json"] ?? "{}");
+		expect(Object.keys(doc).sort()).toEqual([
+			"DataCollection",
+			"Methodology",
+			"OtherMaterial",
+			"PhysicalInstance",
+			"StudyUnit",
+			"VariableGroup",
+		]);
+	});
+
+	it("refuses a dataset whose digest differs from the facts'", async () => {
+		const r = await run("provenance", await files("other\n"));
+		expect(r.code).toBe(1);
+		expect(r.out).toBe("");
+		expect(r.err).toContain(
+			"dataset: `answers.csv` has another SHA-256 digest",
+		);
+	});
+
+	it("writes the JSON Schema of the facts", async () => {
+		const r = await run("provenance", "--schema");
+		expect(r.code).toBe(0);
+		expect(JSON.parse(r.out).properties.qretools_provenance.const).toBe(1);
+	});
+});
