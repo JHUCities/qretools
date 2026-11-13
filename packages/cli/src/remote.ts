@@ -58,7 +58,11 @@ const gitSaid = (e: unknown): string => {
  */
 export async function readTagged(
 	address: RemoteAddress,
-	{ root = cacheRoot(), urlOf = GITHUB }: { root?: string; urlOf?: UrlOf } = {},
+	{
+		root = cacheRoot(),
+		urlOf = GITHUB,
+		locked,
+	}: { root?: string; urlOf?: UrlOf; locked?: string } = {},
 ): Promise<RemoteBank> {
 	const { owner, repo, path, ref } = address;
 	const where = `${owner}/${repo}${path === "" ? "" : `/${path}`}@${ref}`;
@@ -76,31 +80,40 @@ export async function readTagged(
 	// entry records the one it was fetched at, so a moved tag, or the same address read
 	// from another clone, is fetched again rather than served from the cache.
 	let named: string | undefined;
-	try {
-		const { stdout } = await run("git", [
-			"ls-remote",
-			"--tags",
-			url,
-			`refs/tags/${ref}`,
-		]);
-		named = stdout
-			.split("\n")
-			.map((line) => line.split("\t"))
-			.find(([, name]) => name === `refs/tags/${ref}`)?.[0];
-		if (named === undefined)
-			return {
-				kind: "unavailable",
-				reason: `\`${where}\`: ${owner}/${repo} has no tag \`${ref}\`.`,
-			};
-	} catch (e) {
-		// Unreachable (offline, or access lost): the cached entry serves, as it was last
-		// read. So a moved tag shows only once the repository can be reached again.
-		if (!(await exists(join(clone, ".qretools-commit"))))
-			return {
-				kind: "unavailable",
-				reason: `\`${where}\` can't be read: ${gitSaid(e)}`,
-			};
-	}
+	// A commit can't move: an entry at the commit a lock gives serves without asking where the tag points now.
+	// shortcut: the entry is the tag's, so once a read of the moved tag replaces it, the lock asks again (and a release is refused); fetch the locked commit itself if that matters.
+	const atLock =
+		locked !== undefined &&
+		(await readFile(join(clone, ".qretools-commit"), "utf8").then(
+			(text) => text.trim() === locked,
+			() => false,
+		));
+	if (!atLock)
+		try {
+			const { stdout } = await run("git", [
+				"ls-remote",
+				"--tags",
+				url,
+				`refs/tags/${ref}`,
+			]);
+			named = stdout
+				.split("\n")
+				.map((line) => line.split("\t"))
+				.find(([, name]) => name === `refs/tags/${ref}`)?.[0];
+			if (named === undefined)
+				return {
+					kind: "unavailable",
+					reason: `\`${where}\`: ${owner}/${repo} has no tag \`${ref}\`.`,
+				};
+		} catch (e) {
+			// Unreachable (offline, or access lost): the cached entry serves, as it was last
+			// read. So a moved tag shows only once the repository can be reached again.
+			if (!(await exists(join(clone, ".qretools-commit"))))
+				return {
+					kind: "unavailable",
+					reason: `\`${where}\` can't be read: ${gitSaid(e)}`,
+				};
+		}
 	if (named !== undefined && named !== (await fetchedAt(clone))) {
 		// Cloned beside, then moved into place: a clone stopped halfway is never read, and
 		// beside the cache the move stays on one filesystem.

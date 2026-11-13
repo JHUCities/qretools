@@ -780,8 +780,12 @@ describe("qretools build", () => {
 			await git(root, "commit", "-q", "-m", "instrument");
 			const cache = await mkdtemp(join(tmpdir(), "qretools-cache-"));
 			let url = root;
-			const readRemote: Io["readRemote"] = (a) =>
-				readTagged(a, { root: cache, urlOf: () => url });
+			const readRemote: Io["readRemote"] = (a, _from, locked) =>
+				readTagged(a, {
+					root: cache,
+					urlOf: () => url,
+					...(locked !== undefined && { locked }),
+				});
 			const file = join(root, "tag.txt");
 			const built = await runWith(
 				readRemote,
@@ -1068,6 +1072,42 @@ describe("qretools build", () => {
 			expect(other.err).toMatch(/\[dataset-ddi\]/);
 			const gone = await runWith(readRemote, ...csv, "acme/ws/sub@v9:x");
 			expect(gone.err).toMatch(/acme\/ws\/sub@v9.*\[dataset-release\]/);
+		}, 30000);
+
+		it("reads a bank the release locked from the cache, without asking where its tag points", async () => {
+			const { ws, readRemote } = await released();
+			stdin = "{}";
+			const first = await runWith(readRemote, "next", "acme/ws/sub@v2:x");
+			expect(first).toMatchObject({ code: 0, err: "" });
+			// The bank's tag moves: asked, it would be fetched again, and the rebuilt DDI refused.
+			const root = dirname(ws);
+			await writeFile(
+				join(ws, "questions/work/q.yaml"),
+				QUESTION.replace("Do you work?", "Do you work now?"),
+			);
+			await git(root, "commit", "-q", "-am", "moved");
+			await git(root, "tag", "-f", "v1");
+			const again = await runWith(readRemote, "next", "acme/ws/sub@v2:x");
+			expect(again).toMatchObject({ code: 0, err: "", out: first.out });
+			// Locked but not cached, the bank is asked for: the moved tag is read, and the release refused.
+			const cache = await mkdtemp(join(tmpdir(), "qretools-cache-"));
+			const fresh = await runWith(
+				(a, _from, locked) =>
+					readTagged(a, {
+						root: cache,
+						urlOf: () => root,
+						...(locked !== undefined && { locked }),
+					}),
+				"next",
+				"acme/ws/sub@v2:x",
+			);
+			stdin = "";
+			expect(fresh).toMatchObject({ code: 1, out: "" });
+			expect(fresh.err).toMatch(/\[next-release\]/);
+			// `check` still asks, and warns of the move.
+			expect((await runWith(readRemote, "check", ws)).out).toMatch(
+				/\[moved-tag\]/,
+			);
 		}, 30000);
 
 		it("refuses a release made before tag references, and an instrument it doesn't have", async () => {

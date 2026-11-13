@@ -823,9 +823,10 @@ qretools next acme/survey@v3:wave1 state.json         # the same, from the relea
 qretools next --schema                                 # the JSON Schemas of the state and of the reply
 ```
 
-With a tag reference, each call asks GitHub where the tag points, and rebuilds the DDI
-from the cache. Thus, a call takes longer than with the DDI file (approximately half a
-second more for a large instrument).
+With a tag reference, each call asks GitHub where the tag of the release points. Then it
+rebuilds the DDI from the cache. It reads each workspace that the release locked from the
+cache, without asking GitHub, because a locked commit cannot move. Thus, a call takes
+longer than with the DDI file (approximately 0.4 seconds more for a large instrument).
 
 The state holds the inputs by their names in the instrument, and the answers so far. Each
 answer names its DDI Variable by URN, as `responses` does:

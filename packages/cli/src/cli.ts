@@ -54,6 +54,7 @@ import {
 	instrumentOf,
 	instrumentPath,
 	instrumentRelease,
+	type Locks,
 	locate,
 	locksFor,
 	locksWritten,
@@ -122,11 +123,13 @@ export interface Io {
 	readonly removeFile: (path: string) => Promise<void>;
 	/**
 	 * A workspace in another repository, read at its tag (the command uses git:
-	 * `readTagged`); `from` is a local clone to read it from in place of GitHub.
+	 * `readTagged`); `from` is a local clone to read it from in place of GitHub, and
+	 * `locked` the commit a release locked it at, which a cached read at it needn't ask about.
 	 */
 	readonly readRemote: (
 		address: RemoteAddress,
 		from?: string,
+		locked?: string,
 	) => Promise<RemoteBank>;
 	/** The repository a folder is a clone of, and the clone's folder (`ownRepository`). */
 	readonly ownRepository: (dir: string) => Promise<OwnRepository | undefined>;
@@ -619,7 +622,13 @@ async function ddiAtRelease(
 	if (release.kind === "refused") return { ok: false, reason: release.reason };
 	// Its banks as `build` read them, at the tags the release locked; its own repository's
 	// too, from GitHub, since the cached clone holds only this tag.
-	const remote = await readRemotes(read.files, io, undefined);
+	// Read at the commits it locked: a bank cached at its lock is read without asking GitHub.
+	const remote = await readRemotes(
+		read.files,
+		io,
+		undefined,
+		locksWritten(read.files["workspace.yaml"] ?? ""),
+	);
 	const one = workspaceOf(read.files, { remote, versions: release.versions })
 		.instruments[path];
 	const text = one === undefined ? "" : ddiText(one.instrument.ddi);
@@ -1532,13 +1541,14 @@ async function readPin(
 	io: Io,
 	a: RemoteAddress,
 	own: OwnRepository | undefined,
+	locked?: string,
 ): Promise<RemoteBank> {
 	if (
 		own === undefined ||
 		`${a.owner}/${a.repo}`.toLowerCase() !== own.repository
 	)
-		return io.readRemote(a);
-	const read = await io.readRemote(a, own.path);
+		return io.readRemote(a, undefined, locked);
+	const read = await io.readRemote(a, own.path, locked);
 	// A shallow checkout has no tags: say where the tag was looked for, and how to get it.
 	return read.kind === "unavailable"
 		? {
@@ -1548,18 +1558,22 @@ async function readPin(
 		: read;
 }
 
-/** Each workspace in another repository its instruments use, read once at its tag, by key. */
+/**
+ * Each workspace in another repository its instruments use, read once at its tag, by key.
+ * `locks` only for a release: `check` and `build` ask where each tag points, to see it move.
+ */
 const readRemotes = async (
 	files: Readonly<Record<string, string>>,
 	io: Io,
 	own: OwnRepository | undefined,
+	locks: Locks = {},
 ): Promise<Record<string, RemoteBank>> =>
 	Object.fromEntries(
 		await Promise.all(
 			remotesOf(files).map(
 				async (a): Promise<[string, RemoteBank]> => [
 					a.key,
-					await readPin(io, a, own),
+					await readPin(io, a, own, locks[a.key]),
 				],
 			),
 		),

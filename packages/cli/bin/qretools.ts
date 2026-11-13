@@ -23,8 +23,11 @@ process.exitCode = await main(process.argv.slice(2), {
 		await writeFile(path, text, "utf8");
 	},
 	removeFile: (path) => rm(path, { force: true }),
-	readRemote: (address, from) =>
-		readTagged(address, from === undefined ? {} : { urlOf: () => from }),
+	readRemote: (address, from, locked) =>
+		readTagged(address, {
+			...(from !== undefined && { urlOf: () => from }),
+			...(locked !== undefined && { locked }),
+		}),
 	readHistory,
 	ownRepository,
 	readStdin: () => text(process.stdin),
