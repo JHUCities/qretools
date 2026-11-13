@@ -290,11 +290,15 @@ To read an export, do these steps:
 
 1. Do the steps in "Export from Qualtrics" to get the export.
 2. Find the QSF column map of the survey (see "Make the QSF column map").
-3. If the map does not record a release, find the DDI that the map was made from.
+3. If the folder of the map has no `<name>.json` and the map records no release, find the
+   DDI that the map was made from.
 4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json -o <dataset.json>`.
-   The command reads `<name>.json` in the folder of the map. If that file is not there,
-   the command gets the DDI from the release that the map records. If the map records no
-   release, add `--ddi <the DDI>`. `--ddi` can also be a tag reference.
+   The command finds the DDI in this order:
+   - the DDI that `--ddi` gives: a file, an `https://` URL or a tag reference.
+   - `<name>.json` in the folder of the map.
+   - the release that the map records.
+
+   If `<name>.json` is not there and the map records no release, add `--ddi <the DDI>`.
    If the command asks for `--answered-by`, add it (see "The provenance").
 5. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
    The output holds the responses.** Without `-o`, the command writes the dataset to
@@ -333,9 +337,10 @@ To get the values as CSV, see "Export a dataset".
 The dataset cannot yet hold the rows of a roster or a loop. If the export has an answer in
 a row, the command writes no dataset.
 
-The command reads the DDI in `<name>.json` to get the codes of each variable. If
-`<name>.json` is not the DDI that the map was made from, the command gives a warning and
-continues. The dataset records the two digests. The command reads local files only.
+The command reads the DDI to get the codes of each variable. If the DDI is not the DDI
+that the map was made from, the command gives a warning and continues. The dataset records
+the two digests. The export and the map must be local files. The DDI can be a local file,
+an `https://` URL (see "DDI by URL") or a tag reference (see "Tag references").
 
 The command matches each column by the ImportId in row 3, not by the column name. Thus, a
 column that you rename in Qualtrics is still read. The command keeps Survey Preview
