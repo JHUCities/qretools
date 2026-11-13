@@ -1,4 +1,4 @@
-The library's own samples, each a workspace.
+The library's own samples, each a workspace but `datasets/`.
 
 `bank/`: the example questions a new workspace starts with, in `questions/example/`, and
 the shared files they name, as JHUCities/qretools-template ships them. The example
@@ -9,3 +9,7 @@ The tests read the folder with `readWorkspace` and check it with `bankOf`.
 part of the instrument language and asks its own workspace's questions
 (`uses: hh: ../`). The other asks questions from a workspace in another repository, at a
 tag.
+
+`datasets/`: not a workspace. `wave1.json` is a dataset without roster values, as
+`datasetOf` wrote it before datasets held roster rows. A test checks that the same
+dataset still gives these bytes.

@@ -15,6 +15,8 @@ export interface Recording {
 	readonly record: Recorded;
 	/** The roster's name (its `ConstructName`), else its ID. An `each` over a roster has the roster's name, so it joins it. */
 	readonly roster?: string;
+	/** The most rows the roster's step states it has, if it states any. */
+	readonly max?: number;
 }
 
 /**
@@ -27,7 +29,7 @@ export function recordsOf(
 	const out = new Map<string, Recording>();
 	const go = (
 		steps: readonly Step[],
-		roster: string | undefined,
+		roster: { readonly roster: string; readonly max?: number } | undefined,
 	): string | undefined => {
 		for (const s of steps) {
 			let problem: string | undefined;
@@ -36,7 +38,7 @@ export function recordsOf(
 					out.set(record.urn, {
 						ask: s,
 						record,
-						...(roster !== undefined && { roster }),
+						...roster,
 					});
 			else if (s.kind === "if")
 				problem =
@@ -50,7 +52,10 @@ export function recordsOf(
 				// shortcut: an answer names one row, so a roster inside a roster can't be keyed; key by every row if a survey needs one.
 				if (roster !== undefined)
 					return `A roster inside a roster (${s.name ?? s.id}) isn't supported yet.`;
-				problem = go(s.flow, s.name ?? s.id);
+				problem = go(s.flow, {
+					roster: s.name ?? s.id,
+					...(s.max !== undefined && { max: s.max }),
+				});
 			}
 			if (problem !== undefined) return problem;
 		}

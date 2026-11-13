@@ -144,8 +144,10 @@ export interface Described {
 	/** The base of every ID, `dataset-<name>`, and its agency. */
 	readonly base: string;
 	readonly agency: string;
-	/** The DataSet these items describe. */
-	readonly dataset: Pick<Item, "type" | "identity">;
+	/** The DataSets these items describe: the respondents', then each roster's. */
+	readonly datasets: readonly Pick<Item, "type" | "identity">[];
+	/** How a roster's rows are records of a respondent's: only with a roster's DataSet. */
+	readonly relationship?: Pick<Item, "type" | "identity">;
 	/** The variables (URNs) with at least one value, the dataset's own included. */
 	readonly present: readonly string[];
 	/** The dataset's own variables for a data file's metadata columns (URNs). */
@@ -158,6 +160,10 @@ export interface Described {
 /** What the fingerprint of the DataSet is over, as `canonicalForm` writes it. */
 export const DATA_FINGERPRINT =
 	"SHA-256 of every value of the DataSet (the answers, the values of the dataset's own variables a data file's map describes, and each respondent's identifier and interview times) as long CSV: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent and then variable URN in code-unit order";
+
+/** What the fingerprint is over where the dataset holds roster rows, as `canonicalForm` writes it. */
+export const ROSTER_FINGERPRINT =
+	"SHA-256 of every value of the respondents' DataSet (the answers, the values of the dataset's own variables a data file's map describes, and each respondent's identifier and interview times) and the answers of each roster's DataSet, each with its row, as long CSV: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent, then variable URN in code-unit order, then row as a number";
 
 /** The DDI vocabularies a term is from (the version-free URI). */
 export const VOCABULARY = {
@@ -328,17 +334,25 @@ export function provenanceOf(
 					: sorted(p.claimed).map((d) => pair("ddi", d)),
 		}),
 	);
-	const data = item("PhysicalInstance", id("data"), {
-		DataFingerprint: [
-			{
-				Type: "data",
-				AlgorithmSpecification: DATA_FINGERPRINT,
-				DigitalFingerprintValue: p.fingerprint,
-			},
-		],
-		RecordLayoutReference: [ref(d.dataset)],
-		VariableGroupReference: groups.map(ref),
-	});
+	const data = item(
+		"PhysicalInstance",
+		id("data"),
+		obj({
+			DataFingerprint: [
+				{
+					Type: "data",
+					AlgorithmSpecification:
+						d.relationship === undefined
+							? DATA_FINGERPRINT
+							: ROSTER_FINGERPRINT,
+					DigitalFingerprintValue: p.fingerprint,
+				},
+			],
+			RecordLayoutReference: d.datasets.map(ref),
+			VariableGroupReference: groups.map(ref),
+			DataRelationshipReference: d.relationship && [ref(d.relationship)],
+		}),
+	);
 	const methodology =
 		p.facts.software === undefined
 			? undefined

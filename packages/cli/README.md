@@ -334,8 +334,22 @@ command refuses to replace it. Remove the file, or write to another file.
 A blank cell gives no value, because the export cannot tell "not asked" from "not ticked".
 To get the values as CSV, see "Export a dataset".
 
-The dataset cannot yet hold the rows of a roster or a loop. If the export has an answer in
-a row, the command writes no dataset.
+**Roster rows.** The DDI of the instrument tells which roster records each variable. The
+values of a roster are in a `DataSet` of their own, `dataset-<name>.rows-<roster>`, one
+record for each row that has a value. A row that has no value has no record. The record
+of a row has the key `<respondent>#<row>`, for example `R_1#2`. Each row has three values
+of the dataset's own variables, with the answers of the row:
+
+- `<roster>_key`: the key of the row. The `DataSet` of the roster identifies each row
+  with it.
+- `respondent`: the respondent of the row. This value links the row to its respondent.
+- `row`: the number of the row, from 1.
+
+A `DataRelationship` item tells how to find a row: by its respondent and its row, or by
+its key. It also tells that each row is a record of a respondent. A dataset without
+roster values has no `DataRelationship` and no roster `DataSet`. In a roster, the values
+are sorted by respondent, then by row, then by the URN of the variable. A roster inside a
+roster is refused.
 
 The command reads the DDI to get the codes of each variable. If the DDI is not the DDI
 that the map was made from, the command gives a warning and continues. The dataset records
@@ -373,7 +387,10 @@ command exit with 1. The command still writes the values that it can read.
 
 These errors stop the command before it writes the dataset:
 
-- `responses-dataset`: an answer is in the row of a roster or a loop.
+- `responses-dataset`: an answer has a row, and the DDI records its variable outside a
+  roster. Or an answer has no row, and the DDI records its variable in a roster. Or the
+  row is more than the most rows that the DDI gives to the roster. Or the DDI has a
+  roster inside a roster.
 - `responses-agency`: the variables in the map do not have one DDI agency.
 - `responses-exists`: the file of `-o` holds something that is not this dataset.
 - `responses-collection`: the responses have different `Status` or `DistributionChannel`
@@ -704,12 +721,13 @@ The output is long CSV (one value on one line), in four columns:
   level, a number (see "Access levels").
 - `variable`: the URN of a variable in the DDI of the instrument. For a `metadata` column
   of a map, the URN of a variable of the dataset (`dataset-<name>.var-<column>`).
-- `row`: empty. The dataset cannot hold the rows of a roster yet.
+- `row`: the row of a roster, from 1. The column is empty for a variable outside a
+  roster.
 - `value`: a code of the variable, a number or text.
 
-The lines are sorted by respondent, then by the URN of the variable. The output has no
-lines for `respondent`, `start` and `end`: the `respondent` column identifies the
-respondent. A long file does not need a column for each
+The lines are sorted by respondent, then by the URN of the variable, then by row. The output has no
+lines for `respondent`, `start` and `end`, or for the key and the row of a roster row: the
+`respondent` and `row` columns identify them. A long file does not need a column for each
 round of each loop. Thus, a tool can compare two files (for example real and synthetic
 responses) one variable at a time. The format is our own.
 
@@ -736,9 +754,10 @@ of the level, and the URN of the policy of the workspace of the question. This a
 the most open level too. Thus, the level of a question from another workspace is always
 read against the policy of its own workspace, never against the policy of the instrument.
 
-The variables of the dataset (`respondent`, `start`, `end` and the `metadata` columns of
-a map) are not questions. They can identify a respondent. Thus, they are at the most
-closed level of each policy. Below that level:
+The variables of the dataset (`respondent`, `start`, `end`, the `<roster>_key` of each
+roster and the `metadata` columns of a map) are not questions. They can identify a
+respondent. Thus, they are at the most closed level of each policy. The `row` variable
+cannot identify a respondent. Thus, it stays with the answers. Below that level:
 
 - The CSV view numbers the respondents from 1 and does not show the identifiers. The
   order of the numbers is the order of the SHA-256 digests of the identifiers, not the
@@ -780,6 +799,8 @@ the values. It writes nothing and exits with 1, in these conditions:
   have the level of the embargo.
 - `dataset-access-levels`: the command cannot read a policy. The command reads each code
   list with an ID of the form `access-<levels>.codes` as a policy.
+- `dataset-access-rosters`: the command cannot read the rosters of the instrument in the
+  DDI. For example, the DDI has a roster inside a roster.
 - `dataset-access-leak`: after the filter, a value above the level is still in the view.
   This is a bug in QREtools. Please report it.
 

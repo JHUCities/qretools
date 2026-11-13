@@ -218,10 +218,11 @@ const USAGE = `Usage:
                                     access levels, --access is required: the view leaves out each
                                     variable above that level, by the access policy of its own
                                     workspace, and names each one on stderr, never a value. The
-                                    dataset's own variables (respondent, start, end, and a map's
-                                    metadata columns unless the map states their level) stand at the
-                                    most closed level; below it, the CSV numbers the respondents from 1,
-                                    in the order of the SHA-256 of their identifiers
+                                    dataset's own variables (respondent, start, end, each roster's
+                                    key, and a map's metadata columns unless the map states their
+                                    level) stand at the most closed level; below it, the CSV numbers
+                                    the respondents from 1, in the order of the SHA-256 of their
+                                    identifiers. A roster's answers have their row in the row column
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -1473,6 +1474,10 @@ function accessRefusal(
 				(u) =>
 					`${ddiFile}: error: The access level of \`${u}\` can't be traced to one access policy in the DDI. [dataset-access-untraced]`,
 			);
+		case "rosters":
+			return [
+				`${ddiFile}: error: The DDI's rosters can't be read, so a roster key's access level isn't known: ${r.reason} [dataset-access-rosters]`,
+			];
 		case "leak":
 			return r.urns.map(
 				(u) =>
