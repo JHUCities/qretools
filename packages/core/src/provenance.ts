@@ -36,6 +36,7 @@ import { type DdiIndex, deref } from "./ddi/read.ts";
 import { aboveLevel, type FilterRefusal } from "./filter.ts";
 import {
 	type Answer,
+	type Citation,
 	type MetadataColumn,
 	metadataUrn,
 	type Term,
@@ -77,6 +78,9 @@ export interface RunMap {
 	/** A data file's columns no respondent is asked, and what the publisher advises of its weights. */
 	readonly metadata?: readonly MetadataColumn[];
 	readonly weighting?: WeightingAdvice;
+	/** A data file's map: who answered, and the published file it reads. */
+	readonly answered_by?: Term;
+	readonly citation?: Citation;
 }
 
 export interface RunFolder {
@@ -140,13 +144,6 @@ const RunSchema = z.strictObject({
 	end: date.optional(),
 	asked_by: z.array(termSchema).min(1).optional(),
 	answered_by: termSchema.optional(),
-	source: z
-		.strictObject({
-			title: nonEmpty,
-			publisher: nonEmpty.optional(),
-			url: nonEmpty.optional(),
-		})
-		.optional(),
 	runtime: z
 		.strictObject({ name: nonEmpty, version: nonEmpty.optional() })
 		.optional(),
@@ -155,13 +152,8 @@ const RunSchema = z.strictObject({
 });
 type Run = z.infer<typeof RunSchema>;
 
-/** Fields only one kind of folder may declare: a synthetic run (no map), or an ingest (a map). */
-const ONLY: Readonly<Partial<Record<keyof Run, "synthetic" | "ingest">>> = {
-	respondent: "synthetic",
-	runtime: "synthetic",
-	reported: "synthetic",
-	source: "ingest",
-};
+/** Fields only a synthetic run (a folder with no map) may declare. */
+const ONLY: readonly (keyof Run)[] = ["respondent", "runtime", "reported"];
 
 /** A folder name every ID can hang off: DDI's ID characters, with no dot (the one dot is ours). */
 const NAME = /^[A-Za-z0-9*@$_-]+$/;
@@ -238,15 +230,16 @@ export function provenanceOf(
 			? SYNTHETIC
 			: {
 					...f.collection,
+					...(f.map.answered_by !== undefined && {
+						answered_by: f.map.answered_by,
+					}),
 					...(modes.length > 0 && { asked_by: modes.map(([, t]) => t) }),
 				};
-	for (const [key, only] of Object.entries(ONLY))
-		if (run[key as keyof Run] !== undefined && only !== kind)
+	for (const key of ONLY)
+		if (run[key] !== undefined && kind !== "synthetic")
 			say(
 				RUN,
-				only === "synthetic"
-					? `Only a synthetic run (a folder with no column map) declares \`${key}\`; this folder has ${f.map?.path}.`
-					: `Only an ingest (a folder with a column map) declares \`${key}\`.`,
+				`Only a synthetic run (a folder with no column map) declares \`${key}\`; this folder has ${f.map?.path}.`,
 				key,
 			);
 	if (kind === "synthetic" && run.respondent === undefined)
@@ -577,7 +570,7 @@ export function provenanceOf(
 						],
 					}),
 				];
-	const source = run.source;
+	const source = f.map?.citation;
 	const event = obj({
 		...part(`collection-${n}.event`),
 		DataSource: [

@@ -28,6 +28,7 @@ import {
 	type Bank,
 	type BankScope,
 	bankOf,
+	type Citation,
 	collisions,
 	DDI,
 	type DdiDocument,
@@ -78,6 +79,7 @@ import {
 	scopeOf,
 	shortCommit,
 	status,
+	type Term,
 	tagMessage,
 	tickCodes,
 	unlockedTags,
@@ -511,6 +513,9 @@ type ReadWithMap =
 			/** A data file's columns no respondent is asked, and the advice on its weights. */
 			readonly metadata: readonly MetadataColumn[];
 			readonly weighting?: WeightingAdvice;
+			/** A data file's map: who answered, and the published file it reads. */
+			readonly answered_by?: Term;
+			readonly citation?: Citation;
 			readonly notes: readonly string[];
 			readonly findings: readonly ResponseFinding<string>[];
 			readonly answers?: readonly Answer[];
@@ -546,6 +551,14 @@ function readWithMap(
 			`${mapFile}: error: its name says the source \`${named[1]}\`, but its \`source\` field says \`${source}\`. [responses-unreadable]`,
 		);
 	const qsf = source === "qsf";
+	if (
+		!qsf &&
+		mapJson.ok &&
+		(mapJson.value as Record<string, unknown>).answered_by === undefined
+	)
+		return refused(
+			`${mapFile}: error: this map has no \`answered_by\` field, which says who answered (a DataSourceType term, such as \`"ResearchData.Published"\`). Add it to the map. [responses-unreadable]`,
+		);
 	const map = !mapJson.ok
 		? undefined
 		: qsf
@@ -633,8 +646,11 @@ function readWithMap(
 		source,
 		reads,
 		metadata,
-		...("respondent" in map &&
-			map.weighting !== undefined && { weighting: map.weighting }),
+		...("respondent" in map && {
+			answered_by: map.answered_by,
+			...(map.weighting !== undefined && { weighting: map.weighting }),
+			...(map.citation !== undefined && { citation: map.citation }),
+		}),
 		notes,
 		findings: [...made.findings, ...(answered?.findings ?? [])],
 		...(answered !== undefined && { answers: answered.answers }),
@@ -913,6 +929,10 @@ async function writeProvenance(
 			reads: again.reads,
 			metadata: again.metadata,
 			...(again.weighting !== undefined && { weighting: again.weighting }),
+			...(again.answered_by !== undefined && {
+				answered_by: again.answered_by,
+			}),
+			...(again.citation !== undefined && { citation: again.citation }),
 		};
 		if (again.source === "qsf") {
 			const said = exportCollection(sourceText);

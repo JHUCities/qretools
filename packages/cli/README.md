@@ -247,6 +247,8 @@ gives a different source, the command refuses the map:
 {
   "source": "release",
   "ddi": "sha256:3f5a…",
+  "answered_by": "ResearchData.Published",
+  "citation": { "title": "Example Survey 2010, release 2", "publisher": "Example Data Archive", "url": "https://example.org/release2.zip" },
   "respondent": "ID",
   "values": { "-98": "D", "-99": "N", "-100": null },
   "columns": [
@@ -263,6 +265,11 @@ gives a different source, the command refuses the map:
   the map, or make the map again.
 - `ddi`: the SHA-256 digest of the DDI that the map was made from. If the map has a digest,
   the command refuses a different DDI.
+- `answered_by`: who answered, as a term of the DDI vocabulary DataSourceType (or
+  `{ "other": "<your words>" }`). It is a fact of the data, so the map gives it. A data
+  file's map with no `answered_by` is refused: write it in the map.
+- `citation`: optional. The published data file: `title`, and optionally `publisher` and
+  `url`. `provenance` writes it as the origin of the data.
 - `respondent`: the header of the column that identifies each respondent.
 - `values`: the translations for all columns, from a value in the data file to a code of
   the variable. `null` means "no answer": the command writes no line for the value, as
@@ -289,6 +296,7 @@ the publisher advises about the weights in `weighting`:
 {
   "source": "release",
   "ddi": "sha256:3f5a…",
+  "answered_by": "ResearchData.Published",
   "respondent": "ID",
   "columns": [ … ],
   "metadata": [
@@ -494,15 +502,15 @@ one kind of respondent. If the rows are different, export each kind as a differe
 | `respondent` | a synthetic run, always | `"synthetic"` |
 | `start`, `end` | a data file, a synthetic run | `"2010-03-01"`, `"2026-11-12T09:00:00Z"` |
 | `asked_by` | a data file whose map has no `modes` | `["Interview.FaceToFace.CAPIorCAMI"]` |
-| `answered_by` | a data file; a Qualtrics export that is not test responses | `"ResearchData.Published"` |
-| `source` | an ingest | `{ "title": "…", "publisher": "…", "url": "…" }` |
+| `answered_by` | a Qualtrics export that is not test responses | `{ "other": "members of the panel" }` |
 | `runtime` | a synthetic run, always | `{ "name": "example-model", "version": "2026-10-01" }` |
 | `reported` | a synthetic run | `{ "temperature": "0.7" }` |
 | `access` | any | `"public"` |
 
 `asked_by` is a list of terms of the DDI vocabulary ModeOfCollection. `answered_by` is a
 term of the DDI vocabulary DataSourceType. For a term that a vocabulary does not have,
-write `{ "other": "<your words>" }`. `reported` is what the runtime said about the run. The
+write `{ "other": "<your words>" }`. A data file's map gives `answered_by` and the
+citation, so `run.json` does not. `reported` is what the runtime said about the run. The
 command writes it as it is, and does not read it. `access` is the level of `answers.csv`.
 The command makes sure that no answer is above that level.
 

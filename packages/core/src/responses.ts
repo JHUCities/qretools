@@ -437,14 +437,23 @@ export interface MetadataColumn {
 	readonly weight?: true;
 }
 
+/** A published work: a data release, or the codebook that advises on it (DDI's Citation). */
+export interface Citation {
+	readonly title: string;
+	readonly publisher?: string | undefined;
+	readonly url?: string | undefined;
+}
+
+const CitationSchema = z.strictObject({
+	title: nonEmpty,
+	publisher: nonEmpty.optional(),
+	url: nonEmpty.optional(),
+});
+
 /** What the publisher advises about its weights, in its own words, and where and when it was read. */
 export interface WeightingAdvice {
 	readonly advice: string;
-	readonly source: {
-		readonly title: string;
-		readonly publisher?: string | undefined;
-		readonly url?: string | undefined;
-	};
+	readonly source: Citation;
 	/** The date it was read from the source (2026-11-12). */
 	readonly read: string;
 }
@@ -475,11 +484,7 @@ const MetadataSchema = z
 
 const WeightingSchema = z.strictObject({
 	advice: nonEmpty,
-	source: z.strictObject({
-		title: nonEmpty,
-		publisher: nonEmpty.optional(),
-		url: nonEmpty.optional(),
-	}),
+	source: CitationSchema,
 	read: z.string().regex(/^\d{4}-\d\d-\d\d$/),
 });
 
@@ -512,6 +517,10 @@ export interface DataMap {
 	readonly source: string;
 	/** The digest of the DDI it was made from, `sha256:<hex>`. */
 	readonly ddi?: string;
+	/** Who answered: a term of the DDI vocabulary DataSourceType. A fact of the source, so its map says it. */
+	readonly answered_by: Term;
+	/** The published data file it reads, if it is published. */
+	readonly citation?: Citation;
 	/** The header of the column that names each respondent. */
 	readonly respondent: string;
 	/** Translations for every column; a column's own win. */
@@ -544,9 +553,22 @@ function valuesOf(v: unknown): Values | undefined {
 /** A data file's map read from its JSON, once, or undefined where it isn't one. */
 export function dataMapOf(json: unknown): DataMap | undefined {
 	if (typeof json !== "object" || json === null) return undefined;
-	const { source, ddi, respondent, values, columns, metadata, weighting } =
-		json as Record<string, unknown>;
+	const {
+		source,
+		ddi,
+		answered_by,
+		citation,
+		respondent,
+		values,
+		columns,
+		metadata,
+		weighting,
+	} = json as Record<string, unknown>;
 	if (typeof source !== "string") return undefined;
+	const who = termSchema.safeParse(answered_by);
+	const cited =
+		citation === undefined ? undefined : CitationSchema.safeParse(citation);
+	if (!who.success || cited?.success === false) return undefined;
 	if (ddi !== undefined && typeof ddi !== "string") return undefined;
 	if (typeof respondent !== "string" || !Array.isArray(columns))
 		return undefined;
@@ -611,6 +633,8 @@ export function dataMapOf(json: unknown): DataMap | undefined {
 	return {
 		source,
 		...(typeof ddi === "string" && { ddi }),
+		answered_by: who.data,
+		...(cited?.data !== undefined && { citation: cited.data }),
 		respondent,
 		...(shared !== undefined && { values: shared }),
 		columns: read,

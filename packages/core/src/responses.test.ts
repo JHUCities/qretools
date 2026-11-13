@@ -179,6 +179,8 @@ describe("dataMapOf", () => {
 		const json = {
 			ddi: "sha256:0",
 			source: "survey",
+			answered_by: "ResearchData.Published",
+			citation: { title: "Survey 2010, release 2", url: "https://example.org" },
 			respondent: "id",
 			values: { "-98": "D", "-100": null },
 			columns: [{ column: "happy", variable: "urn:happy", values: { x: "1" } }],
@@ -187,7 +189,7 @@ describe("dataMapOf", () => {
 		// A key JSON can hold is kept as data, never as the object's prototype.
 		const proto = dataMapOf(
 			JSON.parse(
-				'{"source":"s","respondent":"id","columns":[],"values":{"__proto__":"D"}}',
+				'{"source":"s","answered_by":"x","respondent":"id","columns":[],"values":{"__proto__":"D"}}',
 			),
 		);
 		expect(proto?.values && Object.hasOwn(proto.values, "__proto__")).toBe(
@@ -198,6 +200,10 @@ describe("dataMapOf", () => {
 			[],
 			{ ...json, respondent: 1 },
 			{ ...json, source: undefined },
+			{ ...json, answered_by: undefined },
+			{ ...json, answered_by: { other: "" } },
+			{ ...json, citation: { url: "https://example.org" } },
+			{ ...json, citation: { title: "t", year: 2010 } },
 			{ ...json, columns: {} },
 			{ ...json, values: { "-98": 1 } },
 			{ ...json, columns: [{ column: "happy" }] },
@@ -210,6 +216,7 @@ describe("dataMapOf", () => {
 describe("dataFileMap", () => {
 	const MAP: DataMap = {
 		source: "survey",
+		answered_by: "ResearchData.Published",
 		respondent: "id",
 		values: { "-98": "D", "-100": null },
 		columns: [
@@ -296,6 +303,7 @@ describe("filtered and censored columns", () => {
 	it("reads nothing from a filtered column, with one note, whether or not the file has it", () => {
 		const map = dataMapOf({
 			source: "survey",
+			answered_by: "ResearchData.Published",
 			respondent: "id",
 			columns: [
 				{ column: "happy", variable: "urn:happy", filtered: true },
@@ -319,6 +327,7 @@ describe("filtered and censored columns", () => {
 			expect(
 				dataMapOf({
 					source: "survey",
+					answered_by: "ResearchData.Published",
 					respondent: "id",
 					columns: [{ column: "age", variable: "urn:age", ...bad }],
 				}),
@@ -331,6 +340,7 @@ describe("metadata columns", () => {
 	const json = {
 		source: "survey",
 		ddi: "sha256:0",
+		answered_by: "ResearchData.Published",
 		respondent: "id",
 		values: { "-98": "D" },
 		columns: [{ column: "happy", variable: "urn:happy" }],

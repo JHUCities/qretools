@@ -250,7 +250,8 @@ describe("provenanceOf, a synthetic run", () => {
 		expect(at({ ...run, asked_by: ["Interview"] })).toEqual([
 			"run.json:asked_by",
 		]);
-		expect(at({ ...run, source: { title: "x" } })).toEqual(["run.json:source"]);
+		// The citation is the map's now: run.json has no such field.
+		expect(at({ ...run, source: { title: "x" } })).toEqual(["run.json:"]);
 		expect(at({ ...run, runtime: undefined })).toEqual(["run.json:runtime"]);
 		expect(at({ ...run, weather: "fine" })).toEqual(["run.json:"]);
 		expect(at({ ...run, start: "12 Nov" })).toEqual(["run.json:start"]);
@@ -329,7 +330,7 @@ describe("provenanceOf, an ingest", () => {
 		expect(fields({ reported: {} })).toEqual(["reported"]);
 	});
 
-	it("needs a data file's facts declared, since no file says them", () => {
+	it("takes who answered and the citation from a data file's map, and the rest from run.json", () => {
 		const data: RunFolder = {
 			...ingest,
 			collection: {},
@@ -337,22 +338,25 @@ describe("provenanceOf, an ingest", () => {
 				...ingest.map,
 				path: "wave1-ddi-gss.columns.json",
 				source: "gss",
-			} as RunFolder["map"] & object,
-		};
-		expect(problems(data).map((p) => p.field)).toEqual([
-			"asked_by",
-			"answered_by",
-		]);
-		const d = made({
-			...data,
-			run: {
-				asked_by: ["Interview.FaceToFace.CAPIorCAMI", "Interview.Telephone"],
 				answered_by: "ResearchData.Published",
-				source: {
+				citation: {
 					title: "Example Survey 2010, release 2",
 					publisher: "Example Data Archive",
 					url: "https://example.org/release2.zip",
 				},
+			} as RunFolder["map"] & object,
+		};
+		expect(problems(data).map((p) => p.field)).toEqual(["asked_by"]);
+		expect(
+			problems({
+				...data,
+				run: { asked_by: ["Interview"], answered_by: "Other" },
+			}).map((p) => p.field),
+		).toEqual(["answered_by"]);
+		const d = made({
+			...data,
+			run: {
+				asked_by: ["Interview.FaceToFace.CAPIorCAMI", "Interview.Telephone"],
 				start: "2010-03-01",
 				end: "2010-08-31",
 				access: "restricted",
@@ -375,6 +379,22 @@ describe("provenanceOf, an ingest", () => {
 		expect(items(d, "VariableGroup").map((g) => g.ID)).toEqual([
 			"group-wave1-tests.present",
 			"group-wave1-tests.not-in-source",
+		]);
+	});
+
+	it("takes who answered from run.json for a platform's real responses, which don't say", () => {
+		const real: RunFolder = {
+			...ingest,
+			// A platform's export says who answered only of its test responses.
+			collection: (({ answered_by: _, ...rest }) => ({
+				...rest,
+				asked_by: ["SelfAdministeredQuestionnaire.CAWI"],
+			}))(platform),
+		};
+		expect(problems(real).map((p) => p.field)).toEqual(["answered_by"]);
+		const d = made({ ...real, run: { answered_by: "Person" } });
+		expect(items(d, "DataCollection")[0]?.CollectionEvent).toMatchObject([
+			{ DataSource: [{ SourceType: [{ StringValue: "Person" }] }] },
 		]);
 	});
 });
@@ -419,10 +439,11 @@ describe("provenanceOf, a data file with columns no respondent is asked", () => 
 			file("source.csv", "b"),
 			file("wave1-ddi-survey.columns.json", "9"),
 		],
-		run: { answered_by: "ResearchData.Published" },
+		run: undefined,
 		map: {
 			path: "wave1-ddi-survey.columns.json",
 			source: "survey",
+			answered_by: "ResearchData.Published",
 			reads: [v("tenure"), v("mood"), v("zip")],
 			metadata,
 			weighting: {
@@ -536,7 +557,7 @@ describe("provenanceOf, a data file with columns no respondent is asked", () => 
 			problems({ ...data, run: { answered_by: "x", asked_by: ["y"] } }).map(
 				(p) => p.field,
 			),
-		).toEqual(["asked_by"]);
+		).toEqual(["answered_by", "asked_by"]);
 		expect(
 			problems({
 				...data,

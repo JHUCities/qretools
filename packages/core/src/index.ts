@@ -215,6 +215,7 @@ export {
 	type Answer,
 	answersCsv,
 	answersOf,
+	type Citation,
 	type DataMap,
 	dataFileMap,
 	dataMapOf,

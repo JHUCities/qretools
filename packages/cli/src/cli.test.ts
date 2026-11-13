@@ -955,6 +955,7 @@ describe("qretools responses", () => {
 		);
 		const json = JSON.stringify({
 			source: "survey",
+			answered_by: "ResearchData.Published",
 			ddi: digest,
 			respondent: "ID",
 			values: { "-98": "D", "-100": null },
@@ -1018,6 +1019,13 @@ describe("qretools responses", () => {
 		);
 		expect((await run("responses", data, "--map", beside)).err).toMatch(
 			/has no `source` field.*Rebuild it/,
+		);
+		await writeFile(
+			beside,
+			JSON.stringify({ ...JSON.parse(json), answered_by: undefined }),
+		);
+		expect((await run("responses", data, "--map", beside)).err).toMatch(
+			/has no `answered_by` field.*Add it to the map/,
 		);
 		expect((await run("responses", data, "--map", ddi)).code).toBe(2);
 	});
@@ -1236,6 +1244,8 @@ describe("qretools responses", () => {
 				mapFile,
 				JSON.stringify({
 					source: "survey",
+					answered_by: "ResearchData.Published",
+					citation: { title: "Example Survey, release 2" },
 					ddi: `sha256:${createHash("sha256").update(ddiText).digest("hex")}`,
 					respondent: "ID",
 					values: { "-98": "D" },
@@ -1279,13 +1289,12 @@ describe("qretools responses", () => {
 				].join("\n"),
 			);
 			await writeFile(join(dir, "answers.csv"), read.out);
-			await writeFile(
-				join(dir, "run.json"),
-				'{"answered_by":"ResearchData.Published"}',
-			);
+			// The map says who answered and the mode: this folder needs no run.json.
 			const r = await run("provenance", dir);
 			expect(r.err).toBe("");
 			const text = r.written[join(dir, "provenance.json")] ?? "";
+			expect(text).toContain('"ResearchData.Published"');
+			expect(text).toContain('"Example Survey, release 2"');
 			expect(text).toContain('"IsWeight": true');
 			expect(text).toContain('"Interview.Telephone"');
 			expect(text).not.toMatch(/0\.98765|1\.23456/);
