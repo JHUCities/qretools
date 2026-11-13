@@ -6,8 +6,8 @@
  * A file's version is how many times its content key has changed, oldest commit first.
  * A shared file's key is its own blob. A question's is its blob and the blobs of every
  * shared file it names, so a question's version moves when its scale (or universe, or
- * `missing.yaml`) does, as a reference carries the referenced item's version; one that
- * names an access level also takes `workspace.yaml`'s list of levels. An
+ * `missing.yaml`) does, as a reference carries the referenced item's version; and
+ * every question also takes `workspace.yaml`'s list of levels. An
  * instrument's is its blob and the commit `workspace.yaml` locks each tag it names at:
  * it is versioned whole, and what it pins is part of it, so a moved and re-locked tag is
  * a new version even when the file is the same.
@@ -43,9 +43,10 @@ export interface History {
  * The shared files a question's text names. Every question also depends on both root
  * files: shortcut: `select_all.yaml` bumps questions that aren't select-all, and
  * `missing.yaml` those without a variable; over-counting a version is safe, and
- * telling them apart needs the env the question was read in. One that writes `access`
- * depends on `workspace.yaml` too, keyed on its levels alone (`levelsOf`): its other
- * lines never change a question's DDI.
+ * telling them apart needs the env the question was read in. Every question depends on
+ * `workspace.yaml` too, keyed on its levels alone (`levelsOf`): once it lists levels,
+ * every variable carries the policy they make, and its other lines never change a
+ * question's DDI. A bank without levels keys on nothing there, so nothing moves.
  */
 const dependencies = (text: string): readonly string[] => {
 	const parsed = parseSurface(text, EMPTY_ENV);
@@ -54,7 +55,7 @@ const dependencies = (text: string): readonly string[] => {
 			...parsed.mentions.map((m) => schemePath(m.scheme, m.name)),
 			ROOT.missing,
 			ROOT.select_all,
-			...(parsed.ranges.access === undefined ? [] : [ROOT.workspace]),
+			ROOT.workspace,
 		]),
 	];
 };

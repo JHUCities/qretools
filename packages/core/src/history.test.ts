@@ -156,9 +156,23 @@ describe("a question's access level", () => {
 			),
 		)[Q]?.number;
 
-	it("moves a question that names a level when the levels change, and only then", () => {
+	it("moves every question when the levels change, and only then", () => {
 		expect(versionAt("q1")).toBe("2");
+		expect(versionAt("q2")).toBe("2");
 		expect(versionAt("q3")).toBe("2");
-		expect(versionAt("q2")).toBe("1");
+	});
+
+	it("moves nothing in a bank without levels when workspace.yaml changes", () => {
+		const v = versionsOf(
+			history(
+				[
+					["d1", { [Q]: "q2", "workspace.yaml": "w0" }],
+					["d2", { [Q]: "q2", "workspace.yaml": "w4" }],
+				],
+				{ ...texts, w0: "agency: a\n", w4: "agency: b\n" },
+			),
+		);
+		expect(v[Q]?.number).toBe("1");
+		expect(v["workspace.yaml"]).toBeUndefined();
 	});
 });

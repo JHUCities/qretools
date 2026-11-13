@@ -55,6 +55,7 @@ export type {
 } from "./ddi/document.ts";
 export { collisions, documentOf } from "./ddi/document.ts";
 export {
+	ACCESS_POLICY_KEY,
 	elaborate,
 	elaborateItems,
 	NOT_TICKED,
@@ -100,6 +101,14 @@ export {
 	UNDECLARED_AGENCY,
 } from "./evaluate.ts";
 export {
+	aboveLevel,
+	accessPoliciesOf,
+	type FilterRefusal,
+	filterAnswers,
+	type Policy,
+	type Removed,
+} from "./filter.ts";
+export {
 	type Edit,
 	type Finding,
 	type FindingCode,
@@ -125,10 +134,12 @@ export {
 } from "./instrument/draft.ts";
 export { exampleInstrument } from "./instrument/example.ts";
 export {
+	type Host,
 	type Instrument,
 	type InstrumentContext,
 	importsOf,
 	instrumentOf,
+	levelsAsked,
 } from "./instrument/instrument.ts";
 export type { Unread } from "./instrument/parse.ts";
 export {
@@ -204,6 +215,7 @@ export {
 export {
 	type Answer,
 	answersCsv,
+	answersOf,
 	type DataMap,
 	dataFileMap,
 	dataMapOf,
@@ -228,6 +240,7 @@ export {
 	isRoot,
 	type Kind,
 	kindAt,
+	levelsNamed,
 	REQUIRED_ROOTS,
 	ROOT,
 	type RootKind,
@@ -240,7 +253,9 @@ export {
 	type Shape,
 	schemeEnv,
 	schemePath,
+	settingsFindings,
 	unknownFolders,
+	unusedLevels,
 } from "./schemes.ts";
 export {
 	DEFAULT_SELECT_ALL,

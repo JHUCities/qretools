@@ -22,6 +22,7 @@ qretools paths wave1.json -o paths.html      # the paths through an instrument's
 qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 qretools provenance provenance.json -o provenance-ddi.json  # where one dataset came from, as DDI, from a file of facts
+qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -396,6 +397,67 @@ files, the instrument's DDI and each prompt are `OtherMaterial`s. A prompt has a
 `Relationship` to its `QuestionItem`, by URN and version. The command validates the DDI
 against the official schema. That schema accepts most properties that it does not declare,
 so the tests of qretools also check the structure.
+## Filter the answers by access level
+
+`filter` keeps the answers that a person at one access level can see. It reads the
+answers as `responses` writes them, and the DDI that the answers refer to:
+
+```sh
+qretools filter wave1-answers.csv --ddi dist/instruments/wave1.json --access public -o wave1-public.csv
+qretools filter --ddi dist/instruments/wave1.json   # list the access policies and their levels
+```
+
+The command keeps the answers to the variables at the level and at each more open level.
+It removes the other answers, by the URN of the variable. The output has the same form as
+the input. Thus, real answers and synthetic answers are filtered in the same way.
+
+The command uses only the DDI. A workspace that lists access levels has an access policy:
+its levels in their order. In the DDI, a policy is a code list. Its ID spells the levels,
+for example `access-public-restricted`, and the code of each level is its rank, from 1 for
+the most open level. Each variable of a question has an embargo. The embargo has the name
+of the level, and the URN of the policy of the workspace of the question. This applies at
+the most open level too. Thus, the level of a question from another workspace is always
+read against the policy of its own workspace, never against the policy of the instrument.
+
+The list of the policies shows each policy, then each level with the number of variables
+at that level:
+
+```text
+urn:ddi:org.example:access-public-restricted.codes:1
+  public 12
+  restricted 3
+```
+
+To filter answers, do these steps:
+
+1. Run `qretools filter --ddi <file.json>` to see the policies and their levels.
+2. Run `qretools filter <answers.csv> --ddi <file.json> --access <level> -o <file>`.
+3. Read the notes on stderr. Each `filter-removed` note gives the name and the URN of one
+   variable that the command removed. A note never shows a value.
+
+The answers and the DDI are one unit. If the command refuses one variable, it refuses all
+the answers. It writes nothing and exits with 1, in these conditions:
+
+- `filter-unknown-level`: a policy in the DDI has no level with that name. The message
+  gives the levels of that policy.
+- `filter-no-levels`: the DDI has no access levels.
+- `filter-unknown-variable`: the answers have a variable that the DDI does not have. The
+  level of that variable is not known.
+- `filter-untraced`: the level of a variable cannot be traced to one policy. For example,
+  the variable has no embargo, the embargo has no policy, or the policy does not have the
+  level of the embargo.
+- `filter-levels`: the command cannot read a policy. The command reads each code list
+  with an ID of the form `access-<levels>.codes` as a policy.
+- `filter-unreadable`: the answers are not in the form that `responses` writes.
+- `filter-leak`: after the filter, an answer above the level is still in the output. This
+  is a bug in QREtools. Please report it.
+
+The command does not compare the answers with the DDI file that `responses` read. Use the
+DDI from `build`: its URNs have versions, so answers from a different build do not match
+its variables. The DDI from `export` has version 1 for each item.
+
+**Caution: a computed value (for example, a value that an instrument computes from a
+restricted answer) has no level. The command does not remove it.**
 
 ## Codebook
 

@@ -74,6 +74,21 @@ export const NOT_TICKED = "not selected";
 export const SELECT_ALL_ID = "select-all";
 
 /**
+ * A bank's access policy, its levels in order, as a code list: each level a category, its
+ * code its rank from 1, the most open. Its ID spells the levels (`access-public-restricted`;
+ * a level's name has no hyphen), so two different policies never share an identity and
+ * one policy is one item, at version 1, whichever bank publishes it. Every embargo names
+ * the policy its level belongs to (`ACCESS_POLICY_KEY`), so a reader of the DDI alone
+ * (`filterAnswers`) resolves a level against its own bank's order.
+ */
+export const ACCESS_POLICY_PREFIX = "access-";
+export const accessPolicyId = (levels: readonly string[]): string =>
+	`${ACCESS_POLICY_PREFIX}${levels.join("-")}`;
+/** The embargo's UserAttributePair key whose value is its policy's code list URN. */
+export const ACCESS_POLICY_KEY = "access-policy";
+const ACCESS_POLICY_NAME = "access-levels";
+
+/**
  * How a bank's named shared file is published: its items' ID, or the base its list's
  * items hang off (`scale-agree4.codes`), is its name after its kind's prefix. One
  * spelling, read both ways (`sharedOf`). A name has no hyphen (`NAME_PATTERN`), so
@@ -138,8 +153,11 @@ export const elaborate = (
 	missing: readonly Code[],
 	selectAll: SelectAll,
 	versioning: Versioning = {},
+	levels: readonly string[] = [],
 ): DdiDocument =>
-	documentOf(elaborateItems(draft, agency, missing, selectAll, versioning));
+	documentOf(
+		elaborateItems(draft, agency, missing, selectAll, versioning, levels),
+	);
 
 /** Who publishes the items, and at which version each file's items are. */
 interface Ctx {
@@ -173,6 +191,8 @@ export function elaborateItems(
 	missing: readonly Code[],
 	selectAll: SelectAll,
 	versioning: Versioning = {},
+	/** The bank's access levels, most open first: published beside a restricted question. */
+	levels: readonly string[] = [],
 ): readonly Item[] {
 	const ctx: Ctx = {
 		agency,
@@ -279,6 +299,19 @@ export function elaborateItems(
 		missing.length > 0 && specs.variables.length > 0
 			? missingValueItems(ctx, missing)
 			: undefined;
+	// The bank's policy, beside every variable once the bank lists levels (`Draft.access`).
+	const policy =
+		draft.access !== undefined &&
+		specs.variables.length > 0 &&
+		levels.includes(draft.access)
+			? codeListItems(
+					ctx,
+					UNVERSIONED,
+					accessPolicyId(levels),
+					levels.map((label, i) => ({ code: String(i + 1), label })),
+					{ name: ACCESS_POLICY_NAME },
+				)
+			: undefined;
 	const variables = specs.variables.map((v) =>
 		variableItem(v, ctx, {
 			question,
@@ -286,7 +319,14 @@ export function elaborateItems(
 			universe,
 			concept,
 			missing: missingItems?.representation,
-			access: draft.access,
+			access:
+				policy === undefined || draft.access === undefined
+					? undefined
+					: {
+							level: draft.access,
+							open: draft.access === levels[0],
+							policy: policy.codeList,
+						},
 		}),
 	);
 
@@ -299,6 +339,8 @@ export function elaborateItems(
 		instruction,
 		universe,
 		...(missingItems?.items ?? []),
+		policy?.codeList,
+		...(policy?.categories ?? []),
 	].filter((it) => it !== undefined);
 }
 
@@ -419,6 +461,37 @@ function missingValueItems(
 	return { representation, items: [representation, codeList, ...categories] };
 }
 
+/**
+ * The missing values an instrument gives its inputs: its own workspace's list, in the
+ * instrument's namespace (`<base>.missing`, `<base>.missing-codes`, …) so no bank's list
+ * can share its identity, at `version` (the workspace's `missing.yaml`'s).
+ */
+export function inputMissingItems(
+	agency: string,
+	base: string,
+	version: Version,
+	missing: readonly Code[],
+): { readonly representation: Item; readonly items: readonly Item[] } {
+	const ctx: Ctx = {
+		agency,
+		own: version,
+		shared: () => version,
+		selectAll: DEFAULT_SELECT_ALL,
+	};
+	const { codeList, categories } = codeListItems(ctx, version, base, missing, {
+		isMissing: true,
+		part: (p) => `${base}.missing-${p}`,
+	});
+	const representation = versioned(
+		ctx,
+		"ManagedMissingValuesRepresentation",
+		`${base}.missing`,
+		version,
+		{ MissingCodeRepresentation: [{ CodeListReference: ref(codeList) }] },
+	);
+	return { representation, items: [representation, codeList, ...categories] };
+}
+
 interface ElaboratedDomain {
 	/** How the question is answered. */
 	readonly responseDomain: JsonObject;
@@ -520,6 +593,7 @@ function codeListItems(
 		principal = false,
 		name,
 		generation,
+		part = (p) => `${base}.${p}`,
 	}: {
 		/** The bank's missing-value list: its categories are marked missing. */
 		readonly isMissing?: boolean;
@@ -529,13 +603,15 @@ function codeListItems(
 		readonly name?: string;
 		/** How a respondent comes to be in a code's category, when the list says. */
 		readonly generation?: (c: Code) => JsonObject;
+		/** Each part's ID (`codes`, `cat-0`, `code-0`): hung off `base` with its one dot. */
+		readonly part?: (p: string) => string;
 	} = {},
 ): { codeList: Item; categories: Item[] } {
 	const options = codes.map((c, i) => {
 		const category = versioned(
 			ctx,
 			"Category",
-			`${base}.cat-${i}`,
+			part(`cat-${i}`),
 			version,
 			obj({
 				Label: [structured(c.label)],
@@ -544,7 +620,7 @@ function codeListItems(
 			}),
 		);
 		const code: JsonObject = {
-			...identity(ctx.agency, `${base}.code-${i}`, version.number),
+			...identity(ctx.agency, part(`code-${i}`), version.number),
 			Value: codeValue(c.code),
 			CategoryReference: ref(category),
 		};
@@ -553,7 +629,7 @@ function codeListItems(
 	const codeList = versioned(
 		ctx,
 		"CodeList",
-		`${base}.codes`,
+		part("codes"),
 		version,
 		obj({
 			CodeListName: maybe(name, (n) => [intl(n)]),
@@ -637,8 +713,8 @@ function variableItem(
 		readonly universe: Item | undefined;
 		readonly concept: Item | undefined;
 		readonly missing: Item | undefined;
-		/** The access level above the most open one, if the question has one. */
-		readonly access: string | undefined;
+		/** The question's access level and its bank's policy, when the bank lists levels. */
+		readonly access: Access | undefined;
 	},
 ): Item {
 	const id = `variable-${v.name}`;
@@ -658,22 +734,42 @@ function variableItem(
 				ValueRepresentation: v.value,
 				MissingValuesReference: maybe(refs.missing, ref),
 			}),
-			EmbargoReference: maybe(refs.access, (level) =>
-				embargo(identity(ctx.agency, `${id}.embargo`, ctx.own.number), level),
+			EmbargoReference: maybe(refs.access, (access) =>
+				embargo(identity(ctx.agency, `${id}.embargo`, ctx.own.number), access),
 			),
 		}),
 	);
 }
 
+/** A question's access level, whether it's its policy's most open, and the policy's list. */
+interface Access {
+	readonly level: string;
+	readonly open: boolean;
+	readonly policy: Item;
+}
+
 /**
  * A variable's access level as DDI says it: an embargo named by the level, with no end
- * date. The 4.0 schema has the embargo inline on the Variable, so it has an identity of
- * its own, hung off the variable's.
+ * date, naming its bank's policy by URN (a UserAttributePair: the schema gives an
+ * Embargo no reference to a code list). The most open level is an embargo too, said to
+ * restrict nothing, so a variable without one is told apart from one open under a
+ * policy. The 4.0 schema has the embargo inline on the Variable, so it has an identity
+ * of its own, hung off the variable's.
  */
-export const embargo = (id: Identity, level: string): JsonObject => ({
-	...id,
-	EmbargoName: [intl(level)],
-});
+const embargo = (id: Identity, access: Access): JsonObject =>
+	obj({
+		...id,
+		UserAttributePair: [
+			{
+				AttributeKey: codeValue(ACCESS_POLICY_KEY),
+				AttributeValue: codeValue(access.policy.identity.URN),
+			},
+		],
+		EmbargoName: [intl(access.level)],
+		Description: access.open
+			? structured("The most open access level: it restricts nothing.")
+			: undefined,
+	});
 
 function numberRange(
 	min: number | undefined,

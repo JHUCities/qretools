@@ -665,7 +665,7 @@ describe("qretools export", () => {
 		// The reason once, though both questions say it.
 		expect(r.err.split("(`access` must be a list of levels)")).toHaveLength(2);
 		expect(r.err).toMatch(
-			/Not exported: a question's access level can't be read\.\n$/,
+			/Not exported: an access level can't be read, or this workspace doesn't declare one\.\n$/,
 		);
 	});
 
@@ -1008,6 +1008,186 @@ describe("qretools responses", () => {
 			).err,
 		).toMatch(/isn't a QSF column map/);
 		expect((await run("responses", data, "--map", ddi)).code).toBe(2);
+	});
+});
+
+describe("access levels, through the commands", () => {
+	it("checks, exports and refuses as the core decides", async () => {
+		const root = await mkdtemp(join(tmpdir(), "qretools-access-"));
+		const q = (name: string, line = "") =>
+			`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${line}`;
+		const put = async (path: string, text: string) => {
+			await mkdir(dirname(join(root, path)), { recursive: true });
+			await writeFile(join(root, path), text);
+		};
+		await put(
+			"bank/workspace.yaml",
+			"agency: org.bank\naccess: [public, restricted, secret]\n",
+		);
+		await put("bank/questions/a/zip.yaml", q("zip", "access: restricted\n"));
+		await put("bank/questions/a/age.yaml", q("age"));
+		await put("bank/missing.yaml", 'labels:\n  "D": Don\x27t know\n');
+		await put("host/workspace.yaml", "agency: org.host\naccess: [public]\n");
+		await put("host/questions/a/own.yaml", q("own", "access: public\n"));
+		await put(
+			"host/instruments/x.yaml",
+			"name: x\nuses:\n  b: acme/b@v1\nflow:\n  - ask: b.zip\n",
+		);
+		const bank = join(root, "bank");
+
+		// check: the missing line is to fill in; a level no question names is a warning.
+		const checked = await run("check", bank);
+		expect(checked.code).toBe(1);
+		expect(checked.out).toMatch(
+			/age\.yaml.*`access` is required.*\[to fill in\]/,
+		);
+		expect(checked.out).toMatch(
+			/workspace\.yaml.*warning: No question names the access level `secret`\. \[unused-level\]/,
+		);
+		// export: the missing level is held at the most closed one, never refused for it.
+		const exported = await run("export", bank);
+		expect(exported.code).toBe(0);
+		expect(exported.out).toContain("access-public-restricted-secret.codes");
+
+		// An instrument whose workspace doesn't declare a level it asks at.
+		const instrument = join(root, "host/instruments/x.yaml");
+		const undeclared = await run(
+			"instrument",
+			"check",
+			instrument,
+			"--bank",
+			`b=${bank}`,
+		);
+		expect(undeclared.code).toBe(1);
+		expect(undeclared.out).toMatch(
+			// At the ask's own line (5), naming the question as written.
+			/x\.yaml:5:\d+: error: `b\.zip` is asked at `restricted`, which this workspace doesn't declare\. \[access-undeclared\]/,
+		);
+		// Missing values coded otherwise than this workspace's: one warning, on the bank's use.
+		expect(undeclared.out).toMatch(
+			/x\.yaml:3:\d+: warning: `b` codes missing values as `D`, and this workspace declares none\. It affects the one question this instrument asks from `b`\. \[missing-differs\]/,
+		);
+		expect(undeclared.out).not.toMatch(/x\.yaml:5:\d+: warning/);
+		const refused = await run(
+			"instrument",
+			"export",
+			instrument,
+			"--bank",
+			`b=${bank}`,
+			"--qsf",
+		);
+		expect(refused).toMatchObject({ code: 1, out: "" });
+		expect(refused.err).toMatch(/Not exported/);
+	});
+});
+
+describe("qretools filter", () => {
+	it("keeps a level and the more open ones, names what it removed, lists levels, and writes nothing when refused", async () => {
+		const q = (name: string, rest = "") =>
+			`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
+		const { ddi } = instrumentOf(
+			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n  - ask: b.zip\n",
+			{
+				banks: {
+					b: bankOf({
+						"workspace.yaml":
+							"agency: org.bank\naccess: [public, restricted]\n",
+						"questions/a/tenure.yaml": q("tenure", "access: public\n"),
+						"questions/a/zip.yaml": q("zip", "access: restricted\n"),
+					}),
+				},
+				agency: "org.example",
+			},
+		);
+		const dir = await mkdtemp(join(tmpdir(), "qretools-filter-"));
+		const file = join(dir, "t.json");
+		await writeFile(file, JSON.stringify(ddi));
+		const v = (name: string) =>
+			`urn:ddi:org.example:instrument-t.var-${name}:1`;
+		const answers = join(dir, "answers.csv");
+		await writeFile(
+			answers,
+			`respondent,variable,row,value\nr1,${v("tenure")},,own\nr1,${v("zip")},,21218\n`,
+		);
+
+		const r = await run("filter", answers, "--ddi", file, "--access", "public");
+		expect(r.out).toBe(
+			`respondent,variable,row,value\nr1,${v("tenure")},,own\n`,
+		);
+		expect(r.err).toBe(
+			`${answers}: note: removed \`zip\` (${v("zip")}), at \`restricted\`. [filter-removed]\n`,
+		);
+		expect(r.code).toBe(0);
+		expect(
+			(await run("filter", answers, "--ddi", file, "--access", "restricted"))
+				.out,
+		).toMatch(/21218/);
+		// The policy, then each level with how many variables stand at it.
+		expect(await run("filter", "--ddi", file)).toMatchObject({
+			code: 0,
+			out: "urn:ddi:org.bank:access-public-restricted.codes:1\n  public 1\n  restricted 1\n",
+		});
+
+		// Refused: nothing written, and no value said.
+		const unknown = await run(
+			"filter",
+			answers,
+			"--ddi",
+			file,
+			"--access",
+			"secret",
+			"-o",
+			"kept.csv",
+		);
+		expect(unknown).toMatchObject({ code: 1, out: "", written: {} });
+		expect(unknown.err).toMatch(
+			/has no level `secret`.*\[filter-unknown-level\]/,
+		);
+		// A DDI with no levels: `--access` means nothing there, so it's refused.
+		const plain = join(dir, "plain.json");
+		await writeFile(
+			plain,
+			JSON.stringify(
+				instrumentOf("name: p\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n", {
+					banks: {
+						b: bankOf({
+							"workspace.yaml": "agency: org.bank\n",
+							"questions/a/tenure.yaml": q("tenure"),
+						}),
+					},
+					agency: "org.example",
+				}).ddi,
+			),
+		);
+		const none = await run(
+			"filter",
+			answers,
+			"--ddi",
+			plain,
+			"--access",
+			"public",
+		);
+		expect(none).toMatchObject({ code: 1, out: "" });
+		expect(none.err).toMatch(/\[filter-no-levels\]/);
+		await writeFile(
+			answers,
+			"respondent,variable,row,value\nr1,urn:ddi:org.example:gone:1,,21218\n",
+		);
+		const gone = await run(
+			"filter",
+			answers,
+			"--ddi",
+			file,
+			"--access",
+			"public",
+		);
+		expect(gone).toMatchObject({ code: 1, out: "" });
+		expect(gone.err).toMatch(/\[filter-unknown-variable\]/);
+		expect(gone.err).not.toMatch(/21218/);
+		expect((await run("filter", answers, "--access", "public")).code).toBe(2);
+		expect((await run("check", ".", "--access", "public")).err).toMatch(
+			/`--access` isn't an option of `check`/,
+		);
 	});
 });
 

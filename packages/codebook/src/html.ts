@@ -412,6 +412,11 @@ function entryHtml(e: Entry, level: 3 | 4, cx: Context): string {
 		),
 		pair(
 			cx,
+			"Access",
+			e.access === undefined ? undefined : escapeHtml(e.access),
+		),
+		pair(
+			cx,
 			"Asked",
 			cx.inputs?.has(e.urn)
 				? "Not asked: comes with each case"

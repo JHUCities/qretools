@@ -73,6 +73,8 @@ export type LintCode =
 	| "unknown-variant"
 	/** Bank-level: `required_in` names a folder no saved question is in. */
 	| "unknown-folder"
+	/** Bank-level: `access` lists a level no question names. */
+	| "unused-level"
 	/** Bank-level: another question has the same name, so the same DDI identity. */
 	| "duplicate-name";
 
@@ -109,7 +111,15 @@ export type InstrumentCode =
 	/** Advice, in `check`: a tag read with no lock in `workspace.yaml`. */
 	| "unlocked-tag"
 	/** A release: an instrument that reads its own workspace as its files are (`../`), not at a tag. */
-	| "untagged-use";
+	| "untagged-use"
+	/** An asked question's bank lists an access level its host workspace doesn't declare. */
+	| "access-undeclared"
+	/** A bank and its host workspace list shared access levels in different orders. */
+	| "access-order"
+	/** Advice: an asked question's bank codes missing values otherwise than its host workspace. */
+	| "missing-differs"
+	/** Advice: an asked select-all question's bank stores chosen and not chosen otherwise. */
+	| "select-all-differs";
 
 export type FindingCode =
 	| ParseCode

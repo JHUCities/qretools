@@ -1,6 +1,8 @@
 import { CompletionContext } from "@codemirror/autocomplete";
 import { yaml } from "@codemirror/lang-yaml";
 import { EditorState } from "@codemirror/state";
+import { EMPTY_ENV } from "@qretools/core";
+import { questionJsonSchema } from "@qretools/core/editor";
 import { stateExtensions } from "codemirror-json-schema";
 import { yamlCompletion } from "codemirror-json-schema/yaml";
 import { describe, expect, it } from "vitest";
@@ -177,5 +179,26 @@ describe("the package's options, under one rule", () => {
 	it("reads the package's empty answer as none", () => {
 		expect(withoutInfo(() => [])(context)).toBeNull();
 		expect(withoutInfo(() => null)(context)).toBeNull();
+	});
+});
+
+describe("access levels, from the question's schema", () => {
+	const levelsAt = (access: readonly string[]) => {
+		const real = questionJsonSchema({ ...EMPTY_ENV, access });
+		const doc = "name: q\naccess: ";
+		const state = EditorState.create({
+			doc,
+			extensions: [yaml(), stateExtensions(real as never)],
+		});
+		return schemaCompletion(
+			new CompletionContext(state, doc.length, true),
+		)?.options.map((o) => o.label);
+	};
+
+	it("offers the workspace's levels under `access:`, and only those", () => {
+		expect(levelsAt(["public", "restricted"])).toEqual([
+			"public",
+			"restricted",
+		]);
 	});
 });

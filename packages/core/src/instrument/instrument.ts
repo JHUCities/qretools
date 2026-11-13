@@ -7,12 +7,15 @@ import { isMap, isScalar, parseDocument } from "yaml";
 import { HERE } from "../address.ts";
 import type { Collision, DdiDocument } from "../ddi/document.ts";
 import { SELECT_ALL_ID } from "../ddi/elaborate.ts";
+import type { Version } from "../ddi/version.ts";
 import type { BankScope } from "../evaluate.ts";
 import { type Finding, inDocumentOrder, type Range } from "../findings.ts";
 import { ACCESS_REFUSING } from "../refusal.ts";
 import { UNDECLARED_AGENCY } from "../schemes.ts";
 import { DEFAULT_SELECT_ALL, selectAllText } from "../selectAll.ts";
 import { AGENCY_PATTERN, AGENCY_RULE_TEXT } from "../surface/bankfile.ts";
+import { definedVariables } from "../surface/draft.ts";
+import type { Env } from "../surface/env.ts";
 import type { Livelit } from "../surface/livelits.ts";
 import { inspectInstrument } from "./check.ts";
 import { type InstrumentDraft, steps, type Use } from "./draft.ts";
@@ -38,6 +41,19 @@ export interface InstrumentContext {
 	readonly agency?: string;
 	/** Its DDI version; "1" when nothing is known of its history. */
 	readonly version?: string;
+	/**
+	 * Its own workspace's settings, which an imported question is checked against: its
+	 * access levels must cover the levels asked at, and its missing values and select-all
+	 * coding are compared with each bank's. Its inputs take its missing values. Absent
+	 * when it's in no workspace: then nothing is checked, and inputs take none.
+	 */
+	readonly host?: Host;
+}
+
+/** What of its own workspace an instrument reads (`InstrumentContext.host`). */
+export interface Host extends Pick<Env, "access" | "missing" | "selectAll"> {
+	/** `missing.yaml`'s DDI version, when the workspace's history is known. */
+	readonly missingVersion?: Version;
 }
 
 export interface Instrument {
@@ -67,6 +83,14 @@ export function instrumentOf(
 	const elaborated = elaborateInstrument(parsed, {
 		agency: context.agency ?? UNDECLARED_AGENCY,
 		...(context.version !== undefined && { version: context.version }),
+		...(context.host !== undefined && {
+			missing: {
+				codes: context.host.missing,
+				...(context.host.missingVersion !== undefined && {
+					version: context.host.missingVersion,
+				}),
+			},
+		}),
 	});
 	const { document, collisions } = instrumentDocument(elaborated);
 	const agency: Finding[] =
@@ -127,6 +151,60 @@ export function instrumentOf(
 			hint: `Correct the \`access\` list in the \`workspace.yaml\` of \`${q.alias}\`.`,
 		});
 	}
+	// An asked question keeps its home bank's policy; its workspace must declare each
+	// level it asks at, in the same order, so its own policy covers what it publishes.
+	const host = context.host;
+	// shortcut: an ask the text can't place is said on its bank's `uses` line; unreachable
+	// through `parseInstrument` today, so untested: test it if a draft can lack an ask's range.
+	const placed = (alias: string, path: string) =>
+		parsed.ranges[path] === undefined ? `uses.${alias}` : path;
+	const undeclared =
+		host === undefined
+			? []
+			: [...asksByBank(parsed.draft)].flatMap(([alias, asks]) =>
+					hostCovers(
+						host.access,
+						alias,
+						context.banks[alias]?.env.access,
+						asks.map((a) => ({ ...a, path: placed(alias, a.path) })),
+					),
+				);
+	// Its missing values and select-all coding: an imported question keeps its bank's in
+	// the DDI, which is right; the workspace is told where they differ from its own.
+	// Missing values are a bank's, so said once on its `uses` line with the questions they
+	// touch; a select-all coding is said at each select-all question asked.
+	const conventions: Finding[] = [];
+	if (host !== undefined) {
+		const asked = new Map<string, Set<string>>();
+		for (const node of steps(parsed.draft.flow)) {
+			const q = node.kind === "ask" ? node.question : undefined;
+			const env = q === undefined ? undefined : context.banks[q.alias]?.env;
+			if (q === undefined || env === undefined) continue;
+			// Only a question with a variable carries missing values into the DDI.
+			if (
+				q.evaluation.draft.domain !== undefined &&
+				definedVariables(q.evaluation.draft).length > 0
+			)
+				asked.set(q.alias, (asked.get(q.alias) ?? new Set()).add(q.name));
+			if (
+				q.evaluation.draft.domain?.kind === "responses" &&
+				q.evaluation.draft.domain.select === "many"
+			)
+				conventions.push(
+					...selectAllDiffers(
+						host,
+						env,
+						placed(q.alias, `${node.path}.ask`),
+						`${q.alias}.${q.name}`,
+					),
+				);
+		}
+		for (const [alias, names] of asked) {
+			const env = context.banks[alias]?.env;
+			if (env !== undefined)
+				conventions.push(...missingDiffers(host, env, alias, names.size));
+		}
+	}
 	// A release whose manifest can't be used: its questions are published, at version 1.
 	const staleManifests: Finding[] = parsed.draft.uses.flatMap(
 		(u): Finding[] => {
@@ -155,6 +233,8 @@ export function instrumentOf(
 				...agency,
 				...banksWithout,
 				...unmarked.values(),
+				...undeclared,
+				...conventions,
 				...staleManifests,
 			],
 			parsed.ranges,
@@ -166,6 +246,176 @@ export function instrumentOf(
 		refs: instrumentRefs(parsed, source),
 		livelits: instrumentLivelits(source, parsed, checked.fills),
 	};
+}
+
+/** One place an instrument asks a bank question at a level. */
+interface Ask {
+	/** Where it's asked: the `ask` field of its step. */
+	readonly path: string;
+	/** As written: `alias.name`. */
+	readonly question: string;
+	/** As held: a missing or unreadable level is the bank's last. */
+	readonly level: string;
+	/** The level is held, not written: the question's own `access` line is missing or unreadable. */
+	readonly held: boolean;
+}
+
+/** Every ask of a question with a level, anywhere in the flow, by its bank's alias. */
+function asksByBank(
+	draft: InstrumentDraft,
+): ReadonlyMap<string, readonly Ask[]> {
+	const asks = new Map<string, Ask[]>();
+	for (const node of steps(draft.flow)) {
+		const q = node.kind === "ask" ? node.question : undefined;
+		const level = q?.evaluation.draft.access;
+		if (q === undefined || level === undefined) continue;
+		asks.set(q.alias, [
+			...(asks.get(q.alias) ?? []),
+			{
+				path: `${node.path}.ask`,
+				question: `${q.alias}.${q.name}`,
+				level,
+				held: q.evaluation.findings.some((f) => f.path === "access"),
+			},
+		]);
+	}
+	return asks;
+}
+
+/**
+ * The levels instruments ask questions at, whatever bank they come from: their
+ * workspace declares them (`access-undeclared`), so they're used (`unusedLevels`). A
+ * level held because a question's own is missing counts here, unlike in `levelsNamed`:
+ * `access-undeclared` asks for it, so it is used.
+ */
+export const levelsAsked = (
+	drafts: Iterable<InstrumentDraft>,
+): ReadonlySet<string> =>
+	new Set(
+		[...drafts].flatMap((d) =>
+			[...asksByBank(d).values()].flatMap((asks) => asks.map((a) => a.level)),
+		),
+	);
+
+/**
+ * What the host workspace lacks to cover a bank's access policy. Each ask at a level the
+ * host's `workspace.yaml` doesn't declare is said where it's asked; levels both list in
+ * different orders are said at the bank's use, naming an ask they touch (the first). A
+ * level is declared to make the host's policy cover it: the question keeps its own
+ * bank's policy, never re-ranked.
+ */
+function hostCovers(
+	host: readonly string[],
+	alias: string,
+	home: readonly string[] | undefined,
+	asks: readonly Ask[],
+): readonly Finding[] {
+	if (home === undefined || home.length === 0) return [];
+	const code = (xs: readonly string[]) => andList(xs.map((x) => `\`${x}\``));
+	const at = (a: Ask) =>
+		a.held
+			? `\`${a.question}\` is held at \`${a.level}\` (its own \`access\` line is missing or unreadable)`
+			: `\`${a.question}\` is asked at \`${a.level}\``;
+	const findings: Finding[] = asks
+		.filter((a) => !host.includes(a.level))
+		.map((a) => ({
+			code: "access-undeclared",
+			severity: "error",
+			path: a.path,
+			message:
+				host.length === 0
+					? `${at(a)}, and this workspace declares no access levels.`
+					: `${at(a)}, which this workspace doesn't declare.`,
+			hint: `Add \`${a.level}\` to the \`access\` list in this workspace's \`workspace.yaml\`, in the order \`${alias}\` gives: ${code(home)}, most open first.`,
+		}));
+	const order = (levels: readonly string[], other: readonly string[]) =>
+		levels.filter((l) => other.includes(l));
+	const shared = order(home, host);
+	// Only where an asked level stands: the order of levels nothing is asked at isn't this instrument's.
+	const before = (levels: readonly string[], a: string, b: string) =>
+		levels.indexOf(a) < levels.indexOf(b);
+	const touched = asks.find(
+		(a) =>
+			shared.includes(a.level) &&
+			shared.some(
+				(b) =>
+					b !== a.level &&
+					before(home, a.level, b) !== before(host, a.level, b),
+			),
+	);
+	if (touched !== undefined)
+		findings.push({
+			code: "access-order",
+			severity: "error",
+			path: `uses.${alias}`,
+			message: `\`${alias}\` orders its access levels ${code(shared)}, and this workspace orders them ${code(order(host, home))}. ${at(touched)}.`,
+			hint: `Put the levels in this workspace's \`workspace.yaml\` in the order \`${alias}\` gives, most open first.`,
+		});
+	return findings;
+}
+
+/**
+ * Where a bank's missing values aren't its host workspace's: the same codes with the same
+ * labels, order aside. Said once, on the bank's `uses` line, with how many of its
+ * questions the instrument asks; the DDI keeps the bank's list, so it's a warning.
+ */
+function missingDiffers(
+	host: Host,
+	home: Pick<Env, "missing">,
+	alias: string,
+	asked: number,
+): readonly Finding[] {
+	const labels = new Map(host.missing.map((c) => [c.code, c.label]));
+	const sameSize = home.missing.length === host.missing.length;
+	if (sameSize && home.missing.every((c) => labels.get(c.code) === c.label))
+		return [];
+	const b = `\`${alias}\``;
+	const codes = (xs: readonly { code: string }[]) =>
+		andList(xs.map((x) => `\`${x.code}\``));
+	const relabelled = home.missing.filter((c) => labels.get(c.code) !== c.label);
+	const differs =
+		host.missing.length === 0
+			? `${b} codes missing values as ${codes(home.missing)}, and this workspace declares none.`
+			: home.missing.length === 0
+				? `${b} has no missing values, and this workspace codes them as ${codes(host.missing)}.`
+				: sameSize && home.missing.every((c) => labels.has(c.code))
+					? `${b} labels missing values differently from this workspace (${relabelled.map((c) => `\`${c.code}\` "${c.label}" against "${labels.get(c.code)}"`).join(", ")}).`
+					: `${b} codes missing values differently from this workspace (${codes(home.missing)} against ${codes(host.missing)}).`;
+	return [
+		{
+			code: "missing-differs",
+			severity: "warning",
+			path: `uses.${alias}`,
+			message: `${differs} It affects ${asked === 1 ? "the one question" : `the ${asked} questions`} this instrument asks from ${b}.`,
+			hint: `Make this workspace's \`missing.yaml\` and the one of ${b} agree, or keep both: the DDI keeps each question's own.`,
+		},
+	];
+}
+
+/**
+ * Where a select-all question's bank stores chosen and not chosen as other codes than its
+ * host workspace (labels aside). Said at the ask; the DDI keeps the bank's coding.
+ */
+function selectAllDiffers(
+	host: Host,
+	home: Pick<Env, "selectAll">,
+	path: string,
+	question: string,
+): readonly Finding[] {
+	const theirs = home.selectAll;
+	const ours = host.selectAll;
+	return theirs.chosen.code === ours.chosen.code &&
+		theirs.notChosen.code === ours.notChosen.code
+		? []
+		: [
+				{
+					code: "select-all-differs",
+					severity: "warning",
+					path,
+					message: `\`${question}\` stores select all that apply as \`${theirs.chosen.code}\` chosen and \`${theirs.notChosen.code}\` not; this workspace stores \`${ours.chosen.code}\` and \`${ours.notChosen.code}\`.`,
+					hint: "Make this workspace's `select_all.yaml` and its bank's agree, or keep both: the DDI keeps each question's own.",
+				},
+			];
 }
 
 /** Names as a reader lists them: "a", "a and b", "a, b and c". */

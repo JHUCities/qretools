@@ -338,6 +338,21 @@ export const absentRoot = (kind: RootKind): readonly Finding[] =>
 		: [];
 
 /**
+ * Everything `workspace.yaml` is told about the workspace beyond its own text: folders
+ * `required_in` names that hold no question, and access levels nothing names. One rule,
+ * for `check` and the app alike. `named` is the levels the questions name (`levelsNamed`)
+ * and those the instruments ask at (`levelsAsked`).
+ */
+export const settingsFindings = (
+	env: Pick<Env, "requiredIn" | "access">,
+	questionPaths: Iterable<string>,
+	named: ReadonlySet<string>,
+): readonly Finding[] => [
+	...unknownFolders(env.requiredIn, questionPaths),
+	...unusedLevels(env.access, named),
+];
+
+/**
  * What `workspace.yaml` is told of the folders its `required_in` names that hold no
  * question, among the workspace's question `paths`: a warning at each key, since a typo
  * there would otherwise require nothing, silently. The workspace's to say, never the
@@ -366,6 +381,50 @@ export function unknownFolders(
 					? `Until \`${folder}\` holds a saved question, this line has no effect.`
 					: `Until \`${folder}\` holds a saved question, this line has no effect. Folders with saved questions: ${there.map((f) => `\`${f}\``).join(", ")}.`,
 		}));
+}
+
+/**
+ * The access levels questions name, from their evaluations: a level a question holds only
+ * because its own is missing or unreadable (a finding at `access`) isn't named.
+ */
+export const levelsNamed = (
+	questions: Iterable<{
+		readonly draft: { readonly access?: string };
+		readonly findings: readonly Finding[];
+	}>,
+): ReadonlySet<string> =>
+	new Set(
+		[...questions].flatMap((q) =>
+			q.draft.access === undefined ||
+			q.findings.some((f) => f.path === "access")
+				? []
+				: [q.draft.access],
+		),
+	);
+
+/**
+ * What `workspace.yaml` is told of the access levels it lists that no question names: a
+ * warning at each, since a level planned but never used is often a typo. `named` is the
+ * levels the workspace's questions name (`levelsNamed`), and those its instruments ask
+ * questions from other banks at (`levelsAsked`): a level declared for them is used.
+ */
+export function unusedLevels(
+	levels: Env["access"],
+	named: ReadonlySet<string>,
+): readonly Finding[] {
+	return levels.flatMap((level, i) =>
+		named.has(level)
+			? []
+			: [
+					{
+						code: "unused-level" as const,
+						severity: "warning" as const,
+						path: `access.${i}`,
+						message: `No question names the access level \`${level}\`.`,
+						hint: `Name it in a question's \`access\` line, or remove it from this list.`,
+					},
+				],
+	);
 }
 
 /** A concept or unit file with its label; the definition is written in the file afterwards. */

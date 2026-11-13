@@ -15,9 +15,11 @@ import { type Bank, type BankScope, bankOf, scopeOf } from "./evaluate.ts";
 import { type Finding, inDocumentOrder } from "./findings.ts";
 import type { Use } from "./instrument/draft.ts";
 import {
+	type Host,
 	type Instrument,
 	importsOf,
 	instrumentOf,
+	levelsAsked,
 } from "./instrument/instrument.ts";
 import type { Unread } from "./instrument/parse.ts";
 import { type Locks, movedTags, unlockedTags } from "./lock.ts";
@@ -223,6 +225,7 @@ export function instrumentIn(
 		agency,
 		locks = {},
 		version,
+		host,
 	}: {
 		/** The workspace's own bank; needed only when a use is local (`resolveUses`). */
 		readonly bank: BankScope | undefined;
@@ -234,6 +237,8 @@ export function instrumentIn(
 		readonly locks?: Locks;
 		/** The instrument's DDI version, from its history; every item it makes carries it. */
 		readonly version?: string;
+		/** Its own workspace's settings; absent, it's in none (`InstrumentContext.host`). */
+		readonly host?: Host;
 	},
 ): InstrumentIn {
 	const uses = resolveUses(importsOf(source), remote);
@@ -253,6 +258,7 @@ export function instrumentIn(
 	const instrument = instrumentOf(source, {
 		banks: given,
 		unresolved,
+		...(host !== undefined && { host }),
 		...(agency !== undefined && { agency }),
 		...(version !== undefined && { version }),
 	});
@@ -326,12 +332,17 @@ export function workspaceOf(
 			continue;
 		}
 		const version = versions?.[path]?.number;
+		const missingVersion = versions?.[ROOT.missing];
 		const read = instrumentIn(outside[path] ?? "", {
 			bank,
 			remote,
 			remoteBanks,
 			agency,
 			locks,
+			host: {
+				...bank.env,
+				...(missingVersion !== undefined && { missingVersion }),
+			},
 			...(version !== undefined && { version }),
 		});
 		// The workspace as committed, as `check` reads it: a tag no lock holds got here
@@ -352,7 +363,19 @@ export function workspaceOf(
 						},
 					};
 	}
-	return { bank, remote: remoteBanks, instruments, ignored: ignored.sort() };
+	// A level declared for questions the instruments ask from other banks is named there:
+	// `unused-level` would tell the author to remove what `access-undeclared` asks for.
+	// The instruments read the bank, so the bank is told what they ask after them: read
+	// once more with those levels, only when there are any (`settingsFindings`).
+	const asked = levelsAsked(
+		Object.values(instruments).map(({ instrument }) => instrument.draft),
+	);
+	return {
+		bank: asked.size === 0 ? bank : bankOf(held, versions, asked),
+		remote: remoteBanks,
+		instruments,
+		ignored: ignored.sort(),
+	};
 }
 
 /**

@@ -21,6 +21,7 @@ import {
 	envAt,
 	evaluate,
 	evaluateScheme,
+	type Host,
 	type InstrumentIn,
 	importsOf,
 	instrumentIn,
@@ -150,6 +151,7 @@ export function createEvaluations(): Evaluations {
 			agency: string | undefined;
 			locks: Locks | undefined;
 			bank: BankScope | undefined;
+			host: Host;
 			read: InstrumentIn;
 		}
 	>();
@@ -282,13 +284,16 @@ export function createEvaluations(): Evaluations {
 				};
 			const agency = written?.agency;
 			const locks = written?.locks;
+			// This workspace's settings, which the instrument's imported questions are checked against.
+			const host = self.env(model);
 			if (
 				hit &&
 				hit.source === e.source &&
 				hit.agency === agency &&
 				hit.locks === locks &&
 				hit.remote === remote &&
-				hit.bank === bank
+				hit.bank === bank &&
+				hit.host === host
 			)
 				return hit.read;
 			const read = instrumentIn(e.source, {
@@ -296,6 +301,7 @@ export function createEvaluations(): Evaluations {
 				remote,
 				remoteBanks,
 				agency,
+				host,
 				...(locks !== undefined && { locks }),
 			});
 			instruments.set(e.id, {
@@ -304,6 +310,7 @@ export function createEvaluations(): Evaluations {
 				agency,
 				locks,
 				bank,
+				host,
 				read,
 			});
 			return read;

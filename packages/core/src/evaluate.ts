@@ -17,13 +17,14 @@ import {
 	bankAgency,
 	evaluateScheme,
 	kindAt,
+	levelsNamed,
 	REQUIRED_ROOTS,
 	type SchemeEvaluation,
 	type SchemeKind,
 	schemeEnv,
 	schemeFilesIn,
+	settingsFindings,
 	UNDECLARED_AGENCY,
-	unknownFolders,
 } from "./schemes.ts";
 import type { Draft } from "./surface/draft.ts";
 import { type Env, envAt } from "./surface/env.ts";
@@ -135,6 +136,7 @@ export const questionItems = (
 					own: path === undefined ? undefined : p.versions[path],
 					shared: p.versions,
 				}),
+		p.env.access,
 	);
 
 /** A whole bank, evaluated: each file by its path. */
@@ -244,6 +246,8 @@ export function bankOf(
 	files: Readonly<Record<string, string>>,
 	/** Each file's DDI version, by path, when history is known. */
 	versions?: Versions,
+	/** The levels the workspace's instruments ask at (`levelsAsked`): they're used. */
+	asked: ReadonlySet<string> = new Set(),
 ): Bank {
 	const { env, agency, questions, schemes, ignored } = evaluateFiles(files);
 	const scope = bankFrom({ env, agency, questions, schemes, versions });
@@ -251,14 +255,18 @@ export function bankOf(
 	const label = (path: string): string =>
 		questions[path]?.draft.name ?? schemes[path]?.name ?? path;
 	const findings: Record<string, readonly Finding[]> = {};
-	// The settings file is also told of the folders it names that aren't there, each in
-	// its place among the file's own findings (`fileFindings` orders them).
-	const folders = unknownFolders(env.requiredIn, Object.keys(questions));
+	// The settings file is also told about the workspace (`settingsFindings`), each in its
+	// place among the file's own findings (`fileFindings` orders them).
+	const settings = settingsFindings(
+		env,
+		Object.keys(questions),
+		new Set([...levelsNamed(Object.values(questions)), ...asked]),
+	);
 	for (const [path, ev] of byPath(questions, schemes))
 		findings[path] = fileFindings(
 			path,
 			path === ROOT.workspace
-				? { ...ev, findings: [...ev.findings, ...folders] }
+				? { ...ev, findings: [...ev.findings, ...settings] }
 				: ev,
 			scope.index,
 			label,
