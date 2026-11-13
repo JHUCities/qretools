@@ -5,8 +5,10 @@ import {
 	instrumentOf,
 	printCondition,
 } from "@qretools/core";
+import type { ColumnMap } from "./columns.ts";
 import type { Cond, Part, Source, Step } from "./read.ts";
-import type { Qsf } from "./skeleton.ts";
+import { expand } from "./responses.ts";
+import type { Qsf, QsfObject } from "./skeleton.ts";
 
 /** A read flow as lines of text, to compare whole. */
 export const source = (s: Source): string =>
@@ -219,3 +221,92 @@ export const flowOutline = (qsf: Qsf): string[] => {
 		});
 	return tree(flow.Flow, "");
 };
+
+/** A row-3 cell as Qualtrics writes it: JSON, quoted, its quotes doubled. */
+const cell = (o: object) => `"${JSON.stringify(o).replaceAll('"', '""')}"`;
+
+/** What changes in a survey between the QSF written and its export. */
+export interface ExportOptions {
+	/** Each QID as the export numbers it. */
+	readonly qid?: (qid: string) => string;
+	/** Each question's export tag as the export names it. */
+	readonly tag?: (tag: string) => string;
+	/** Each question's text (QSF HTML) as row 2 gives it. */
+	readonly text?: (text: string) => string;
+	/** The `qretools_*` stamps' values: instrument, DDI digest, version. */
+	readonly stamp?: readonly string[];
+	/** Columns added at the end: name, label, row 3's JSON. */
+	readonly extra?: readonly (readonly [string, string, object])[];
+	/** Whether a question's column (by ImportId and tag) is left out. */
+	readonly drop?: (importId: string, tag: string) => boolean;
+}
+
+/**
+ * The response export of a survey `qsfOf` made, in Qualtrics' shape (three header rows, a
+ * column per round and option), with one response whose every answer is `SECRET`.
+ */
+export function exportOfSurvey(
+	made: { readonly qsf: QsfObject; readonly columns: ColumnMap },
+	{
+		qid = (x) => x,
+		tag = (x) => x,
+		text = (x) => x,
+		stamp = ["", "", ""],
+		extra = [],
+		drop = () => false,
+	}: ExportOptions = {},
+): string {
+	const payloads = new Map(
+		(
+			made.qsf.SurveyElements as {
+				Element: string;
+				PrimaryAttribute: string;
+				Payload: { DataExportTag: string; QuestionText: string };
+			}[]
+		)
+			.filter((e) => e.Element === "SQ")
+			.map((e) => [e.PrimaryAttribute, e.Payload]),
+	);
+
+	const columns: (readonly [string, string, object])[] = [
+		["ResponseId", "Response ID", { ImportId: "_recordId" }],
+		["StartDate", "Start Date", { ImportId: "startDate", timeZone: "Z" }],
+		...(
+			["qretools_instrument", "qretools_ddi", "qretools_version"] as const
+		).map((f) => [f, f, { ImportId: f }] as const),
+	];
+	for (const c of made.columns.columns) {
+		const m = /^(QID\d+)(.*)$/.exec(c.importId);
+		const p = m === null ? undefined : payloads.get(m[1] ?? "");
+		for (const e of expand(c)) {
+			if (m === null || p === undefined) {
+				columns.push([e.importId, e.importId, { ImportId: e.importId }]);
+				continue;
+			}
+			const round = e.importId === c.importId ? "" : e.importId.split("_")[0];
+			const id = `${round ? `${round}_` : ""}${qid(m[1] ?? "")}${m[2]}`;
+			if (drop(id, p.DataExportTag)) continue;
+			columns.push([
+				`${round ? `${round}_` : ""}${tag(p.DataExportTag)}${c.choice === undefined ? "" : `_${c.choice}`}`,
+				`${round ? `${round} - ` : ""}${text(p.QuestionText)}${c.choice === undefined ? "" : " - an option"}`,
+				{ ImportId: id, ...(c.choice !== undefined && { choiceId: c.choice }) },
+			]);
+		}
+	}
+	columns.push(...extra);
+	const csv = (xs: readonly string[]) =>
+		xs
+			.map((x) => (/[",]/.test(x) ? `"${x.replaceAll('"', '""')}"` : x))
+			.join(",");
+	return [
+		csv(columns.map((c) => c[0])),
+		csv(columns.map((c) => c[1])),
+		columns.map((c) => cell(c[2])).join(","),
+		csv([
+			"R_1",
+			"2026-01-01",
+			...stamp,
+			...columns.slice(5).map(() => "SECRET"),
+		]),
+	].join("\r\n");
+}
