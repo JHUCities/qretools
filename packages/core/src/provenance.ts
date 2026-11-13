@@ -87,7 +87,7 @@ export interface Provenance {
 	readonly facts: Facts & Required<Pick<Facts, Fact>>;
 	/** The variables (URNs) the map reads a column into. */
 	readonly reads: readonly string[];
-	/** SHA-256 (hex) of the answers in their canonical form (`csvView`). */
+	/** SHA-256 (hex) of the whole DataSet in its canonical form (`canonicalForm`). */
 	readonly fingerprint: string;
 	readonly source: FileDigest;
 	/** The map, and the DDI digest it names. */
@@ -112,9 +112,9 @@ export interface Described {
 	readonly ends: readonly string[];
 }
 
-/** What the fingerprint of the answers is over, as `csvView` writes it: the answers only. */
+/** What the fingerprint of the DataSet is over, as `canonicalForm` writes it. */
 export const DATA_FINGERPRINT =
-	"SHA-256 of the answers only (not the respondent identifiers or the interview times), in the long CSV view: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent and then variable URN in code-unit order";
+	"SHA-256 of every value of the DataSet (the answers, and each respondent's identifier and interview times on the dataset's own variables) as long CSV: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent and then variable URN in code-unit order";
 
 /** The DDI vocabularies a term is from (the version-free URI). */
 const VOCABULARY = {

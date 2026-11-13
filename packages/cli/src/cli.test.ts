@@ -1180,6 +1180,28 @@ describe("qretools responses", () => {
 		expect(Object.keys(view.StudyUnit)).toEqual([
 			"org.example:dataset-t.study:1",
 		]);
+		// The fingerprint covers the whole DataSet: an interview's time changes it.
+		const fingerprint = (doc: string) =>
+			Object.values(
+				JSON.parse(doc).PhysicalInstance as Record<
+					string,
+					{
+						DataFingerprint: {
+							Type: string;
+							DigitalFingerprintValue: string;
+						}[];
+					}
+				>,
+			)
+				.flatMap((p) => p.DataFingerprint)
+				.find((f) => f.Type === "data")?.DigitalFingerprintValue;
+		await writeFile(
+			csv,
+			(await readFile(csv, "utf8")).replace("23:16:02", "23:16:03"),
+		);
+		const later = await run("responses", csv, "--map", map);
+		expect(fingerprint(later.out)).toMatch(/^[0-9a-f]{64}$/);
+		expect(fingerprint(later.out)).not.toBe(fingerprint(r.out));
 		// The provenance is no dataset, and one view at a time.
 		const file = join(dirname(csv), "p.json");
 		await writeFile(file, r.out);

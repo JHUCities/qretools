@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import schemaText from "../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
 import {
+	canonicalForm,
 	csvView,
 	type Dataset,
 	datasetOf,
@@ -404,6 +405,40 @@ describe("a dataset's provenance", () => {
 			index: ddiIndexOf(documentOf([])),
 		});
 		expect(r.ok ? "" : r.error).toMatch(/holds 0 instruments/);
+	});
+});
+
+describe("the canonical form of a dataset", () => {
+	it("holds every value of the DataSet, so a time, an identifier or a respondent with no answers changes it", () => {
+		const form = canonicalForm(DATASET);
+		expect(form).toContain(
+			"R_3,urn:ddi:org.example:dataset-wave1.respondent:1,,R_3",
+		);
+		expect(form).toContain(
+			"R_1,urn:ddi:org.example:dataset-wave1.start:1,,2026-11-12T23:14:02Z",
+		);
+		const [first, ...rest] = DATASET.respondents;
+		const changed = (d: Dataset) => expect(canonicalForm(d)).not.toBe(form);
+		changed({
+			...DATASET,
+			respondents: [
+				{ ...first, id: "R_1", start: "2026-11-12T23:14:03Z" },
+				...rest,
+			],
+		});
+		changed({
+			...DATASET,
+			respondents: DATASET.respondents.map((r) =>
+				r.id === "R_3" ? { id: "R_4" } : r,
+			),
+		});
+		changed({
+			...DATASET,
+			respondents: [...DATASET.respondents, { id: "R_5" }],
+		});
+		// A reader recomputes it from the document.
+		const read = readDataset(JSON.parse(JSON.stringify(made(DATASET))));
+		expect(read.ok && canonicalForm(read.value)).toBe(form);
 	});
 });
 

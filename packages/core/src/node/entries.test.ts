@@ -61,6 +61,7 @@ describe("the entry points", () => {
 			    "bankFrom",
 			    "bankLocation",
 			    "bankOf",
+			    "canonicalForm",
 			    "codeSpans",
 			    "collisions",
 			    "compact",

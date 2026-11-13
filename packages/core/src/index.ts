@@ -46,6 +46,7 @@ export {
 } from "./copy.ts";
 // A dataset as DDI: the answers in a DataSet, and its views.
 export {
+	canonicalForm,
 	csvView,
 	DATASET_NAME,
 	type Dataset,
