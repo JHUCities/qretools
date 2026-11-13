@@ -13,18 +13,22 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { codebookOf, parse as parseDdi } from "@qretools/codebook";
 import {
 	addressOf,
 	bankOf,
+	csvView,
 	instrumentOf,
 	makeValidator,
 	questionItems,
+	readDataset,
 	remoteScope,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import schema from "@qretools/core/schema.json" with { type: "json" };
 import { qsfOf } from "@qretools/qualtrics";
 import { describe, expect, it } from "vitest";
+import { exportOfSurvey } from "../../qualtrics/src/testing.ts";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
 import { ownRepository, readHistory } from "./history.ts";
 import { readTagged } from "./remote.ts";
@@ -47,6 +51,9 @@ async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
 	return runOver({}, readRemote, ...argv);
 }
 
+/** What a run reads on standard input. */
+let stdin = "";
+
 /** `runWith`, over files an earlier run wrote: a second build into the same folder. */
 async function runOver(
 	files: Readonly<Record<string, string>>,
@@ -68,6 +75,7 @@ async function runOver(
 		readRemote,
 		readHistory,
 		ownRepository,
+		readStdin: async () => stdin,
 	};
 	const code = await main(argv, io);
 	return { code, out: out.join(""), err: err.join(""), written };
@@ -453,23 +461,16 @@ describe("qretools build", () => {
 				"org.example:instrument-x:2",
 			]);
 			expect(r.written[join(ws, "dist", "ddi.json")]).toBeDefined();
-			// Its Qualtrics survey, and the map of the survey's columns to that DDI.
-			const json = r.written[join(ws, "dist", "instruments", "x.json")] ?? "";
-			const map = JSON.parse(
-				r.written[join(ws, "dist", "instruments", "x-ddi-qsf.columns.json")] ??
-					"{}",
-			);
-			expect(map).toEqual({
-				qretools: expect.any(String),
-				instrument: "urn:ddi:org.example:instrument-x:2",
-				ddi: `sha256:${createHash("sha256").update(json).digest("hex")}`,
-				columns: [
-					{
-						importId: "QID1_TEXT",
-						variable: "urn:ddi:org.example:instrument-x.var-q:2",
-					},
-				],
-			});
+			// Its Qualtrics survey, and never a column map: `qsf-map` makes that.
+			expect(
+				Object.keys(r.written)
+					.map((p) => p.slice(ws.length + 1))
+					.sort(),
+			).toEqual([
+				"dist/ddi.json",
+				"dist/instruments/x.json",
+				"dist/instruments/x.qsf",
+			]);
 			const qsf = r.written[join(ws, "dist", "instruments", "x.qsf")] ?? "";
 			// Dated when the instrument last changed, never now: a commit builds the same bytes.
 			const changed = (
@@ -516,10 +517,7 @@ describe("qretools build", () => {
 			const dist = (file: string) => join(ws, "dist", "instruments", file);
 			// What an earlier build wrote: that a release writes these is the test above.
 			const earlier = Object.fromEntries(
-				["x.json", "x.qsf", "x-ddi-qsf.columns.json"].map((f) => [
-					dist(f),
-					"earlier",
-				]),
+				["x.json", "x.qsf"].map((f) => [dist(f), "earlier"]),
 			);
 			// An input named like a field Qualtrics surveys get: a release allows it, a survey can't.
 			await writeFile(
@@ -606,6 +604,127 @@ describe("qretools build", () => {
 			);
 		});
 
+		describe("with column maps in maps/", () => {
+			const pinned = `agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n`;
+			const bank: Io["readRemote"] = async () => ({
+				kind: "files",
+				files: {
+					"workspace.yaml": "agency: org.example\n",
+					"questions/t/q.yaml": OPEN,
+				},
+				at: { commit: A, blobs: { "questions/t/q.yaml": "b1" } },
+			});
+			const qsf = (ddi?: string) =>
+				`${JSON.stringify({ source: "qsf", ...(ddi !== undefined && { ddi }), columns: [] }, null, 2)}\n`;
+			const data = (ddi: string) =>
+				JSON.stringify({
+					source: "gss",
+					ddi,
+					answered_by: "ResearchData.Published",
+					respondent: "id",
+					columns: [],
+				});
+
+			/** An instrument `x` built once (its DDI's digest), then maps committed beside it. */
+			async function withMaps(
+				maps: (digest: string) => Readonly<Record<string, string>>,
+			) {
+				const { ws } = await withInstrument("acme/ws/sub@v1", pinned);
+				const before = await runWith(bank, "build", ws);
+				const built = before.written[join(ws, "dist/instruments/x.json")] ?? "";
+				const digest = `sha256:${createHash("sha256").update(built).digest("hex")}`;
+				await mkdir(join(ws, "maps"));
+				for (const [name, text] of Object.entries(maps(digest)))
+					await writeFile(join(ws, "maps", name), text);
+				await git(dirname(ws), "add", "-A");
+				await git(dirname(ws), "commit", "-q", "-m", "maps");
+				return { ws, before };
+			}
+
+			it("copies each map beside its instrument's DDI, as committed, and versions nothing by it", async () => {
+				let map = "";
+				const { ws, before } = await withMaps((digest) => {
+					map = qsf(digest);
+					return { "x-ddi-qsf.columns.json": map, "README.md": "not a map\n" };
+				});
+				// Not committed: not copied.
+				await writeFile(join(ws, "maps/x-ddi-gss.columns.json"), data(""));
+				const r = await runWith(bank, "build", ws);
+				expect(r.code).toBe(0);
+				expect(
+					r.written[join(ws, "dist/instruments/x-ddi-qsf.columns.json")],
+				).toBe(map);
+				expect(r.err).not.toMatch(/build-map/);
+				// A commit to maps/ moves no version, so the DDI is the one the map was made from.
+				const {
+					[join(ws, "dist/instruments/x-ddi-qsf.columns.json")]: _,
+					...rest
+				} = r.written;
+				expect(rest).toEqual(before.written);
+			});
+
+			it("warns of a map made from another DDI, naming it and how to make it again, and copies it", async () => {
+				const old = `sha256:${"0".repeat(64)}`;
+				const { ws } = await withMaps(() => ({
+					"x-ddi-qsf.columns.json": qsf(old),
+					"x-ddi-gss.columns.json": data(old),
+				}));
+				const r = await runWith(bank, "build", ws);
+				expect(r.code).toBe(0);
+				expect(r.err).toMatch(
+					new RegExp(
+						`maps/x-ddi-qsf\\.columns\\.json: warning: made from the DDI ${old}.*\`qretools qsf-map\`.*\\[build-map-ddi\\]`,
+					),
+				);
+				expect(r.err).toMatch(
+					/maps\/x-ddi-gss\.columns\.json: warning: .*tools\/.*\[build-map-ddi\]/,
+				);
+				expect(
+					r.written[join(ws, "dist/instruments/x-ddi-gss.columns.json")],
+				).toBe(data(old));
+			});
+
+			it.each([
+				[
+					"names no instrument it builds",
+					"y-ddi-qsf.columns.json",
+					qsf(),
+					/no instrument `y`/,
+				],
+				[
+					"isn't named as a map",
+					"x.columns.json",
+					qsf(),
+					/named `<instrument>-ddi-<source>\.columns\.json`/,
+				],
+				["has no source", "x-ddi-gss.columns.json", "{}", /no `source` field/],
+				[
+					"gives another source than its name",
+					"x-ddi-gss.columns.json",
+					qsf(),
+					/name says the source `gss`, but its `source` field says `qsf`/,
+				],
+				["isn't JSON", "x-ddi-qsf.columns.json", "{", /this isn.t JSON \(/],
+				[
+					"isn't a map of its source",
+					"x-ddi-qsf.columns.json",
+					'{"source":"qsf"}',
+					/isn't a QSF column map/,
+				],
+			])(
+				"refuses a map that %s, and writes nothing",
+				async (_, name, text, message) => {
+					const { ws } = await withMaps(() => ({ [name]: text }));
+					const r = await runWith(bank, "build", ws);
+					expect(r.code).toBe(1);
+					expect(r.written).toEqual({});
+					expect(r.err).toMatch(message);
+					expect(r.err).toMatch(/\[build-map\]/);
+					expect(r.err).toMatch(/Not built: every file in maps\//);
+				},
+			);
+		});
+
 		it("refuses a pinned tag that has moved since it was locked", async () => {
 			const { ws } = await withInstrument(
 				"acme/ws/sub@v1",
@@ -629,6 +748,290 @@ describe("qretools build", () => {
 				/error: `acme\/ws\/sub@v1` has moved to a new version/,
 			);
 		});
+	});
+
+	describe("a tag reference to an instrument in a release", () => {
+		/**
+		 * `repo()` released as `v2`, as a workspace's release workflow tags it: an instrument
+		 * reading the workspace's own questions at `v1`, built with `--tag-message`.
+		 */
+		async function released() {
+			const ws = await repo();
+			const root = dirname(ws);
+			await git(
+				root,
+				"remote",
+				"add",
+				"origin",
+				"https://github.com/acme/ws.git",
+			);
+			await git(root, "tag", "v1");
+			const v1 = (await git(root, "rev-parse", "HEAD")).stdout.trim();
+			await mkdir(join(ws, "instruments"));
+			await writeFile(
+				join(ws, "workspace.yaml"),
+				`agency: org.example\nlocked:\n  acme/ws/sub@v1: ${v1}\n`,
+			);
+			await writeFile(
+				join(ws, "instruments/x.yaml"),
+				"name: x\nuses:\n  b: acme/ws/sub@v1\nflow:\n  - ask: b.q\n",
+			);
+			await git(root, "add", "-A");
+			await git(root, "commit", "-q", "-m", "instrument");
+			const cache = await mkdtemp(join(tmpdir(), "qretools-cache-"));
+			let url = root;
+			const readRemote: Io["readRemote"] = (a) =>
+				readTagged(a, { root: cache, urlOf: () => url });
+			const file = join(root, "tag.txt");
+			const built = await runWith(
+				readRemote,
+				"build",
+				ws,
+				"--tag-message",
+				file,
+			);
+			expect(built.code).toBe(0);
+			const message = built.written[file] ?? "";
+			const tag = async (name: string, text: string) => {
+				await writeFile(file, text);
+				await git(root, "tag", "-a", "--cleanup=verbatim", "-F", file, name);
+			};
+			await tag("v2", message);
+			return {
+				ws,
+				message,
+				tag,
+				readRemote,
+				offline: () => {
+					url = join(root, "nowhere");
+				},
+				ddi: built.written[join(ws, "dist", "instruments", "x.json")] ?? "",
+			};
+		}
+		const sha = (text: string) =>
+			`sha256:${createHash("sha256").update(text).digest("hex")}`;
+
+		it("rebuilds the DDI the release built, makes its map, and records the release", async () => {
+			const { ws, readRemote, offline, ddi } = await released();
+			const out = join(ws, "maps");
+			const r = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v2:x",
+				"-o",
+				out,
+			);
+			expect(r.err).toBe("");
+			expect(r.code).toBe(0);
+			const map = JSON.parse(
+				r.written[join(out, "x-ddi-qsf.columns.json")] ?? "{}",
+			);
+			expect(map).toMatchObject({ ddi: sha(ddi), release: "acme/ws/sub@v2:x" });
+			// Offline, the tag read once is served from the cache.
+			offline();
+			const again = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v2:x",
+				"-o",
+				out,
+			);
+			expect(again.code).toBe(0);
+			expect(again.written).toEqual(r.written);
+			const lost = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v9:x",
+				"-o",
+				out,
+			);
+			expect(lost).toMatchObject({ code: 1, written: {} });
+			expect(lost.err).toMatch(
+				/acme\/ws\/sub@v9.*can't be read.*\[qsf-map-release\]/,
+			);
+		}, 30000);
+
+		it("makes the same map from an export with the release as --ddi", async () => {
+			const { ws, readRemote, ddi } = await released();
+			const out = join(ws, "maps");
+			const made = qsfOf(JSON.parse(ddi), {
+				name: "",
+				created: "",
+				digest: sha(ddi),
+				version: "0",
+			});
+			if (made.kind !== "made") throw new Error("the survey isn't made");
+			const csv = join(ws, "export.csv");
+			await writeFile(csv, exportOfSurvey(made));
+			const fromRelease = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v2:x",
+				"-o",
+				out,
+			);
+			const fromExport = await runWith(
+				readRemote,
+				"qsf-map",
+				"--export",
+				csv,
+				"--ddi",
+				"acme/ws/sub@v2:x",
+				"-o",
+				out,
+			);
+			expect(fromExport.code).toBe(0);
+			expect(fromExport.written).toEqual(fromRelease.written);
+			expect(
+				JSON.parse(
+					fromExport.written[join(out, "x-ddi-qsf.columns.json")] ?? "{}",
+				),
+			).toMatchObject({ release: "acme/ws/sub@v2:x" });
+		}, 30000);
+
+		it("reads responses with the release a map names, and asks for --ddi when there's none", async () => {
+			const { ws, readRemote } = await released();
+			const out = join(ws, "maps");
+			const made = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v2:x",
+				"-o",
+				out,
+			);
+			const mapFile = join(out, "x-ddi-qsf.columns.json");
+			const map = made.written[mapFile] ?? "";
+			await mkdir(out);
+			await writeFile(mapFile, map);
+			// An export of the survey, its `qretools_*` fields as the map expects them.
+			const m = JSON.parse(map);
+			const fields = [
+				"qretools_instrument",
+				"qretools_ddi",
+				"qretools_version",
+			];
+			const head = ["ResponseId", ...fields, "q"];
+			const ids = ["_recordId", ...fields, m.columns[0].importId].map(
+				(i) => `"${JSON.stringify({ ImportId: i }).replaceAll('"', '""')}"`,
+			);
+			const csv = join(ws, "export.csv");
+			await writeFile(
+				csv,
+				[
+					head.join(","),
+					head.join(","),
+					ids.join(","),
+					`R_1,${m.instrument},${m.ddi},${m.qretools},1`,
+					"",
+				].join("\r\n"),
+			);
+			// The export says neither fact: the options give them.
+			const facts = [
+				"--asked-by",
+				"SelfAdministeredQuestionnaire.CAWI",
+				"--answered-by",
+				"PopulationGroup",
+			];
+			const r = await runWith(
+				readRemote,
+				"responses",
+				csv,
+				"--map",
+				mapFile,
+				...facts,
+			);
+			expect(r.err).toBe("");
+			const read = readDataset(JSON.parse(r.out));
+			expect(read.ok && csvView(read.value)).toBe(
+				`respondent,variable,row,value\nR_1,${m.columns[0].variable},,1\n`,
+			);
+			const { release: _, ...unreleased } = JSON.parse(map);
+			await writeFile(mapFile, JSON.stringify(unreleased));
+			const none = await runWith(
+				readRemote,
+				"responses",
+				csv,
+				"--map",
+				mapFile,
+			);
+			expect(none.code).toBe(2);
+			const given = await runWith(
+				readRemote,
+				"responses",
+				csv,
+				"--map",
+				mapFile,
+				"--ddi",
+				"acme/ws/sub@v2:x",
+				...facts,
+			);
+			// The same values; the map differs (no release), so its digest does too.
+			const back = readDataset(JSON.parse(given.out));
+			expect(back.ok && csvView(back.value)).toBe(
+				read.ok && csvView(read.value),
+			);
+			// The DDI from the release is named by its tag reference.
+			expect(r.out).toContain('"Value": "acme/ws/sub@v2:x"');
+			await writeFile(
+				mapFile,
+				JSON.stringify({ ...unreleased, release: "x.json" }),
+			);
+			const bad = await runWith(readRemote, "responses", csv, "--map", mapFile);
+			expect(bad.err).toMatch(/release `x\.json` isn't a tag reference/);
+			expect(none.err).toMatch(
+				/no DDI .*x\.json beside the map, and the map names no release\. Give the DDI it was made from with `--ddi`/,
+			);
+		}, 30000);
+
+		it("refuses a DDI that rebuilds differently, naming the version that built the release", async () => {
+			const { ws, message, tag, readRemote } = await released();
+			await tag(
+				"v3",
+				message
+					.replace(/"qretools": "[^"]*"/, '"qretools": "2.0.0-alpha.1"')
+					.replace(/"ddi": "sha256:[0-9a-f]+"/, `"ddi": "${sha("other")}"`),
+			);
+			const r = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v3:x",
+				"-o",
+				join(ws, "maps"),
+			);
+			expect(r).toMatchObject({ code: 1, written: {} });
+			expect(r.err).toMatch(
+				/QREtools 2\.0\.0-alpha\.1 built this release.*`npx qretools@2\.0\.0-alpha\.1`.*\[qsf-map-release\]/,
+			);
+		}, 30000);
+
+		it("refuses a release made before tag references, and an instrument it doesn't have", async () => {
+			const { ws, message, tag, readRemote } = await released();
+			const old = message.replace(
+				/,\n {2}"instruments": \{[\s\S]*\n {2}\}\n\}/,
+				"\n}",
+			);
+			expect(old).not.toContain('"instruments"');
+			await tag("v4", old);
+			const r = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v4:x",
+				"-o",
+				join(ws, "maps"),
+			);
+			expect(r).toMatchObject({ code: 1, written: {} });
+			expect(r.err).toMatch(
+				/made before tag references\. Release the workspace again/,
+			);
+			const y = await runWith(
+				readRemote,
+				"qsf-map",
+				"acme/ws/sub@v2:y",
+				"-o",
+				join(ws, "maps"),
+			);
+			expect(y.err).toMatch(/no instrument `instruments\/y\.yaml`/);
+		}, 30000);
 	});
 });
 
@@ -797,6 +1200,51 @@ describe("qretools codebook", () => {
 	});
 });
 
+describe("qretools next", () => {
+	it("says the next step from an instrument's DDI and a state, and refuses a state that isn't one", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-next-"));
+		const file = join(dir, "ddi.json");
+		const ddi = (
+			await run(
+				"instrument",
+				"export",
+				here("../../core/fixtures/households/instruments/households.yaml"),
+			)
+		).out;
+		await writeFile(file, ddi);
+		const state = join(dir, "state.json");
+		await writeFile(state, JSON.stringify({ inputs: { county: "2" } }));
+		const r = await run("next", file, state);
+		expect(r).toMatchObject({ code: 0, err: "" });
+		const reply = JSON.parse(r.out);
+		expect(reply).toMatchObject({ kind: "ask", question: "consent" });
+		// The missing codes are the codebook's, read from the same DDI.
+		const index = parseDdi(JSON.parse(ddi));
+		if (!index.ok) throw new Error("not DDI");
+		const consent = codebookOf(index.value).entries.find(
+			(e) => e.urn === reply.domain.variable,
+		);
+		expect(reply.domain.missing.map((m: { code: string }) => m.code)).toEqual(
+			consent?.responses?.rows.filter((x) => x.missing).map((x) => x.code),
+		);
+		// The state on standard input, as `-` or with no file named.
+		stdin = JSON.stringify({ inputs: { county: "2" } });
+		expect((await run("next", file, "-")).out).toBe(r.out);
+		expect((await run("next", file)).out).toBe(r.out);
+		stdin = "";
+		// The reply's schema is open, so a field added later doesn't fail a caller's validation.
+		const open = JSON.parse((await run("next", "--schema")).out).reply;
+		expect(JSON.stringify(open)).not.toContain('"additionalProperties":false');
+		await writeFile(state, JSON.stringify({ answers: "none" }));
+		const bad = await run("next", file, state);
+		expect(bad).toMatchObject({ code: 1, out: "" });
+		expect(bad.err).toMatch(/this isn't a state: .*answers.*\[next-state\]/s);
+		const schemas = JSON.parse((await run("next", "--schema")).out);
+		expect(Object.keys(schemas)).toEqual(["state", "reply"]);
+		expect((await run("check", "--schema")).code).toBe(2);
+	});
+});
+
 describe("qretools paths", () => {
 	it("writes the report of an instrument's paths, and refuses what isn't JSON", async () => {
 		const file = join(
@@ -841,6 +1289,122 @@ describe("qretools paths", () => {
 	});
 });
 
+describe("qretools qsf-map", () => {
+	it("writes the QSF column map of an instrument's DDI, with its source and the file's digest", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-qsf-map-"));
+		const file = join(dir, "households.json");
+		const ddi = (
+			await run(
+				"instrument",
+				"export",
+				here("../../core/fixtures/households/instruments/households.yaml"),
+			)
+		).out;
+		await writeFile(file, ddi);
+		const r = await run("qsf-map", file, "-o", "maps");
+		expect(r).toMatchObject({ code: 0, out: "" });
+		expect(Object.keys(r.written)).toEqual([
+			join("maps", "households-ddi-qsf.columns.json"),
+		]);
+		const map = JSON.parse(Object.values(r.written)[0] ?? "{}");
+		expect(map).toMatchObject({
+			source: "qsf",
+			instrument: "urn:ddi:org.example.households:instrument-households:1",
+			ddi: `sha256:${createHash("sha256").update(ddi).digest("hex")}`,
+		});
+		expect(map.columns.length).toBeGreaterThan(0);
+	});
+
+	it("writes nothing for a file that isn't an instrument's DDI, and needs -o", async () => {
+		const file = join(
+			await mkdtemp(join(tmpdir(), "qretools-qsf-map-")),
+			"ddi.json",
+		);
+		await writeFile(file, (await run("export", SAMPLE)).out);
+		const none = await run("qsf-map", file, "-o", "maps");
+		expect(none).toMatchObject({ code: 1, written: {} });
+		expect(none.err).toMatch(
+			/The DDI has no instrument\. \[qsf-unread\]\n.*Not written:/,
+		);
+		await writeFile(file, "{");
+		const bad = await run("qsf-map", file, "-o", "maps");
+		expect(bad).toMatchObject({ code: 1, written: {} });
+		expect(bad.err).toMatch(
+			/isn't DDI-Lifecycle 4.0 JSON.*\[qsf-map-unreadable\]/,
+		);
+		expect((await run("qsf-map", file)).code).toBe(2);
+		expect((await run("qsf-map", "-o", "maps")).code).toBe(2);
+	});
+
+	it("makes the same map from a Qualtrics export and the DDI, byte for byte, saying no answer", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-qsf-map-"));
+		const file = join(dir, "households.json");
+		const ddi = (
+			await run(
+				"instrument",
+				"export",
+				here("../../core/fixtures/households/instruments/households.yaml"),
+			)
+		).out;
+		await writeFile(file, ddi);
+		const made = qsfOf(JSON.parse(ddi), {
+			name: "",
+			created: "",
+			digest: `sha256:${createHash("sha256").update(ddi).digest("hex")}`,
+			version: "0",
+		});
+		if (made.kind !== "made") throw new Error("the survey isn't made");
+		const csv = join(dir, "export.csv");
+		await writeFile(csv, exportOfSurvey(made));
+		const fromDdi = await run("qsf-map", file, "-o", "maps");
+		const fromExport = await run(
+			"qsf-map",
+			"--export",
+			csv,
+			"--ddi",
+			file,
+			"-o",
+			"maps",
+		);
+		expect(fromExport).toMatchObject({ code: 0, out: "" });
+		expect(fromExport.written).toEqual(fromDdi.written);
+		expect(fromExport.err).not.toContain("SECRET");
+
+		// An answer column no question of the DDI has: nothing written, the column named.
+		await writeFile(
+			csv,
+			exportOfSurvey(made, {
+				extra: [["Q99", "Another?", { ImportId: "QID99" }]],
+			}),
+		);
+		const refused = await run(
+			"qsf-map",
+			"--export",
+			csv,
+			"--ddi",
+			file,
+			"-o",
+			"maps",
+		);
+		expect(refused).toMatchObject({ code: 1, written: {} });
+		expect(refused.err).toMatch(
+			/export\.csv: error: column `Q99`: No question of the DDI matches.*\[qsf-map-unmatched\]/,
+		);
+		expect(refused.err).not.toContain("SECRET");
+
+		// One DDI: by `--ddi` with `--export`, else as the positional.
+		expect((await run("qsf-map", "--export", csv, "-o", "m")).code).toBe(2);
+		expect(
+			(await run("qsf-map", file, "--export", csv, "--ddi", file, "-o", "m"))
+				.code,
+		).toBe(2);
+		expect((await run("qsf-map", file, "--ddi", file, "-o", "m")).code).toBe(2);
+		expect((await run("check", "--export", csv)).err).toMatch(
+			/`--export` isn't an option of `check`/,
+		);
+	});
+});
+
 describe("qretools responses", () => {
 	const q = (name: string, rest: string) =>
 		`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
@@ -861,7 +1425,7 @@ describe("qretools responses", () => {
 	const v = (name: string) => `urn:ddi:org.example:instrument-t.var-${name}:1`;
 	const id = (o: object) => `"${JSON.stringify(o).replaceAll('"', '""')}"`;
 
-	/** What `build` writes for an instrument, and an export of its survey. */
+	/** An instrument's DDI and its QSF column map, as `build` and `qsf-map` write them, and an export of its survey. */
 	async function files(
 		digestOf = (ddi: string) => ddi,
 		kind = { status: "2", channel: "test" },
@@ -1020,6 +1584,7 @@ describe("qretools responses", () => {
 			"ID,TENURE,RENT,OTHER\n7,2,-98,x\n8,-100,-100,y\n9,5,1200,z\n",
 		);
 		const json = JSON.stringify({
+			source: "survey",
 			ddi: digest,
 			answered_by: "ResearchData.Published",
 			respondent: "ID",
@@ -1112,7 +1677,7 @@ describe("qretools responses", () => {
 			createHash("sha256").update(other).digest("hex"),
 		);
 
-		// Each kind of map is read only under its own name.
+		// Its `source` says what kind of map it is, and must agree with its name.
 		await writeFile(join(dir, "t-ddi-qsf.columns.json"), json);
 		expect(
 			(
@@ -1123,7 +1688,28 @@ describe("qretools responses", () => {
 					join(dir, "t-ddi-qsf.columns.json"),
 				)
 			).err,
+		).toMatch(
+			/its name says the source `qsf`, but its `source` field says `survey`/,
+		);
+		await writeFile(
+			join(dir, "t-ddi-qsf.columns.json"),
+			JSON.stringify({ ...JSON.parse(json), source: "qsf" }),
+		);
+		expect(
+			(
+				await run(
+					"responses",
+					data,
+					"--map",
+					join(dir, "t-ddi-qsf.columns.json"),
+				)
+			).err,
 		).toMatch(/isn't a QSF column map/);
+		const { source: _, ...unsourced } = JSON.parse(json);
+		await writeFile(beside, JSON.stringify(unsourced));
+		expect((await run("responses", data, "--map", beside)).err).toMatch(
+			/this map has no `source` field.*Add `"source": "survey"`/,
+		);
 		expect((await run("responses", data, "--map", ddi)).code).toBe(2);
 	});
 
@@ -1343,6 +1929,7 @@ describe("qretools dataset export at an access level", () => {
 		await writeFile(
 			map,
 			JSON.stringify({
+				source: "survey",
 				answered_by: "ResearchData.Published",
 				respondent: "ID",
 				columns: [

@@ -368,7 +368,7 @@ function censoredMessage(censored: Readonly<Record<string, string>>): string {
 }
 
 /** Whether a variable can hold a value. */
-const holds = (r: Representation | undefined, value: string): boolean =>
+export const holds = (r: Representation | undefined, value: string): boolean =>
 	r === undefined
 		? false
 		: r.kind === "codes"
@@ -615,6 +615,8 @@ const extrasSchema = z.object({
  * itself. It holds no data.
  */
 export interface DataMap {
+	/** The source's short name (`gss`), as the map's file name ends (`-ddi-gss.columns.json`). */
+	readonly source: string;
 	/** The digest of the DDI it was made from, `sha256:<hex>`. */
 	readonly ddi?: string;
 	/** Who answered: a term of the DDI vocabulary DataSourceType. A fact of the source, so its map says it. */
@@ -665,7 +667,11 @@ function valuesOf(v: unknown): Values | undefined {
 /** A data file's map read from its JSON, once, or undefined where it isn't one. */
 export function dataMapOf(json: unknown): DataMap | undefined {
 	if (typeof json !== "object" || json === null) return undefined;
-	const { ddi, respondent, values, columns } = json as Record<string, unknown>;
+	const { source, ddi, respondent, values, columns } = json as Record<
+		string,
+		unknown
+	>;
+	if (typeof source !== "string") return undefined;
 	if (ddi !== undefined && typeof ddi !== "string") return undefined;
 	if (typeof respondent !== "string" || !Array.isArray(columns))
 		return undefined;
@@ -721,6 +727,7 @@ export function dataMapOf(json: unknown): DataMap | undefined {
 	if ((metadata ?? []).some((m) => m.weight) !== (weighting !== undefined))
 		return undefined;
 	return {
+		source,
 		...(typeof ddi === "string" && { ddi }),
 		answered_by,
 		...(citation !== undefined && { citation }),

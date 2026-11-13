@@ -105,3 +105,26 @@ export function addressOf(text: string): Address {
 		key: `${owner.toLowerCase()}/${repo.toLowerCase()}${path === "" ? "" : `/${path}`}@${ref}`,
 	};
 }
+
+/** An instrument in a workspace's release: `owner/repo[/folder]@tag:name`. */
+export interface TagRef {
+	readonly address: Extract<Address, { kind: "remote" }>;
+	/** The instrument's name: its file is `instruments/<name>.yaml`. */
+	readonly name: string;
+	/** As written, trimmed: what a map records as its release. */
+	readonly text: string;
+}
+
+/**
+ * `text` as a tag reference, or undefined when it isn't one (a file's path, say). A ref
+ * can't hold `:`, so the name follows the last one.
+ */
+export function tagRefOf(text: string): TagRef | undefined {
+	const t = text.trim();
+	const colon = t.lastIndexOf(":");
+	const name = t.slice(colon + 1);
+	// No `.`, so a file's name (`x.json`) is never read as an instrument's.
+	if (colon < 0 || !/^[A-Za-z0-9_-]+$/.test(name)) return undefined;
+	const address = addressOf(t.slice(0, colon));
+	return address.kind === "remote" ? { address, name, text: t } : undefined;
+}
