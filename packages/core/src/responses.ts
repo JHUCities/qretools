@@ -38,6 +38,15 @@ export interface ResponseMap {
 	/** The column that names each respondent. */
 	readonly respondent: number;
 	readonly columns: readonly ResponseColumn[];
+	/**
+	 * The columns that give when each interview started and ended, as a local date and time
+	 * (`2026-11-12 23:15:41`), and the zone they are in (`Z` or an offset such as `-05:00`).
+	 */
+	readonly times?: {
+		readonly start: number;
+		readonly end: number;
+		readonly zone: string;
+	};
 }
 
 /** What a variable can hold, as its DDI represents it. */
@@ -59,6 +68,13 @@ export interface Answer {
 	readonly variable: string;
 	readonly row?: number;
 	readonly value: string;
+}
+
+/** One respondent, and when their interview started and ended (`2026-11-12T23:15:41Z`). */
+export interface Respondent {
+	readonly id: string;
+	readonly start?: string;
+	readonly end?: string;
 }
 
 /** A row of a source: its cells, and the line of the file it starts on (from 1). */
@@ -91,7 +107,9 @@ export type ResponseCode =
 	/** A column whose values the source doesn't hold: none is read. */
 	| "responses-filtered"
 	/** A value that stands for a range (a top or bottom code): it gives no answer. */
-	| "responses-censored";
+	| "responses-censored"
+	/** An interview's start or end that isn't a date and time, or a zone that isn't `Z` or an offset. */
+	| "responses-time";
 
 /**
  * Where a finding is: the first line it's on and how many rows share it, and the column by
@@ -109,8 +127,12 @@ export interface ResponseFinding<Code extends string = ResponseCode> {
 
 const NUMBER = /^-?\d+(\.\d+)?$/;
 
+/** A local date and time, as a survey platform exports it: `2026-11-12 23:15:41`. */
+const LOCAL_TIME = /^(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d:\d\d)$/;
+
 /**
- * Each row's answers, and findings for what can't be read. `header` names the columns in
+ * Each row's respondent, with their interview's times where the map gives them, and their
+ * answers, and findings for what can't be read. `header` names the columns in
  * findings. One finding per column and code, at its first row, with a count: a column
  * read the wrong way is one mistake, not one per respondent.
  */
@@ -121,10 +143,12 @@ export function readResponses(
 	map: ResponseMap,
 	representations: ReadonlyMap<string, Representation>,
 ): {
+	readonly respondents: readonly Respondent[];
 	readonly answers: readonly Answer[];
 	readonly findings: readonly ResponseFinding[];
 } {
 	const answers: Answer[] = [];
+	const listed: Respondent[] = [];
 	const found = new Map<string, ResponseFinding>();
 	const note = (
 		code: ResponseCode,
@@ -185,6 +209,25 @@ export function readResponses(
 			continue;
 		}
 		respondents.add(respondent);
+		const time = (column: number, zone: string): string | undefined => {
+			const t = LOCAL_TIME.exec(cells[column] ?? "");
+			if (t !== null) return `${t[1]}T${t[2]}${zone}`;
+			note(
+				"responses-time",
+				"error",
+				"This cell isn't a date and time such as `2026-11-12 23:15:41`, so it isn't read.",
+				line,
+				column,
+			);
+			return undefined;
+		};
+		const start = map.times && time(map.times.start, map.times.zone);
+		const end = map.times && time(map.times.end, map.times.zone);
+		listed.push({
+			id: respondent,
+			...(start !== undefined && { start }),
+			...(end !== undefined && { end }),
+		});
 		const given = new Set<string>();
 		for (const c of readable) {
 			const cell = cells[c.column] ?? "";
@@ -246,7 +289,7 @@ export function readResponses(
 			});
 		}
 	}
-	return { answers, findings: [...found.values()] };
+	return { respondents: listed, answers, findings: [...found.values()] };
 }
 
 /** What a column's censored values mean, as one note: the values are the map's, not a response's. */
@@ -324,7 +367,7 @@ export function answersOf(
 	if (header?.cells.join(",") !== ANSWERS_HEADER)
 		return err({
 			line: 1,
-			message: `The header isn't \`${ANSWERS_HEADER}\`, as \`responses\` writes it.`,
+			message: `The header isn't \`${ANSWERS_HEADER}\`, as \`dataset export --csv\` writes it.`,
 		});
 	const answers: Answer[] = [];
 	for (const { line, cells } of records) {

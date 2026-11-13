@@ -17,8 +17,10 @@ import { codebookOf, parse as parseDdi } from "@qretools/codebook";
 import {
 	addressOf,
 	bankOf,
+	csvView,
 	instrumentOf,
 	questionItems,
+	readDataset,
 	remoteScope,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
@@ -917,7 +919,8 @@ describe("qretools build", () => {
 			);
 			const r = await runWith(readRemote, "responses", csv, "--map", mapFile);
 			expect(r.err).toBe("");
-			expect(r.out).toBe(
+			const read = readDataset(JSON.parse(r.out));
+			expect(read.ok && csvView(read.value)).toBe(
 				`respondent,variable,row,value\nR_1,${m.columns[0].variable},,1\n`,
 			);
 			const { release: _, ...unreleased } = JSON.parse(map);
@@ -1416,9 +1419,11 @@ describe("qretools responses", () => {
 		await writeFile(
 			csv,
 			[
-				"ResponseId,qretools_instrument,qretools_ddi,qretools_version,tenure,modes_1,modes_9,rent",
-				"Response ID,qretools_instrument,qretools_ddi,qretools_version,tenure?,modes? - Bus,modes? - None,rent?",
+				"StartDate,EndDate,ResponseId,qretools_instrument,qretools_ddi,qretools_version,tenure,modes_1,modes_9,rent",
+				"Start Date,End Date,Response ID,qretools_instrument,qretools_ddi,qretools_version,tenure?,modes? - Bus,modes? - None,rent?",
 				[
+					id({ ImportId: "startDate", timeZone: "Z" }),
+					id({ ImportId: "endDate", timeZone: "Z" }),
 					id({ ImportId: "_recordId" }),
 					id({ ImportId: "qretools_instrument" }),
 					id({ ImportId: "qretools_ddi" }),
@@ -1428,49 +1433,101 @@ describe("qretools responses", () => {
 					id({ ImportId: "QID2", choiceId: "9" }),
 					id({ ImportId: "QID3_TEXT" }),
 				].join(","),
-				`R_1,urn:ddi:org.example:instrument-t:1,${digest},9,2,1,,1200`,
-				`R_2,urn:ddi:org.example:instrument-t:1,${digest},9,3,,1,D`,
+				`2026-11-12 23:14:02,2026-11-12 23:16:02,R_1,urn:ddi:org.example:instrument-t:1,${digest},9,2,1,,1200`,
+				`2026-11-12 23:15:41,2026-11-12 23:15:50,R_2,urn:ddi:org.example:instrument-t:1,${digest},9,3,,1,D`,
 				"",
 			].join("\r\n"),
 		);
 		return { csv, map };
 	}
 
-	it("reads an export with its map and the DDI beside it, into one line per value", async () => {
+	/** The CSV view of a dataset `responses` wrote to stdout. */
+	async function csvOf(datasetText: string) {
+		const file = join(
+			await mkdtemp(join(tmpdir(), "qretools-dataset-")),
+			"d.json",
+		);
+		await writeFile(file, datasetText);
+		return run("dataset", "export", file, "--csv");
+	}
+
+	it("reads an export with its map and the DDI beside it, into a dataset of one value per answer", async () => {
 		const { csv, map } = await files();
 		const r = await run("responses", csv, "--map", map);
-		expect(r.out).toBe(
+		// Sorted by respondent, then variable URN.
+		expect((await csvOf(r.out)).out).toBe(
 			[
 				"respondent,variable,row,value",
-				`R_1,${v("tenure")},,2`,
 				`R_1,${v("modes_b")},,1`,
 				`R_1,${v("rent")},,1200`,
+				`R_1,${v("tenure")},,2`,
 				`R_2,${v("modes_9")},,1`,
 				`R_2,${v("rent")},,D`,
 				"",
 			].join("\n"),
 		);
+		// Each interview's times, in the zone the export names, on the dataset's own variables.
+		const document = JSON.parse(r.out);
+		expect(Object.keys(document.DataSet)).toEqual(["org.example:dataset-t:1"]);
+		const values = document.DataSet["org.example:dataset-t:1"].ItemSet
+			.ItemValue as {
+			VariableReference: { value: string[] };
+			Value: unknown;
+		}[];
+		expect(
+			values
+				.filter((x) => x.VariableReference.value[1] === "dataset-t.start")
+				.map((x) => x.Value),
+		).toEqual([
+			[{ StringValue: "2026-11-12T23:14:02Z" }],
+			[{ StringValue: "2026-11-12T23:15:41Z" }],
+		]);
 		// R_2's tenure isn't one of its codes: placed, never shown.
 		expect(r.err).toBe(
 			`${csv}:5: error: column \`tenure\`: This value isn't one \`${v("tenure")}\` can hold, so it isn't read. [responses-not-a-code]\n`,
 		);
 		expect(r.code).toBe(1);
+		// Named by -o, without `.json`.
+		const named = await run("responses", csv, "--map", map, "-o", "wave1.json");
 		expect(
-			(await run("responses", csv, "--map", map, "-o", "a.csv")).written,
-		).toEqual({ "a.csv": r.out });
+			Object.keys(JSON.parse(named.written["wave1.json"] ?? "{}").DataSet),
+		).toEqual(["org.example:dataset-wave1:1"]);
 	});
 
-	it("refuses a DDI the map wasn't made from, and needs --map", async () => {
-		const { csv, map } = await files((ddi) => `${ddi} `);
-		const r = await run("responses", csv, "--map", map);
-		expect(r).toMatchObject({ code: 1, out: "" });
-		expect(r.err).toMatch(
-			/isn't the DDI the map was made from.*\[responses-provenance\]/,
+	it("never replaces a different file, and says when the dataset is unchanged", async () => {
+		const { csv, map } = await files();
+		const out = join(dirname(csv), "d.json");
+		const first = await run("responses", csv, "--map", map, "-o", out);
+		await writeFile(out, first.written[out] ?? "");
+		const same = await run("responses", csv, "--map", map, "-o", out);
+		expect(same).toMatchObject({ code: 1, written: {} });
+		expect(same.err).toContain(`${out}: unchanged\n`);
+		await writeFile(out, "{}\n");
+		const refused = await run("responses", csv, "--map", map, "-o", out);
+		expect(refused).toMatchObject({ code: 1, written: {} });
+		expect(refused.err).toMatch(
+			/a dataset never replaces it.*\[responses-exists\]/,
 		);
-		expect((await run("responses", csv)).code).toBe(2);
-		expect((await run("check", ".", "--map", map)).err).toMatch(
-			/`--map` isn't an option of `check`/,
+		// A file name that can't name a dataset is a usage error.
+		expect(
+			(await run("responses", csv, "--map", map, "-o", "a.b.json")).code,
+		).toBe(2);
+	});
+
+	it("exports only a dataset, and only as --csv", async () => {
+		const { csv, map } = await files();
+		const file = join(dirname(csv), "d.json");
+		await writeFile(file, (await run("responses", csv, "--map", map)).out);
+		expect((await run("dataset", "export", file)).code).toBe(2);
+		expect(
+			(await run("dataset", "export", file, "--csv", "--map", map)).err,
+		).toMatch(/`--map` isn't an option of `dataset export`/);
+		expect((await run("responses", csv, "--map", map, "--csv")).err).toMatch(
+			/`--csv` isn't an option of `responses`/,
 		);
+		const refused = await run("dataset", "export", map, "--csv");
+		expect(refused).toMatchObject({ code: 1, out: "" });
+		expect(refused.err).toMatch(/\[dataset-unreadable\]/);
 	});
 
 	it("reads a data file with a map that names its columns by header, beside the DDI or with --ddi", async () => {
@@ -1498,15 +1555,17 @@ describe("qretools responses", () => {
 		const beside = join(dir, "t-ddi-survey.columns.json");
 		await writeFile(beside, json);
 		const r = await run("responses", data, "--map", beside);
-		expect(r.out).toBe(
+		expect((await csvOf(r.out)).out).toBe(
 			[
 				"respondent,variable,row,value",
-				`7,${v("tenure")},,2`,
 				`7,${v("rent")},,D`,
+				`7,${v("tenure")},,2`,
 				`9,${v("rent")},,1200`,
 				"",
 			].join("\n"),
 		);
+		// A data file gives no times: the dataset has no start or end variable.
+		expect(r.out).not.toMatch(/dataset-t\.(start|end)/);
 		expect(r.err).toBe(
 			[
 				`${data}: note: column \`OTHER\`: The map names no variable for this column, so it isn't read. [responses-unmapped-column]`,

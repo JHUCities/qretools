@@ -27,7 +27,9 @@ export type ExportCode =
 	/** A select-all option whose tick the DDI doesn't say. */
 	| "responses-unknown-variable"
 	/** The export's `qretools_*` fields don't say what the map says. */
-	| "responses-provenance";
+	| "responses-provenance"
+	/** `StartDate` and `EndDate` can't be read as times: one is missing, or their zone isn't `Z` or an offset. */
+	| "responses-time";
 
 export type ExportFinding = ResponseFinding<ExportCode>;
 
@@ -78,6 +80,9 @@ const QUESTION = /^(\d+_)?QID\d+/;
 
 /** What a respondent's column is called in every export. */
 const RESPONDENT = "_recordId";
+
+/** A time zone DDI can write: UTC or an offset. */
+const ZONE = /^(Z|[+-]\d\d:\d\d)$/;
 
 /** What Qualtrics writes in a ticked select-all option's column ("Export values"). */
 const TICK = "1";
@@ -260,7 +265,49 @@ export function exportMap(
 	// Another version of QREtools may write the same survey: worth knowing, not wrong.
 	stamp(PROVENANCE.version, columns.qretools, "info", "QREtools version");
 
-	return { header, rows, map: { respondent, columns: mapped }, findings };
+	// When each interview started and ended, in the zone row 3 names: never a guessed one.
+	const zoneAt = (i: number): unknown => {
+		try {
+			return (JSON.parse(ids.cells[i] ?? "") as Record<string, unknown>)
+				.timeZone;
+		} catch {
+			return undefined;
+		}
+	};
+	const start = byImportId.get("startDate");
+	const end = byImportId.get("endDate");
+	let times: ResponseMap["times"];
+	if (start !== undefined && end !== undefined) {
+		const zone = zoneAt(start);
+		if (typeof zone === "string" && ZONE.test(zone) && zoneAt(end) === zone)
+			times = { start, end, zone };
+		else
+			note(
+				"responses-time",
+				"error",
+				"The time zone of `StartDate` and `EndDate` (third header row) isn't `Z` or an offset such as `-05:00`, so no interview's times are read.",
+				{
+					line: ids.line,
+					...(header[start] !== undefined && { column: header[start] }),
+				},
+			);
+	} else if (start !== undefined || end !== undefined)
+		note(
+			"responses-time",
+			"error",
+			"The export has only one of `StartDate` and `EndDate`, so no interview's times are read.",
+		);
+
+	return {
+		header,
+		rows,
+		map: {
+			respondent,
+			columns: mapped,
+			...(times !== undefined && { times }),
+		},
+		findings,
+	};
 }
 
 /** A QSF column map read from its JSON, once, or undefined where it isn't one. */

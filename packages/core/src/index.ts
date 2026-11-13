@@ -46,6 +46,14 @@ export {
 	UNNAMED,
 	WORKSPACE_DETAILS,
 } from "./copy.ts";
+// A dataset as DDI: the answers in a DataSet, and its views.
+export {
+	csvView,
+	DATASET_NAME,
+	type Dataset,
+	datasetOf,
+	readDataset,
+} from "./dataset.ts";
 export type {
 	Collision,
 	DdiDocument,
@@ -219,6 +227,7 @@ export {
 	dataMapOf,
 	parseCsv,
 	type Representation,
+	type Respondent,
 	type ResponseCode,
 	type ResponseColumn,
 	type ResponseFinding,
