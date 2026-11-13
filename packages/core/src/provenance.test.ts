@@ -6,7 +6,7 @@ import { makeValidator } from "./ddi/validate.ts";
 import { bankOf } from "./evaluate.ts";
 import { instrumentOf } from "./instrument/instrument.ts";
 import { type Collection, provenanceOf, type RunFolder } from "./provenance.ts";
-import type { Answer } from "./responses.ts";
+import { type Answer, type MetadataColumn, metadataUrn } from "./responses.ts";
 
 const schema = JSON.parse(schemaText);
 const validator = makeValidator(schema);
@@ -159,7 +159,10 @@ function structural(d: Doc) {
 	expect(JSON.stringify(d)).not.toMatch(/Universe|"Sample/);
 	for (const p of items(d, "PhysicalInstance"))
 		expect(JSON.stringify(p.DataFingerprint)).toMatch(/"[0-9a-f]{64}"/);
-	for (const m of items(d, "OtherMaterial"))
+	// Every file of the folder, that is: a document the publisher's advice is quoted from isn't one.
+	for (const m of items(d, "OtherMaterial").filter(
+		(o) => (o.TypeOfMaterial as JsonObject).StringValue !== "weighting advice",
+	))
 		expect(JSON.stringify(m.UserAttributePair)).toMatch(
 			/"sha256".*"[0-9a-f]{64}"/,
 		);
@@ -373,5 +376,172 @@ describe("provenanceOf, an ingest", () => {
 			"group-wave1-tests.present",
 			"group-wave1-tests.not-in-source",
 		]);
+	});
+});
+
+describe("provenanceOf, a data file with columns no respondent is asked", () => {
+	const metadata: readonly MetadataColumn[] = [
+		{
+			column: "mode",
+			label: "How the interview was done",
+			role: "mode",
+			unit: "Interviewer",
+			codes: { "1": "In person", "2": "By phone" },
+			modes: {
+				"1": "Interview.FaceToFace.CAPIorCAMI",
+				"2": "Interview.Telephone",
+			},
+		},
+		{
+			column: "phase",
+			label: "Phase of the sample",
+			role: "design",
+			unit: { other: "survey organisation" },
+			codes: { "1": "First phase", "2": "Second phase" },
+		},
+		{ column: "wtss", role: "weight", number: true, weight: true },
+		{ column: "wtssnr", role: "weight", number: true, weight: true },
+	];
+	const m = (column: string) =>
+		metadataUrn("urn:ddi:org.example:instrument-wave1:1", "survey", column);
+	const data: RunFolder = {
+		...ingest,
+		collection: {},
+		answers: [
+			...answers,
+			{ respondent: "RESP-ONE", variable: m("mode"), value: "2" },
+			{ respondent: "RESP-ONE", variable: m("wtss"), value: "0.98765" },
+			{ respondent: "RESP-TWO", variable: m("wtssnr"), value: "1.23456" },
+		],
+		files: [
+			file("answers.csv", "a"),
+			file("ddi.json", "d"),
+			file("source.csv", "b"),
+			file("wave1-ddi-survey.columns.json", "9"),
+		],
+		run: { answered_by: "ResearchData.Published" },
+		map: {
+			path: "wave1-ddi-survey.columns.json",
+			source: "survey",
+			reads: [v("tenure"), v("mood"), v("zip")],
+			metadata,
+			weighting: {
+				advice: "ADVICE: use wtssnr for this year.",
+				source: {
+					title: "Example Survey codebook, release 2",
+					publisher: "Example Data Archive",
+					url: "https://example.org/codebook.pdf",
+				},
+				read: "2026-11-12",
+			},
+		},
+	};
+
+	it("owns their variables, lists each mode, and gives the publisher's advice once", () => {
+		const d = made(data);
+		structural(d);
+		const [collection] = items(d, "DataCollection");
+		expect(collection?.ProcessingEventSchemeReference).toHaveLength(1);
+		expect(collection?.CollectionEvent).toMatchObject([
+			{
+				ModeOfCollection: [
+					{
+						TypeOfModeOfCollection: {
+							StringValue: "Interview.FaceToFace.CAPIorCAMI",
+						},
+						UserAttributePair: [
+							{
+								AttributeKey: { StringValue: m("mode") },
+								AttributeValue: { StringValue: "1" },
+							},
+						],
+					},
+					{ TypeOfModeOfCollection: { StringValue: "Interview.Telephone" } },
+				],
+			},
+		]);
+		const variables = Object.fromEntries(
+			items(d, "Variable").map((x) => [x.URN, x]),
+		);
+		expect(Object.keys(variables)).toEqual(metadata.map((c) => m(c.column)));
+		expect(variables[m("mode")]).toMatchObject({
+			ID: "instrument-wave1-survey.mode",
+			SourceUnit: { StringValue: "Interviewer" },
+			VariableRepresentation: {
+				VariableRole: { StringValue: "mode" },
+				ValueRepresentation: { $type: "CodeDomain" },
+			},
+		});
+		expect(variables[m("mode")]?.QuestionReference).toBeUndefined();
+		expect(variables[m("mode")]?.IsWeight).toBeUndefined();
+		const [weighting] = items(d, "Weighting");
+		for (const w of ["wtss", "wtssnr"])
+			expect(variables[m(w)]).toMatchObject({
+				IsWeight: true,
+				WeightingProcessReference: {
+					value: ["org.example", weighting?.ID, "1"],
+				},
+				VariableRepresentation: {
+					ValueRepresentation: { $type: "NumericDomain" },
+				},
+			});
+		expect(items(d, "Weighting")).toHaveLength(1);
+		expect(JSON.stringify(weighting?.UsageGuide)).toContain(
+			'"Value":"ADVICE: use wtssnr for this year."',
+		);
+		expect(
+			items(d, "OtherMaterial").find(
+				(o) =>
+					(o.TypeOfMaterial as JsonObject).StringValue === "weighting advice",
+			),
+		).toMatchObject({
+			ExternalURLReference: ["https://example.org/codebook.pdf"],
+			UserAttributePair: [{ AttributeValue: { StringValue: "2026-11-12" } }],
+		});
+		const groups = Object.fromEntries(
+			items(d, "VariableGroup").map((g) => [
+				g.ID,
+				(g.VariableReference as JsonObject[]).map(keyOf),
+			]),
+		);
+		const k = (c: string) => m(c).slice("urn:ddi:".length);
+		expect(groups["group-wave1-tests.not-asked"]).toEqual(
+			["mode", "phase", "wtss", "wtssnr"].map(k),
+		);
+		expect(groups["group-wave1-tests.present"]).toEqual(
+			expect.arrayContaining(["mode", "wtss", "wtssnr"].map(k)),
+		);
+	});
+
+	it("holds no value, gives the same document for the same folder, and the same variables in every run", () => {
+		const text = JSON.stringify(made(data));
+		expect(text).not.toMatch(/VALUE-|RESP-|0\.98765|1\.23456/);
+		const shuffled = {
+			...data,
+			files: [...data.files].reverse(),
+			answers: [...data.answers].reverse(),
+		};
+		expect(JSON.stringify(made(shuffled))).toBe(text);
+		const other = made({ ...data, name: "another-run" });
+		const strip = (d: Doc) =>
+			items(d, "Variable").map(
+				({ WeightingProcessReference: _, ...rest }) => rest,
+			);
+		expect(strip(other)).toEqual(strip(made(data)));
+		expect(other.CodeList).toEqual(made(data).CodeList);
+	});
+
+	it("refuses run.json declaring the modes the map gives, and a variable the map doesn't", () => {
+		expect(
+			problems({ ...data, run: { answered_by: "x", asked_by: ["y"] } }).map(
+				(p) => p.field,
+			),
+		).toEqual(["asked_by"]);
+		expect(
+			problems({
+				...data,
+				answers: [{ respondent: "r", variable: m("other"), value: "1" }],
+			}).map((p) => p.file),
+		).toEqual(["answers.csv"]);
 	});
 });

@@ -8,6 +8,7 @@
  * hold is a finding, never written.
  */
 
+import { z } from "zod";
 import type { Severity } from "./findings.ts";
 import { err, ok, type Result } from "./result.ts";
 
@@ -404,6 +405,104 @@ export function parseCsv(text: string): {
 /** What a data file's map says a value stands for: source value to DDI code, or `null` for no answer. */
 export type Values = Readonly<Record<string, string | null>>;
 
+/** A term of a DDI vocabulary (its notation), or `Other` with our own words. */
+export type Term = string | { readonly other: string };
+
+const nonEmpty = z.string().min(1);
+export const termSchema = z.union([
+	nonEmpty,
+	z.strictObject({ other: nonEmpty }),
+]);
+
+/**
+ * A column of a data file that no respondent is asked (the mode of each interview, a
+ * sample phase, a weight). No DDI describes its variable, so the map does.
+ */
+export interface MetadataColumn {
+	/** Its header, and its variable's name: letters, digits and `_`, since IDs are made from it. */
+	readonly column: string;
+	readonly label?: string;
+	/** What the variable is for (DDI's VariableRole), in the map's own term. */
+	readonly role?: string;
+	/** Who gives its values: a term of the DDI vocabulary ResponseUnit. */
+	readonly unit?: Term;
+	/** Its own translations only: the map's shared ones are for the instrument's variables. */
+	readonly values?: Values;
+	/** Its codes, each with its label; or `number`. */
+	readonly codes?: Readonly<Record<string, string>>;
+	readonly number?: true;
+	/** The column that records each respondent's mode: a ModeOfCollection term for each code that is a mode. */
+	readonly modes?: Readonly<Record<string, Term>>;
+	/** A weight the publisher gives; what the publisher advises of them all is the map's `weighting`. */
+	readonly weight?: true;
+}
+
+/** What the publisher advises about its weights, in its own words, and where and when it was read. */
+export interface WeightingAdvice {
+	readonly advice: string;
+	readonly source: {
+		readonly title: string;
+		readonly publisher?: string | undefined;
+		readonly url?: string | undefined;
+	};
+	/** The date it was read from the source (2026-11-12). */
+	readonly read: string;
+}
+
+const MetadataSchema = z
+	.strictObject({
+		column: z.string().regex(/^[A-Za-z0-9_]+$/),
+		label: nonEmpty.optional(),
+		role: nonEmpty.optional(),
+		unit: termSchema.optional(),
+		values: z.record(z.string(), z.string().nullable()).optional(),
+		codes: z.record(z.string(), nonEmpty).optional(),
+		number: z.literal(true).optional(),
+		modes: z.record(z.string(), termSchema).optional(),
+		weight: z.literal(true).optional(),
+	})
+	.refine((m) => (m.codes === undefined) !== (m.number === undefined))
+	.refine(
+		(m) =>
+			m.modes === undefined ||
+			// A code may be no mode ("not recorded"): only the modes are named.
+			(Object.keys(m.modes).length > 0 &&
+				Object.keys(m.modes).every(
+					(k) => m.codes && Object.hasOwn(m.codes, k),
+				)),
+	)
+	.refine((m) => m.weight === undefined || m.number === true);
+
+const WeightingSchema = z.strictObject({
+	advice: nonEmpty,
+	source: z.strictObject({
+		title: nonEmpty,
+		publisher: nonEmpty.optional(),
+		url: nonEmpty.optional(),
+	}),
+	read: z.string().regex(/^\d{4}-\d\d-\d\d$/),
+});
+
+/**
+ * The URN of a metadata column's variable: hung off the instrument and the map's source,
+ * so `responses` and `provenance` make the same one, and the same map gives the same URN
+ * in every run. Its version is the instrument's: a map is made again when the DDI is.
+ */
+export function metadataUrn(
+	instrument: string,
+	source: string,
+	column: string,
+): string {
+	const [, , agency, id, version] = instrument.split(":");
+	return `urn:ddi:${agency}:${id}-${source}.${column}:${version}`;
+}
+
+/** What a metadata column's variable can hold, as the map says. */
+export const metadataRepresentation = (m: MetadataColumn): Representation =>
+	m.codes === undefined
+		? { kind: "number", missing: [] }
+		: { kind: "codes", codes: Object.keys(m.codes) };
+
 /**
  * A map of a data file with one header row (a published data release as CSV, say): each
  * column by its header, and the DDI variable it records. It holds no data.
@@ -426,6 +525,10 @@ export interface DataMap {
 		/** Values that stand for a range, with what each means: no answer, and a note. */
 		readonly censored?: Readonly<Record<string, string>>;
 	}[];
+	/** The columns no respondent is asked. */
+	readonly metadata?: readonly MetadataColumn[];
+	/** What the publisher advises of the weights: given exactly when a column is a weight. */
+	readonly weighting?: WeightingAdvice;
 }
 
 /** A `values` object read from JSON, or undefined where a target isn't a string or null. */
@@ -441,10 +544,8 @@ function valuesOf(v: unknown): Values | undefined {
 /** A data file's map read from its JSON, once, or undefined where it isn't one. */
 export function dataMapOf(json: unknown): DataMap | undefined {
 	if (typeof json !== "object" || json === null) return undefined;
-	const { source, ddi, respondent, values, columns } = json as Record<
-		string,
-		unknown
-	>;
+	const { source, ddi, respondent, values, columns, metadata, weighting } =
+		json as Record<string, unknown>;
 	if (typeof source !== "string") return undefined;
 	if (ddi !== undefined && typeof ddi !== "string") return undefined;
 	if (typeof respondent !== "string" || !Array.isArray(columns))
@@ -486,12 +587,37 @@ export function dataMapOf(json: unknown): DataMap | undefined {
 			}),
 		});
 	}
+	const meta =
+		metadata === undefined
+			? undefined
+			: z.array(MetadataSchema).safeParse(metadata);
+	const advice =
+		weighting === undefined ? undefined : WeightingSchema.safeParse(weighting);
+	if (meta?.success === false || advice?.success === false) return undefined;
+	const extra = (meta?.data ?? []) as readonly MetadataColumn[];
+	if (extra.length > 0) {
+		// The source is part of every metadata ID: no dot or hyphen may reach it. The
+		// digest pins the instrument whose version the metadata's URNs take.
+		if (!/^[a-z0-9]+$/.test(source) || typeof ddi !== "string")
+			return undefined;
+		for (const m of extra) {
+			if (named.has(m.column) || m.column === respondent) return undefined;
+			named.add(m.column);
+		}
+		if (extra.filter((m) => m.modes !== undefined).length > 1) return undefined;
+	}
+	// A weight points at the publisher's advice, and advice is about weights.
+	if (extra.some((m) => m.weight) !== (advice !== undefined)) return undefined;
 	return {
 		source,
 		...(typeof ddi === "string" && { ddi }),
 		respondent,
 		...(shared !== undefined && { values: shared }),
 		columns: read,
+		...(meta !== undefined && { metadata: extra }),
+		...(advice?.data !== undefined && {
+			weighting: advice.data as WeightingAdvice,
+		}),
 	};
 }
 
@@ -503,6 +629,8 @@ export function dataMapOf(json: unknown): DataMap | undefined {
 export function dataFileMap(
 	text: string,
 	map: DataMap,
+	/** The instrument's URN, which the metadata columns' variables hang off. */
+	instrument: string,
 ): {
 	readonly header: readonly string[];
 	readonly rows: readonly ResponseRow[];
@@ -547,7 +675,24 @@ export function dataFileMap(
 	}
 	const columns: ResponseColumn[] = [];
 	const absent: string[] = [];
-	for (const c of map.columns) {
+	const entries = [
+		...map.columns.map((c) => ({
+			...c,
+			values:
+				map.values === undefined && c.values === undefined
+					? undefined
+					: { ...map.values, ...c.values },
+		})),
+		// Its own translations only: the shared ones give the instrument's missing codes.
+		...(map.metadata ?? []).map((m) => ({
+			column: m.column,
+			variable: metadataUrn(instrument, map.source, m.column),
+			values: m.values,
+			filtered: undefined,
+			censored: undefined,
+		})),
+	];
+	for (const c of entries) {
 		// Said whether or not the file has the column: there's nothing in it to read.
 		if (c.filtered) {
 			note(
@@ -573,14 +718,10 @@ export function dataFileMap(
 			);
 			continue;
 		}
-		const values =
-			map.values === undefined && c.values === undefined
-				? undefined
-				: { ...map.values, ...c.values };
 		columns.push({
 			column: i,
 			variable: c.variable,
-			...(values !== undefined && { values }),
+			...(c.values !== undefined && { values: c.values }),
 			...(c.censored !== undefined && { censored: c.censored }),
 		});
 	}
@@ -591,7 +732,7 @@ export function dataFileMap(
 			"warning",
 			`The file has no column \`${absent[0]}\`${absent.length > 1 ? ` (nor ${absent.length - 1} more of the map's columns)` : ""}, which the map names.`,
 		);
-	const named = new Set(map.columns.map((c) => c.column));
+	const named = new Set(entries.map((c) => c.column));
 	const unmapped = header.filter((h) => h !== map.respondent && !named.has(h));
 	const [first] = unmapped;
 	// One finding for them all: a data release has hundreds of columns no map names.

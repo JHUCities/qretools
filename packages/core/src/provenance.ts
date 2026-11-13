@@ -11,8 +11,12 @@
  * One StudyUnit, one DataCollection with one CollectionEvent that names the instrument,
  * the data files as PhysicalInstances (SHA-256 fingerprint and size), every other file as
  * an OtherMaterial (its digest as a pair), the variables in groups, and the access level
- * as an InformationClassification. Every item is version 1: a provenance records one
- * event, so `qretools provenance` refuses to overwrite one that would differ.
+ * as an InformationClassification. A data file's columns no respondent is asked (its
+ * map's `metadata`: a mode, a phase, weights) become Variables the provenance owns, with
+ * the publisher's advice on its weights as one Weighting. Every item is version 1 (a
+ * provenance records one event, so `qretools provenance` refuses to overwrite one that
+ * would differ), but for those Variables and their codes, which the map defines: they
+ * keep `metadataUrn`'s identity, since answers.csv names them.
  */
 import { z } from "zod";
 import {
@@ -30,11 +34,17 @@ import {
 } from "./ddi/document.ts";
 import { type DdiIndex, deref } from "./ddi/read.ts";
 import { aboveLevel, type FilterRefusal } from "./filter.ts";
-import type { Answer } from "./responses.ts";
+import {
+	type Answer,
+	type MetadataColumn,
+	metadataUrn,
+	type Term,
+	termSchema,
+	type WeightingAdvice,
+} from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
 
-/** A term of a DDI vocabulary (its notation), or `Other` with our own words. */
-export type Term = string | { readonly other: string };
+export type { Term };
 
 /** What the folder gives of how the data were collected; `run.json` may not repeat any of it. */
 export interface Collection {
@@ -64,6 +74,9 @@ export interface RunMap {
 	readonly source: string;
 	/** The variables its columns are read into (not those marked `filtered`). */
 	readonly reads: readonly string[];
+	/** A data file's columns no respondent is asked, and what the publisher advises of its weights. */
+	readonly metadata?: readonly MetadataColumn[];
+	readonly weighting?: WeightingAdvice;
 }
 
 export interface RunFolder {
@@ -100,6 +113,7 @@ export const PROVENANCE = "provenance.json";
 const VOCABULARY = {
 	mode: "http://rdf-vocabulary.ddialliance.org/cv/ModeOfCollection/",
 	source: "http://rdf-vocabulary.ddialliance.org/cv/DataSourceType/",
+	unit: "http://rdf-vocabulary.ddialliance.org/cv/ResponseUnit/",
 } as const;
 
 /** A synthetic run: asked by a simulation, answered by no one real. */
@@ -109,7 +123,6 @@ const SYNTHETIC: Collection = {
 };
 
 const nonEmpty = z.string().min(1);
-const term = z.union([nonEmpty, z.strictObject({ other: nonEmpty })]);
 const date = z
 	.string()
 	.regex(
@@ -125,8 +138,8 @@ const RunSchema = z.strictObject({
 	respondent: z.literal("synthetic").optional(),
 	start: date.optional(),
 	end: date.optional(),
-	asked_by: z.array(term).min(1).optional(),
-	answered_by: term.optional(),
+	asked_by: z.array(termSchema).min(1).optional(),
+	answered_by: termSchema.optional(),
 	source: z
 		.strictObject({
 			title: nonEmpty,
@@ -214,7 +227,19 @@ export function provenanceOf(
 	if (!parsed.success) return err(problems);
 	const run: Run = parsed.data;
 	const kind = f.map === undefined ? "synthetic" : "ingest";
-	const given: Collection = f.map === undefined ? SYNTHETIC : f.collection;
+	const metadata = f.map?.metadata ?? [];
+	const urnOf = (m: MetadataColumn) =>
+		metadataUrn(instrument?.urn ?? "", f.map?.source ?? "", m.column);
+	// Each mode the map's mode column codes: a fact of the map, never of the answers.
+	const modeColumn = metadata.find((m) => m.modes !== undefined);
+	const modes = Object.entries(modeColumn?.modes ?? {});
+	const given: Collection =
+		f.map === undefined
+			? SYNTHETIC
+			: {
+					...f.collection,
+					...(modes.length > 0 && { asked_by: modes.map(([, t]) => t) }),
+				};
 	for (const [key, only] of Object.entries(ONLY))
 		if (run[key as keyof Run] !== undefined && only !== kind)
 			say(
@@ -269,9 +294,13 @@ export function provenanceOf(
 
 	// The variables: those present must be the instrument's; access must remove none.
 	const isVariable = (u: string) => deref(f.index, u)?.type === "Variable";
+	const metaUrns = new Set(metadata.map(urnOf));
 	const present = sorted(f.answers.map((a) => a.variable));
-	for (const u of present.filter((u) => !isVariable(u)))
-		say(ANSWERS, `\`${u}\` isn't a Variable of ddi.json.`);
+	for (const u of present.filter((u) => !isVariable(u) && !metaUrns.has(u)))
+		say(
+			ANSWERS,
+			`\`${u}\` isn't a Variable of ddi.json, nor one of the column map's metadata.`,
+		);
 	const variables = sorted(
 		[...f.index.byUrn.values()]
 			.filter((it) => it.type === "Variable" && it.owner === undefined)
@@ -351,6 +380,11 @@ export function provenanceOf(
 			notInSource,
 		),
 		...group(
+			"not-asked",
+			"The variables no respondent is asked: what the column map's `metadata` says of the source's other columns (the mode of each interview, a sample phase, a weight). They have no question.",
+			sorted(metaUrns),
+		),
+		...group(
 			"removed-by-access",
 			`The instrument's variables above the access level \`${run.access}\`, so not in the dataset. Not missing answers.`,
 			removed,
@@ -364,6 +398,96 @@ export function provenanceOf(
 						LevelOfInformationClassification: { StringValue: run.access },
 					}),
 				];
+
+	// The metadata columns' variables, hung off the instrument (`metadataUrn`), at its version.
+	const [, , , instrumentId = "", instrumentVersion = "1"] =
+		instrument.urn.split(":");
+	const base = `${instrumentId}-${f.map?.source ?? ""}`;
+	const defined = (type: ItemType, id: string, body: JsonObject): Item => ({
+		type,
+		identity: identity(agency, id, instrumentVersion),
+		body,
+	});
+	const advice = f.map?.weighting;
+	const adviceMaterial =
+		advice === undefined
+			? undefined
+			: make(
+					"OtherMaterial",
+					`material-${n}.weighting-advice`,
+					obj({
+						TypeOfMaterial: { StringValue: "weighting advice" },
+						Citation: obj({
+							Title: intl(advice.source.title),
+							Publisher: advice.source.publisher && [
+								{ PublisherName: intl(advice.source.publisher) },
+							],
+						}),
+						ExternalURLReference: advice.source.url && [advice.source.url],
+						UserAttributePair: [pair("read", advice.read)],
+					}),
+				);
+	const weighting =
+		advice === undefined || adviceMaterial === undefined
+			? undefined
+			: make("Weighting", `weighting-${n}`, {
+					UsageGuide: { UsageRecommendations: structured(advice.advice) },
+					RelatedOtherMaterialReference: [ref(adviceMaterial)],
+				});
+	const metaItems = metadata.flatMap((m): Item[] => {
+		const codes = Object.entries(m.codes ?? {});
+		const categories = codes.map(([, label], i) =>
+			defined("Category", `${base}.${m.column}-cat-${i}`, {
+				Label: [structured(label)],
+			}),
+		);
+		const codeList =
+			m.codes === undefined
+				? undefined
+				: defined("CodeList", `${base}.${m.column}-codes`, {
+						Code: codes.map(([code], i) => ({
+							...identity(
+								agency,
+								`${base}.${m.column}-code-${i}`,
+								instrumentVersion,
+							),
+							Value: { StringValue: code },
+							CategoryReference: ref(categories[i] as Item),
+						})),
+					});
+		const variable = defined(
+			"Variable",
+			`${base}.${m.column}`,
+			obj({
+				VariableName: [intl(m.column)],
+				Label: m.label && [structured(m.label)],
+				SourceUnit: m.unit && codeValueOf(m.unit, VOCABULARY.unit),
+				IsWeight: m.weight,
+				// shortcut: these URNs are the map's at the instrument's version, so a map edited without a new DDI keeps them, and the Weighting is this run's, so two runs refer to different ones; give the map a version of its own when one bank publishes several runs of one map.
+				WeightingProcessReference: m.weight && weighting && ref(weighting),
+				VariableRepresentation: obj({
+					VariableRole: m.role && { StringValue: m.role },
+					ValueRepresentation:
+						codeList === undefined
+							? { $type: "NumericDomain" }
+							: { $type: "CodeDomain", CodeListReference: ref(codeList) },
+				}),
+			}),
+		);
+		return [variable, ...(codeList ? [codeList] : []), ...categories];
+	});
+	const processingEvent =
+		weighting === undefined
+			? undefined
+			: make("ProcessingEvent", `processing-${n}.weighting`, {
+					WeightingReference: [ref(weighting)],
+				});
+	const processing =
+		processingEvent === undefined
+			? undefined
+			: make("ProcessingEventScheme", `processing-${n}`, {
+					ProcessingEventReference: [ref(processingEvent)],
+				});
 
 	// The files, in name order: the answers and the source as data, the rest as material.
 	const byName = [...f.files].sort((a, b) =>
@@ -481,10 +605,21 @@ export function provenanceOf(
 						StartDate: c.start && dateOf(c.start),
 						EndDate: c.end && dateOf(c.end),
 					}),
-		ModeOfCollection: (c.asked_by ?? []).map((t, i) => ({
-			...part(`collection-${n}.mode-${i + 1}`),
-			TypeOfModeOfCollection: codeValueOf(t, VOCABULARY.mode),
-		})),
+		// A mode the map gives: which respondents it asked is in the mode variable, by code.
+		ModeOfCollection:
+			modeColumn === undefined
+				? (c.asked_by ?? []).map((t, i) => ({
+						...part(`collection-${n}.mode-${i + 1}`),
+						TypeOfModeOfCollection: codeValueOf(t, VOCABULARY.mode),
+					}))
+				: modes.map(([code, t], i) => ({
+						...part(`collection-${n}.mode-${i + 1}`),
+						TypeOfModeOfCollection: codeValueOf(t, VOCABULARY.mode),
+						Description: structured(
+							`Each respondent's mode is in the variable ${modeColumn.column}: this mode is its code ${code}.`,
+						),
+						UserAttributePair: [pair(urnOf(modeColumn), code)],
+					})),
 		InstrumentReference: [instrumentRef],
 		// Written unread: what the runtime reported of itself.
 		UserAttributePair:
@@ -499,6 +634,7 @@ export function provenanceOf(
 		`collection-${n}`,
 		obj({
 			MethodologyReference: methodology[0] && ref(methodology[0]),
+			ProcessingEventSchemeReference: processing && [ref(processing)],
 			CollectionEvent: [event],
 		}),
 	);
@@ -521,6 +657,10 @@ export function provenanceOf(
 			...materials,
 			...access,
 			...groups,
+			...metaItems,
+			...[adviceMaterial, weighting, processingEvent, processing].filter(
+				(x) => x !== undefined,
+			),
 		]),
 	);
 }

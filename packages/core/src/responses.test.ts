@@ -4,6 +4,8 @@ import {
 	type DataMap,
 	dataFileMap,
 	dataMapOf,
+	metadataRepresentation,
+	metadataUrn,
 	parseCsv,
 	type Representation,
 	type ResponseMap,
@@ -222,6 +224,7 @@ describe("dataFileMap", () => {
 		const made = dataFileMap(
 			"id,age,happy,twice,twice,extra,more\n1,-100,-98,,,,\n",
 			MAP,
+			"",
 		);
 		expect(made.map).toEqual({
 			respondent: 0,
@@ -250,7 +253,7 @@ describe("dataFileMap", () => {
 
 	it("reads nothing without one respondent column, or a header", () => {
 		for (const text of ["happy\n1\n", "id,id\n1,1\n", ""]) {
-			const made = dataFileMap(text, MAP);
+			const made = dataFileMap(text, MAP, "");
 			expect(made.map).toBeUndefined();
 			expect(made.findings.map((f) => f.code)).toEqual([
 				"responses-unreadable",
@@ -301,7 +304,7 @@ describe("filtered and censored columns", () => {
 			],
 		});
 		if (map === undefined) throw new Error("the map isn't read");
-		const made = dataFileMap("id,happy,age\na,1,6\n", map);
+		const made = dataFileMap("id,happy,age\na,1,6\n", map, "");
 		expect(made.map?.columns).toEqual([
 			{ column: 2, variable: "urn:age", censored: { "6": "6 or more" } },
 		]);
@@ -320,5 +323,97 @@ describe("filtered and censored columns", () => {
 					columns: [{ column: "age", variable: "urn:age", ...bad }],
 				}),
 			).toBeUndefined();
+	});
+});
+
+describe("metadata columns", () => {
+	const INSTRUMENT = "urn:ddi:org.example:instrument-wave1:3";
+	const json = {
+		source: "survey",
+		ddi: "sha256:0",
+		respondent: "id",
+		values: { "-98": "D" },
+		columns: [{ column: "happy", variable: "urn:happy" }],
+		metadata: [
+			{
+				column: "mode",
+				// A code that is no mode names none.
+				codes: { "1": "In person", "2": "By phone", "9": "Not recorded" },
+				modes: { "1": "Interview.FaceToFace", "2": "Interview.Telephone" },
+			},
+			{ column: "wt", number: true, weight: true, values: { "-1": null } },
+		],
+		weighting: {
+			advice: "Use wt.",
+			source: { title: "Codebook" },
+			read: "2026-11-12",
+		},
+	};
+
+	it("reads a map's metadata, and refuses metadata it can't give a variable", () => {
+		expect(dataMapOf(json)).toEqual(json);
+		const meta = (m: object) => ({
+			...json,
+			metadata: [...json.metadata, m],
+		});
+		for (const bad of [
+			meta({ column: "phase" }),
+			meta({ column: "phase", codes: { "1": "x" }, number: true }),
+			meta({ column: "phase", codes: { "1": "x" }, modes: { "2": "y" } }),
+			meta({ column: "phase", codes: { "1": "x" }, modes: { "1": "y" } }),
+			meta({ column: "phase", codes: { "1": "x" }, weight: true }),
+			meta({ column: "a.b", number: true }),
+			meta({ column: "happy", number: true }),
+			meta({ column: "id", number: true }),
+			meta({ column: "phase", number: true, extra: 1 }),
+			{ ...json, weighting: undefined },
+			{ ...json, metadata: json.metadata.slice(0, 1) },
+			{ ...json, weighting: { ...json.weighting, read: "12 Nov" } },
+			{ ...json, source: "a-b" },
+			{ ...json, ddi: undefined },
+			meta({ column: "phase", codes: { "1": "x" }, modes: {} }),
+		])
+			expect(dataMapOf(bad), JSON.stringify(bad)).toBeUndefined();
+	});
+
+	it("reads them into variables of their own, with their own translations only", () => {
+		const map = dataMapOf(json) as DataMap;
+		const made = dataFileMap(
+			"id,happy,mode,wt\n1,-98,1,0.5\n2,1,-98,-1\n",
+			map,
+			INSTRUMENT,
+		);
+		const mode = metadataUrn(INSTRUMENT, "survey", "mode");
+		const wt = metadataUrn(INSTRUMENT, "survey", "wt");
+		expect([mode, wt]).toEqual([
+			"urn:ddi:org.example:instrument-wave1-survey.mode:3",
+			"urn:ddi:org.example:instrument-wave1-survey.wt:3",
+		]);
+		const representations = new Map<string, Representation>([
+			["urn:happy", { kind: "codes", codes: ["1", "D"] }],
+			...(map.metadata ?? []).map(
+				(m) =>
+					[
+						metadataUrn(INSTRUMENT, "survey", m.column),
+						metadataRepresentation(m),
+					] as const,
+			),
+		]);
+		const r = readResponses(
+			made.header,
+			made.rows,
+			made.map as ResponseMap,
+			representations,
+		);
+		expect(r.answers).toEqual([
+			{ respondent: "1", variable: "urn:happy", value: "D" },
+			{ respondent: "1", variable: mode, value: "1" },
+			{ respondent: "1", variable: wt, value: "0.5" },
+			{ respondent: "2", variable: "urn:happy", value: "1" },
+		]);
+		// The shared -98 is the instrument's "don't know": no code of `mode`.
+		expect(r.findings.map((f) => [f.code, f.column])).toEqual([
+			["responses-not-a-code", "mode"],
+		]);
 	});
 });

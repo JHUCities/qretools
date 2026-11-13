@@ -1220,6 +1220,76 @@ describe("qretools responses", () => {
 				/`--map` isn't an option of `provenance`/,
 			);
 		});
+
+		it("reads a data file's columns no respondent is asked into answers.csv, and describes them", async () => {
+			const { map: qsfMap } = await files();
+			const dir = join(dirname(qsfMap), "wave1-data");
+			await mkdir(dir);
+			const ddiText = await readFile(join(dirname(qsfMap), "t.json"), "utf8");
+			await writeFile(join(dir, "ddi.json"), ddiText);
+			await writeFile(
+				join(dir, "source.csv"),
+				"ID,TENURE,MODE,WT\n7,2,1,0.98765\n8,,2,1.23456\n",
+			);
+			const mapFile = join(dir, "t-ddi-survey.columns.json");
+			await writeFile(
+				mapFile,
+				JSON.stringify({
+					source: "survey",
+					ddi: `sha256:${createHash("sha256").update(ddiText).digest("hex")}`,
+					respondent: "ID",
+					values: { "-98": "D" },
+					columns: [{ column: "TENURE", variable: v("tenure") }],
+					metadata: [
+						{
+							column: "MODE",
+							codes: { "1": "In person", "2": "By phone" },
+							modes: {
+								"1": "Interview.FaceToFace",
+								"2": "Interview.Telephone",
+							},
+						},
+						{ column: "WT", number: true, weight: true },
+					],
+					weighting: {
+						advice: "Use WT.",
+						source: { title: "Example codebook" },
+						read: "2026-11-12",
+					},
+				}),
+			);
+			const read = await run(
+				"responses",
+				join(dir, "source.csv"),
+				"--map",
+				mapFile,
+				"--ddi",
+				join(dir, "ddi.json"),
+			);
+			const m = (c: string) => `urn:ddi:org.example:instrument-t-survey.${c}:1`;
+			expect(read.out).toBe(
+				[
+					"respondent,variable,row,value",
+					`7,${v("tenure")},,2`,
+					`7,${m("MODE")},,1`,
+					`7,${m("WT")},,0.98765`,
+					`8,${m("MODE")},,2`,
+					`8,${m("WT")},,1.23456`,
+					"",
+				].join("\n"),
+			);
+			await writeFile(join(dir, "answers.csv"), read.out);
+			await writeFile(
+				join(dir, "run.json"),
+				'{"answered_by":"ResearchData.Published"}',
+			);
+			const r = await run("provenance", dir);
+			expect(r.err).toBe("");
+			const text = r.written[join(dir, "provenance.json")] ?? "";
+			expect(text).toContain('"IsWeight": true');
+			expect(text).toContain('"Interview.Telephone"');
+			expect(text).not.toMatch(/0\.98765|1\.23456/);
+		});
 	});
 });
 

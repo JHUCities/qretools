@@ -37,7 +37,10 @@ export type ItemType =
 	| "PhysicalInstance"
 	| "OtherMaterial"
 	| "InformationClassification"
-	| "VariableGroup";
+	| "VariableGroup"
+	| "Weighting"
+	| "ProcessingEvent"
+	| "ProcessingEventScheme";
 
 export interface Identity {
 	readonly URN: string;

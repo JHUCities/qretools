@@ -279,6 +279,57 @@ gives a different source, the command refuses the map:
   bottom code). The command writes no line for such a value. It writes one note for the
   column, and reads all other values of the column.
 
+**Columns that no respondent is asked.** A data file can have columns that are not
+answers: for example the mode of each interview, the phase of the sample, the version of
+the questionnaire, and the survey weights. The instrument has no variable for these
+columns. Write them in `metadata`, not in `columns`. If a column is a weight, write what
+the publisher advises about the weights in `weighting`:
+
+```json
+{
+  "source": "release",
+  "ddi": "sha256:3f5a…",
+  "respondent": "ID",
+  "columns": [ … ],
+  "metadata": [
+    { "column": "MODE", "label": "Mode of interview", "role": "mode", "unit": "Interviewer",
+      "codes": { "1": "In person", "2": "By phone" },
+      "modes": { "1": "Interview.FaceToFace.CAPIorCAMI", "2": "Interview.Telephone" } },
+    { "column": "PHASE", "label": "Phase of the sample", "role": "design",
+      "unit": { "other": "survey organization" }, "codes": { "1": "First phase", "2": "Second phase" } },
+    { "column": "WTSSNR", "role": "weight", "number": true, "weight": true }
+  ],
+  "weighting": {
+    "advice": "<the words of the publisher>",
+    "source": { "title": "Codebook, release 3", "publisher": "…", "url": "https://…" },
+    "read": "2026-11-12"
+  }
+}
+```
+
+- `column`: the header. It is also the name of the variable, so use letters, digits and
+  `_` only. It cannot be the `respondent` column or a header in `columns`.
+- `codes` (each code and its label) or `number: true`: what the column holds. Give one.
+- `label`, `role`, `unit`: optional. `role` is your term for the function of the variable
+  (DDI `VariableRole`). `unit` is a term of the DDI vocabulary ResponseUnit (who gives the
+  value), or `{ "other": "<your words>" }`.
+- `values`: optional. The translations of this column only. The `values` of the map do
+  not apply to a metadata column, because they translate to the codes of the instrument.
+- `modes`: for the one column that records the mode of each interview. Give a term of the
+  DDI vocabulary ModeOfCollection for each code that is a mode. Do not give a term for a
+  code such as "not recorded".
+- `weight: true`: the column is a weight. The command does not choose a weight.
+- `weighting`: the advice of the publisher, word for word, the document that gives it, and
+  the date that you read it. Give it if and only if a column is a weight.
+- The map's `source` must be letters and digits only, because it is part of the URN. A
+  map with `metadata` must have its `ddi` digest.
+
+The command writes the values of these columns in the output, as for all other columns.
+The URN of each variable comes from the instrument, the `source` and the header. For
+example, the column `MODE` of the source `release` of `instrument-wave1` at version 3 is
+`urn:ddi:org.example:instrument-wave1-release.MODE:3`. Thus, the same map gives the same
+URNs in each run. The DDI of the instrument does not change.
+
 **Filtered.** A variable is filtered from a data file when the data file does not hold
 its values at the level of access that you have. The publisher can filter a variable, for
 example to protect respondents. You can filter a variable too, for example when the data
@@ -442,7 +493,7 @@ one kind of respondent. If the rows are different, export each kind as a differe
 |---|---|---|
 | `respondent` | a synthetic run, always | `"synthetic"` |
 | `start`, `end` | a data file, a synthetic run | `"2010-03-01"`, `"2026-11-12T09:00:00Z"` |
-| `asked_by` | a data file | `["Interview.FaceToFace.CAPIorCAMI"]` |
+| `asked_by` | a data file whose map has no `modes` | `["Interview.FaceToFace.CAPIorCAMI"]` |
 | `answered_by` | a data file; a Qualtrics export that is not test responses | `"ResearchData.Published"` |
 | `source` | an ingest | `{ "title": "…", "publisher": "…", "url": "…" }` |
 | `runtime` | a synthetic run, always | `{ "name": "example-model", "version": "2026-10-01" }` |
@@ -471,8 +522,21 @@ Qualtrics export), a field of another kind of folder, and a field that it does n
   of the instrument that the source does not hold; and the variables that the access level
   removes. These are not missing answers.
 - `InformationClassification`: the access level.
+- For each column of the map's `metadata`, a `Variable` with no question: its name, label,
+  `SourceUnit` (`unit`), `VariableRole` (`role`) and its codes or `NumericDomain`. A
+  weight has `IsWeight` and refers to the one `Weighting`, which holds the advice of the
+  publisher in `UsageGuide` and refers to an `OtherMaterial` that cites the document. A
+  `ProcessingEventScheme` of the `DataCollection` lists the `Weighting`. A `VariableGroup`
+  lists these variables.
+- If the map has `modes`, the `CollectionEvent` has one `ModeOfCollection` for each code,
+  in code order. Each one says its code, and that the mode of each respondent is in the
+  variable. Then `run.json` cannot give `asked_by`.
 
-Each item has version 1. A second run of the command on the same folder gives the same
+**Not yet:** `filter` and `access` do not know the metadata variables, so they refuse
+answers that hold them.
+
+Each item has version 1, except the variables of `metadata` and their codes: these have
+the version of the instrument. A second run of the command on the same folder gives the same
 file. The command does not replace a `provenance.json` that is different: move it, then
 run the command again.
 

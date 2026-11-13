@@ -218,6 +218,9 @@ export {
 	type DataMap,
 	dataFileMap,
 	dataMapOf,
+	type MetadataColumn,
+	metadataRepresentation,
+	metadataUrn,
 	parseCsv,
 	type Representation,
 	type ResponseCode,
@@ -227,6 +230,7 @@ export {
 	type ResponseRow,
 	readResponses,
 	type Values,
+	type WeightingAdvice,
 } from "./responses.ts";
 export { err, ok, type Result } from "./result.ts";
 export {

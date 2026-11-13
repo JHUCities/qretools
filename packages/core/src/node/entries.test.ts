@@ -107,6 +107,8 @@ describe("the entry points", () => {
 			    "locksFor",
 			    "locksWritten",
 			    "makeValidator",
+			    "metadataRepresentation",
+			    "metadataUrn",
 			    "movedTags",
 			    "namesOf",
 			    "notHere",

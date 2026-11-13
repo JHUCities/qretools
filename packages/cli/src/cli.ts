@@ -49,7 +49,10 @@ import {
 	locate,
 	locksFor,
 	locksWritten,
+	type MetadataColumn,
 	makeValidator,
+	metadataRepresentation,
+	metadataUrn,
 	movedTags,
 	notHere,
 	PROVENANCE,
@@ -80,6 +83,7 @@ import {
 	unlockedTags,
 	type Validator,
 	versionsOf,
+	type WeightingAdvice,
 	WORKSPACE,
 	withLocks,
 	workspaceOf,
@@ -504,6 +508,9 @@ type ReadWithMap =
 			readonly source: string;
 			/** The variables the map reads columns into: not those it marks `filtered`. */
 			readonly reads: readonly string[];
+			/** A data file's columns no respondent is asked, and the advice on its weights. */
+			readonly metadata: readonly MetadataColumn[];
+			readonly weighting?: WeightingAdvice;
 			readonly notes: readonly string[];
 			readonly findings: readonly ResponseFinding<string>[];
 			readonly answers?: readonly Answer[];
@@ -591,8 +598,28 @@ function readWithMap(
 			.find((t) => t !== undefined);
 		if (tick !== undefined) ticked.set(e.urn, tick);
 	}
+	// A metadata column's variable is the map's, hung off the one instrument.
+	const metadata = "respondent" in map ? (map.metadata ?? []) : [];
+	const instruments = [...new Set(index.byUrn.values())].filter(
+		(it) => it.type === "Instrument" && it.owner === undefined,
+	);
+	const [instrument] = instruments;
+	if (
+		metadata.length > 0 &&
+		(instrument === undefined || instruments.length > 1)
+	)
+		return refused(
+			`${ddiFile}: error: this DDI holds ${instruments.length} instruments, so the map's \`metadata\` can't be given variables: they hang off one. [responses-unreadable]`,
+		);
+	for (const m of metadata)
+		representations.set(
+			metadataUrn(instrument?.urn ?? "", source, m.column),
+			metadataRepresentation(m),
+		);
 	const made =
-		"respondent" in map ? dataFileMap(csv, map) : exportMap(csv, map, ticked);
+		"respondent" in map
+			? dataFileMap(csv, map, instrument?.urn ?? "")
+			: exportMap(csv, map, ticked);
 	const answered =
 		made.map === undefined
 			? undefined
@@ -605,6 +632,9 @@ function readWithMap(
 		kind: "read",
 		source,
 		reads,
+		metadata,
+		...("respondent" in map &&
+			map.weighting !== undefined && { weighting: map.weighting }),
 		notes,
 		findings: [...made.findings, ...(answered?.findings ?? [])],
 		...(answered !== undefined && { answers: answered.answers }),
@@ -877,7 +907,13 @@ async function writeProvenance(
 			return refuse([
 				`${at(ANSWERS)}: error: it isn't what reading ${SOURCE} with ${mapFile.path}${typeof level === "string" ? ` and filtering at \`${level}\`` : ""} gives, byte for byte. [provenance-ingest]`,
 			]);
-		map = { path: mapFile.path, source: again.source, reads: again.reads };
+		map = {
+			path: mapFile.path,
+			source: again.source,
+			reads: again.reads,
+			metadata: again.metadata,
+			...(again.weighting !== undefined && { weighting: again.weighting }),
+		};
 		if (again.source === "qsf") {
 			const said = exportCollection(sourceText);
 			if (!said.ok)
