@@ -416,7 +416,8 @@ const ZONED_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/;
  * (a program that writes answers can't know the dataset's own URNs). Each respondent named
  * is listed. Every value is checked against its variable, as `readResponses` checks a
  * source's, and findings say where, never what: one per code and variable, at its first
- * line, with a count. A roster row isn't read: a dataset can't hold one yet.
+ * line, with a count. A roster's answer has its `row`, from 1; which variables a roster
+ * records is the DDI's, so `datasetOf` checks it.
  */
 export function answersOf(
 	text: string,
@@ -477,22 +478,36 @@ export function answersOf(
 			times.set(respondent, entry);
 			lines.set(respondent, line);
 		}
-		if (row !== "") {
+		if (row !== "" && (variable === "start" || variable === "end")) {
 			note(
 				"responses-row",
 				"error",
-				`\`${variable}\` is answered in a roster row, and a dataset can't hold roster rows yet, so it isn't read.`,
+				`An interview's \`${variable}\` has no row, so this line isn't read.`,
 				line,
 				variable,
 			);
 			continue;
 		}
-		const key = `${respondent}\u0000${variable}`;
+		// A safe integer too, so a row's key never reads `1e+20`.
+		if (
+			row !== "" &&
+			!(/^[1-9][0-9]*$/.test(row) && Number.isSafeInteger(Number(row)))
+		) {
+			note(
+				"responses-row",
+				"error",
+				`The row of \`${variable}\` isn't a whole number from 1, so this line isn't read.`,
+				line,
+				variable,
+			);
+			continue;
+		}
+		const key = `${respondent}\u0000${variable}\u0000${row}`;
 		if (given.has(key)) {
 			note(
 				"responses-duplicate",
 				"error",
-				`An earlier line gives \`${variable}\` for this respondent too, so this one isn't read.`,
+				`An earlier line gives \`${variable}\`${row === "" ? "" : ` in row ${row}`} for this respondent too, so this one isn't read.`,
 				line,
 				variable,
 			);
@@ -538,7 +553,12 @@ export function answersOf(
 			);
 			continue;
 		}
-		answers.push({ respondent, variable, value });
+		answers.push({
+			respondent,
+			variable,
+			...(row !== "" && { row: Number(row) }),
+			value,
+		});
 	}
 	for (const t of times.values()) {
 		const line = lines.get(t.id) ?? 1;

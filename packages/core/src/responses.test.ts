@@ -530,7 +530,7 @@ describe("answersOf", () => {
 				"a,urn:happy,,secret",
 				"a,urn:age,,9x",
 				"a,urn:gone,,1",
-				"a,urn:tick,2,1",
+				"a,urn:tick,0,1",
 				"a,urn:tick,,1",
 				"a,urn:tick,,0",
 				"b,urn:happy,,secret",
@@ -555,6 +555,48 @@ describe("answersOf", () => {
 		expect(r.answers).toEqual([
 			{ respondent: "a", variable: "urn:tick", value: "1" },
 		]);
+	});
+
+	it("reads a roster's rows, from 1, and refuses any other row", () => {
+		const r = answersOf(
+			file(
+				"a,urn:age,1,30",
+				"a,urn:age,2,31",
+				"a,urn:age,1,32",
+				"a,start,1,2026-11-12T23:14:02Z",
+				...["0", "01", "-1", "1.0", "123456789012345678901"].map(
+					(row) => `a,urn:happy,${row},1`,
+				),
+			),
+			REPRESENTATIONS,
+		);
+		expect(r.answers).toEqual([
+			{ respondent: "a", variable: "urn:age", row: 1, value: "30" },
+			{ respondent: "a", variable: "urn:age", row: 2, value: "31" },
+		]);
+		expect(r.findings.map((f) => [f.code, f.line, f.count, f.message])).toEqual(
+			[
+				[
+					"responses-duplicate",
+					4,
+					1,
+					"An earlier line gives `urn:age` in row 1 for this respondent too, so this one isn't read.",
+				],
+				[
+					"responses-row",
+					5,
+					1,
+					"An interview's `start` has no row, so this line isn't read.",
+				],
+				[
+					"responses-row",
+					6,
+					5,
+					"The row of `urn:happy` isn't a whole number from 1, so this line isn't read.",
+				],
+				["responses-time", 2, 1, expect.any(String)],
+			],
+		);
 	});
 
 	it("refuses another header, and an interview that ends before it starts", () => {
