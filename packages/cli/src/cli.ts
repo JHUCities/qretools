@@ -12,7 +12,7 @@
  */
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
@@ -26,6 +26,7 @@ import {
 	type BankScope,
 	bankOf,
 	collisions,
+	type DataMap,
 	type DdiDocument,
 	dataFileMap,
 	dataMapOf,
@@ -80,6 +81,7 @@ import {
 import { readWorkspace } from "@qretools/core/node";
 import { pathsPageOf } from "@qretools/paths";
 import {
+	type ColumnMap,
 	columnMapOf,
 	exportMap,
 	qsfMapOf,
@@ -136,8 +138,11 @@ const USAGE = `Usage:
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist),
                                     and each instrument's to outdir/instruments/<name>.json, with its Qualtrics
                                     survey (<name>.qsf); an instrument Qualtrics can't run gets a warning instead
-                                    of the survey. Refused while an instrument is incomplete, reads this
-                                    workspace as \`../\`, or reads a tag it hasn't locked or that has moved
+                                    of the survey. Copies each column map in maps/, <name>-ddi-<source>.columns.json,
+                                    beside its instrument's DDI, with a warning if it was made from another DDI.
+                                    Refused while an instrument is incomplete, reads this workspace as \`../\`,
+                                    or reads a tag it hasn't locked or that has moved, or a map in maps/ names
+                                    no instrument it builds or can't be read as the source its name gives
   qretools qsf-map <name.json> -o <dir>
                                     Write the QSF column map of an instrument's DDI (as \`build\` writes it), from
                                     the response columns of its Qualtrics survey to its DDI variables, to
@@ -636,6 +641,47 @@ async function writePaths(
  */
 const MAP_NAME = /-ddi-([a-z0-9]+)\.columns\.json$/;
 
+/** A column map read from its JSON, as its name's source says it is, or why it can't be. */
+type MapRead =
+	| {
+			readonly kind: "read";
+			readonly map: ColumnMap | DataMap;
+	  }
+	| { readonly kind: "unreadable"; readonly reason: string };
+
+/**
+ * A map's text read as the source its name gives (`MAP_NAME`): its `source` field must
+ * agree, and `qsf` reads as a QSF column map, any other as a data file's map. The one
+ * rule `responses` and `build` both apply.
+ */
+function mapOf(named: string, text: string): MapRead {
+	const json = jsonOf(text);
+	if (!json.ok)
+		return { kind: "unreadable", reason: `this isn't JSON (${json.detail}).` };
+	const source =
+		typeof json.value === "object" && json.value !== null
+			? (json.value as Record<string, unknown>).source
+			: undefined;
+	if (typeof source !== "string")
+		return {
+			kind: "unreadable",
+			reason: `this map has no \`source\` field, which says what it reads. ${named === "qsf" ? "Make it again with `qretools qsf-map`." : `Add \`"source": "${named}"\`.`}`,
+		};
+	if (source !== named)
+		return {
+			kind: "unreadable",
+			reason: `its name says the source \`${named}\`, but its \`source\` field says \`${source}\`.`,
+		};
+	const qsf = source === "qsf";
+	const map = qsf ? columnMapOf(json.value) : dataMapOf(json.value);
+	return map === undefined
+		? {
+				kind: "unreadable",
+				reason: `this isn't a ${qsf ? "QSF column map" : "data file's column map"}.`,
+			}
+		: { kind: "read", map };
+}
+
 /**
  * Responses read with a column map, as long CSV: one line per value, keyed by DDI Variable
  * URN (`answersCsv`). A QSF column map reads a Qualtrics response export; any other map
@@ -670,35 +716,12 @@ async function writeResponses(
 			return USAGE_ERROR;
 		}
 	const [csv = "", mapText = "", ddiText = ""] = texts;
-	const mapJson = jsonOf(mapText);
-	const source =
-		mapJson.ok && typeof mapJson.value === "object" && mapJson.value !== null
-			? (mapJson.value as Record<string, unknown>).source
-			: undefined;
-	if (typeof source !== "string") {
-		io.err(
-			`${mapFile}: error: this map has no \`source\` field, which says what it reads. ${named[1] === "qsf" ? "Make it again with `qretools qsf-map`." : `Add \`"source": "${named[1]}"\`.`} [responses-unreadable]\n`,
-		);
+	const opened = mapOf(named[1] ?? "", mapText);
+	if (opened.kind === "unreadable") {
+		io.err(`${mapFile}: error: ${opened.reason} [responses-unreadable]\n`);
 		return PROBLEMS;
 	}
-	if (source !== named[1]) {
-		io.err(
-			`${mapFile}: error: its name says the source \`${named[1]}\`, but its \`source\` field says \`${source}\`. [responses-unreadable]\n`,
-		);
-		return PROBLEMS;
-	}
-	const qsf = source === "qsf";
-	const map = !mapJson.ok
-		? undefined
-		: qsf
-			? columnMapOf(mapJson.value)
-			: dataMapOf(mapJson.value);
-	if (map === undefined) {
-		io.err(
-			`${mapFile}: error: this isn't a ${qsf ? "QSF column map" : "data file's column map"}. [responses-unreadable]\n`,
-		);
-		return PROBLEMS;
-	}
+	const { map } = opened;
 	if (map.ddi !== undefined && map.ddi !== digestOf(ddiText)) {
 		io.err(
 			`${ddiFile}: error: this isn't the DDI the map was made from (its digest differs). [responses-provenance]\n`,
@@ -1108,11 +1131,60 @@ async function exportBank(
 }
 
 /**
+ * The column maps a build copies (`maps/<instrument>-ddi-<source>.columns.json`, by file
+ * name), checked against the instruments it builds (their DDI as written, by name): a
+ * line for each map it refuses (not named as a map, no such instrument, not readable as
+ * its source), and a warning for each made from another DDI than this build's. That one
+ * is still copied: an instrument's new DDI exists only once it's merged, and a fielded
+ * survey's map stays with the release it was fielded from.
+ */
+function mapsChecked(
+	maps: Readonly<Record<string, string>>,
+	ddis: ReadonlyMap<string, Rendered>,
+): {
+	readonly errors: readonly string[];
+	readonly warnings: readonly string[];
+} {
+	const errors: string[] = [];
+	const warnings: string[] = [];
+	for (const [file, text] of Object.entries(maps)) {
+		const named = MAP_NAME.exec(file);
+		const instrument = named === null ? undefined : file.slice(0, named.index);
+		const source = named?.[1] ?? "";
+		const ddi = instrument === undefined ? undefined : ddis.get(instrument);
+		const opened = mapOf(source, text);
+		const problem =
+			instrument === undefined
+				? "a file in maps/ is a column map, named `<instrument>-ddi-<source>.columns.json`."
+				: ddi === undefined
+					? `this workspace builds no instrument \`${instrument}\` (instruments/${instrument}.yaml).`
+					: opened.kind === "unreadable"
+						? opened.reason
+						: undefined;
+		if (problem !== undefined) {
+			errors.push(`${file}: error: ${problem} [build-map]`);
+			continue;
+		}
+		const made = opened.kind === "read" ? opened.map.ddi : undefined;
+		if (made !== undefined && made !== digestOf(ddi?.text ?? ""))
+			warnings.push(
+				`${file}: warning: made from the DDI ${made}, not the one this build wrote for \`${instrument}\`. ${
+					source === "qsf"
+						? `If the survey isn't fielded yet, make it again with \`qretools qsf-map\` from this build's ${instrument}.json. Keep a fielded survey's map as it is.`
+						: "If it should read this DDI, make it again with the workspace's own tool in tools/."
+				} [build-map-ddi]`,
+			);
+	}
+	return { errors, warnings };
+}
+
+/**
  * `qretools build [dir]`: the workspace as committed at HEAD, each file at the version its
  * first-parent history gives (`versionsOf`), exported as `export` does to `out/ddi.json`;
  * and each instrument to `out/instruments/<name>.json`, with its Qualtrics survey
- * (`<name>.qsf`), or a warning where Qualtrics can't run it. It never makes a column map:
- * `qsf-map` does, once the survey is fielded. Uncommitted changes are left out, and said to be.
+ * (`<name>.qsf`), or a warning where Qualtrics can't run it. It never makes a column map
+ * (`qsf-map` does, once the survey is fielded): it copies those committed in `maps/`
+ * (`mapsChecked`). Uncommitted changes are left out, and said to be.
  */
 async function build(
 	dir: string,
@@ -1165,6 +1237,22 @@ async function build(
 		io.err(`${join(dir, path)}:\n`);
 		return refused(refusal, io);
 	}
+	// Each instrument's DDI as written, so a map's digest is checked against these bytes.
+	const ddis = new Map(
+		Object.entries(instruments).map(([path, { instrument }]) => [
+			instrumentAt(path) ?? path,
+			asJson(instrument.ddi),
+		]),
+	);
+	const maps = mapsChecked(read.maps, ddis);
+	for (const line of maps.errors)
+		io.err(`${join(dir, WORKSPACE.maps)}${sep}${line}\n`);
+	if (maps.errors.length > 0) {
+		io.err(
+			"Not built: every file in maps/ is copied beside its instrument's DDI, so each must be a column map of an instrument this workspace builds.\n",
+		);
+		return PROBLEMS;
+	}
 	const code = await exportBank(bank, join(out, "ddi.json"), io, asJson);
 	if (code !== OK) return code;
 	for (const [path, { instrument }] of Object.entries(instruments)) {
@@ -1208,6 +1296,11 @@ async function build(
 			);
 		await io.writeFile(file(".qsf"), `${JSON.stringify(made.qsf, null, 2)}\n`);
 	}
+	// Copied as committed, never made: a map is the workspace's (`qsf-map`, or its own tools).
+	for (const line of maps.warnings)
+		io.err(`${join(dir, WORKSPACE.maps)}${sep}${line}\n`);
+	for (const [file, text] of Object.entries(read.maps))
+		await io.writeFile(join(out, WORKSPACE.instruments, file), text);
 	// Only for a build that exported: a refused one is no release. Workspaces that use this
 	// release read banks from the message, never instruments, so it lists the bank's files.
 	if (message !== undefined)

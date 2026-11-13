@@ -599,6 +599,121 @@ describe("qretools build", () => {
 			);
 		});
 
+		describe("with column maps in maps/", () => {
+			const pinned = `agency: org.example\nlocked:\n  acme/ws/sub@v1: ${A}\n`;
+			const bank: Io["readRemote"] = async () => ({
+				kind: "files",
+				files: {
+					"workspace.yaml": "agency: org.example\n",
+					"questions/t/q.yaml": OPEN,
+				},
+				at: { commit: A, blobs: { "questions/t/q.yaml": "b1" } },
+			});
+			const qsf = (ddi?: string) =>
+				`${JSON.stringify({ source: "qsf", ...(ddi !== undefined && { ddi }), columns: [] }, null, 2)}\n`;
+			const data = (ddi: string) =>
+				JSON.stringify({ source: "gss", ddi, respondent: "id", columns: [] });
+
+			/** An instrument `x` built once (its DDI's digest), then maps committed beside it. */
+			async function withMaps(
+				maps: (digest: string) => Readonly<Record<string, string>>,
+			) {
+				const { ws } = await withInstrument("acme/ws/sub@v1", pinned);
+				const before = await runWith(bank, "build", ws);
+				const built = before.written[join(ws, "dist/instruments/x.json")] ?? "";
+				const digest = `sha256:${createHash("sha256").update(built).digest("hex")}`;
+				await mkdir(join(ws, "maps"));
+				for (const [name, text] of Object.entries(maps(digest)))
+					await writeFile(join(ws, "maps", name), text);
+				await git(dirname(ws), "add", "-A");
+				await git(dirname(ws), "commit", "-q", "-m", "maps");
+				return { ws, before };
+			}
+
+			it("copies each map beside its instrument's DDI, as committed, and versions nothing by it", async () => {
+				let map = "";
+				const { ws, before } = await withMaps((digest) => {
+					map = qsf(digest);
+					return { "x-ddi-qsf.columns.json": map, "README.md": "not a map\n" };
+				});
+				// Not committed: not copied.
+				await writeFile(join(ws, "maps/x-ddi-gss.columns.json"), data(""));
+				const r = await runWith(bank, "build", ws);
+				expect(r.code).toBe(0);
+				expect(
+					r.written[join(ws, "dist/instruments/x-ddi-qsf.columns.json")],
+				).toBe(map);
+				expect(r.err).not.toMatch(/build-map/);
+				// A commit to maps/ moves no version, so the DDI is the one the map was made from.
+				const {
+					[join(ws, "dist/instruments/x-ddi-qsf.columns.json")]: _,
+					...rest
+				} = r.written;
+				expect(rest).toEqual(before.written);
+			});
+
+			it("warns of a map made from another DDI, naming it and how to make it again, and copies it", async () => {
+				const old = `sha256:${"0".repeat(64)}`;
+				const { ws } = await withMaps(() => ({
+					"x-ddi-qsf.columns.json": qsf(old),
+					"x-ddi-gss.columns.json": data(old),
+				}));
+				const r = await runWith(bank, "build", ws);
+				expect(r.code).toBe(0);
+				expect(r.err).toMatch(
+					new RegExp(
+						`maps/x-ddi-qsf\\.columns\\.json: warning: made from the DDI ${old}.*\`qretools qsf-map\`.*\\[build-map-ddi\\]`,
+					),
+				);
+				expect(r.err).toMatch(
+					/maps\/x-ddi-gss\.columns\.json: warning: .*tools\/.*\[build-map-ddi\]/,
+				);
+				expect(
+					r.written[join(ws, "dist/instruments/x-ddi-gss.columns.json")],
+				).toBe(data(old));
+			});
+
+			it.each([
+				[
+					"names no instrument it builds",
+					"y-ddi-qsf.columns.json",
+					qsf(),
+					/no instrument `y`/,
+				],
+				[
+					"isn't named as a map",
+					"x.columns.json",
+					qsf(),
+					/named `<instrument>-ddi-<source>\.columns\.json`/,
+				],
+				["has no source", "x-ddi-gss.columns.json", "{}", /no `source` field/],
+				[
+					"gives another source than its name",
+					"x-ddi-gss.columns.json",
+					qsf(),
+					/name says the source `gss`, but its `source` field says `qsf`/,
+				],
+				["isn't JSON", "x-ddi-qsf.columns.json", "{", /this isn.t JSON \(/],
+				[
+					"isn't a map of its source",
+					"x-ddi-qsf.columns.json",
+					'{"source":"qsf"}',
+					/isn't a QSF column map/,
+				],
+			])(
+				"refuses a map that %s, and writes nothing",
+				async (_, name, text, message) => {
+					const { ws } = await withMaps(() => ({ [name]: text }));
+					const r = await runWith(bank, "build", ws);
+					expect(r.code).toBe(1);
+					expect(r.written).toEqual({});
+					expect(r.err).toMatch(message);
+					expect(r.err).toMatch(/\[build-map\]/);
+					expect(r.err).toMatch(/Not built: every file in maps\//);
+				},
+			);
+		});
+
 		it("refuses a pinned tag that has moved since it was locked", async () => {
 			const { ws } = await withInstrument(
 				"acme/ws/sub@v1",
