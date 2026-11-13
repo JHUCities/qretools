@@ -1004,6 +1004,72 @@ describe("qretools build", () => {
 			);
 		}, 30000);
 
+		it("says the next step, reads a model's answers and exports their dataset from the release", async () => {
+			const { ws, readRemote, offline, ddi } = await released();
+			const file = join(ws, "x.json");
+			await writeFile(file, ddi);
+			stdin = "{}";
+			const fromFile = await runWith(readRemote, "next", file);
+			const fromRelease = await runWith(readRemote, "next", "acme/ws/sub@v2:x");
+			expect(fromRelease).toMatchObject({ code: 0, err: "" });
+			expect(fromRelease.out).toBe(fromFile.out);
+			const lost = await runWith(readRemote, "next", "acme/ws/sub@v9:x");
+			expect(lost).toMatchObject({ code: 1, out: "" });
+			expect(lost.err).toMatch(/acme\/ws\/sub@v9.*\[next-release\]/);
+			stdin = "";
+			const { variable } = JSON.parse(fromRelease.out).domain;
+			const answers = join(ws, "answers.csv");
+			await writeFile(
+				answers,
+				`respondent,variable,row,value\ns1,start,,2026-11-13T00:10:00Z\ns1,end,,2026-11-13T00:20:00Z\ns1,${variable},,1\n`,
+			);
+			const synthetic = ["--synthetic", "--runtime", "m"];
+			// Without -o, the dataset is the instrument's, by name.
+			const named = await runWith(
+				readRemote,
+				"responses",
+				answers,
+				"--ddi",
+				"acme/ws/sub@v2:x",
+				...synthetic,
+			);
+			expect(named).toMatchObject({ code: 0, err: "" });
+			expect(named.out).toContain('"dataset-x.start"');
+			const out = join(ws, "run.json");
+			const argv = [
+				"responses",
+				answers,
+				"--ddi",
+				"acme/ws/sub@v2:x",
+				...synthetic,
+				"-o",
+				out,
+			];
+			const r = await runWith(readRemote, ...argv);
+			expect(r).toMatchObject({ code: 0, err: "" });
+			const text = r.written[out] ?? "";
+			// The DDI from the release is named by its tag reference, with the digest of the file `build` wrote.
+			expect(text).toContain('"Value": "acme/ws/sub@v2:x"');
+			expect(text).toContain(sha(ddi).slice("sha256:".length));
+			await writeFile(out, text);
+			offline();
+			expect((await runWith(readRemote, ...argv)).err).toBe(
+				`${out}: unchanged\n`,
+			);
+			// The release and the file are the same DDI to the digest check.
+			const csv = ["dataset", "export", out, "--csv", "--ddi"];
+			const viewed = await runWith(readRemote, ...csv, "acme/ws/sub@v2:x");
+			expect(viewed).toMatchObject({ code: 0, err: "" });
+			expect(viewed.out).toBe((await runWith(readRemote, ...csv, file)).out);
+			expect(viewed.out).toContain(`s1,${variable},,1`);
+			await writeFile(file, `${ddi} `);
+			const other = await runWith(readRemote, ...csv, file);
+			expect(other).toMatchObject({ code: 1, out: "" });
+			expect(other.err).toMatch(/\[dataset-ddi\]/);
+			const gone = await runWith(readRemote, ...csv, "acme/ws/sub@v9:x");
+			expect(gone.err).toMatch(/acme\/ws\/sub@v9.*\[dataset-release\]/);
+		}, 30000);
+
 		it("refuses a release made before tag references, and an instrument it doesn't have", async () => {
 			const { ws, message, tag, readRemote } = await released();
 			const old = message.replace(

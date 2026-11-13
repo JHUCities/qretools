@@ -148,9 +148,9 @@ const USAGE = `Usage:
                                     Write a report of an instrument's paths, one HTML page: how many
                                     ways through its routing, and which questions each reaches, from
                                     its DDI (as \`instrument export\` writes it)
-  qretools next <file.json> [state.json]
+  qretools next <file.json | owner/repo@tag:name> [state.json]
                                     Say the next step of an interview through an instrument, from its
-                                    DDI (as \`build\` writes it): the question to ask, with its fills, or
+                                    DDI (as \`build\` writes it, or from a release): the question to ask, with its fills, or
                                     an input the route needs, or the end. The state (stdin when no file
                                     is named, or \`-\`) holds the inputs by name and the answers so far,
                                     by DDI Variable URN. Writes JSON to stdout
@@ -199,7 +199,7 @@ const USAGE = `Usage:
                                     interview's date, and the publisher's advice on the weights.
                                     --asked-by is needed only where no mode column says. Every row
                                     is read
-  qretools responses <answers.csv> --ddi <file.json> (--synthetic --runtime name [--runtime-version v]
+  qretools responses <answers.csv> --ddi <file.json | owner/repo@tag:name> (--synthetic --runtime name [--runtime-version v]
                     | --answered-by term --asked-by term) [--file path]... [-o dataset.json]
                                     Read answers already in QREtools' form (as a model harness writes
                                     them) the same way: long CSV respondent,variable,row,value, each
@@ -208,7 +208,8 @@ const USAGE = `Usage:
                                     --synthetic says a model answered, in a simulation; --runtime
                                     names the software that ran it. Each --file (a trace, a config)
                                     is cited by its digest. Any error writes nothing
-  qretools dataset export <dataset.json> --csv | --provenance --ddi <file.json> [--access <level>] [-o file]
+  qretools dataset export <dataset.json> --csv | --provenance --ddi <file.json | owner/repo@tag:name>
+                    [--access <level>] [-o file]
                                     Write a view of a dataset: --csv its values as long CSV, one line
                                     per value: respondent,variable,row,value, each variable by its DDI
                                     URN; --provenance the dataset without its values. --ddi is the DDI
@@ -633,6 +634,50 @@ async function ddiAtRelease(
 }
 
 /**
+ * A DDI given as a file or a tag reference to its release (`ddiAtRelease`): its text, and
+ * its digest as a dataset records it, named by the file's name or by the reference. Where
+ * it can't be read, says why (a release's refusal in the words `refused` gives) and gives
+ * the exit code.
+ */
+async function ddiOf(
+	input: string,
+	io: Io,
+	refused: (reason: string) => string,
+): Promise<
+	| { readonly ok: true; readonly text: string; readonly digest: FileDigest }
+	| { readonly ok: false; readonly exit: number }
+> {
+	const ref = tagRefOf(input);
+	let bytes: Buffer;
+	if (ref !== undefined) {
+		const got = await ddiAtRelease(ref, io);
+		if (!got.ok) {
+			io.err(refused(got.reason));
+			return { ok: false, exit: PROBLEMS };
+		}
+		bytes = Buffer.from(got.text, "utf8");
+	} else
+		try {
+			bytes = await readFile(input);
+		} catch (e) {
+			io.err(
+				`Can't read ${input}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return { ok: false, exit: USAGE_ERROR };
+		}
+	return {
+		ok: true,
+		text: bytes.toString("utf8"),
+		digest: {
+			// A DDI from a release is recorded by its tag reference.
+			name: ref?.text ?? basename(input),
+			sha256: sha256Of(bytes),
+			size: bytes.length,
+		},
+	};
+}
+
+/**
  * The QSF column map of an instrument's DDI (a file as `build` writes it, or a tag
  * reference to its release, `ddiAtRelease`), to `<out>/<name>-ddi-qsf.columns.json`:
  * made as the survey is, by `qsfMapOf`, with the DDI's digest, so `responses` reads an
@@ -648,23 +693,13 @@ async function writeQsfMap(
 	io: Io,
 ): Promise<number> {
 	const ref = tagRefOf(input);
-	let text: string;
-	if (ref !== undefined) {
-		const got = await ddiAtRelease(ref, io);
-		if (!got.ok) {
-			io.err(`${input}: error: Not written: ${got.reason} [qsf-map-release]\n`);
-			return PROBLEMS;
-		}
-		text = got.text;
-	} else
-		try {
-			text = await readFile(input, "utf8");
-		} catch (e) {
-			io.err(
-				`Can't read ${input}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
+	const ddi = await ddiOf(
+		input,
+		io,
+		(reason) => `${input}: error: Not written: ${reason} [qsf-map-release]\n`,
+	);
+	if (!ddi.ok) return ddi.exit;
+	const { text } = ddi;
 	let csv: string | undefined;
 	if (exportFile !== undefined)
 		try {
@@ -730,10 +765,15 @@ async function writeNext(
 	stateFile: string | undefined,
 	io: Io,
 ): Promise<number> {
-	let text: string;
+	const ddi = await ddiOf(
+		file,
+		io,
+		(reason) => `${file}: error: ${reason} [next-release]\n`,
+	);
+	if (!ddi.ok) return ddi.exit;
+	const { text } = ddi;
 	let stateText: string;
 	try {
-		text = await readFile(file, "utf8");
 		stateText =
 			stateFile === undefined || stateFile === "-"
 				? await io.readStdin()
@@ -964,30 +1004,13 @@ async function writeResponses(
 		);
 		return PROBLEMS;
 	}
-	let ddiSource: string;
-	if (ref !== undefined) {
-		const got = await ddiAtRelease(ref, io);
-		if (!got.ok) {
-			io.err(`${ddiFile}: error: ${got.reason} [responses-release]\n`);
-			return PROBLEMS;
-		}
-		ddiSource = got.text;
-	} else
-		try {
-			ddiSource = await readFile(ddiFile, "utf8");
-		} catch (e) {
-			io.err(
-				`Can't read ${ddiFile}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
-	// A DDI from a release is recorded by its tag reference.
-	const ddiBytes = Buffer.from(ddiSource, "utf8");
-	const ddiRead: FileDigest = {
-		name: ref === undefined ? basename(ddiFile) : ddiFile,
-		sha256: sha256Of(ddiBytes),
-		size: ddiBytes.length,
-	};
+	const ddi = await ddiOf(
+		ddiFile,
+		io,
+		(reason) => `${ddiFile}: error: ${reason} [responses-release]\n`,
+	);
+	if (!ddi.ok) return ddi.exit;
+	const ddiSource = ddi.text;
 	// The dataset records both digests: a difference is worth a warning, not a refusal.
 	if (map.ddi !== undefined && map.ddi !== digestOf(ddiSource))
 		io.err(
@@ -1079,7 +1102,7 @@ async function writeResponses(
 		),
 		fingerprint: sha256Of(canonicalForm(values)),
 		source: sourceFile,
-		ddi: ddiRead,
+		ddi: ddi.digest,
 		map: { ...mapRead, ...(map.ddi !== undefined && { ddi: map.ddi }) },
 		claimed: "claimed" in made ? (made.claimed ?? []) : [],
 		...("respondent" in map && {
@@ -1212,19 +1235,28 @@ async function writeAnswers(
 	files: readonly string[],
 	io: Io,
 ): Promise<number> {
-	const named = output ?? ddiFile;
-	const name = basename(named, extname(named));
+	// Without -o, the DDI's name: a release's instrument, or the file's.
+	const name =
+		output === undefined
+			? (tagRefOf(ddiFile)?.name ?? basename(ddiFile, extname(ddiFile)))
+			: basename(output, extname(output));
 	if (!DATASET_NAME.test(name)) {
 		io.err(
 			`${output ?? ddiFile}: a dataset is named by its file name, without \`.json\`, so it may hold only letters, digits, \`-\` and \`_\`. Use -o to name it.\n`,
 		);
 		return USAGE_ERROR;
 	}
-	const read = await readDigested([file, ddiFile, ...files], io);
+	const read = await readDigested([file, ...files], io);
 	if (read === undefined) return USAGE_ERROR;
-	// The answers and the DDI, then each --file, in that order.
-	const [answersRead, ddiRead, ...others] = read as [Read, Read, ...Read[]];
-	const ddiJson = jsonOf(ddiRead.text);
+	// The answers, then each --file, in that order.
+	const [answersRead, ...others] = read as [Read, ...Read[]];
+	const ddi = await ddiOf(
+		ddiFile,
+		io,
+		(reason) => `${ddiFile}: error: ${reason} [responses-release]\n`,
+	);
+	if (!ddi.ok) return ddi.exit;
+	const ddiJson = jsonOf(ddi.text);
 	const ddiIndex = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
 	if (ddiIndex?.ok !== true) {
 		io.err(
@@ -1274,7 +1306,7 @@ async function writeAnswers(
 		},
 		fingerprint: sha256Of(canonicalForm(values)),
 		source: answersRead.digest,
-		ddi: ddiRead.digest,
+		ddi: ddi.digest,
 		files: others.map((f) => f.digest),
 		claimed: [],
 	});
@@ -1288,7 +1320,7 @@ async function writeAnswers(
 }
 
 /**
- * `dataset export <dataset.json> --csv | --provenance --ddi <file> [--access <level>]`: a
+ * `dataset export <dataset.json> --csv | --provenance --ddi <file | tag reference> [--access <level>]`: a
  * view of a dataset `responses` wrote. `--csv` is its values as long CSV; `--provenance`
  * is the document without its values, which says where they came from. Each variable's
  * access level is the instrument DDI's, so `--ddi` must be the DDI the dataset records
@@ -1319,17 +1351,21 @@ async function dataset(
 		(help ? io.out : io.err)(`${USAGE}\n`);
 		return help ? OK : USAGE_ERROR;
 	}
-	const read: Buffer[] = [];
-	for (const f of [file, ddi])
-		try {
-			read.push(await readFile(f));
-		} catch (e) {
-			io.err(
-				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
-	const [text = Buffer.alloc(0), ddiBytes = Buffer.alloc(0)] = read;
+	let text: Buffer;
+	try {
+		text = await readFile(file);
+	} catch (e) {
+		io.err(
+			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const read = await ddiOf(
+		ddi,
+		io,
+		(reason) => `${ddi}: error: ${reason} [dataset-release]\n`,
+	);
+	if (!read.ok) return read.exit;
 	const json = jsonOf(text.toString("utf8"));
 	const got = json.ok ? readDataset(json.value) : undefined;
 	if (!json.ok || got?.ok !== true) {
@@ -1339,16 +1375,13 @@ async function dataset(
 		return PROBLEMS;
 	}
 	// Levels read from another DDI than the dataset's could let a value through.
-	if (
-		recordedDdiOf(json.value, got.value) !==
-		createHash("sha256").update(ddiBytes).digest("hex")
-	) {
+	if (recordedDdiOf(json.value, got.value) !== read.digest.sha256) {
 		io.err(
 			`${ddi}: error: this isn't the DDI the dataset was made from (its digest differs), so its access levels can't be trusted. Nothing is written. [dataset-ddi]\n`,
 		);
 		return PROBLEMS;
 	}
-	const ddiJson = jsonOf(ddiBytes.toString("utf8"));
+	const ddiJson = jsonOf(read.text);
 	// The dataset's own metadata variables beside the instrument's: a level their map stated is read as a question's.
 	const index = ddiJson.ok
 		? readDdi(withMetadataVariables(ddiJson.value, json.value, got.value))

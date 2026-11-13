@@ -132,7 +132,8 @@ is one). The tag points at the default branch's own commit, and only the tag is 
 A tag reference names an instrument in a release of a workspace:
 `owner/repo@tag:name`, or `owner/repo/folder@tag:name` for a workspace in a folder. For
 example, `acme/survey@v3:wave1` is the instrument `instruments/wave1.yaml` in the release
-`v3`. `qsf-map` and `responses --ddi` accept a tag reference where they accept a DDI file.
+`v3`. `qsf-map`, `responses --ddi`, `next` and `dataset export --ddi` accept a tag
+reference where they accept a DDI file.
 
 The command reads the tag with git, as it reads a workspace in another repository. It
 rebuilds the DDI of the instrument with the versions in the tag's message. Then it
@@ -603,7 +604,9 @@ qretools responses runs/run1/answers.csv --ddi dist/instruments/wave1.json --syn
   --file runs/run1/traces.jsonl --file runs/run1/config.toml -o runs/run1/dataset.json
 ```
 
-- `--ddi` is necessary. It is the DDI of the instrument.
+- `--ddi` is necessary. It is the DDI of the instrument: a file, or a tag reference (see
+  "Tag references"). The dataset records a DDI from a release by its tag reference. If
+  you do not give `-o`, the name of the dataset is the name of the instrument.
 - Give `--synthetic` for the answers of a model. The dataset says that the respondents
   were asked in a simulation (`Simulation`), and that `Other` ("synthetic") answered.
   `--runtime` is necessary: it is the software that gave the answers. `--runtime-version`
@@ -642,8 +645,8 @@ value. **If the command finds an error, it writes no dataset.**
 `dataset export` writes a view of a dataset. Give `--csv` or `--provenance`, and `--ddi`
 with the DDI that the dataset was made from. The command compares the SHA-256 digest of
 that file with the digest that the dataset records. If the digests are different, the
-command writes nothing (`dataset-ddi`). The command gets the access level of each
-variable from this DDI. See "Access levels" below.
+command writes nothing (`dataset-ddi`). `--ddi` can also be a tag reference. The command
+gets the access level of each variable from this DDI. See "Access levels" below.
 
 `--provenance` writes the dataset without its values: the `DataSet` item without its
 `ItemSet`, and the provenance. The output holds no value and no respondent. Thus, you can
@@ -816,8 +819,13 @@ program does not evaluate a condition. It calls `next` once for each step:
 
 ```sh
 qretools next dist/instruments/wave1.json state.json   # or: … | qretools next wave1.json
+qretools next acme/survey@v3:wave1 state.json         # the same, from the release v3
 qretools next --schema                                 # the JSON Schemas of the state and of the reply
 ```
+
+With a tag reference, each call asks GitHub where the tag points, and rebuilds the DDI
+from the cache. Thus, a call takes longer than with the DDI file (approximately half a
+second more for a large instrument).
 
 The state holds the inputs by their names in the instrument, and the answers so far. Each
 answer names its DDI Variable by URN, as `responses` does:
