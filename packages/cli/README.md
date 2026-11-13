@@ -96,7 +96,21 @@ blob is a UserID.
   folder, it writes the Qualtrics survey of the instrument, `<name>.qsf`. If Qualtrics
   cannot run an instrument, `build` gives a warning. It then writes no survey for that
   instrument.
-- It does not write a column map. Use `qsf-map` (see "Make the QSF column map").
+- It does not make a column map. Use `qsf-map` (see "Make the QSF column map"), or a
+  tool of your workspace for a data file's map.
+- It copies each column map in `maps/` to `<outdir>/instruments/`, beside the DDI of its
+  instrument. It reads the map from the last commit and does not change it. A map is
+  named `<instrument>-ddi-<source>.columns.json`. `build` reads only the `.json` files
+  at the top of `maps/`.
+- `build` fails, and writes nothing, if a map names no instrument of the workspace, if
+  its `source` field is missing or is not the source in its name, or if it is not a
+  column map (`build-map`). Unlike `responses`, it says nothing of a map without a `ddi`
+  digest.
+- If a map was made from a different DDI, `build` gives a warning (`build-map-ddi`) and
+  copies the map. The warning names the digest of that DDI. This is usual after you
+  change an instrument: its new DDI exists only after the merge, so make its data map
+  again in a second pull request. Do not make the QSF column map of a fielded survey
+  again: it stays with the release that you fielded.
 
 `--tag-message <file>` also writes the text for a release's tag: a line, a blank line,
 then each file's version, date and blob as JSON. Tag the built commit with it, verbatim,
@@ -118,7 +132,8 @@ qretools qsf-map dist/instruments/wave1.json -o maps
    `<dir>/<name>-ddi-qsf.columns.json`.
 3. Read each `qsf-unmapped` warning. The map has no column for the item that the
    warning names.
-4. Commit the map. Do not make it again for a survey that you fielded.
+4. Commit the map in `maps/`. `build` copies it beside the DDI. Do not make it again
+   for a survey that you fielded.
 
 The map has `"source": "qsf"` and the SHA-256 digest of the DDI file. `responses` reads
 the export only with that DDI. If Qualtrics cannot run the instrument, the command writes

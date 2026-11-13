@@ -27,8 +27,8 @@ import { manifestVersions } from "./manifest.ts";
 import { ROOT } from "./schemes.ts";
 import { agencyWritten, locksWritten } from "./surface/bankfile.ts";
 
-/** Where a workspace keeps what its bank doesn't read: its instruments' folder (one file each). */
-export const WORKSPACE = { instruments: "instruments" } as const;
+/** Where a workspace keeps what its bank doesn't read: its instruments (one file each), and the column maps `build` copies beside them. */
+export const WORKSPACE = { instruments: "instruments", maps: "maps" } as const;
 
 /**
  * Whether a folder is never walked for a workspace's files, by its name: hidden ones
