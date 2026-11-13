@@ -70,6 +70,8 @@ export interface ColumnMap {
 	readonly qretools?: string;
 	readonly instrument?: string;
 	readonly ddi?: string;
+	/** The release its DDI was taken from, as a tag reference (`owner/repo@v1:name`), when it was. */
+	readonly release?: string;
 	readonly columns: readonly Column[];
 }
 
