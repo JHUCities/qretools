@@ -50,6 +50,7 @@ export {
 	DATASET_NAME,
 	type Dataset,
 	datasetOf,
+	provenanceView,
 	readDataset,
 } from "./dataset.ts";
 export type {
@@ -188,6 +189,16 @@ export {
 	unlockedTags,
 } from "./lock.ts";
 export { tagMessage } from "./manifest.ts";
+export {
+	DATA_FINGERPRINT,
+	FACT_OPTIONS,
+	type Fact,
+	type Facts,
+	type FileDigest,
+	factsOf,
+	type Provenance,
+	type Term,
+} from "./provenance.ts";
 export {
 	type Exportable,
 	exportRefusal,

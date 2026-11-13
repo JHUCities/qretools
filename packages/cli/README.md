@@ -19,9 +19,11 @@ qretools build path/to/workspace             # its last commit's DDI, versioned 
 qretools codebook path/to/workspace -o codebook.html  # its questions' codebook, one HTML page
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
-qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json -o wave1.json  # a Qualtrics export, as a DDI dataset
-qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json -o release.json  # a data file, as a DDI dataset
+qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json --answered-by PopulationGroup -o wave1.json  # a Qualtrics export, as a DDI dataset
+qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json \
+  --asked-by Interview.FaceToFace --answered-by ResearchData.Published -o release.json  # a data file, as a DDI dataset
 qretools dataset export wave1.json --csv     # a dataset's values, one line per value
+qretools dataset export wave1.json --provenance  # a dataset without its values: where they came from
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
 ```
 
@@ -155,7 +157,7 @@ collects responses can use the new map.
 dataset: a DDI-Lifecycle 4.0 document that holds the responses.
 
 ```sh
-qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json -o wave1-data.json
+qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json --answered-by PopulationGroup -o wave1-data.json
 ```
 
 To read an export, do these steps:
@@ -165,6 +167,7 @@ To read an export, do these steps:
 3. Make sure that `<name>.json` is in the same folder as the map. `build` writes the two
    files together.
 4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json -o <dataset.json>`.
+   If the command asks for `--answered-by`, add it (see "The provenance").
 5. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
    The output holds the responses.** Without `-o`, the command writes the dataset to
    stdout.
@@ -184,6 +187,8 @@ The dataset also holds three variables of its own:
 - `start` and `end`: the time when the interview started and ended. The command reads
   them from `StartDate` and `EndDate`, in the time zone that row 3 gives.
 
+The dataset also holds its provenance (see "The provenance").
+
 The dataset gets its name from the file name of `-o`, without `.json`. Without `-o`, it
 gets the name of the instrument: `<name>` in the name of the map. The name can have only letters, digits, `-` and `_`. The IDs
 of the dataset and of its variables start with `dataset-<name>`. The dataset has the DDI
@@ -200,13 +205,14 @@ To get the values as CSV, see "Export a dataset".
 The dataset cannot yet hold the rows of a roster or a loop. If the export has an answer in
 a row, the command writes no dataset.
 
-The command reads the DDI in `<name>.json` to get the codes of each variable. It refuses a
-`<name>.json` that is not the DDI that the map was made from. It reads local files only.
+The command reads the DDI in `<name>.json` to get the codes of each variable. If
+`<name>.json` is not the DDI that the map was made from, the command gives a warning and
+continues. The dataset records the two digests. The command reads local files only.
 
 The command matches each column by the ImportId in row 3, not by the column name. Thus, a
 column that you rename in Qualtrics is still read. The command keeps Survey Preview
-responses and test responses. Remove them in Qualtrics before you export, if you do not
-want them.
+responses and test responses. One dataset describes one collection, so one export must
+hold one kind of response. Export each kind apart.
 
 The command writes findings on stderr, at their line in the export and their column. A
 finding never shows a response value. If a column has the same problem in many rows, the
@@ -218,8 +224,10 @@ command exit with 1. The command still writes the values that it can read.
 - `responses-not-a-code` (error): the value is not a code of the variable, or not a number
   in the range that the DDI gives.
 - `responses-not-a-tick` (error): a select-all cell is not `1` and is not blank.
-- `responses-provenance`: the `qretools_instrument` or `qretools_ddi` field of a response is
-  not the same as in the map (error). A different `qretools_version` is a note.
+- `responses-provenance`: the `qretools_instrument` field of a response is not the same
+  as in the map (error). A different `qretools_ddi` is a warning: the dataset records each
+  digest. A different `qretools_version` is a note. A different DDI given to the command is
+  a warning too.
 - `responses-respondent` (error): a row has no ResponseId, or has the ResponseId of an
   earlier row.
 - `responses-row` (error): a row has more or fewer cells than the header.
@@ -236,9 +244,57 @@ These errors stop the command before it writes the dataset:
 - `responses-dataset`: an answer is in the row of a roster or a loop.
 - `responses-agency`: the variables in the map do not have one DDI agency.
 - `responses-exists`: the file of `-o` holds something that is not this dataset.
+- `responses-collection`: the responses have different `Status` or `DistributionChannel`
+  values, for example test responses and real responses.
+- `responses-facts` (exit 2): an option is necessary, or the option gives a fact that the
+  source gives (see "The provenance").
 
 The command reads the columns of a Qualtrics loop as `1_<ImportId>` to
 `<rounds>_<ImportId>`. This form is not yet tested with a real export of a loop.
+
+## The provenance
+
+The dataset holds its provenance beside its values. The provenance holds no value and no
+respondent:
+
+- A `StudyUnit`. All the other items of the provenance are found from it.
+- A `DataCollection` with one `CollectionEvent`:
+  - `InstrumentReference`: the instrument of the DDI, with its version.
+  - `DataCollectionDate`: the earliest start and the latest end of the interviews. No
+    option gives the dates.
+  - `ModeOfCollection`: how the respondents were asked, as a term of the DDI vocabulary
+    ModeOfCollection.
+  - `DataSource`: who answered, as a term of the DDI vocabulary DataSourceType.
+  - For a Qualtrics export, a `Methodology` names the software, Qualtrics.
+- A `PhysicalInstance` for the dataset. It refers to the `DataSet`. Its `DataFingerprint`
+  (`Type` `data`) is the SHA-256 digest of the CSV view (`dataset export --csv`). The CSV
+  view holds the answers only, not the respondents or the times of the interviews. The CSV
+  view is sorted, so the same values always give the same digest, in each file format.
+- A `PhysicalInstance` for the source file, with its SHA-256 digest (`Type` `dataFile`)
+  and its size. It also records the DDI digests that the source names (`qretools_ddi`).
+- An `OtherMaterial` for the map and one for the DDI, each with its SHA-256 digest
+  (`UserID`) and its size. The map also records the DDI digest that it names.
+- Two `VariableGroup` items: `present` (each variable with a value, also `respondent`,
+  `start` and `end`) and `not-in-source` (each variable of the instrument that the map
+  does not read).
+
+The command gets each fact of the collection in this sequence:
+
+1. If the source gives the fact, the command uses it.
+2. If the source does not give the fact, an option must give it: `--asked-by <term>` or
+   `--answered-by <term>`.
+3. If no option gives the fact, the command stops. The message names the option.
+
+If an option gives a fact that the source gives, the command stops. It writes nothing.
+
+| Source | The source gives | The options that you must give |
+|---|---|---|
+| Qualtrics test responses (`Status` 2, channel `test`) | asked by `Simulation`, answered by `Other` ("generated by the survey platform") | none |
+| Qualtrics responses on an anonymous link or by email (`Status` 0) | asked by `SelfAdministeredQuestionnaire.CAWI` | `--answered-by` |
+| Other Qualtrics responses | nothing | `--asked-by`, `--answered-by` |
+| A data file | nothing | `--asked-by`, `--answered-by` |
+
+The command does not check a term against the vocabulary.
 
 ## Read a data file
 
@@ -271,7 +327,7 @@ reads all other names as the map of a data file:
 ```
 
 - `ddi`: the SHA-256 digest of the DDI that the map was made from. If the map has a digest,
-  the command refuses a different DDI.
+  and the DDI is different, the command gives a warning. The dataset records the two digests.
 - `respondent`: the header of the column that identifies each respondent.
 - `values`: the translations for all columns, from a value in the data file to a code of
   the variable. `null` means "no answer": the command writes no line for the value, as
@@ -306,8 +362,8 @@ To read a data file, do these steps:
    case of a header.
 5. Put the digest of the DDI in `ddi` (`shasum -a 256 <name>.json`, then add `sha256:`
    before it).
-6. Run `qretools responses <data.csv> --map <the map>`. If `<name>.json` is not in the
-   folder of the map, add `--ddi <the DDI>`.
+6. Run `qretools responses <data.csv> --map <the map> --asked-by <term> --answered-by <term>`.
+   If `<name>.json` is not in the folder of the map, add `--ddi <the DDI>`.
 7. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
    The output holds the responses.**
 
@@ -337,7 +393,17 @@ asks. Thus, a data file can give "Don't know" (or another missing value) for an 
 
 ## Export a dataset
 
-`dataset export` writes the values of a dataset as long CSV, for analysis tools:
+`dataset export` writes a view of a dataset. Give `--csv` or `--provenance`.
+
+`--provenance` writes the dataset without its values: the `DataSet` item without its
+`ItemSet`, and the provenance. The output holds no value and no respondent. Thus, you can
+publish it. `dataset export --csv` refuses it, because it holds no values.
+
+```sh
+qretools dataset export wave1-data.json --provenance -o wave1-provenance.json
+```
+
+`--csv` writes the values of a dataset as long CSV, for analysis tools:
 
 ```sh
 qretools dataset export wave1-data.json --csv -o wave1-answers.csv
@@ -363,7 +429,7 @@ The output is long CSV (one value on one line), in four columns:
 - `row`: the row of a roster or a loop, from 1. The column is empty for other variables.
 - `value`: a code of the variable, a number or text.
 
-The lines are in the order of the dataset. The output does not include the variables of
+The lines are sorted by respondent, then by the URN of the variable. The output does not include the variables of
 the dataset (`respondent`, `start` and `end`). A long file does not need a column for each
 round of each loop. Thus, a tool can compare two files (for example real and synthetic
 responses) one variable at a time. The format is our own.

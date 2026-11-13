@@ -30,16 +30,21 @@ gives a `ResponseMap`. The core's `readResponses` then reads the rows into answe
 variable URN, and gives each respondent the start and end of the interview from `StartDate`
 and `EndDate` (in the time zone of row 3: `Z` or an offset, else a finding). The core knows no source, so another source (a published data file) can give
 its own map. Anything the package cannot read is a finding, with its line and column.
+`exportMap` also gives `facts` (how the responses were collected, as far as `Status` and
+`DistributionChannel` say, and the software, Qualtrics) and `claimed` (the DDI digests in
+`qretools_ddi`). `facts` is absent when the responses are of more than one kind.
 
 ```ts
-import { datasetOf, readResponses } from "@qretools/core";
+import { datasetOf, factsOf, readResponses } from "@qretools/core";
 import { exportMap } from "@qretools/qualtrics";
 
 const read = exportMap(csv, columnMap, ticked); // ticked: the tick code of each select-all option, from the DDI
 // read.map is absent when the file can't be read at all (read.findings says why)
 if (read.map !== undefined) {
   const { respondents, answers, findings } = readResponses(read.header, read.rows, read.map, representations);
-  const dataset = datasetOf({ name, agency, respondents, answers }); // the dataset as DDI
+  const facts = factsOf(read.facts ?? {}, { answered_by: "PopulationGroup" }); // the data's facts first
+  // provenance: the DDI's index, the facts, the files' digests (see `Provenance`)
+  const dataset = datasetOf({ name, agency, respondents, answers }, provenance); // the dataset as DDI
 }
 ```
 

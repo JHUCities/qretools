@@ -6,7 +6,9 @@
  * one value per respondent, so a respondent with no answers is kept) and each
  * interview's `start` and `end` where the source gives them. Values are sorted by
  * respondent, then variable URN, so the same answers give the same bytes. `readDataset`
- * reads such a document back, once, into the value `datasetOf` writes from.
+ * reads such a document back, once, into the value `datasetOf` writes from. Beside the
+ * DataSet, the document holds its provenance (`provenanceOf`); `provenanceView` is the
+ * document without the values.
  */
 
 import {
@@ -21,6 +23,7 @@ import {
 	ref,
 } from "./ddi/document.ts";
 import { asList, asObj, str } from "./ddi/read.ts";
+import { type Provenance, provenanceOf } from "./provenance.ts";
 import { type Answer, answersCsv, type Respondent } from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
 
@@ -84,9 +87,13 @@ const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 /**
  * The dataset as DDI. Refused, with nothing written, where it can't say what it was
  * given: a name that isn't one ID part, an answer in a roster row (not yet described), a
- * variable that isn't a DDI URN, or an answer for a respondent it doesn't list.
+ * variable that isn't a DDI URN, an answer for a respondent it doesn't list, or a
+ * provenance that can't be written (`provenanceOf`).
  */
-export function datasetOf(d: Dataset): Result<DdiDocument, string> {
+export function datasetOf(
+	d: Dataset,
+	provenance: Provenance,
+): Result<DdiDocument, string> {
 	if (!DATASET_NAME.test(d.name))
 		return err(
 			`The dataset's name \`${d.name}\` isn't one a DDI ID can hold: use letters, digits, \`-\` and \`_\` only.`,
@@ -133,16 +140,28 @@ export function datasetOf(d: Dataset): Result<DdiDocument, string> {
 	// 4.0 beta 4's DateTimeDomain has no type code: the values are ISO 8601 date-times with a zone.
 	const time = (id: Identity, name: string) =>
 		variable(id, name, { IsTemporal: true }, "DateTimeDomain");
+	const set = item("DataSet", ids.dataset, {
+		DataSetName: [intl(d.name)],
+		IdentifyingVariableReference: ref(respondent),
+		ItemSet: { ItemValue: values.map((v) => v.value) },
+	});
+	const described = provenanceOf(provenance, {
+		name: d.name,
+		base: ids.dataset.ID,
+		agency: d.agency,
+		dataset: set,
+		present: values.map((v) => v.urn),
+		starts: d.respondents.flatMap((r) => r.start ?? []),
+		ends: d.respondents.flatMap((r) => r.end ?? []),
+	});
+	if (!described.ok) return described;
 	return ok(
 		documentOf([
-			item("DataSet", ids.dataset, {
-				DataSetName: [intl(d.name)],
-				IdentifyingVariableReference: ref(respondent),
-				ItemSet: { ItemValue: values.map((v) => v.value) },
-			}),
+			set,
 			respondent,
 			...(timed("start") ? [time(ids.start, "start")] : []),
 			...(timed("end") ? [time(ids.end, "end")] : []),
+			...described.value,
 		]),
 	);
 }
@@ -169,6 +188,10 @@ export function readDataset(json: unknown): Result<Dataset, string> {
 			"This isn't a dataset QREtools wrote: its DataSet's ID isn't `dataset-<name>`.",
 		);
 	const ids = owned(agency, name);
+	if (asObj(head.ItemSet) === undefined)
+		return err(
+			"This is a dataset's provenance: it holds no values, so it has no view but itself.",
+		);
 	const identifying = asObj(head.IdentifyingVariableReference)?.value;
 	if (
 		!Array.isArray(identifying) ||
@@ -222,5 +245,29 @@ export function readDataset(json: unknown): Result<Dataset, string> {
 	return ok({ name, agency, respondents: [...respondents.values()], answers });
 }
 
-/** The answers as long CSV, as `answersCsv` writes them: the dataset's own variables aren't answers. */
-export const csvView = (d: Dataset): string => answersCsv(d.answers);
+/**
+ * The answers as long CSV, as `answersCsv` writes them, sorted by respondent and then
+ * variable URN: the canonical form the dataset's fingerprint is over. The dataset's own
+ * variables aren't answers.
+ */
+export const csvView = (d: Dataset): string =>
+	answersCsv(
+		[...d.answers].sort(
+			(a, b) =>
+				compare(a.respondent, b.respondent) || compare(a.variable, b.variable),
+		),
+	);
+
+/**
+ * A dataset document without its values: its DataSet is kept, without the ItemSet, so
+ * every reference to it still resolves. Read with `readDataset` first.
+ */
+export const provenanceView = (doc: unknown): DdiDocument => ({
+	...asObj(doc),
+	DataSet: Object.fromEntries(
+		Object.entries(asObj(asObj(doc)?.DataSet) ?? {}).map(([key, set]) => {
+			const { ItemSet: _, ...kept } = asObj(set) ?? {};
+			return [key, kept];
+		}),
+	),
+});

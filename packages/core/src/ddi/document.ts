@@ -30,7 +30,14 @@ export type ItemType =
 	| "StatementItem"
 	| "ComputationItem"
 	| "GenerationInstruction"
-	| "DataSet";
+	| "DataSet"
+	// A dataset's provenance (`provenance.ts`).
+	| "StudyUnit"
+	| "DataCollection"
+	| "Methodology"
+	| "PhysicalInstance"
+	| "OtherMaterial"
+	| "VariableGroup";
 
 export interface Identity {
 	readonly URN: string;
