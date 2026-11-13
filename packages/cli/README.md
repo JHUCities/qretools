@@ -266,9 +266,11 @@ respondent:
   - `DataSource`: who answered, as a term of the DDI vocabulary DataSourceType.
   - For a Qualtrics export, a `Methodology` names the software, Qualtrics.
 - A `PhysicalInstance` for the dataset. It refers to the `DataSet`. Its `DataFingerprint`
-  (`Type` `data`) is the SHA-256 digest of the CSV view (`dataset export --csv`). The CSV
-  view holds the answers only, not the respondents or the times of the interviews. The CSV
-  view is sorted, so the same values always give the same digest, in each file format.
+  (`Type` `data`) is the SHA-256 digest of all the values of the `DataSet`: the answers,
+  and the identifier and the start and end times of each respondent. The command writes
+  them in one form: long CSV, as the CSV view writes it, with a line for each value of
+  `respondent`, `start` and `end` too, sorted by respondent, then by the URN of the
+  variable. Thus, the same values always give the same digest, in each file format.
 - A `PhysicalInstance` for the source file, with its SHA-256 digest (`Type` `dataFile`)
   and its size. It also records the DDI digests that the source names (`qretools_ddi`).
 - An `OtherMaterial` for the map and one for the DDI, each with its SHA-256 digest

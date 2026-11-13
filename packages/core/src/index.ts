@@ -48,6 +48,7 @@ export {
 export {
 	type Access,
 	accessOf,
+	canonicalForm,
 	csvView,
 	DATASET_NAME,
 	type Dataset,

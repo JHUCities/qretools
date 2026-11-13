@@ -24,6 +24,7 @@ import {
 	type Bank,
 	type BankScope,
 	bankOf,
+	canonicalForm,
 	collisions,
 	csvView,
 	DATASET_NAME,
@@ -664,7 +665,7 @@ async function writeResponses(
 		reads: map.columns.flatMap((c) =>
 			"filtered" in c && c.filtered ? [] : [c.variable],
 		),
-		fingerprint: sha256(csvView(values)),
+		fingerprint: sha256(canonicalForm(values)),
 		source: sourceFile,
 		ddi: ddiRead,
 		map: { ...mapRead, ...(map.ddi !== undefined && { ddi: map.ddi }) },
