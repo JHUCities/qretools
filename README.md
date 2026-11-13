@@ -68,8 +68,8 @@ Three to look at:
   instruments in the browser.
 - **The command-line package** (`packages/cli/`, [on npm](https://www.npmjs.com/package/qretools)
   as `qretools`). Run `check`, `export`, `codebook` or `build` on a workspace, and
-  `instrument check` or `instrument export` on an instrument, and `paths` on an
-  instrument's DDI.
+  `instrument check` or `instrument export` on an instrument, and `paths` or `next` on an
+  instrument's DDI (`next` gives an interview's next question, for a program that asks it).
 - **The core package** (`packages/core/`). Reads questions and instruments, checks them,
   and turns them into DDI. Every other package uses it.
 - **The codebook package** (`packages/codebook/`). Turns a DDI-Lifecycle 4.0 document into an
