@@ -15,6 +15,7 @@ import {
 	type DdiDocument,
 	documentOf,
 	identity,
+	intl,
 	item,
 } from "./ddi/document.ts";
 import { ddiIndexOf, deref, type Indexed } from "./ddi/read.ts";
@@ -142,6 +143,12 @@ describe("a dataset as DDI", () => {
 		expect(doc.Variable?.[v("tenure")]).toBeUndefined();
 	});
 
+	it("keeps the bytes it wrote before rosters, without a roster value", async () => {
+		await expect(
+			`${JSON.stringify(made(DATASET), null, 2)}\n`,
+		).toMatchFileSnapshot("../fixtures/datasets/wave1.json");
+	});
+
 	it("gives the same bytes for the same answers in any order", () => {
 		const shuffled = {
 			...DATASET,
@@ -196,7 +203,7 @@ describe("a dataset as DDI", () => {
 					{ respondent: "R_1", variable: v("age"), row: 1, value: "40" },
 				],
 			}),
-		).toMatch(/roster row/);
+		).toMatch(/isn't recorded in a roster/);
 		expect(refused({ ...DATASET, name: "wave.1" })).toMatch(
 			/isn't one a DDI ID/,
 		);
@@ -276,7 +283,7 @@ describe("a dataset as DDI", () => {
 					},
 				},
 			}),
-		).toMatch(/one variable, one respondent and one value/);
+		).toMatch(/one variable, one record and one value/);
 	});
 });
 
@@ -877,5 +884,293 @@ describe("a data file's metadata, weights and dates", () => {
 					{},
 			),
 		).not.toContain("x");
+	});
+});
+
+describe("roster rows", () => {
+	const q = (name: string, domain: string) =>
+		`name: ${name}\ntext: ${name}?\nintent: i\n${domain}\naccess: public\n`;
+	const instrumentDdi = instrumentOf(
+		"name: r\nuses:\n  b: here\nflow:\n  - ask: b.size\n  - roster: members\n    count: b.size\n    max: 3\n    flow:\n      - ask: b.age\n      - ask: b.pet\n  - roster: cars\n    count: b.size\n    flow:\n      - ask: b.car\n",
+		{
+			banks: {
+				b: bankOf({
+					"workspace.yaml": "agency: org.bank\naccess: [public, restricted]\n",
+					"questions/a/size.yaml": q("size", "number: {}"),
+					"questions/a/age.yaml": q("age", "number: {}"),
+					"questions/a/pet.yaml": q("pet", "open: {}"),
+					"questions/a/car.yaml": q("car", "open: {}"),
+				}),
+			},
+			agency: "org.example",
+		},
+	).ddi;
+	const ROSTERED = ddiIndexOf(instrumentDdi);
+	const r = (name: string) => `urn:ddi:org.example:instrument-r.var-${name}:1`;
+	// Row 2 of R_1's members has no value, so it has no record.
+	const D: Dataset = {
+		name: "w",
+		agency: "org.example",
+		respondents: [{ id: "R_2" }, { id: "R_1" }],
+		answers: [
+			{ respondent: "R_1", variable: r("size"), value: "3" },
+			{ respondent: "R_1", variable: r("age"), row: 3, value: "9" },
+			{ respondent: "R_1", variable: r("age"), row: 1, value: "40" },
+			{ respondent: "R_1", variable: r("pet"), row: 1, value: "cat" },
+			{ respondent: "R_2", variable: r("car"), row: 1, value: "van" },
+		],
+	};
+	const P = { ...PROVENANCE, index: ROSTERED, reads: undefined };
+	const { reads: _, ...noReads } = P;
+	const build = (d: Dataset) => datasetOf(d, noReads);
+	const doc = build(D);
+	if (!doc.ok) throw new Error(doc.error);
+	const values = (key: string) =>
+		(
+			doc.value.DataSet?.[key]?.ItemSet as
+				| {
+						ItemValue: {
+							RecordReference: string;
+							VariableReference: { value: string[] };
+							Value: { StringValue: string }[];
+						}[];
+				  }
+				| undefined
+		)?.ItemValue.map(
+			(x) =>
+				`${x.RecordReference} ${x.VariableReference.value[1]} ${x.Value[0]?.StringValue}`,
+		);
+
+	it("are a DataSet per roster, each row keyed and linked to its respondent, valid DDI", () => {
+		expect(validator.ok && validator.value(doc.value)).toEqual([]);
+		expect(Object.keys(doc.value.DataSet ?? {})).toEqual([
+			"org.example:dataset-w:1",
+			"org.example:dataset-w.rows-cars:1",
+			"org.example:dataset-w.rows-members:1",
+		]);
+		expect(values("org.example:dataset-w:1")).toEqual([
+			"R_1 dataset-w.respondent R_1",
+			"R_1 instrument-r.var-size 3",
+			"R_2 dataset-w.respondent R_2",
+		]);
+		// Sorted by respondent, then row, then variable URN.
+		expect(values("org.example:dataset-w.rows-members:1")).toEqual([
+			"R_1#1 dataset-w.key-members R_1#1",
+			"R_1#1 dataset-w.respondent R_1",
+			"R_1#1 dataset-w.row 1",
+			"R_1#1 instrument-r.var-age 40",
+			"R_1#1 instrument-r.var-pet cat",
+			"R_1#3 dataset-w.key-members R_1#3",
+			"R_1#3 dataset-w.respondent R_1",
+			"R_1#3 dataset-w.row 3",
+			"R_1#3 instrument-r.var-age 9",
+		]);
+		expect(
+			doc.value.DataSet?.["org.example:dataset-w.rows-cars:1"]
+				?.IdentifyingVariableReference,
+		).toEqual({
+			$type: "Variable",
+			value: ["org.example", "dataset-w.key-cars", "1"],
+		});
+		const relationship =
+			doc.value.DataRelationship?.["org.example:dataset-w.records:1"];
+		expect(
+			(relationship?.LogicalRecord as { ID: string }[] | undefined)?.map(
+				(x) => x.ID,
+			),
+		).toEqual([
+			"dataset-w.record",
+			"dataset-w.record-cars",
+			"dataset-w.record-members",
+		]);
+		expect(relationship?.RecordRelationship).toMatchObject([
+			{
+				ID: "dataset-w.link-cars",
+				SourceLogicalRecordReference: { ID: "dataset-w.record-cars" },
+				TargetLogicalRecordReference: { ID: "dataset-w.record" },
+				RelationToTarget: "Child",
+			},
+			{ ID: "dataset-w.link-members" },
+		]);
+		const data = doc.value.PhysicalInstance?.["org.example:dataset-w.data:1"];
+		expect(data?.RecordLayoutReference).toHaveLength(3);
+		expect(data?.DataRelationshipReference).toEqual([
+			{
+				$type: "DataRelationship",
+				value: ["org.example", "dataset-w.records", "1"],
+			},
+		]);
+		expect(JSON.stringify(data?.DataFingerprint)).toMatch(/each with its row/);
+	});
+
+	it("are reported by the validator when wrong", () => {
+		const bad = JSON.parse(JSON.stringify(doc.value));
+		bad.DataRelationship[
+			"org.example:dataset-w.records:1"
+		].RecordRelationship[0].RelationToTarget = 5;
+		expect(validator.ok && validator.value(bad).length).toBeGreaterThan(0);
+	});
+
+	it("read back as answers with their rows, and the CSV view is answersCsv's", () => {
+		const read = readDataset(JSON.parse(JSON.stringify(doc.value)));
+		if (!read.ok) throw new Error(read.error);
+		expect(read.value.respondents).toEqual([{ id: "R_1" }, { id: "R_2" }]);
+		const sorted = [...D.answers].sort(
+			(a, b) =>
+				(a.respondent < b.respondent
+					? -1
+					: a.respondent > b.respondent
+						? 1
+						: 0) ||
+				(a.variable < b.variable ? -1 : a.variable > b.variable ? 1 : 0) ||
+				(a.row ?? 0) - (b.row ?? 0),
+		);
+		expect(csvView(read.value)).toBe(answersCsv(sorted));
+		// The same dataset again gives the same bytes; the canonical form holds no row's key.
+		const again = build(read.value);
+		expect(again.ok && JSON.stringify(again.value)).toBe(
+			JSON.stringify(doc.value),
+		);
+		expect(canonicalForm(D)).toContain("instrument-r.var-age:1,3,9");
+		expect(canonicalForm(D)).not.toMatch(/key-|dataset-w\.row|#/);
+	});
+
+	it.each<[string, Dataset["answers"][number], RegExp]>([
+		[
+			"a row outside a roster",
+			{ respondent: "R_1", variable: r("size"), row: 1, value: "3" },
+			/`size` isn't recorded in a roster/,
+		],
+		[
+			"no row in a roster",
+			{ respondent: "R_1", variable: r("age"), value: "40" },
+			/`age` is recorded in a roster: its answers need a `row`/,
+		],
+		[
+			"a row above the roster's max",
+			{ respondent: "R_1", variable: r("age"), row: 4, value: "40" },
+			/row 4, and its roster `members` has at most 3 rows/,
+		],
+	])("are refused with %s", (_, answer, message) => {
+		const got = build({ ...D, answers: [answer] });
+		expect(got.ok ? "" : got.error).toMatch(message);
+	});
+
+	it("are refused for a roster inside a roster", () => {
+		const nested = ddiIndexOf(
+			instrumentOf(
+				"name: r\nuses:\n  b: here\nflow:\n  - ask: b.size\n  - roster: members\n    count: b.size\n    max: 3\n    flow:\n      - roster: cars\n        count: b.size\n        max: 3\n        flow:\n          - ask: b.car\n",
+				{
+					banks: {
+						b: bankOf({
+							"workspace.yaml": "agency: org.bank\n",
+							"questions/a/size.yaml":
+								"name: size\ntext: s?\nintent: i\nnumber: {}\n",
+							"questions/a/car.yaml":
+								"name: car\ntext: c?\nintent: i\nopen: {}\n",
+						}),
+					},
+					agency: "org.example",
+				},
+			).ddi,
+		);
+		const got = datasetOf(D, { ...noReads, index: nested });
+		expect(got.ok ? "" : got.error).toMatch(
+			/A roster inside a roster \(cars\)/,
+		);
+	});
+
+	it("are refused where a roster's name can't be part of a DDI ID", () => {
+		const ddi = JSON.parse(JSON.stringify(instrumentDdi));
+		for (const loop of Object.values(ddi.Loop) as {
+			ID: string;
+			ConstructName: unknown;
+		}[])
+			if (loop.ID.endsWith("roster-cars"))
+				loop.ConstructName = [intl("my cars")];
+		const got = datasetOf(D, { ...noReads, index: ddiIndexOf(ddi) });
+		expect(got.ok ? "" : got.error).toMatch(
+			/roster `my cars` has a name a DDI ID can't hold/,
+		);
+	});
+
+	it("read back only when each row is keyed by its respondent and row", () => {
+		const refused = (
+			edit: (j: {
+				DataSet: Record<
+					string,
+					{
+						ItemSet: {
+							ItemValue: {
+								RecordReference: string;
+								VariableReference: { value: string[] };
+								Value: { StringValue: string }[];
+							}[];
+						};
+					}
+				>;
+			}) => void,
+		) => {
+			const j = JSON.parse(JSON.stringify(doc.value));
+			edit(j);
+			const got = readDataset(j);
+			return got.ok ? "" : got.error;
+		};
+		const members = "org.example:dataset-w.rows-members:1";
+		// A key that isn't the respondent, #, the row.
+		expect(
+			refused((j) => {
+				for (const x of j.DataSet[members]?.ItemSet.ItemValue ?? [])
+					if (
+						x.VariableReference.value[1] === "dataset-w.row" &&
+						x.RecordReference === "R_1#3"
+					)
+						x.Value = [{ StringValue: "2" }];
+			}),
+		).toMatch(/isn't keyed by one respondent and one row/);
+		// A row of a respondent the respondents' DataSet doesn't hold.
+		expect(
+			refused((j) => {
+				for (const x of j.DataSet[members]?.ItemSet.ItemValue ?? []) {
+					x.RecordReference = x.RecordReference.replace("R_1", "R_9");
+					for (const v of x.Value)
+						v.StringValue = v.StringValue.replace("R_1", "R_9");
+				}
+			}),
+		).toMatch(/names a respondent the dataset doesn't identify/);
+		// A value given twice names its row.
+		expect(
+			refused((j) => {
+				const set = j.DataSet[members];
+				const age = set?.ItemSet.ItemValue.find(
+					(x) =>
+						x.RecordReference === "R_1#3" &&
+						x.VariableReference.value[1] === "instrument-r.var-age",
+				);
+				if (set && age) set.ItemSet.ItemValue.push(age);
+			}),
+		).toMatch(/twice in row 3/);
+	});
+
+	it("keep a row's key with its respondent, and its row with the answers, at a level", () => {
+		const open = accessOf(ROSTERED, D, "public");
+		if (!open.ok || open.value === undefined) throw new Error("no access");
+		expect(open.value.removed.map((x) => x.name)).toEqual([
+			"respondent",
+			"cars_key",
+			"members_key",
+		]);
+		const view = provenanceView(
+			JSON.parse(JSON.stringify(doc.value)),
+			open.value,
+		);
+		expect(validator.ok && validator.value(view)).toEqual([]);
+		expect(JSON.stringify(view)).not.toContain("ItemSet");
+		const present = (
+			view.VariableGroup?.["org.example:dataset-w.present:1"]
+				?.VariableReference as { value: string[] }[] | undefined
+		)?.map((x) => x.value[1]);
+		expect(present).toContain("dataset-w.row");
+		expect(present).not.toContain("dataset-w.key-members");
 	});
 });

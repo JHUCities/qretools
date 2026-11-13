@@ -1,0 +1,735 @@
+{
+  "DataSet": {
+    "org.example:dataset-wave1:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1",
+      "Version": "1",
+      "DataSetName": [
+        {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "wave1"
+              }
+            }
+          ]
+        }
+      ],
+      "IdentifyingVariableReference": {
+        "$type": "Variable",
+        "value": [
+          "org.example",
+          "dataset-wave1.respondent",
+          "1"
+        ]
+      },
+      "ItemSet": {
+        "ItemValue": [
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "dataset-wave1.end",
+                "1"
+              ]
+            },
+            "RecordReference": "R_1",
+            "Value": [
+              {
+                "StringValue": "2026-11-12T23:16:02Z"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "dataset-wave1.respondent",
+                "1"
+              ]
+            },
+            "RecordReference": "R_1",
+            "Value": [
+              {
+                "StringValue": "R_1"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "dataset-wave1.start",
+                "1"
+              ]
+            },
+            "RecordReference": "R_1",
+            "Value": [
+              {
+                "StringValue": "2026-11-12T23:14:02Z"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "instrument-t.var-modes_b",
+                "1"
+              ]
+            },
+            "RecordReference": "R_1",
+            "Value": [
+              {
+                "StringValue": "1"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "instrument-t.var-tenure",
+                "1"
+              ]
+            },
+            "RecordReference": "R_1",
+            "Value": [
+              {
+                "StringValue": "2"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "instrument-t.var-why",
+                "1"
+              ]
+            },
+            "RecordReference": "R_1",
+            "Value": [
+              {
+                "StringValue": "Close, \"mostly\""
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "dataset-wave1.end",
+                "1"
+              ]
+            },
+            "RecordReference": "R_2",
+            "Value": [
+              {
+                "StringValue": "2026-11-12T23:15:50Z"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "dataset-wave1.respondent",
+                "1"
+              ]
+            },
+            "RecordReference": "R_2",
+            "Value": [
+              {
+                "StringValue": "R_2"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "dataset-wave1.start",
+                "1"
+              ]
+            },
+            "RecordReference": "R_2",
+            "Value": [
+              {
+                "StringValue": "2026-11-12T23:15:41Z"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "instrument-t.var-tenure",
+                "1"
+              ]
+            },
+            "RecordReference": "R_2",
+            "Value": [
+              {
+                "StringValue": "1"
+              }
+            ]
+          },
+          {
+            "VariableReference": {
+              "$type": "Variable",
+              "value": [
+                "org.example",
+                "dataset-wave1.respondent",
+                "1"
+              ]
+            },
+            "RecordReference": "R_3",
+            "Value": [
+              {
+                "StringValue": "R_3"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "Variable": {
+    "org.example:dataset-wave1.respondent:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.respondent:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.respondent",
+      "Version": "1",
+      "VariableName": [
+        {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "respondent"
+              }
+            }
+          ]
+        }
+      ],
+      "VariableRepresentation": {
+        "ValueRepresentation": {
+          "$type": "TextDomain"
+        }
+      }
+    },
+    "org.example:dataset-wave1.start:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.start:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.start",
+      "Version": "1",
+      "VariableName": [
+        {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "start"
+              }
+            }
+          ]
+        }
+      ],
+      "IsTemporal": true,
+      "VariableRepresentation": {
+        "ValueRepresentation": {
+          "$type": "DateTimeDomain"
+        }
+      }
+    },
+    "org.example:dataset-wave1.end:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.end:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.end",
+      "Version": "1",
+      "VariableName": [
+        {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "end"
+              }
+            }
+          ]
+        }
+      ],
+      "IsTemporal": true,
+      "VariableRepresentation": {
+        "ValueRepresentation": {
+          "$type": "DateTimeDomain"
+        }
+      }
+    }
+  },
+  "StudyUnit": {
+    "org.example:dataset-wave1.study:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.study:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.study",
+      "Version": "1",
+      "Citation": {
+        "Title": {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "wave1"
+              }
+            }
+          ]
+        }
+      },
+      "DataCollectionReference": [
+        {
+          "$type": "DataCollection",
+          "value": [
+            "org.example",
+            "dataset-wave1.collection",
+            "1"
+          ]
+        }
+      ],
+      "PhysicalInstanceReference": [
+        {
+          "$type": "PhysicalInstance",
+          "value": [
+            "org.example",
+            "dataset-wave1.data",
+            "1"
+          ]
+        },
+        {
+          "$type": "PhysicalInstance",
+          "value": [
+            "org.example",
+            "dataset-wave1.source",
+            "1"
+          ]
+        }
+      ],
+      "RelatedOtherMaterialReference": [
+        {
+          "$type": "OtherMaterial",
+          "value": [
+            "org.example",
+            "dataset-wave1.map",
+            "1"
+          ]
+        },
+        {
+          "$type": "OtherMaterial",
+          "value": [
+            "org.example",
+            "dataset-wave1.ddi",
+            "1"
+          ]
+        }
+      ]
+    }
+  },
+  "DataCollection": {
+    "org.example:dataset-wave1.collection:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.collection:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.collection",
+      "Version": "1",
+      "MethodologyReference": {
+        "$type": "Methodology",
+        "value": [
+          "org.example",
+          "dataset-wave1.methodology",
+          "1"
+        ]
+      },
+      "CollectionEvent": [
+        {
+          "URN": "urn:ddi:org.example:dataset-wave1.event:1",
+          "Agency": "org.example",
+          "ID": "dataset-wave1.event",
+          "Version": "1",
+          "DataSource": [
+            {
+              "SourceType": [
+                {
+                  "StringValue": "PopulationGroup",
+                  "ControlledVocabularyURI": "http://rdf-vocabulary.ddialliance.org/cv/DataSourceType/"
+                }
+              ]
+            }
+          ],
+          "DataCollectionDate": {
+            "StartDate": {
+              "DateTime": "2026-11-12T23:14:02Z"
+            },
+            "EndDate": {
+              "DateTime": "2026-11-12T23:16:02Z"
+            }
+          },
+          "ModeOfCollection": [
+            {
+              "URN": "urn:ddi:org.example:dataset-wave1.mode:1",
+              "Agency": "org.example",
+              "ID": "dataset-wave1.mode",
+              "Version": "1",
+              "TypeOfModeOfCollection": {
+                "StringValue": "SelfAdministeredQuestionnaire.CAWI",
+                "ControlledVocabularyURI": "http://rdf-vocabulary.ddialliance.org/cv/ModeOfCollection/"
+              }
+            }
+          ],
+          "InstrumentReference": [
+            {
+              "$type": "Instrument",
+              "value": [
+                "org.example",
+                "instrument-t",
+                "1"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "Methodology": {
+    "org.example:dataset-wave1.methodology:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.methodology:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.methodology",
+      "Version": "1",
+      "DataCollectionSoftware": [
+        {
+          "SoftwareName": [
+            {
+              "String": [
+                {
+                  "MultilingualStringValue": {
+                    "LanguageTag": "en",
+                    "Value": "Qualtrics"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "PhysicalInstance": {
+    "org.example:dataset-wave1.data:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.data:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.data",
+      "Version": "1",
+      "DataFingerprint": [
+        {
+          "Type": "data",
+          "AlgorithmSpecification": "SHA-256 of every value of the DataSet (the answers, the values of the dataset's own variables a data file's map describes, and each respondent's identifier and interview times) as long CSV: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent and then variable URN in code-unit order",
+          "DigitalFingerprintValue": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      ],
+      "RecordLayoutReference": [
+        {
+          "$type": "DataSet",
+          "value": [
+            "org.example",
+            "dataset-wave1",
+            "1"
+          ]
+        }
+      ],
+      "VariableGroupReference": [
+        {
+          "$type": "VariableGroup",
+          "value": [
+            "org.example",
+            "dataset-wave1.present",
+            "1"
+          ]
+        },
+        {
+          "$type": "VariableGroup",
+          "value": [
+            "org.example",
+            "dataset-wave1.not-in-source",
+            "1"
+          ]
+        }
+      ]
+    },
+    "org.example:dataset-wave1.source:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.source:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.source",
+      "Version": "1",
+      "Citation": {
+        "Title": {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "export.csv"
+              }
+            }
+          ]
+        }
+      },
+      "DataFingerprint": [
+        {
+          "Type": "dataFile",
+          "AlgorithmSpecification": "SHA-256",
+          "DigitalFingerprintValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "DataFileIdentification": [
+        {
+          "Location": {
+            "String": [
+              {
+                "MultilingualStringValue": {
+                  "LanguageTag": "en",
+                  "Value": "export.csv"
+                }
+              }
+            ]
+          },
+          "SizeInBytes": 10
+        }
+      ],
+      "UserAttributePair": [
+        {
+          "AttributeKey": {
+            "StringValue": "ddi"
+          },
+          "AttributeValue": {
+            "StringValue": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          }
+        }
+      ]
+    }
+  },
+  "OtherMaterial": {
+    "org.example:dataset-wave1.map:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.map:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.map",
+      "Version": "1",
+      "TypeOfMaterial": {
+        "StringValue": "column map"
+      },
+      "Citation": {
+        "Title": {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "t-ddi-qsf.columns.json"
+              }
+            }
+          ]
+        }
+      },
+      "UserID": [
+        {
+          "StringValue": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "TypeOfUserID": {
+            "StringValue": "SHA-256"
+          }
+        }
+      ],
+      "SizeInBytes": 10,
+      "UserAttributePair": [
+        {
+          "AttributeKey": {
+            "StringValue": "ddi"
+          },
+          "AttributeValue": {
+            "StringValue": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        }
+      ]
+    },
+    "org.example:dataset-wave1.ddi:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.ddi:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.ddi",
+      "Version": "1",
+      "TypeOfMaterial": {
+        "StringValue": "instrument DDI"
+      },
+      "Citation": {
+        "Title": {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "t.json"
+              }
+            }
+          ]
+        }
+      },
+      "UserID": [
+        {
+          "StringValue": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "TypeOfUserID": {
+            "StringValue": "SHA-256"
+          }
+        }
+      ],
+      "SizeInBytes": 10,
+      "Relationship": [
+        {
+          "RelatedToReference_Versionable": {
+            "$type": "Instrument",
+            "value": [
+              "org.example",
+              "instrument-t",
+              "1"
+            ]
+          },
+          "TypeOfRelationship": {
+            "StringValue": "describes"
+          }
+        }
+      ]
+    }
+  },
+  "VariableGroup": {
+    "org.example:dataset-wave1.present:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.present:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.present",
+      "Version": "1",
+      "VariableGroupName": [
+        {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "present"
+              }
+            }
+          ]
+        }
+      ],
+      "Description": {
+        "Content": [
+          {
+            "MultilingualStringValue": {
+              "LanguageTag": "en",
+              "Value": "The variables the dataset holds at least one value of, its own included."
+            }
+          }
+        ]
+      },
+      "VariableReference": [
+        {
+          "$type": "Variable",
+          "value": [
+            "org.example",
+            "dataset-wave1.end",
+            "1"
+          ]
+        },
+        {
+          "$type": "Variable",
+          "value": [
+            "org.example",
+            "dataset-wave1.respondent",
+            "1"
+          ]
+        },
+        {
+          "$type": "Variable",
+          "value": [
+            "org.example",
+            "dataset-wave1.start",
+            "1"
+          ]
+        },
+        {
+          "$type": "Variable",
+          "value": [
+            "org.example",
+            "instrument-t.var-modes_b",
+            "1"
+          ]
+        },
+        {
+          "$type": "Variable",
+          "value": [
+            "org.example",
+            "instrument-t.var-tenure",
+            "1"
+          ]
+        },
+        {
+          "$type": "Variable",
+          "value": [
+            "org.example",
+            "instrument-t.var-why",
+            "1"
+          ]
+        }
+      ]
+    },
+    "org.example:dataset-wave1.not-in-source:1": {
+      "URN": "urn:ddi:org.example:dataset-wave1.not-in-source:1",
+      "Agency": "org.example",
+      "ID": "dataset-wave1.not-in-source",
+      "Version": "1",
+      "VariableGroupName": [
+        {
+          "String": [
+            {
+              "MultilingualStringValue": {
+                "LanguageTag": "en",
+                "Value": "not-in-source"
+              }
+            }
+          ]
+        }
+      ],
+      "Description": {
+        "Content": [
+          {
+            "MultilingualStringValue": {
+              "LanguageTag": "en",
+              "Value": "The instrument's variables the map reads no column into: the source doesn't hold them. Not missing answers."
+            }
+          }
+        ]
+      },
+      "VariableReference": [
+        {
+          "$type": "Variable",
+          "value": [
+            "org.example",
+            "instrument-t.var-unread",
+            "1"
+          ]
+        }
+      ]
+    }
+  }
+}

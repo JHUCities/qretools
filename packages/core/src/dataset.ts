@@ -36,6 +36,8 @@ import {
 	filterAnswers,
 	type Removed,
 } from "./filter.ts";
+import { readInstruments } from "./instrument/read.ts";
+import { type Recording, recordsOf } from "./instrument/records.ts";
 import {
 	codeValueOf,
 	type Provenance,
@@ -73,6 +75,14 @@ const owned = (agency: string, name: string) => {
 		end: identity(agency, `${base}.end`),
 		// The OtherMaterial of the instrument DDI (`provenanceOf`'s `ddi`).
 		ddi: identity(agency, `${base}.ddi`),
+		// A roster's rows: roster names have no hyphen, so these parts never meet another.
+		row: identity(agency, `${base}.row`),
+		key: (roster: string) => identity(agency, `${base}.key-${roster}`),
+		rows: (roster: string) => identity(agency, `${base}.rows-${roster}`),
+		records: identity(agency, `${base}.records`),
+		record: identity(agency, `${base}.record`),
+		recordOf: (roster: string) => identity(agency, `${base}.record-${roster}`),
+		link: (roster: string) => identity(agency, `${base}.link-${roster}`),
 	};
 };
 
@@ -114,13 +124,60 @@ const variable = (
 		VariableRepresentation: { ValueRepresentation: { $type: domain } },
 	});
 
+/** An ItemValue: a value of a variable (its URN, which `datasetOf` has checked) for a record. */
+const itemValue = (urn: string, record: string, value: string): JsonObject => {
+	const [Agency = "", ID = "", Version = ""] = partsOf(urn) ?? [];
+	return {
+		VariableReference: ref({
+			type: "Variable",
+			identity: { URN: urn, Agency, ID, Version },
+		}),
+		RecordReference: record,
+		Value: [{ StringValue: value }],
+	};
+};
+
 /** Code-unit order: the same in every locale. */
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** Respondent, then variable URN, then row: the order of the canonical form and the CSV view. */
+const byVariable = (a: Answer, b: Answer): number =>
+	compare(a.respondent, b.respondent) ||
+	compare(a.variable, b.variable) ||
+	(a.row ?? 0) - (b.row ?? 0);
+
+/** Respondent, then row, then variable URN: the order of a roster's ItemSet. */
+const byRow = (a: Answer, b: Answer): number =>
+	compare(a.respondent, b.respondent) ||
+	(a.row ?? 0) - (b.row ?? 0) ||
+	compare(a.variable, b.variable);
+
+/** A roster row's record: the respondent's identifier, `#`, the row. The row is digits, so the text after the last `#` is always the row. */
+const rowKey = (respondent: string, row: number): string =>
+	`${respondent}#${row}`;
+
 /**
- * Every value the DataSet holds, as `Answer`s: the answers, then each respondent's
- * identifier and times on the dataset's own variables, sorted by respondent and then
- * variable URN. The ItemSet is written from it, and the fingerprint is over it.
+ * Which roster records each variable the instrument DDI asks, and the most rows it
+ * states (`recordsOf`): the DDI must hold one instrument, with no roster inside a roster.
+ */
+// shortcut: rosters are known by name, so two loops of another program's DDI that share a ConstructName are one record type; tell them apart by ID if such DDI comes.
+export function rostersOf(
+	index: DdiIndex,
+): Result<ReadonlyMap<string, Recording>, string> {
+	const { instruments } = readInstruments(index).value;
+	const [instrument] = instruments;
+	if (instrument === undefined || instruments.length > 1)
+		return err(
+			`The DDI holds ${instruments.length} instruments, and a dataset is the answers to one.`,
+		);
+	return recordsOf(instrument.flow);
+}
+
+/**
+ * Every value of the dataset but a roster row's own (its key, respondent and row), as
+ * `Answer`s: the answers, then each respondent's identifier and times on the dataset's
+ * own variables, sorted by respondent, variable URN and row. The fingerprint is over it,
+ * and the respondents' ItemSet is written from the values without a row.
  */
 const valuesOf = (d: Dataset): Answer[] => {
 	const ids = owned(d.agency, d.name);
@@ -135,23 +192,24 @@ const valuesOf = (d: Dataset): Answer[] => {
 				? []
 				: [{ respondent: r.id, variable: ids.end.URN, value: r.end }]),
 		]),
-	].sort(
-		(a, b) =>
-			compare(a.respondent, b.respondent) || compare(a.variable, b.variable),
-	);
+	].sort(byVariable);
 };
 
 /**
- * The whole DataSet in one canonical form, which its fingerprint is over: every value,
- * the dataset's own included, as `answersCsv` writes it, in the ItemSet's order.
+ * The whole dataset in one canonical form, which its fingerprint is over: every value,
+ * the dataset's own included, as `answersCsv` writes it, in `valuesOf`'s order. A roster
+ * row's key, respondent and row values aren't in it: the answers decide them.
  */
 export const canonicalForm = (d: Dataset): string => answersCsv(valuesOf(d));
 
 /**
  * The dataset as DDI. Refused, with nothing written, where it can't say what it was
- * given: a name that isn't one ID part, an answer in a roster row (not yet described), a
- * variable that isn't a DDI URN, an answer for a respondent it doesn't list, or a
- * provenance that can't be written (`provenanceOf`).
+ * given: a name that isn't one ID part, a variable that isn't a DDI URN, an answer for a
+ * respondent it doesn't list, a row where the instrument DDI has no roster (or none
+ * where it has one), a row above the most its roster states, or a provenance that can't
+ * be written (`provenanceOf`). A roster's answers are a record type of their own: a
+ * DataSet per roster, each row identified by a key of its own, and a DataRelationship
+ * that says each row is a respondent's. Only a dataset with a roster value has them.
  */
 export function datasetOf(
 	d: Dataset,
@@ -163,11 +221,9 @@ export function datasetOf(
 		);
 	const ids = owned(d.agency, d.name);
 	const listed = new Set(d.respondents.map((r) => r.id));
+	const rosters = rostersOf(provenance.index);
+	if (!rosters.ok) return rosters;
 	for (const a of d.answers) {
-		if (a.row !== undefined)
-			return err(
-				`\`${a.variable}\` is answered in a roster row, and a dataset can't hold roster rows yet.`,
-			);
 		const parts = partsOf(a.variable);
 		if (parts === undefined)
 			return err(
@@ -175,22 +231,26 @@ export function datasetOf(
 			);
 		if (!listed.has(a.respondent))
 			return err("An answer names a respondent the dataset doesn't list.");
+		const r = rosters.value.get(a.variable);
+		const name = r?.record.variable ?? a.variable;
+		if ((r?.roster !== undefined) !== (a.row !== undefined))
+			return err(
+				r?.roster !== undefined
+					? `Variable \`${name}\` is recorded in a roster: its answers need a \`row\`.`
+					: `Variable \`${name}\` isn't recorded in a roster: its answers have no \`row\`.`,
+			);
+		// Its name is a part of DDI IDs (`rows-<roster>`): one part, with no hyphen to meet another.
+		if (r?.roster !== undefined && !/^[A-Za-z0-9_]+$/.test(r.roster))
+			return err(
+				`The roster \`${r.roster}\` has a name a DDI ID can't hold: a dataset names its rows by the roster's name, so it may hold only letters, digits and \`_\`.`,
+			);
+		if (a.row !== undefined && r?.max !== undefined && a.row > r.max)
+			return err(
+				`Variable \`${name}\` is answered in row ${a.row}, and its roster \`${r.roster}\` has at most ${r.max} rows.`,
+			);
 	}
-	// Every variable is a DDI URN now, so its parts are read again without a check.
-	const values = valuesOf(d).map((v) => {
-		const [Agency = "", ID = "", Version = ""] = partsOf(v.variable) ?? [];
-		return {
-			urn: v.variable,
-			value: {
-				VariableReference: ref({
-					type: "Variable",
-					identity: { URN: v.variable, Agency, ID, Version },
-				}),
-				RecordReference: v.respondent,
-				Value: [{ StringValue: v.value }],
-			},
-		};
-	});
+	const all = valuesOf(d);
+	const flat = all.filter((v) => v.row === undefined);
 	const timed = (k: "start" | "end") =>
 		d.respondents.some((r) => r[k] !== undefined);
 	const respondent = variable(ids.respondent, "respondent", {}, "TextDomain");
@@ -200,14 +260,18 @@ export function datasetOf(
 	const set = item("DataSet", ids.dataset, {
 		DataSetName: [intl(d.name)],
 		IdentifyingVariableReference: ref(respondent),
-		ItemSet: { ItemValue: values.map((v) => v.value) },
+		ItemSet: {
+			ItemValue: flat.map((v) => itemValue(v.variable, v.respondent, v.value)),
+		},
 	});
+	const rows = rosterItems(d, rosters.value, ids, respondent, flat);
 	const described = provenanceOf(provenance, {
 		name: d.name,
 		base: ids.dataset.ID,
 		agency: d.agency,
-		dataset: set,
-		present: values.map((v) => v.urn),
+		datasets: [set, ...rows.sets],
+		...(rows.relationship && { relationship: rows.relationship }),
+		present: [...flat.map((v) => v.variable), ...rows.present],
 		metadata: (provenance.metadata ?? []).map(
 			(m) => ids.variable(m.column).URN,
 		),
@@ -273,13 +337,146 @@ export function datasetOf(
 	return ok(
 		documentOf([
 			set,
+			...rows.sets,
 			respondent,
 			...(timed("start") ? [time(ids.start, "start")] : []),
 			...(timed("end") ? [time(ids.end, "end")] : []),
 			...metadata,
+			...rows.variables,
+			...(rows.relationship ? [rows.relationship] : []),
 			...described.value,
 		]),
 	);
+}
+
+/**
+ * The record types of a dataset's roster rows, none without a roster value. Each roster
+ * is a DataSet of its rows, in roster name order: each row (with at least one value) is
+ * keyed by `rowKey`, and holds that key, its respondent and its row on the dataset's own
+ * variables beside its answers. The DataRelationship says how a row is found: by its
+ * respondent and row, or by its key; and that it is a respondent's (a Child record,
+ * linked by the respondent's identifier). `flat` is the respondents' own ItemSet.
+ */
+function rosterItems(
+	d: Dataset,
+	rosters: ReadonlyMap<string, Recording>,
+	ids: ReturnType<typeof owned>,
+	respondent: Item,
+	flat: readonly Answer[],
+): {
+	readonly sets: readonly Item[];
+	readonly variables: readonly Item[];
+	readonly relationship?: Item;
+	readonly present: readonly string[];
+} {
+	const rowed = d.answers.filter((a) => a.row !== undefined);
+	if (rowed.length === 0) return { sets: [], variables: [], present: [] };
+	// `datasetOf` has refused a row on a variable outside a roster.
+	const rosterOf = (a: Answer) => rosters.get(a.variable)?.roster ?? "";
+	const urns = (xs: readonly string[]) =>
+		[...new Set(xs)].sort(compare).map((u) => refTo("Variable", u));
+	const row = variable(ids.row, "row", {}, "NumericDomain");
+	const sets: Item[] = [];
+	const keys: Item[] = [];
+	const records: JsonObject[] = [
+		{
+			...ids.record,
+			LogicalRecordName: [intl("respondent")],
+			CaseIdentification: [
+				{
+					FixedIdentifier: { VariableReference: [ref(respondent)] },
+					IsPrimary: true,
+				},
+			],
+			VariablesInRecord: {
+				VariableUsedReference: urns(flat.map((v) => v.variable)),
+			},
+		},
+	];
+	const links: JsonObject[] = [];
+	for (const name of [...new Set(rowed.map(rosterOf))].sort(compare)) {
+		const key = variable(
+			ids.key(name),
+			`${name}_key`,
+			{
+				Description: structured(
+					`Identifies a row of the roster ${name}: the respondent's identifier, then #, then the row's number.`,
+				),
+			},
+			"TextDomain",
+		);
+		keys.push(key);
+		const mine = rowed.filter((a) => rosterOf(a) === name);
+		const own = (a: Answer, urn: string, value: string): Answer => ({
+			...a,
+			variable: urn,
+			value,
+		});
+		const firsts = new Map(
+			mine.map((a) => [rowKey(a.respondent, a.row ?? 0), a]),
+		);
+		const values = [
+			...mine,
+			...[...firsts].flatMap(([k, a]) => [
+				own(a, key.identity.URN, k),
+				own(a, ids.respondent.URN, a.respondent),
+				own(a, ids.row.URN, String(a.row)),
+			]),
+		].sort(byRow);
+		sets.push(
+			item("DataSet", ids.rows(name), {
+				DataSetName: [intl(name)],
+				IdentifyingVariableReference: ref(key),
+				ItemSet: {
+					ItemValue: values.map((v) =>
+						itemValue(v.variable, rowKey(v.respondent, v.row ?? 0), v.value),
+					),
+				},
+			}),
+		);
+		records.push({
+			...ids.recordOf(name),
+			LogicalRecordName: [intl(name)],
+			CaseIdentification: [
+				{
+					FixedIdentifier: { VariableReference: [ref(respondent), ref(row)] },
+					IsPrimary: true,
+				},
+				{ FixedIdentifier: { VariableReference: [ref(key)] } },
+			],
+			VariablesInRecord: {
+				VariableUsedReference: [
+					ref(key),
+					ref(respondent),
+					ref(row),
+					...urns(mine.map((a) => a.variable)),
+				],
+			},
+		});
+		// The schema types these references as the record itself: its identity alone is written.
+		links.push({
+			...ids.link(name),
+			SourceLogicalRecordReference: { ...ids.recordOf(name) },
+			TargetLogicalRecordReference: { ...ids.record },
+			SourceTargetLink: [
+				{
+					SourceLinkVariableReference: ref(respondent),
+					TargetLinkVariableReference: ref(respondent),
+				},
+			],
+			RelationToTarget: "Child",
+		});
+	}
+	return {
+		sets,
+		variables: [row, ...keys],
+		relationship: item("DataRelationship", ids.records, {
+			DataRelationshipName: [intl("records")],
+			LogicalRecord: records,
+			RecordRelationship: links,
+		}),
+		present: [row, ...keys].map((v) => v.identity.URN),
+	};
 }
 
 /**
@@ -306,19 +503,23 @@ function policyFor(
 }
 
 /**
- * A dataset document read back, all or none: one `DataSet` identified by its own
- * respondent variable, with an `ItemSet`, each value naming a Variable, a respondent and
- * one value, never two for one variable and respondent. Values of the dataset's own
- * variables become its respondents and their times; every other value is an answer, of a
- * respondent the dataset identifies.
+ * A dataset document read back, all or none: a `DataSet` of respondents, identified by
+ * its own respondent variable, with an `ItemSet`, and a DataSet for each roster
+ * (`dataset-<name>.rows-<roster>`), identified by its key; each value naming a Variable,
+ * a record and one value, never two for one variable and record. Values of the dataset's
+ * own variables become its respondents and their times, and each row's respondent and
+ * row; every other value is an answer, of a respondent the dataset identifies.
  */
 // shortcut: start and end values aren't checked as dates or date-times, nor the variables' items read; check them when another program writes datasets.
 export function readDataset(json: unknown): Result<Dataset, string> {
-	const sets = Object.values(asObj(asObj(json)?.DataSet) ?? {});
-	const [set] = sets;
-	const head = asObj(set);
-	if (sets.length !== 1 || head === undefined)
-		return err("This isn't a dataset: it doesn't hold exactly one DataSet.");
+	const sets = Object.values(asObj(asObj(json)?.DataSet) ?? {}).map(asObj);
+	// The respondents' DataSet is the one whose ID is one part: `dataset-<name>`.
+	const heads = sets.filter((s) => !str(s?.ID)?.includes("."));
+	const [head] = heads;
+	if (heads.length !== 1 || head === undefined)
+		return err(
+			"This isn't a dataset: it doesn't hold exactly one DataSet of respondents.",
+		);
 	const agency = str(head.Agency);
 	const base = str(head.ID);
 	const name = base?.startsWith("dataset-") ? base.slice(8) : undefined;
@@ -331,35 +532,39 @@ export function readDataset(json: unknown): Result<Dataset, string> {
 		return err(
 			"This is a dataset's provenance: it holds no values, so it has no view but itself.",
 		);
-	const identifying = asObj(head.IdentifyingVariableReference)?.value;
-	if (
-		!Array.isArray(identifying) ||
-		urnOf(identifying.map(String)) !== ids.respondent.URN
-	)
+	const identifiedBy = (set: JsonObject, urn: string) => {
+		const by = asObj(set.IdentifyingVariableReference)?.value;
+		return Array.isArray(by) && urnOf(by.map(String)) === urn;
+	};
+	if (!identifiedBy(head, ids.respondent.URN))
 		return err("This dataset isn't identified by its own respondent variable.");
+	/** Each value of a DataSet: its variable's URN, record and value; or undefined where one isn't. */
+	const valuesIn = (set: JsonObject) =>
+		asList(asObj(set.ItemSet)?.ItemValue).map((v) => {
+			const target = asObj(v.VariableReference)?.value;
+			const parts = Array.isArray(target) ? target.map(str) : [];
+			const record = str(v.RecordReference);
+			const values = asList(v.Value);
+			const value = str(values[0]?.StringValue);
+			return parts.length !== 3 ||
+				parts.some((p) => p === undefined) ||
+				record === undefined ||
+				values.length !== 1 ||
+				value === undefined
+				? undefined
+				: { urn: urnOf(parts as string[]), record, value };
+		});
+	const unreadable =
+		"A value of the dataset isn't one variable, one record and one value.";
 	const respondents = new Map<
 		string,
 		{ id: string; start?: string; end?: string }
 	>();
 	const answers: Answer[] = [];
 	const seen = new Set<string>();
-	for (const v of asList(asObj(head.ItemSet)?.ItemValue)) {
-		const target = asObj(v.VariableReference)?.value;
-		const parts = Array.isArray(target) ? target.map(str) : [];
-		const respondent = str(v.RecordReference);
-		const values = asList(v.Value);
-		const value = str(values[0]?.StringValue);
-		if (
-			parts.length !== 3 ||
-			parts.some((p) => p === undefined) ||
-			respondent === undefined ||
-			values.length !== 1 ||
-			value === undefined
-		)
-			return err(
-				"A value of the dataset isn't one variable, one respondent and one value.",
-			);
-		const urn = urnOf(parts as string[]);
+	for (const v of valuesIn(head)) {
+		if (v === undefined) return err(unreadable);
+		const { urn, record: respondent, value } = v;
 		const key = `${respondent}\u0000${urn}`;
 		if (seen.has(key))
 			return err(`The dataset gives \`${urn}\` twice for one respondent.`);
@@ -381,6 +586,65 @@ export function readDataset(json: unknown): Result<Dataset, string> {
 		)
 	)
 		return err("A value names a respondent the dataset doesn't identify.");
+	for (const set of sets) {
+		if (set === undefined || set === head) continue;
+		const roster = str(set.ID)?.slice(`${base}.rows-`.length);
+		if (
+			str(set.ID) !== `${base}.rows-${roster}` ||
+			roster === undefined ||
+			!identifiedBy(set, ids.key(roster).URN)
+		)
+			return err(
+				"This isn't a dataset QREtools wrote: a DataSet beside the respondents' isn't a roster's, identified by its key.",
+			);
+		const rows = new Map<string, { urn: string; value: string }[]>();
+		for (const v of valuesIn(set)) {
+			if (v === undefined) return err(unreadable);
+			rows.set(v.record, [...(rows.get(v.record) ?? []), v]);
+		}
+		for (const [record, values] of rows) {
+			const own = (urn: string) =>
+				values.filter((v) => v.urn === urn).map((v) => v.value);
+			const [respondent, ...more] = own(ids.respondent.URN);
+			const [row, ...rowsMore] = own(ids.row.URN);
+			const [key, ...keysMore] = own(ids.key(roster).URN);
+			if (
+				respondent === undefined ||
+				row === undefined ||
+				!/^[1-9][0-9]*$/.test(row) ||
+				key !== record ||
+				record !== rowKey(respondent, Number(row)) ||
+				more.length + rowsMore.length + keysMore.length > 0
+			)
+				return err(
+					`A row of the roster \`${roster}\` isn't keyed by one respondent and one row: its key must be the respondent's identifier, #, the row.`,
+				);
+			if (!respondents.has(respondent))
+				return err(
+					`A row of the roster \`${roster}\` names a respondent the dataset doesn't identify.`,
+				);
+			const given = new Set<string>();
+			for (const v of values) {
+				if (
+					v.urn === ids.respondent.URN ||
+					v.urn === ids.row.URN ||
+					v.urn === ids.key(roster).URN
+				)
+					continue;
+				if (given.has(v.urn))
+					return err(
+						`The dataset gives \`${v.urn}\` twice in row ${row} of one respondent.`,
+					);
+				given.add(v.urn);
+				answers.push({
+					respondent,
+					variable: v.urn,
+					row: Number(row),
+					value: v.value,
+				});
+			}
+		}
+	}
 	return ok({ name, agency, respondents: [...respondents.values()], answers });
 }
 
@@ -389,6 +653,8 @@ export function readDataset(json: unknown): Result<Dataset, string> {
  * (never a value), and whether the dataset's own variables (respondent, start, end) are
  * kept. They have no question to take a level from and can identify a respondent, so
  * they stand at the most closed level: kept only at the most closed level of every policy.
+ * A roster's key holds the respondent's identifier, so it stands with them; its row
+ * number identifies no one, so it stays with the answers.
  * So does a metadata column's variable, unless its map stated a level, which its embargo
  * records as a question's does.
  */
@@ -416,6 +682,16 @@ export function accessOf(
 		return policies.length === 0
 			? ok(undefined)
 			: err({ kind: "level-required", policies });
+	// Only a dataset with rows has keys: one without is read as before, whatever the DDI's rosters.
+	const rowed = d.answers.filter((a) => a.row !== undefined);
+	const rosters =
+		rowed.length === 0 ? ok(new Map<string, Recording>()) : rostersOf(index);
+	if (!rosters.ok) return err({ kind: "rosters", reason: rosters.error });
+	const keyed = [
+		...new Set(
+			rowed.flatMap((a) => rosters.value.get(a.variable)?.roster ?? []),
+		),
+	].sort(compare);
 	// A metadata variable with no embargo (or none in the index) stands with the respondent's.
 	const ids = owned(d.agency, d.name);
 	const closed = new Set(
@@ -446,6 +722,7 @@ export function accessOf(
 			...(d.respondents.some((r) => r.end !== undefined)
 				? ([[ids.end, "end"]] as const)
 				: []),
+			...keyed.map((r) => [ids.key(r), `${r}_key`] as const),
 		] as const
 	)
 		.map(([id, name]): Removed => ({ urn: id.URN, name, level: above ?? "" }))
@@ -473,8 +750,8 @@ export function accessOf(
 }
 
 /**
- * The answers as long CSV, as `answersCsv` writes them, sorted by respondent and then
- * variable URN: the canonical form the dataset's fingerprint is over. The dataset's own
+ * The answers as long CSV, as `answersCsv` writes them, sorted by respondent, variable URN
+ * and row: the canonical form the dataset's fingerprint is over. The dataset's own
  * variables aren't answers. At an access level, only the answers it keeps; where the
  * respondent variable is above it, each respondent is numbered from 1 instead, in the
  * order of the `digest` of their identifier (the shell gives SHA-256 in hex), so the
@@ -486,13 +763,7 @@ export const csvView = (
 ): string => {
 	const [access, digest] = at;
 	if (access === undefined || access.owned || digest === undefined)
-		return answersCsv(
-			[...(access?.kept ?? d.answers)].sort(
-				(a, b) =>
-					compare(a.respondent, b.respondent) ||
-					compare(a.variable, b.variable),
-			),
-		);
+		return answersCsv([...(access?.kept ?? d.answers)].sort(byVariable));
 	// Every respondent named anywhere is numbered, so none can come out blank.
 	const ids = [
 		...new Set([
@@ -509,7 +780,12 @@ export const csvView = (
 	const num = (a: Answer) => numbers.get(a.respondent) ?? 0;
 	return answersCsv(
 		[...access.kept]
-			.sort((a, b) => num(a) - num(b) || compare(a.variable, b.variable))
+			.sort(
+				(a, b) =>
+					num(a) - num(b) ||
+					compare(a.variable, b.variable) ||
+					(a.row ?? 0) - (b.row ?? 0),
+			)
 			.map((a) => ({ ...a, respondent: String(num(a)) })),
 	);
 };
@@ -534,8 +810,10 @@ export const provenanceView = (doc: unknown, access?: Access): DdiDocument => {
 		),
 	};
 	if (access === undefined) return view as DdiDocument;
-	// The DataSet `readDataset` read: `dataset-<name>`, the base of every ID the dataset owns.
-	const set = asObj(Object.values(asObj(root.DataSet) ?? {})[0]);
+	// The DataSet of respondents `readDataset` read: `dataset-<name>`, the base of every ID the dataset owns.
+	const set = Object.values(asObj(root.DataSet) ?? {})
+		.map(asObj)
+		.find((s) => !str(s?.ID)?.includes("."));
 	const agency = str(set?.Agency) ?? "";
 	const base = str(set?.ID) ?? "";
 	const id = (part: string) => identity(agency, `${base}.${part}`);

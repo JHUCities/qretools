@@ -31,6 +31,7 @@ export type ItemType =
 	| "ComputationItem"
 	| "GenerationInstruction"
 	| "DataSet"
+	| "DataRelationship"
 	// A dataset's provenance (`provenance.ts`).
 	| "StudyUnit"
 	| "DataCollection"

@@ -40,6 +40,8 @@ export type FilterRefusal =
 	| { readonly kind: "unknown-variables"; readonly urns: readonly string[] }
 	/** Variables whose level can't be traced to exactly one policy. */
 	| { readonly kind: "untraced"; readonly urns: readonly string[] }
+	/** The instrument's rosters can't be read (`rostersOf`), so a roster key's level isn't known. */
+	| { readonly kind: "rosters"; readonly reason: string }
 	/** After filtering, answers above the level remain: a bug, so nothing is kept. */
 	| { readonly kind: "leak"; readonly urns: readonly string[] };
 
