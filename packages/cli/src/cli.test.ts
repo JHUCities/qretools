@@ -1701,7 +1701,35 @@ describe("qretools responses", () => {
 		);
 		expect(repeated).toMatchObject({ code: 2, out: "" });
 		expect(repeated.err).toMatch(
-			`${beside}: error: the map already says who answered, so \`--answered-by\` isn't taken. Nothing is written. [responses-facts]\n`,
+			`${beside}: error: the map already says where the answers come from, so \`--answered-by\` isn't taken. Nothing is written. [responses-facts]\n`,
+		);
+		// Each term the map gives is checked, at its field; nothing is written.
+		const badMap = join(dir, "bad-ddi-survey.columns.json");
+		await writeFile(
+			badMap,
+			JSON.stringify({
+				...JSON.parse(json),
+				answered_by: "Respondents",
+				metadata: [
+					{
+						column: "OTHER",
+						codes: { x: "in person", y: "by phone" },
+						modes: { x: "Interview.FaceToFace", y: "Other:by phone" },
+					},
+				],
+			}),
+		);
+		expect(await run("responses", data, "--map", badMap, "--ddi", ddi)).toEqual(
+			{
+				code: 1,
+				out: "",
+				written: {},
+				err: [
+					`${badMap}: error: \`answered_by\`: \`Respondents\` isn't a term of DDI's DataSourceType vocabulary (1.0.2). For a source it doesn't list, write \`{ "other": "<words>" }\`. The terms: https://rdf-vocabulary.ddialliance.org/cv/DataSourceType/1.0.2/ Nothing is written. [responses-term]`,
+					`${badMap}: error: \`metadata[0].modes."y"\`: in a map, write Other as \`{ "other": "by phone" }\`. Nothing is written. [responses-term]`,
+					"",
+				].join("\n"),
+			},
 		);
 		const facts = ["--asked-by", "Interview"];
 		const r = await run("responses", data, "--map", beside, ...facts);
@@ -1808,7 +1836,7 @@ describe("qretools responses", () => {
 		const missing = await run("responses", csv, "--map", map);
 		expect(missing).toMatchObject({ code: 2, out: "" });
 		expect(missing.err).toMatch(
-			/doesn't say who answered: give `--answered-by <term>`/,
+			/doesn't say where its answers come from: give `--answered-by <term>`/,
 		);
 		const repeated = await run(
 			"responses",
@@ -1982,10 +2010,11 @@ describe("qretools responses", () => {
 			EndDate: { DateTime: "2026-11-13T00:20:00+01:00" },
 		});
 		expect(JSON.stringify(event?.ModeOfCollection)).toMatch(
-			/"StringValue":"Simulation"/,
+			// The term's own URI: every term --synthetic writes is in its vocabulary.
+			/"StringValue":"Simulation",.*"ControlledVocabularyInstanceURI":"http:\/\/rdf-vocabulary.ddialliance.org\/cv\/ModeOfCollection\/5.0.1\/4f502b5"/,
 		);
 		expect(JSON.stringify(event?.DataSource)).toMatch(
-			/"StringValue":"Other","OtherValue":"synthetic"/,
+			/"StringValue":"Other","OtherValue":"synthetic","ControlledVocabularyURI":"http:\/\/rdf-vocabulary.ddialliance.org\/cv\/DataSourceType\/","ControlledVocabularyInstanceURI":"http:\/\/rdf-vocabulary.ddialliance.org\/cv\/DataSourceType\/1.0.2\/6311ae1"/,
 		);
 		expect(JSON.stringify(doc.Methodology)).toMatch(
 			/"Value":"model:Q8".*"SoftwareVersion":"b1"/,
@@ -2164,6 +2193,44 @@ describe("qretools responses", () => {
 		expect(
 			await usage("--ddi", ddi, "--answered-by", "PopulationGroup"),
 		).toMatch(/give `--asked-by <term>`/);
+		// A term is checked before any file is read: this one isn't there.
+		const term = async (...argv: string[]) =>
+			run("responses", "none.csv", "--ddi", "none.json", ...argv);
+		expect(
+			await term("--answered-by", "PopulationGroup", "--asked-by", "Web"),
+		).toEqual({
+			code: 2,
+			out: "",
+			written: {},
+			err: "error: `--asked-by Web` isn't a term of DDI's ModeOfCollection vocabulary (5.0.1). Did you mean `Interview.WebBased`, `SelfAdministeredQuestionnaire.CAWI` or `SelfAdministeredWritingsAndDiaries.WebBased`? For a mode it doesn't list, give `Other:<words>`. The terms: https://rdf-vocabulary.ddialliance.org/cv/ModeOfCollection/5.0.1/ Nothing is written. [responses-term]\n",
+		});
+		expect((await term("--answered-by", "Other")).err).toBe(
+			'error: `--answered-by Other` needs words: give `"Other:<words>"`, such as `"Other:a language model"`. Nothing is written. [responses-term]\n',
+		);
+		expect(
+			(await term("--answered-by", "Population", "--asked-by", "Zoom")).err,
+		).toBe(
+			[
+				"error: `--asked-by Zoom` isn't a term of DDI's ModeOfCollection vocabulary (5.0.1). For a mode it doesn't list, give `Other:<words>`. The terms: https://rdf-vocabulary.ddialliance.org/cv/ModeOfCollection/5.0.1/ Nothing is written. [responses-term]",
+				"error: `--answered-by Population` isn't a term of DDI's DataSourceType vocabulary (1.0.2). Did you mean `PopulationGroup`? For a source it doesn't list, give `Other:<words>`. The terms: https://rdf-vocabulary.ddialliance.org/cv/DataSourceType/1.0.2/ Nothing is written. [responses-term]",
+				"",
+			].join("\n"),
+		);
+		// Other with words: DDI's Other, and the words beside it.
+		const words = await run(
+			"responses",
+			good,
+			"--ddi",
+			ddi,
+			"--answered-by",
+			"Other: a panel vendor ",
+			"--asked-by",
+			"SelfAdministeredQuestionnaire.CAWI",
+		);
+		expect(words.code).toBe(0);
+		expect(words.out).toMatch(
+			/"StringValue": "Other",\s*"OtherValue": "a panel vendor"/,
+		);
 		expect((await run("check", ".", "--file", traces)).code).toBe(2);
 		// Real answers from elsewhere: who answered, and how they were asked.
 		const real = await run(

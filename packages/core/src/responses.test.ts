@@ -12,6 +12,10 @@ import {
 	type ResponseMap,
 	readResponses,
 } from "./responses.ts";
+import { err, ok } from "./result.ts";
+import { MODE_OF_COLLECTION } from "./vocabularies.ts";
+
+const SHAPE = err({ kind: "shape" });
 
 const REPRESENTATIONS = new Map<string, Representation>([
 	["urn:happy", { kind: "codes", codes: ["1", "2", "D"] }],
@@ -186,16 +190,18 @@ describe("dataMapOf", () => {
 			values: { "-98": "D", "-100": null },
 			columns: [{ column: "happy", variable: "urn:happy", values: { x: "1" } }],
 		};
-		expect(dataMapOf(json)).toEqual(json);
+		expect(dataMapOf(json)).toEqual(ok(json));
 		// A key JSON can hold is kept as data, never as the object's prototype.
 		const proto = dataMapOf(
 			JSON.parse(
-				'{"source":"s","answered_by":"Other","respondent":"id","columns":[],"values":{"__proto__":"D"}}',
+				'{"source":"s","answered_by":{"other":"x"},"respondent":"id","columns":[],"values":{"__proto__":"D"}}',
 			),
 		);
-		expect(proto?.values && Object.hasOwn(proto.values, "__proto__")).toBe(
-			true,
-		);
+		expect(
+			proto.ok &&
+				proto.value.values !== undefined &&
+				Object.hasOwn(proto.value.values, "__proto__"),
+		).toBe(true);
 		for (const bad of [
 			null,
 			[],
@@ -207,10 +213,49 @@ describe("dataMapOf", () => {
 			{ ...json, columns: [...json.columns, ...json.columns] },
 			// Who answered is a fact of the source: its map says it.
 			{ ...json, answered_by: undefined },
-			{ ...json, answered_by: { other: "" } },
 			{ ...json, citation: { publisher: "P" } },
 		])
-			expect(dataMapOf(bad)).toBeUndefined();
+			expect(dataMapOf(bad)).toEqual(SHAPE);
+	});
+	it("refuses each term no vocabulary has, at its field", () => {
+		const read = dataMapOf({
+			source: "survey",
+			answered_by: "Respondents",
+			respondent: "id",
+			columns: [],
+			metadata: [
+				{
+					column: "mode",
+					unit: "interviewer",
+					codes: { "1": "in person", "2": "by phone" },
+					modes: { "1": "Interview.FaceToFace", "2": "Other:by phone" },
+				},
+				{ column: "w", unit: { other: "  " }, number: true },
+			],
+		});
+		expect(
+			read.ok ||
+				read.error.kind !== "terms" ||
+				read.error.problems.map((p) => [p.field, p.term, p.problem]),
+		).toEqual([
+			["answered_by", "Respondents", { kind: "unknown", suggestions: [] }],
+			[
+				"metadata[0].unit",
+				"interviewer",
+				{ kind: "unknown", suggestions: ["Interviewer"] },
+			],
+			[
+				'metadata[0].modes."2"',
+				"Other:by phone",
+				{ kind: "otherInMap", words: "by phone" },
+			],
+			["metadata[1].unit", '{"other":""}', { kind: "otherNeedsWords" }],
+		]);
+		expect(
+			!read.ok &&
+				read.error.kind === "terms" &&
+				read.error.problems[2]?.vocabulary,
+		).toBe(MODE_OF_COLLECTION);
 	});
 });
 
@@ -302,9 +347,9 @@ describe("filtered and censored columns", () => {
 	});
 
 	it("reads nothing from a filtered column, with one note, whether or not the file has it", () => {
-		const map = dataMapOf({
+		const read = dataMapOf({
 			source: "survey",
-			answered_by: "Other",
+			answered_by: { other: "x" },
 			respondent: "id",
 			columns: [
 				{ column: "happy", variable: "urn:happy", filtered: true },
@@ -312,7 +357,8 @@ describe("filtered and censored columns", () => {
 				{ column: "age", variable: "urn:age", censored: { "6": "6 or more" } },
 			],
 		});
-		if (map === undefined) throw new Error("the map isn't read");
+		if (!read.ok) throw new Error("the map isn't read");
+		const map = read.value;
 		const made = dataFileMap("id,happy,age\na,1,6\n", map, meta);
 		expect(made.map?.columns).toEqual([
 			{ column: 2, variable: "urn:age", censored: { "6": "6 or more" } },
@@ -328,11 +374,11 @@ describe("filtered and censored columns", () => {
 			expect(
 				dataMapOf({
 					source: "survey",
-					answered_by: "Other",
+					answered_by: { other: "x" },
 					respondent: "id",
 					columns: [{ column: "age", variable: "urn:age", ...bad }],
 				}),
-			).toBeUndefined();
+			).toEqual(SHAPE);
 	});
 });
 
@@ -368,7 +414,7 @@ describe("a data file's metadata and interview date", () => {
 			weighting: ADVICE,
 			interview_date: { column: "day", form: "MMDD", year: "yr" },
 		};
-		expect(dataMapOf(json)).toEqual(json);
+		expect(dataMapOf(json)).toEqual(ok(json));
 		for (const bad of [
 			// A column twice, or the respondent's, or an answer's.
 			{ metadata: [W, W], weighting: ADVICE },
@@ -395,16 +441,17 @@ describe("a data file's metadata and interview date", () => {
 			{ interview_date: { column: "day", form: "YYYY-MM-DD", year: "yr" } },
 			{ interview_date: { column: "day", form: "DDMM" } },
 		])
-			expect(dataMapOf({ ...BASE, ...bad })).toBeUndefined();
+			expect(dataMapOf({ ...BASE, ...bad })).toEqual(SHAPE);
 	});
 
 	it("reads a metadata column into the dataset's own variable, with its own translations only", () => {
-		const map = dataMapOf({
+		const read = dataMapOf({
 			...BASE,
 			values: { "-1": "D" },
 			metadata: [SHIFT],
 		});
-		if (map === undefined) throw new Error("the map isn't read");
+		if (!read.ok) throw new Error("the map isn't read");
+		const map = read.value;
 		const made = dataFileMap("id,happy,shift\na,1,-1\nb,-1,2\n", map, meta);
 		expect(made.map?.columns).toEqual([
 			{ column: 1, variable: "urn:happy", values: { "-1": "D" } },
@@ -452,11 +499,12 @@ describe("a data file's metadata and interview date", () => {
 	});
 
 	it("gives each interview its date as start and end, and an unreadable one no time, with one finding", () => {
-		const map = dataMapOf({
+		const read = dataMapOf({
 			...BASE,
 			interview_date: { column: "day", form: "MMDD", year: "yr" },
 		});
-		if (map === undefined) throw new Error("the map isn't read");
+		if (!read.ok) throw new Error("the map isn't read");
+		const map = read.value;
 		const made = dataFileMap(
 			"id,happy,day,yr\na,1,315,2010\nb,1,-100,2010\nc,1,229,2010\n",
 			map,
