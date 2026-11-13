@@ -67,6 +67,7 @@ export function exportedCodes(
 export interface ColumnMap {
 	/** What kind of map it is: a QSF column map, read by ImportId. */
 	readonly source: "qsf";
+	/** The version of QREtools that made the map, which may not be the one that built the survey: never compared. */
 	readonly qretools?: string;
 	readonly instrument?: string;
 	readonly ddi?: string;

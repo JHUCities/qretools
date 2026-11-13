@@ -189,9 +189,9 @@ The map has `"source": "qsf"` and the SHA-256 digest of the DDI file. If `respon
 reads the export with a different DDI, it gives a warning. If Qualtrics cannot run the instrument, the command writes
 no map, and it shows each error. `-o` is necessary.
 
-The map records the version of qretools that ran `qsf-map`. If this is not the version that
-built the survey, `responses` gives a note. To prevent the note, use the same version for
-the two commands.
+The map records the version of qretools that ran `qsf-map`. This version can be different
+from the version that built the survey. `responses` does not compare the two versions. It
+compares only the instrument and the DDI digest.
 
 ### Make the map from an export
 
@@ -354,8 +354,7 @@ command exit with 1. The command still writes the values that it can read.
 - `responses-not-a-tick` (error): a select-all cell is not `1` and is not blank.
 - `responses-provenance`: the `qretools_instrument` field of a response is not the same
   as in the map (error). A different `qretools_ddi` is a warning: the dataset records each
-  digest. A different `qretools_version` is a note. A different DDI given to the command is
-  a warning too.
+  digest. A different DDI given to the command is a warning too.
 - `responses-respondent` (error): a row has no ResponseId, or has the ResponseId of an
   earlier row.
 - `responses-row` (error): a row has more or fewer cells than the header.

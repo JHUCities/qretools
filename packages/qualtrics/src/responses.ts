@@ -281,8 +281,7 @@ export function exportMap(
 	stamp(PROVENANCE.instrument, columns.instrument, "error", "instrument");
 	// The dataset records each digest: a difference is worth a warning, not a refusal.
 	stamp(PROVENANCE.ddi, columns.ddi, "warning", "DDI");
-	// Another version of QREtools may write the same survey: worth knowing, not wrong.
-	stamp(PROVENANCE.version, columns.qretools, "info", "QREtools version");
+	// No version check: the map's `qretools` made the map, the response's built the survey.
 
 	// When each interview started and ended, in the zone row 3 names: never a guessed one.
 	const zoneAt = (i: number): unknown => {

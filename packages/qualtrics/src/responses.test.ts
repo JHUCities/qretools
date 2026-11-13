@@ -159,7 +159,6 @@ describe("a Qualtrics response export", () => {
 		expect(shown).toEqual([
 			"responses-unmapped-column  QID9_DO x1",
 			"responses-provenance 7 qretools_instrument x1",
-			"responses-provenance 7 qretools_version x1",
 			"responses-not-a-code 4 tenure x2",
 			"responses-not-a-tick 4 modes_10 x1",
 			"responses-not-a-code 5 size x1",
@@ -173,6 +172,26 @@ describe("a Qualtrics response export", () => {
 		expect(JSON.stringify(r.findings)).not.toContain(SENTINEL);
 		// What could be read is: the first response's size.
 		expect(r.answers.map((a) => a.variable)).toEqual([v("size")]);
+	});
+
+	it("matches a response to its map by the DDI digest, never by the QREtools version", () => {
+		const provenance = (stamp: string) =>
+			read(exportOf(`R_1,${stamp},,,,,,,,,,`)).findings.filter(
+				(f) => f.code === "responses-provenance",
+			);
+		// A later QREtools may make the map of a survey an earlier one built.
+		expect(
+			provenance("urn:ddi:org.example:instrument-t:1,sha256:abc,8"),
+		).toEqual([]);
+		expect(
+			provenance("urn:ddi:org.example:instrument-t:1,sha256:other,9"),
+		).toEqual([
+			expect.objectContaining({
+				severity: "warning",
+				column: "qretools_ddi",
+				line: 4,
+			}),
+		]);
 	});
 
 	it("says which of the map's columns the export lacks, and refuses one with no respondent", () => {
