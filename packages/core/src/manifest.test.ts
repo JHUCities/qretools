@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { manifestVersions, tagMessage } from "./manifest.ts";
+import { instrumentRelease, manifestVersions, tagMessage } from "./manifest.ts";
 
 const VERSIONS = {
 	"questions/t/q.yaml": {
@@ -76,5 +76,62 @@ describe("a release's manifest in its tag's message", () => {
 		expect(manifestVersions(badDate, READ).kind).toBe("unreadable");
 		const later = MESSAGE.replace('"qretools"', '"later": true,\n  "qretools"');
 		expect(manifestVersions(later, READ).kind).toBe("used");
+	});
+});
+
+describe("an instrument in a release's manifest", () => {
+	const X = { number: "2", date: "2026-10-02T12:00:00Z", blob: "bx" };
+	const RELEASE = tagMessage(
+		{ ...VERSIONS, "instruments/x.yaml": X },
+		"2.0.0",
+		{ "instruments/x.yaml": "sha256:abc" },
+	);
+
+	it("gives every version its DDI carries, the digest, and who built it", () => {
+		expect(instrumentRelease(RELEASE, READ, "instruments/x.yaml")).toEqual({
+			kind: "release",
+			versions: { ...VERSIONS, "instruments/x.yaml": X },
+			ddi: "sha256:abc",
+			qretools: "2.0.0",
+		});
+	});
+
+	it("is listed apart, so a reader of the bank alone uses the manifest as before", () => {
+		expect(manifestVersions(RELEASE, READ)).toEqual({
+			kind: "used",
+			versions: VERSIONS,
+		});
+		const { "instruments/x.yaml": _, ...bankOnly } = READ;
+		expect(manifestVersions(RELEASE, bankOnly).kind).toBe("used");
+	});
+
+	it("refuses a tag made before instruments were listed, and never guesses", () => {
+		// As `build` wrote it before: no `instruments`.
+		const old = MESSAGE.replace(',\n  "instruments": {}', "");
+		expect(old).not.toContain("instruments");
+		expect(instrumentRelease(old, READ, "instruments/x.yaml")).toEqual({
+			kind: "refused",
+			reason:
+				"Its release was made before tag references. Release the workspace again.",
+		});
+		expect(instrumentRelease("v1\n", READ, "instruments/x.yaml").kind).toBe(
+			"refused",
+		);
+		expect(
+			instrumentRelease(RELEASE, READ, "instruments/y.yaml"),
+		).toMatchObject({
+			kind: "refused",
+			reason: expect.stringContaining("instruments/x.yaml"),
+		});
+		for (const blobs of [
+			{ ...READ, "instruments/x.yaml": "other" },
+			{ ...READ, "scales/agree.yaml": "other" },
+		])
+			expect(
+				instrumentRelease(RELEASE, blobs, "instruments/x.yaml"),
+			).toMatchObject({
+				kind: "refused",
+				reason: expect.stringMatching(/match/),
+			});
 	});
 });

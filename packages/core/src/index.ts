@@ -12,6 +12,8 @@ export {
 	addressOf,
 	HERE,
 	notHere,
+	type TagRef,
+	tagRefOf,
 } from "./address.ts";
 export {
 	type BankLocation,
@@ -141,6 +143,14 @@ export {
 	instrumentOf,
 	levelsAsked,
 } from "./instrument/instrument.ts";
+export {
+	Next,
+	NextState,
+	nextSchemas,
+	nextStateOf,
+	nextStep,
+	type ParsedState,
+} from "./instrument/next.ts";
 export type { Unread } from "./instrument/parse.ts";
 export {
 	type ByInput,
@@ -179,7 +189,11 @@ export {
 	shortCommit,
 	unlockedTags,
 } from "./lock.ts";
-export { tagMessage } from "./manifest.ts";
+export {
+	type InstrumentRelease,
+	instrumentRelease,
+	tagMessage,
+} from "./manifest.ts";
 export {
 	type Exportable,
 	exportRefusal,

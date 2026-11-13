@@ -266,13 +266,16 @@ export function exportMap(
 /** A QSF column map read from its JSON, once, or undefined where it isn't one. */
 export function columnMapOf(json: unknown): ColumnMap | undefined {
 	if (typeof json !== "object" || json === null) return undefined;
-	const { source, qretools, instrument, ddi, columns } = json as Record<
-		string,
-		unknown
-	>;
+	const { source, qretools, instrument, ddi, release, columns } =
+		json as Record<string, unknown>;
 	if (source !== "qsf") return undefined;
 	const optional = (v: unknown) => v === undefined || typeof v === "string";
-	if (!optional(qretools) || !optional(instrument) || !optional(ddi))
+	if (
+		!optional(qretools) ||
+		!optional(instrument) ||
+		!optional(ddi) ||
+		!optional(release)
+	)
 		return undefined;
 	if (!Array.isArray(columns)) return undefined;
 	const read: Column[] = [];
@@ -315,6 +318,7 @@ export function columnMapOf(json: unknown): ColumnMap | undefined {
 		...(typeof qretools === "string" && { qretools }),
 		...(typeof instrument === "string" && { instrument }),
 		...(typeof ddi === "string" && { ddi }),
+		...(typeof release === "string" && { release }),
 		columns: read,
 	};
 }

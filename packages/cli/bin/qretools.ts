@@ -2,6 +2,7 @@
 /** The `qretools` command, wired to the process: see src/cli.ts. */
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { text } from "node:stream/consumers";
 import { main } from "../src/cli.ts";
 import { ownRepository, readHistory } from "../src/history.ts";
 import { readTagged } from "../src/remote.ts";
@@ -26,6 +27,7 @@ process.exitCode = await main(process.argv.slice(2), {
 		readTagged(address, from === undefined ? {} : { urlOf: () => from }),
 	readHistory,
 	ownRepository,
+	readStdin: () => text(process.stdin),
 }).catch((e: unknown) => {
 	process.stderr.write(
 		`qretools failed: ${e instanceof Error ? e.stack : String(e)}\n`,

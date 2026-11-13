@@ -20,8 +20,10 @@ qretools codebook path/to/workspace -o codebook.html  # its questions' codebook,
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 qretools qsf-map dist/instruments/wave1.json -o maps  # the QSF column map of an instrument's survey
+qretools qsf-map acme/survey@v3:wave1 -o maps         # the same, from the release v3 (a tag reference)
 qretools qsf-map --export export.csv --ddi wave1.json -o maps  # the same, from a fielded survey's export
 qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/instruments/wave1.json  # a Qualtrics export, by DDI variable
+qretools next wave1.json state.json          # the next question of an interview, as JSON
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
 ```
@@ -114,10 +116,32 @@ blob is a UserID.
   again: it stays with the release that you fielded.
 
 `--tag-message <file>` also writes the text for a release's tag: a line, a blank line,
-then each file's version, date and blob as JSON. Tag the built commit with it, verbatim,
+then each file's version, date and blob as JSON. The JSON also gives each instrument's
+version, date and blob, the SHA-256 digest of its DDI, and the version of qretools that
+built it, so a tag reference can rebuild the DDI (see "Tag references"). Tag the built commit with it, verbatim,
 so git keeps it whole: `git tag -a --cleanup=verbatim -F <file> v2 HEAD`. A workspace can
 do this in a workflow it runs by hand with the tag's name (qretools-gss's `release.yml`
 is one). The tag points at the default branch's own commit, and only the tag is pushed.
+
+## Tag references
+
+A tag reference names an instrument in a release of a workspace:
+`owner/repo@tag:name`, or `owner/repo/folder@tag:name` for a workspace in a folder. For
+example, `acme/survey@v3:wave1` is the instrument `instruments/wave1.yaml` in the release
+`v3`. `qsf-map` and `responses --ddi` accept a tag reference where they accept a DDI file.
+
+The command reads the tag with git, as it reads a workspace in another repository. It
+rebuilds the DDI of the instrument with the versions in the tag's message. Then it
+compares the digest of the DDI with the digest that the release recorded:
+
+- If the digests are the same, the command uses the DDI.
+- If the digests are different, the command stops. The message gives the version of
+  qretools that built the release. Run the same command again with that version, for example
+  `npx qretools@2.0.0-alpha.12 qsf-map acme/survey@v3:wave1 -o maps`.
+- If the tag was made before tag references, the command stops. Release the workspace
+  again.
+
+Offline, the command reads a tag that it read before from the cache.
 
 ## Make the QSF column map
 
@@ -125,12 +149,14 @@ The QSF column map gives the DDI variable of each column in the response export 
 survey that `build` wrote. Make the map from the DDI of the instrument that you fielded:
 
 ```sh
-qretools qsf-map dist/instruments/wave1.json -o maps
+qretools qsf-map acme/survey@v3:wave1 -o maps
 ```
 
-1. Get `<name>.json` from the release that made the survey that you fielded.
-2. Run `qretools qsf-map <name>.json -o <dir>`. The command writes
-   `<dir>/<name>-ddi-qsf.columns.json`.
+1. Find the release that made the survey that you fielded, for example `v3`.
+2. Run `qretools qsf-map <owner>/<repo>@<tag>:<name> -o <dir>`. The command writes
+   `<dir>/<name>-ddi-qsf.columns.json`. The map records the release in its `release`
+   field. You can also give the file `<name>.json` from the release:
+   `qretools qsf-map <name>.json -o <dir>`.
 3. Read each `qsf-unmapped` warning. The map has no column for the item that the
    warning names.
 4. Commit the map in `maps/`. `build` copies it beside the DDI. Do not make it again
@@ -151,7 +177,8 @@ did not come from a release. You need a response export of the survey (see "Expo
 Qualtrics") and a DDI of the instrument.
 
 1. Run `qretools qsf-map --export <export.csv> --ddi <name.json> -o <dir>`. The command
-   writes `<dir>/<name>-ddi-qsf.columns.json`.
+   writes `<dir>/<name>-ddi-qsf.columns.json`. `--ddi` can also be a tag reference
+   (`owner/repo@tag:name`). Then the map records the release, as `qsf-map` does.
 2. Read each `qsf-map-matched` finding. Each finding tells how the command matched a
    question of the export to a question of the DDI: by its export tag (a note, or a
    warning if the text is different), by its question text (a warning), or by its place
@@ -248,9 +275,11 @@ To read an export, do these steps:
 
 1. Do the steps in "Export from Qualtrics" to get the export.
 2. Find the QSF column map of the survey (see "Make the QSF column map").
-3. Find the DDI that the map was made from.
-4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json --ddi <name>.json`.
-   If `<name>.json` is in the same folder as the map, you can omit `--ddi`.
+3. If the map does not record a release, find the DDI that the map was made from.
+4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json`. The command
+   reads `<name>.json` in the folder of the map. If that file is not there, the command
+   gets the DDI from the release that the map records. If the map records no release,
+   add `--ddi <the DDI>`. `--ddi` can also be a tag reference.
 5. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
    The output holds the responses.** Use `-o` to write the output to a file. Without `-o`,
    the command writes it to stdout.
@@ -506,6 +535,97 @@ qretools paths wave1.json -o wave1-paths.html
 
 It reads any DDI-Lifecycle 4.0 JSON with an instrument in it. What it can't read is said
 on stderr as `check` says a finding.
+
+## Next: one step of an interview
+
+`next` tells a program (an interviewer, or a harness that interviews a language model)
+the next step of an interview through an instrument. QREtools decides the routing. The
+program does not evaluate a condition. It calls `next` once for each step:
+
+1. Run `next` with the instrument's DDI and the state (a JSON file, or stdin).
+2. Show the reply to the respondent, or ask the respondent for the input it names.
+3. Add the answer to the state.
+4. Do steps 1 to 3 again until the reply is `end`.
+
+```sh
+qretools next dist/instruments/wave1.json state.json   # or: … | qretools next wave1.json
+qretools next --schema                                 # the JSON Schemas of the state and of the reply
+```
+
+The state holds the inputs by their names in the instrument, and the answers so far. Each
+answer names its DDI Variable by URN, as `responses` does:
+
+```json
+{
+  "inputs": { "self_employed": "1", "last_year": 2009 },
+  "answers": [
+    { "variable": "urn:ddi:us.jhu:instrument-gss_2010.var-wrkstat:4", "value": "1" },
+    { "variable": "urn:ddi:us.jhu:instrument-gss_2010.var-hrs1:4", "value": 40 }
+  ]
+}
+```
+
+- A code is always a string. A number is a JSON number or a string. A missing-value code
+  (such as `"D"`) is a string, and every variable takes its own missing codes.
+- An answer in a roster has a `row`, from 1. An answer outside a roster has no `row`.
+- To go back, remove the answer. The command replays the instrument from the start each
+  time. It ignores an answer to a question that the route does not reach, and no condition
+  reads that answer.
+
+The reply has one of three kinds:
+
+- `ask`: the question to ask. It has the step's URN (`step`), the question's name and URN,
+  the `row` in a roster, the `text` with its fills, the `instructions`, and the `domain`.
+  The domain is `choice` (the codes and labels in the author's order), `select-all` (each
+  option with its own variable and its ticked and unticked codes), `number` (`min`, `max`,
+  `decimals`), `text` (`maxLength`) or `other` (any text). Each variable has its URN, its
+  name and its `missing` codes. If the answer in the state cannot be taken, the reply asks
+  the same question again and `problem` says why.
+- `input`: an input that the route needs and the state does not hold. The reply gives its
+  name, its URN, its domain and its `missing` codes. Send `null` if the value is not known.
+  The command asks for an input only when a condition or a fill on the route needs it.
+- `end`: the end of the interview. `how` is `end`, or `stopped` after a screen-out.
+
+An `ask` and an `end` also have `statements`: the text to show since the last answered
+question. An `input` reply has no statements, so the program shows each statement one
+time. Each reply has `notes`: what the route so far could not follow as the DDI says.
+Each note has a `code` and a `message`. The codes are:
+
+| Code | Meaning |
+|---|---|
+| `ddi-unread` | A part of the DDI that the command cannot read. It is not on the route. |
+| `next-verbatim` | A condition in another language. It is taken as not true. |
+| `next-undecided` | A condition that the command cannot decide. It is taken as not true. |
+| `next-empty-fill` | A fill with no value. The text shows nothing in its place. |
+| `next-unrecorded` | A question that records no variable. The command skips it. |
+| `next-section-order` | A section in random or rotated order. It runs in its written order. |
+| `next-no-count` | A roster count with no value. The roster has no rows. |
+| `next-roster-cap` | A roster with more than 100 rows. It stops at row 100. |
+| `next-loop-skipped` | A loop that the command cannot run. Its questions are never asked. |
+
+A later version can add codes. Read a code that you do not know as information.
+
+The reply schema does not refuse a field that it does not name. Thus a later version can
+add a field, and a program that validates replies against the schema does not fail.
+
+The `missing` codes are all the codes in the bank's `missing.yaml`. Some of them are for
+data processing (such as "Not applicable"), and a respondent does not give them. The
+program chooses which missing codes to offer to the respondent.
+
+How values are read in a condition:
+
+- A missing code of a coded question is that code, so `x in {"2", "R"}` holds for `"R"`.
+- A missing code of a number has no value, so `isnull(x)` holds for it.
+
+If the state cannot belong to the instrument, the command writes nothing on stdout. It
+writes the error on stderr and stops with exit code 1. These are the errors: an unknown
+input or variable, a `row` that is wrong for its variable, an answer given twice, or a
+code sent as a number. Item versions come from git history, so a new build can change the
+URNs. A state from an older build then gives an error.
+
+Limits: a shuffled section and shuffled options run in their written order (the reply
+gives `responseOrder`, so the program can shuffle the options). A roster inside a roster
+is refused. A check that is not `blocking` is not applied.
 
 ## Output
 

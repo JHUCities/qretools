@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressOf, HERE } from "./address.ts";
+import { addressOf, HERE, tagRefOf } from "./address.ts";
 
 describe("a bank's address", () => {
 	it("is local when it starts ./ or ../, as the instrument's own workspace does", () => {
@@ -63,5 +63,28 @@ describe("a bank's address", () => {
 		expect(addressOf("../@v1")).toMatchObject({
 			reason: expect.stringContaining("Write `../`."),
 		});
+	});
+});
+
+describe("a tag reference to an instrument in a release", () => {
+	it("is an address at a tag, then the instrument's name", () => {
+		expect(tagRefOf(" Acme/Ws/sub@v2:gss_2010 ")).toMatchObject({
+			address: { kind: "remote", key: "acme/ws/sub@v2", path: "sub" },
+			name: "gss_2010",
+			text: "Acme/Ws/sub@v2:gss_2010",
+		});
+	});
+
+	it("is nothing else: a file's path, an address with no name, a local one", () => {
+		for (const t of [
+			"dist/instruments/x.json",
+			"C:\\dist\\x.json",
+			"acme/ws@v2",
+			"acme/ws@v2:",
+			"acme/ws@v2:a/b",
+			"acme/ws@v2:x.json",
+			"../@v2:x",
+		])
+			expect(tagRefOf(t)).toBeUndefined();
 	});
 });

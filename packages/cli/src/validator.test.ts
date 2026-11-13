@@ -24,6 +24,7 @@ const io: Io = {
 	},
 	readHistory,
 	ownRepository,
+	readStdin: async () => "",
 };
 
 it("compiles the DDI schema once for two exports", async () => {
