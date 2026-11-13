@@ -912,20 +912,20 @@ describe("qretools responses", () => {
 	}
 
 	/** The CSV view of a dataset `responses` wrote to stdout. */
-	async function csvOf(datasetText: string) {
+	async function csvOf(datasetText: string, ddi: string) {
 		const file = join(
 			await mkdtemp(join(tmpdir(), "qretools-dataset-")),
 			"d.json",
 		);
 		await writeFile(file, datasetText);
-		return run("dataset", "export", file, "--csv");
+		return run("dataset", "export", file, "--csv", "--ddi", ddi);
 	}
 
 	it("reads an export with its map and the DDI beside it, into a dataset of one value per answer", async () => {
 		const { csv, map } = await files();
 		const r = await run("responses", csv, "--map", map);
 		// Sorted by respondent, then variable URN.
-		expect((await csvOf(r.out)).out).toBe(
+		expect((await csvOf(r.out, join(dirname(csv), "t.json"))).out).toBe(
 			[
 				"respondent,variable,row,value",
 				`R_1,${v("modes_b")},,1`,
@@ -995,7 +995,14 @@ describe("qretools responses", () => {
 		expect((await run("responses", csv, "--map", map, "--csv")).err).toMatch(
 			/`--csv` isn't an option of `responses`/,
 		);
-		const refused = await run("dataset", "export", map, "--csv");
+		const refused = await run(
+			"dataset",
+			"export",
+			map,
+			"--csv",
+			"--ddi",
+			join(dirname(csv), "t.json"),
+		);
 		expect(refused).toMatchObject({ code: 1, out: "" });
 		expect(refused.err).toMatch(/\[dataset-unreadable\]/);
 	});
@@ -1036,7 +1043,7 @@ describe("qretools responses", () => {
 			"ResearchData.Published",
 		];
 		const r = await run("responses", data, "--map", beside, ...facts);
-		expect((await csvOf(r.out)).out).toBe(
+		expect((await csvOf(r.out, ddi)).out).toBe(
 			[
 				"respondent,variable,row,value",
 				`7,${v("rent")},,D`,
@@ -1170,7 +1177,15 @@ describe("qretools responses", () => {
 		const { csv, map } = await files();
 		const dataset = join(dirname(csv), "d.json");
 		await writeFile(dataset, (await run("responses", csv, "--map", map)).out);
-		const r = await run("dataset", "export", dataset, "--provenance");
+		const ddi = join(dirname(csv), "t.json");
+		const r = await run(
+			"dataset",
+			"export",
+			dataset,
+			"--provenance",
+			"--ddi",
+			ddi,
+		);
 		expect(r.code).toBe(0);
 		const view = JSON.parse(r.out);
 		const validator = makeValidator(schema);
@@ -1183,9 +1198,9 @@ describe("qretools responses", () => {
 		// The provenance is no dataset, and one view at a time.
 		const file = join(dirname(csv), "p.json");
 		await writeFile(file, r.out);
-		expect((await run("dataset", "export", file, "--csv")).err).toMatch(
-			/holds no values.*\[dataset-unreadable\]/,
-		);
+		expect(
+			(await run("dataset", "export", file, "--csv", "--ddi", ddi)).err,
+		).toMatch(/holds no values.*\[dataset-unreadable\]/);
 		expect(
 			(await run("dataset", "export", dataset, "--csv", "--provenance")).code,
 		).toBe(2);
@@ -1262,112 +1277,156 @@ describe("access levels, through the commands", () => {
 	});
 });
 
-describe("qretools filter", () => {
-	it("keeps a level and the more open ones, names what it removed, lists levels, and writes nothing when refused", async () => {
-		const q = (name: string, rest = "") =>
-			`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
+describe("qretools dataset export at an access level", () => {
+	const q = (name: string, rest = "") =>
+		`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
+	const v = (name: string) => `urn:ddi:org.example:instrument-t.var-${name}:1`;
+	const facts = [
+		"--asked-by",
+		"Interview",
+		"--answered-by",
+		"ResearchData.Published",
+	];
+
+	/** A dataset `responses` writes from a data file, and the DDI it was made from. */
+	async function made(levels: boolean) {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-access-"));
 		const { ddi } = instrumentOf(
 			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n  - ask: b.zip\n",
 			{
 				banks: {
 					b: bankOf({
-						"workspace.yaml":
-							"agency: org.bank\naccess: [public, restricted]\n",
-						"questions/a/tenure.yaml": q("tenure", "access: public\n"),
-						"questions/a/zip.yaml": q("zip", "access: restricted\n"),
+						"workspace.yaml": `agency: org.bank\n${levels ? "access: [public, restricted]\n" : ""}`,
+						"questions/a/tenure.yaml": q(
+							"tenure",
+							levels ? "access: public\n" : "",
+						),
+						"questions/a/zip.yaml": q(
+							"zip",
+							levels ? "access: restricted\n" : "",
+						),
 					}),
 				},
 				agency: "org.example",
 			},
 		);
-		const dir = await mkdtemp(join(tmpdir(), "qretools-filter-"));
 		const file = join(dir, "t.json");
 		await writeFile(file, JSON.stringify(ddi));
-		const v = (name: string) =>
-			`urn:ddi:org.example:instrument-t.var-${name}:1`;
-		const answers = join(dir, "answers.csv");
+		const map = join(dir, "t-ddi-survey.columns.json");
 		await writeFile(
-			answers,
-			`respondent,variable,row,value\nr1,${v("tenure")},,own\nr1,${v("zip")},,21218\n`,
+			map,
+			JSON.stringify({
+				respondent: "ID",
+				columns: [
+					{ column: "TENURE", variable: v("tenure") },
+					{ column: "ZIP", variable: v("zip") },
+				],
+			}),
+		);
+		const data = join(dir, "data.csv");
+		await writeFile(data, "ID,TENURE,ZIP\nR_7,own,21218\n");
+		const dataset = join(dir, "d.json");
+		await writeFile(
+			dataset,
+			(await run("responses", data, "--map", map, ...facts)).out,
+		);
+		return { dir, ddi: file, dataset };
+	}
+
+	it("needs a level where the DDI defines them, keeps that level and the more open ones, and names what it removed", async () => {
+		const { ddi, dataset } = await made(true);
+		const view = (...more: string[]) =>
+			run("dataset", "export", dataset, "--ddi", ddi, ...more);
+
+		const required = await view("--csv", "-o", "kept.csv");
+		expect(required).toMatchObject({ code: 1, out: "", written: {} });
+		expect(required.err).toMatch(
+			/give `--access <level>`.*`public`, `restricted`, most open first.*\[dataset-access-level-required\]/,
 		);
 
-		const r = await run("filter", answers, "--ddi", file, "--access", "public");
-		expect(r.out).toBe(
-			`respondent,variable,row,value\nr1,${v("tenure")},,own\n`,
+		// Below the most closed level: no zip, and the respondent numbered, never named.
+		const open = await view("--csv", "--access", "public");
+		expect(open.out).toBe(
+			`respondent,variable,row,value\n1,${v("tenure")},,own\n`,
 		);
-		expect(r.err).toBe(
-			`${answers}: note: removed \`zip\` (${v("zip")}), at \`restricted\`. [filter-removed]\n`,
+		expect(open.err).toBe(
+			[
+				`${dataset}: note: removed \`zip\` (${v("zip")}), at \`restricted\`. [dataset-access-removed]`,
+				`${dataset}: note: removed \`respondent\` (urn:ddi:org.example:dataset-t.respondent:1), at \`restricted\`. [dataset-access-removed]`,
+				"",
+			].join("\n"),
 		);
-		expect(r.code).toBe(0);
-		expect(
-			(await run("filter", answers, "--ddi", file, "--access", "restricted"))
-				.out,
-		).toMatch(/21218/);
-		// The policy, then each level with how many variables stand at it.
-		expect(await run("filter", "--ddi", file)).toMatchObject({
-			code: 0,
-			out: "urn:ddi:org.bank:access-public-restricted.codes:1\n  public 1\n  restricted 1\n",
-		});
+		expect(open.code).toBe(0);
+		const closed = await view("--csv", "--access", "restricted");
+		expect(closed).toMatchObject({ code: 0, err: "" });
+		expect(closed.out).toMatch(/R_7,.*21218/);
+
+		// The provenance view records the level and what it removed.
+		const provenance = await view("--provenance", "--access", "public");
+		const doc = JSON.parse(provenance.out);
+		const validator = makeValidator(schema);
+		expect(validator.ok && validator.value(doc)).toEqual([]);
+		expect(provenance.out).toContain('"LevelOfInformationClassification"');
+		expect(provenance.out).toContain("removed-by-access");
+		expect(provenance.out).not.toMatch(/R_7|21218|"own"/);
 
 		// Refused: nothing written, and no value said.
-		const unknown = await run(
-			"filter",
-			answers,
-			"--ddi",
-			file,
-			"--access",
-			"secret",
-			"-o",
-			"kept.csv",
-		);
+		const unknown = await view("--csv", "--access", "secret", "-o", "k.csv");
 		expect(unknown).toMatchObject({ code: 1, out: "", written: {} });
 		expect(unknown.err).toMatch(
-			/has no level `secret`.*\[filter-unknown-level\]/,
+			/has no level `secret`.*\[dataset-access-unknown-level\]/,
 		);
-		// A DDI with no levels: `--access` means nothing there, so it's refused.
-		const plain = join(dir, "plain.json");
-		await writeFile(
-			plain,
-			JSON.stringify(
-				instrumentOf("name: p\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n", {
-					banks: {
-						b: bankOf({
-							"workspace.yaml": "agency: org.bank\n",
-							"questions/a/tenure.yaml": q("tenure"),
-						}),
-					},
-					agency: "org.example",
-				}).ddi,
-			),
-		);
-		const none = await run(
-			"filter",
-			answers,
+		expect(unknown.err).not.toMatch(/21218|R_7/);
+	});
+
+	it("reads levels only from the DDI the dataset was made from", async () => {
+		const { ddi, dataset } = await made(true);
+		await writeFile(ddi, `${await readFile(ddi, "utf8")}\n`);
+		const r = await run(
+			"dataset",
+			"export",
+			dataset,
+			"--csv",
 			"--ddi",
-			plain,
+			ddi,
+			"--access",
+			"restricted",
+		);
+		expect(r).toMatchObject({ code: 1, out: "" });
+		expect(r.err).toMatch(/\[dataset-ddi\]/);
+		expect((await run("dataset", "export", dataset, "--csv")).code).toBe(2);
+	});
+
+	it("refuses a level where the DDI defines none, and gives the whole view", async () => {
+		const { ddi, dataset } = await made(false);
+		const whole = await run(
+			"dataset",
+			"export",
+			dataset,
+			"--csv",
+			"--ddi",
+			ddi,
+		);
+		expect(whole).toMatchObject({ code: 0, err: "" });
+		expect(whole.out).toMatch(/R_7,/);
+		const refused = await run(
+			"dataset",
+			"export",
+			dataset,
+			"--csv",
+			"--ddi",
+			ddi,
 			"--access",
 			"public",
 		);
-		expect(none).toMatchObject({ code: 1, out: "" });
-		expect(none.err).toMatch(/\[filter-no-levels\]/);
-		await writeFile(
-			answers,
-			"respondent,variable,row,value\nr1,urn:ddi:org.example:gone:1,,21218\n",
+		expect(refused).toMatchObject({ code: 1, out: "" });
+		expect(refused.err).toMatch(/\[dataset-access-no-levels\]/);
+		// The dataset is never filtered, and `filter` is gone.
+		expect((await run("responses", "x.csv", "--access", "public")).err).toMatch(
+			/`--access` isn't an option of `responses`/,
 		);
-		const gone = await run(
-			"filter",
-			answers,
-			"--ddi",
-			file,
-			"--access",
-			"public",
-		);
-		expect(gone).toMatchObject({ code: 1, out: "" });
-		expect(gone.err).toMatch(/\[filter-unknown-variable\]/);
-		expect(gone.err).not.toMatch(/21218/);
-		expect((await run("filter", answers, "--access", "public")).code).toBe(2);
-		expect((await run("check", ".", "--access", "public")).err).toMatch(
-			/`--access` isn't an option of `check`/,
+		expect((await run("filter", "--ddi", ddi)).err).toMatch(
+			/Unknown command `filter`/,
 		);
 	});
 });

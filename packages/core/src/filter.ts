@@ -27,6 +27,8 @@ export type FilterRefusal =
 	| { readonly kind: "unreadable-levels"; readonly reason: string }
 	/** The DDI holds no policy, so no level means anything. */
 	| { readonly kind: "no-levels" }
+	/** The DDI holds policies, and no level was given: one of their levels is needed. */
+	| { readonly kind: "level-required"; readonly policies: readonly Policy[] }
 	/** A level that one or more of the DDI's policies don't list. */
 	| {
 			readonly kind: "unknown-level";

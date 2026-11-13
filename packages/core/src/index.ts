@@ -46,12 +46,15 @@ export {
 } from "./copy.ts";
 // A dataset as DDI: the answers in a DataSet, and its views.
 export {
+	type Access,
+	accessOf,
 	csvView,
 	DATASET_NAME,
 	type Dataset,
 	datasetOf,
 	provenanceView,
 	readDataset,
+	recordedDdiOf,
 } from "./dataset.ts";
 export type {
 	Collision,
