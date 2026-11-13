@@ -6,6 +6,11 @@
 export type { Column, ColumnMap } from "./columns.ts";
 export type { Finding as QsfFinding, QsfCode } from "./findings.ts";
 export {
+	type FromExportCode,
+	type FromExportFinding,
+	qsfMapFromExport,
+} from "./fromexport.ts";
+export {
 	type Qsf,
 	type QsfObject,
 	type QsfResult,

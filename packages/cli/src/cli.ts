@@ -81,6 +81,7 @@ import {
 	type ColumnMap,
 	columnMapOf,
 	exportMap,
+	qsfMapFromExport,
 	qsfMapOf,
 	qsfOf,
 	qsfRefusalReason,
@@ -135,6 +136,12 @@ const USAGE = `Usage:
                                     Write the QSF column map of an instrument's DDI (as \`build\` writes it), from
                                     the response columns of its Qualtrics survey to its DDI variables, to
                                     dir/<name>-ddi-qsf.columns.json. Not written if Qualtrics can't run the survey
+  qretools qsf-map --export <export.csv> --ddi <name.json> -o <dir>
+                                    The same map, for a fielded survey that may not be the one the DDI makes
+                                    (its release unknown, or edited in Qualtrics): each question of a response
+                                    export matched to one of the DDI's by its ImportId, export tag or text, each
+                                    guess a finding. Reads the export's header rows and qretools_* fields, never
+                                    an answer. Not written if an answer column matches no question
   qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [--ddi file] [-o file]
                                     Read a Qualtrics response export (CSV, export values, multi-value
                                     fields split into columns) into long CSV, one line per value:
@@ -173,7 +180,8 @@ moves after that, check warns until the next export records it again.
 --agency  the instrument's DDI agency, in place of its workspace's (workspace.yaml).
           Needed for a file outside a workspace's instruments/.
 --ddi     the DDI a column map was made from, in place of <name>.json beside the map;
-          for filter, the DDI the answers refer to.
+          for filter, the DDI the answers refer to; for qsf-map --export, the DDI to map to.
+--export  for qsf-map, the Qualtrics response export to make the map from.
 --access  for filter, the access level to keep, with every more open one.
 --qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
           if any part of it can't work in Qualtrics as the DDI says.`;
@@ -222,26 +230,29 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	const stray =
 		command !== "responses" && args.values.map !== undefined
 			? "--map"
-			: command !== "responses" &&
-					command !== "filter" &&
-					args.values.ddi !== undefined
-				? "--ddi"
-				: command !== "filter" && args.values.access !== undefined
-					? "--access"
-					: args.values.bank !== undefined
-						? "--bank"
-						: args.values.agency !== undefined
-							? "--agency"
-							: args.values.qsf === true
-								? "--qsf"
-								: command !== "build" &&
-										args.values["tag-message"] !== undefined
-									? "--tag-message"
-									: command === "check"
-										? args.values.output !== undefined && "--output"
-										: command !== "codebook" &&
-											args.values.strict === true &&
-											"--strict";
+			: command !== "qsf-map" && args.values.export !== undefined
+				? "--export"
+				: command !== "responses" &&
+						command !== "filter" &&
+						command !== "qsf-map" &&
+						args.values.ddi !== undefined
+					? "--ddi"
+					: command !== "filter" && args.values.access !== undefined
+						? "--access"
+						: args.values.bank !== undefined
+							? "--bank"
+							: args.values.agency !== undefined
+								? "--agency"
+								: args.values.qsf === true
+									? "--qsf"
+									: command !== "build" &&
+											args.values["tag-message"] !== undefined
+										? "--tag-message"
+										: command === "check"
+											? args.values.output !== undefined && "--output"
+											: command !== "codebook" &&
+												args.values.strict === true &&
+												"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -283,11 +294,19 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	}
 	if (command === "qsf-map") {
 		// A file, always, and a folder: the map's name says its kind, so it has no stdout form.
-		if (args.positionals[1] === undefined || args.values.output === undefined) {
+		// The DDI is the positional, or `--ddi` with `--export`: one or the other.
+		const fromExport = args.values.export !== undefined;
+		const ddi = fromExport ? args.values.ddi : args.positionals[1];
+		if (
+			ddi === undefined ||
+			args.values.output === undefined ||
+			(fromExport && args.positionals[1] !== undefined) ||
+			(!fromExport && args.values.ddi !== undefined)
+		) {
 			io.err(`${USAGE}\n`);
 			return USAGE_ERROR;
 		}
-		return writeQsfMap(dir, args.values.output, io);
+		return writeQsfMap(ddi, args.values.export, args.values.output, io);
 	}
 	if (command === "paths") {
 		// A file, always: there's no workspace default to fall back on.
@@ -435,18 +454,27 @@ function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
  * The QSF column map of an instrument's DDI file (as `build` writes it), to
  * `<out>/<name>-ddi-qsf.columns.json`: made as the survey is, by `qsfMapOf`, with the
  * file's digest, so `responses` reads an export only with that DDI. Written with warnings
- * for columns it can't name; not written when Qualtrics can't run the survey.
+ * for columns it can't name; not written when Qualtrics can't run the survey. With an
+ * export (`--export`), each of its questions is matched to the DDI's survey's
+ * (`qsfMapFromExport`), each guess said; not written when an answer column matches none.
  */
-async function writeQsfMap(file: string, out: string, io: Io): Promise<number> {
-	let text: string;
-	try {
-		text = await readFile(file, "utf8");
-	} catch (e) {
-		io.err(
-			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
-		);
-		return USAGE_ERROR;
-	}
+async function writeQsfMap(
+	file: string,
+	exportFile: string | undefined,
+	out: string,
+	io: Io,
+): Promise<number> {
+	const texts: string[] = [];
+	for (const f of exportFile === undefined ? [file] : [file, exportFile])
+		try {
+			texts.push(await readFile(f, "utf8"));
+		} catch (e) {
+			io.err(
+				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return USAGE_ERROR;
+		}
+	const [text = "", csv] = texts;
 	const json = jsonOf(text);
 	// The trust boundary: DDI the official schema accepts, before the package reads it.
 	const invalid = json.ok ? await validate(json.value as DdiDocument) : [];
@@ -460,18 +488,28 @@ async function writeQsfMap(file: string, out: string, io: Io): Promise<number> {
 		);
 		return PROBLEMS;
 	}
-	const made = qsfMapOf(json.value as DdiDocument, {
-		digest: digestOf(text),
-		version: pkg.version,
-	});
-	for (const f of made.findings.filter(
-		(f) => f.code === "qsf-unmapped" || f.severity === "error",
-	))
-		io.err(
-			`${file}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]\n`,
-		);
+	const options = { digest: digestOf(text), version: pkg.version };
+	const made =
+		csv === undefined
+			? qsfMapOf(json.value as DdiDocument, options)
+			: qsfMapFromExport(csv, json.value as DdiDocument, options);
+	for (const f of "survey" in made ? made.survey : made.findings)
+		if (f.code === "qsf-unmapped" || f.severity === "error")
+			io.err(
+				`${file}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]\n`,
+			);
+	// Findings place a column by its name and a response by its line, never by a value.
+	if ("survey" in made)
+		for (const f of made.findings)
+			io.err(
+				`${exportFile}${f.line === undefined ? "" : `:${f.line}`}: ${LEVEL[f.severity]}: ${f.column === undefined ? "" : `column \`${f.column}\`: `}${f.message}${f.count > 1 ? ` (${f.count} rows)` : ""} [${f.code}]\n`,
+			);
 	if (made.kind === "refused") {
-		io.err(`${file}: error: Not written: ${qsfRefusalReason(made.errors)}\n`);
+		io.err(
+			made.errors !== undefined
+				? `${file}: error: Not written: ${qsfRefusalReason(made.errors)}\n`
+				: `${exportFile}: error: Not written: the map can't name every answer column.\n`,
+		);
 		return PROBLEMS;
 	}
 	await io.writeFile(
@@ -825,6 +863,7 @@ function parse(argv: readonly string[]) {
 			qsf: { type: "boolean" },
 			map: { type: "string" },
 			ddi: { type: "string" },
+			export: { type: "string" },
 			access: { type: "string" },
 			"tag-message": { type: "string" },
 			help: { type: "boolean", short: "h" },

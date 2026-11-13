@@ -23,6 +23,7 @@ import {
 import { readWorkspace } from "@qretools/core/node";
 import { qsfOf } from "@qretools/qualtrics";
 import { describe, expect, it } from "vitest";
+import { exportOfSurvey } from "../../qualtrics/src/testing.ts";
 import { findingLine, type Io, lineCol, main } from "./cli.ts";
 import { ownRepository, readHistory } from "./history.ts";
 import { readTagged } from "./remote.ts";
@@ -989,6 +990,74 @@ describe("qretools qsf-map", () => {
 		);
 		expect((await run("qsf-map", file)).code).toBe(2);
 		expect((await run("qsf-map", "-o", "maps")).code).toBe(2);
+	});
+
+	it("makes the same map from a Qualtrics export and the DDI, byte for byte, saying no answer", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-qsf-map-"));
+		const file = join(dir, "households.json");
+		const ddi = (
+			await run(
+				"instrument",
+				"export",
+				here("../../core/fixtures/households/instruments/households.yaml"),
+			)
+		).out;
+		await writeFile(file, ddi);
+		const made = qsfOf(JSON.parse(ddi), {
+			name: "",
+			created: "",
+			digest: `sha256:${createHash("sha256").update(ddi).digest("hex")}`,
+			version: "0",
+		});
+		if (made.kind !== "made") throw new Error("the survey isn't made");
+		const csv = join(dir, "export.csv");
+		await writeFile(csv, exportOfSurvey(made));
+		const fromDdi = await run("qsf-map", file, "-o", "maps");
+		const fromExport = await run(
+			"qsf-map",
+			"--export",
+			csv,
+			"--ddi",
+			file,
+			"-o",
+			"maps",
+		);
+		expect(fromExport).toMatchObject({ code: 0, out: "" });
+		expect(fromExport.written).toEqual(fromDdi.written);
+		expect(fromExport.err).not.toContain("SECRET");
+
+		// An answer column no question of the DDI has: nothing written, the column named.
+		await writeFile(
+			csv,
+			exportOfSurvey(made, {
+				extra: [["Q99", "Another?", { ImportId: "QID99" }]],
+			}),
+		);
+		const refused = await run(
+			"qsf-map",
+			"--export",
+			csv,
+			"--ddi",
+			file,
+			"-o",
+			"maps",
+		);
+		expect(refused).toMatchObject({ code: 1, written: {} });
+		expect(refused.err).toMatch(
+			/export\.csv: error: column `Q99`: No question of the DDI matches.*\[qsf-map-unmatched\]/,
+		);
+		expect(refused.err).not.toContain("SECRET");
+
+		// One DDI: by `--ddi` with `--export`, else as the positional.
+		expect((await run("qsf-map", "--export", csv, "-o", "m")).code).toBe(2);
+		expect(
+			(await run("qsf-map", file, "--export", csv, "--ddi", file, "-o", "m"))
+				.code,
+		).toBe(2);
+		expect((await run("qsf-map", file, "--ddi", file, "-o", "m")).code).toBe(2);
+		expect((await run("check", "--export", csv)).err).toMatch(
+			/`--export` isn't an option of `check`/,
+		);
 	});
 });
 

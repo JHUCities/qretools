@@ -20,6 +20,7 @@ qretools codebook path/to/workspace -o codebook.html  # its questions' codebook,
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 qretools qsf-map dist/instruments/wave1.json -o maps  # the QSF column map of an instrument's survey
+qretools qsf-map --export export.csv --ddi wave1.json -o maps  # the same, from a fielded survey's export
 qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/instruments/wave1.json  # a Qualtrics export, by DDI variable
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
@@ -142,6 +143,44 @@ no map, and it shows each error. `-o` is necessary.
 The map records the version of qretools that ran `qsf-map`. If this is not the version that
 built the survey, `responses` gives a note. To prevent the note, use the same version for
 the two commands.
+
+### Make the map from an export
+
+Use this procedure if you do not know the release that made the survey, or if the survey
+did not come from a release. You need a response export of the survey (see "Export from
+Qualtrics") and a DDI of the instrument.
+
+1. Run `qretools qsf-map --export <export.csv> --ddi <name.json> -o <dir>`. The command
+   writes `<dir>/<name>-ddi-qsf.columns.json`.
+2. Read each `qsf-map-matched` finding. Each finding tells how the command matched a
+   question of the export to a question of the DDI: by its export tag (a note, or a
+   warning if the text is different), by its question text (a warning), or by its place
+   among questions with the same text (a warning). If a match is wrong, correct the map
+   by hand.
+3. Read each `qsf-map-absent` warning. The export has no column for the item that the
+   warning names, so the map does not include it.
+4. Commit the map in `maps/`.
+
+The command makes the map that `qsf-map <name.json>` makes. Then it changes the ImportId
+of each question to the ImportId in row 3 of the export. A question that has the same
+QID, and the same export tag or text, needs no finding. Thus, for the survey that the DDI
+makes, the two commands write the same bytes.
+
+A match needs the same kind of question (one choice, select all, or typed), the same
+options of a select-all question, and the same number of rounds of a loop. The command
+does not compare the codes of a single-choice question: the header rows do not show them.
+
+The command reads only the three header rows and the `qretools_*` fields. It does not
+show an answer. If a column of an answer matches no question of the DDI, the command
+writes no map, and it names each such column (`qsf-map-unmatched`). Each column of a
+question is an answer column, for example an "other, specify" box, but not its display
+order or its page timing. The Qualtrics metadata is not an answer.
+
+The map records the digest of the DDI that you give. If the `qretools_instrument` or
+`qretools_ddi` field of a response names a different instrument or DDI, or if the export
+has no such field, the command gives a warning (`qsf-map-provenance`) and writes the map.
+`responses` does not read that export with the map, because it cannot match the export to
+the DDI.
 
 ## Export from Qualtrics
 
