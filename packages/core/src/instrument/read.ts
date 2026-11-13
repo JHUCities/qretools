@@ -92,6 +92,8 @@ export type Source =
 			readonly urn: string;
 			readonly variable: string;
 			readonly domain?: Domain;
+			/** The codes it may hold in place of a value (its MissingValuesReference's). */
+			readonly missing?: readonly Choice[];
 	  }
 	/** `urn` is the ComputationItem's. */
 	| {
@@ -156,7 +158,14 @@ export type Step =
 				/** The Variable's URN. */
 				readonly urn: string;
 				readonly code?: string;
+				/** For a select-all option: the values that are a tick and none. */
+				readonly ticked?: string;
+				readonly unticked?: string;
+				/** The codes it may hold in place of an answer (its MissingValuesReference's), in order. */
+				readonly missing: readonly Choice[];
 			}[];
+			/** Its question's interviewer instructions, each with its fills piped in. */
+			readonly instructions: readonly (readonly Part[])[];
 			/** The question's text with its fills piped in. */
 			readonly text: readonly Part[];
 			/** Its `ResponseSequence.ItemSequenceType` (`Random`, `Rotate`), verbatim. */
@@ -269,6 +278,12 @@ export function readInstruments(
 	const ofType = (type: string) =>
 		items.filter((it) => it.type === type && it.owner === undefined);
 
+	/** A list's codes and their words. */
+	const choicesOf = (list: unknown): Choice[] =>
+		asList(deref(index, list)?.item.Code).map((c) => ({
+			code: str(asObj(c.Value)?.StringValue) ?? "",
+			label: said(deref(index, c.CategoryReference)?.item.Label) ?? "",
+		}));
 	const domainOf = (d: JsonLike): Domain | undefined => {
 		const type = str(d?.$type);
 		if (type === "CodeDomain")
@@ -276,12 +291,7 @@ export function readInstruments(
 				kind: "choice",
 				// A question's own outputs say whether it is select-all (below); an input never is.
 				many: false,
-				choices: asList(deref(index, d?.CodeListReference)?.item.Code).map(
-					(c) => ({
-						code: str(asObj(c.Value)?.StringValue) ?? "",
-						label: said(deref(index, c.CategoryReference)?.item.Label) ?? "",
-					}),
-				),
+				choices: choicesOf(d?.CodeListReference),
 			};
 		if (type === "NumericDomain") {
 			const range = asList(d?.NumberRange)[0];
@@ -347,6 +357,9 @@ export function readInstruments(
 				]);
 		}
 	const ticks = tickCodes(index, items);
+	/** Each variable's missing codes, by its URN: codes only, as the codebook reads them. */
+	// shortcut: missing values given as numeric or text ranges aren't read, only codes.
+	const missingOf = new Map<string, Choice[]>();
 
 	// What each parameter stands for, by key: the definitions only.
 	const params = new Map<string, Source>();
@@ -358,6 +371,15 @@ export function readInstruments(
 		const variable = said(v.item.VariableName);
 		const key = keyOf(out);
 		if (key === "" || variable === undefined) continue;
+		missingOf.set(
+			v.urn,
+			asList(
+				deref(
+					index,
+					asObj(v.item.VariableRepresentation)?.MissingValuesReference,
+				)?.item.MissingCodeRepresentation,
+			).flatMap((m) => choicesOf(m.CodeListReference)),
+		);
 		const reference = asList(v.item.QuestionReference)[0];
 		const representation = asObj(
 			asObj(v.item.VariableRepresentation)?.ValueRepresentation,
@@ -374,6 +396,7 @@ export function readInstruments(
 				urn: v.urn,
 				variable,
 				...(domain !== undefined && { domain }),
+				missing: missingOf.get(v.urn) ?? [],
 			};
 			params.set(key, input);
 			if (latestOf(index, v) === v) inputs.push([key, input]);
@@ -598,7 +621,7 @@ export function readInstruments(
 			return [];
 		}
 		const fills = new Map<string, Part>();
-		const records: { variable: string; urn: string; code?: string }[] = [];
+		const records: Extract<Step, { kind: "ask" }>["records"][number][] = [];
 		for (const b of asList(c.Binding)) {
 			const source = keyOf(b.SourceParameterReference);
 			const target = keyOf(b.TargetParameterReference);
@@ -609,6 +632,11 @@ export function readInstruments(
 					variable: recorded.variable,
 					urn: recorded.urn,
 					...(code !== undefined && { code }),
+					...(recorded.option !== undefined && {
+						ticked: recorded.option.ticked,
+						unticked: recorded.option.unticked,
+					}),
+					missing: missingOf.get(recorded.urn) ?? [],
 				});
 				continue;
 			}
@@ -627,6 +655,14 @@ export function readInstruments(
 				question,
 				records,
 				text: textOf(asked?.item.QuestionText, (k) => fills.get(k), id),
+				instructions: asList(asked?.item.InterviewerInstructionAttachment)
+					.flatMap((a) => asReferences(a.InterviewerInstructionReference))
+					.flatMap((r) => {
+						const i = deref(index, r);
+						return i === undefined
+							? []
+							: [textOf(i.item.InstructionText, (k) => fills.get(k), id)];
+					}),
 				...(order !== undefined && { responseOrder: order }),
 				checks,
 			},

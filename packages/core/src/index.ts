@@ -141,6 +141,14 @@ export {
 	instrumentOf,
 	levelsAsked,
 } from "./instrument/instrument.ts";
+export {
+	Next,
+	NextState,
+	nextSchemas,
+	nextStateOf,
+	nextStep,
+	type ParsedState,
+} from "./instrument/next.ts";
 export type { Unread } from "./instrument/parse.ts";
 export {
 	type ByInput,
