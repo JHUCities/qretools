@@ -11,6 +11,7 @@ import {
 	readInstruments,
 	type Step,
 } from "../instrument/read.ts";
+import { recordsOf } from "../instrument/records.ts";
 import { readWorkspace } from "./index.ts";
 
 const root = fileURLToPath(
@@ -410,5 +411,67 @@ describe("a note's code", () => {
 		],
 	])("is %s", (code, step) => {
 		expect(codesOf(step)).toEqual([code]);
+	});
+});
+
+describe("the roster each variable is recorded in", () => {
+	/** Each variable's name and its roster ("" outside one). */
+	const rosters = (flow: typeof households) => {
+		const r = recordsOf(flow.instrument.flow);
+		if (!r.ok) throw new Error(r.error);
+		return Object.fromEntries(
+			[...r.value.values()].map((x) => [x.record.variable, x.roster ?? ""]),
+		);
+	};
+	it("names each roster of the households instrument, and none for the rest", () => {
+		expect(rosters(households)).toEqual({
+			consent: "",
+			size: "",
+			age: "members",
+			works: "members",
+			tenure: "",
+			rent: "",
+			utilities: "",
+			vehicle: "vehicles",
+			more_vehicles: "vehicles",
+			comments: "",
+		});
+	});
+	it("puts a question asked in an `each` in its roster", () => {
+		const flow = flowOf(`name: later
+uses:
+  hh: ../
+flow:
+  - ask: hh.size
+  - roster: members
+    count: hh.size
+    flow:
+      - ask: hh.age
+  - each: members
+    flow:
+      - ask: hh.works
+`);
+		expect(rosters(flow)).toMatchObject({ age: "members", works: "members" });
+	});
+	it("refuses a roster inside a roster", () => {
+		const flow = flowOf(`name: nested
+uses:
+  hh: ../
+flow:
+  - ask: hh.size
+  - roster: members
+    count: hh.size
+    flow:
+      - roster: vehicles
+        more: hh.more_vehicles = "1"
+        max: 4
+        flow:
+          - ask: hh.vehicle
+          - ask: hh.more_vehicles
+`);
+		expect(recordsOf(flow.instrument.flow)).toEqual({
+			ok: false,
+			error: "A roster inside a roster (vehicles) isn't supported yet.",
+		});
 	});
 });

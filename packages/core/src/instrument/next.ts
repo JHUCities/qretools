@@ -21,6 +21,7 @@ import type {
 	Source,
 	Step,
 } from "./read.ts";
+import { type Ask, type Recorded, recordsOf } from "./records.ts";
 
 const Code = z.object({ code: z.string(), label: z.string() });
 
@@ -176,8 +177,6 @@ export const nextSchemas = () => ({
 	reply: z.toJSONSchema(Next, { io: "input" }),
 });
 
-type Ask = Extract<Step, { kind: "ask" }>;
-type Recorded = Ask["records"][number];
 type Input = Extract<Source, { kind: "input" }>;
 /** A value held: a code or text, a number, or `null` for none. */
 type Held = string | number | boolean | null;
@@ -187,45 +186,6 @@ const MAX_ROWS = 100;
 
 const keyOf = (urn: string, row: number | undefined) =>
 	row === undefined ? urn : `${urn}#${row}`;
-
-/** Each variable the flow records, with its ask and whether a roster records it; or why it can't be run. */
-function recordsOf(
-	flow: readonly Step[],
-): Result<
-	Map<string, { ask: Ask; record: Recorded; inRoster: boolean }>,
-	string
-> {
-	const out = new Map<
-		string,
-		{ ask: Ask; record: Recorded; inRoster: boolean }
-	>();
-	const go = (steps: readonly Step[], depth: number): string | undefined => {
-		for (const s of steps) {
-			let problem: string | undefined;
-			if (s.kind === "ask")
-				for (const record of s.records)
-					out.set(record.urn, { ask: s, record, inRoster: depth > 0 });
-			else if (s.kind === "if")
-				problem =
-					s.branches.map((b) => go(b.then, depth)).find((p) => p) ??
-					go(s.else ?? [], depth);
-			else if (s.kind === "stop")
-				problem = go(s.say, depth) ?? go(s.else, depth);
-			else if (s.kind === "section" || s.kind === "loop")
-				problem = go(s.flow, depth);
-			else if (s.kind === "count" || s.kind === "repeat") {
-				// shortcut: an answer names one row, so a roster inside a roster can't be keyed; key by every row if a survey needs one.
-				if (depth > 0)
-					return `A roster inside a roster (${s.name ?? s.id}) can't be run yet.`;
-				problem = go(s.flow, depth + 1);
-			}
-			if (problem !== undefined) return problem;
-		}
-		return undefined;
-	};
-	const problem = go(flow, 0);
-	return problem === undefined ? ok(out) : err(problem);
-}
 
 /** An input's value, from what the caller sent, as its domain reads it; or why it can't be. */
 function inputValue(
@@ -312,9 +272,9 @@ export function nextStep(
 			return err(
 				`No question in this instrument records the variable ${a.variable}.`,
 			);
-		if (r.inRoster !== (a.row !== undefined))
+		if ((r.roster !== undefined) !== (a.row !== undefined))
 			return err(
-				r.inRoster
+				r.roster !== undefined
 					? `Variable \`${r.record.variable}\` is recorded in a roster: its answers need a \`row\`.`
 					: `Variable \`${r.record.variable}\` isn't recorded in a roster: its answers have no \`row\`.`,
 			);
