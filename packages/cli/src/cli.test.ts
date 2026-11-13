@@ -7,6 +7,7 @@ import {
 	mkdtemp,
 	readFile,
 	realpath,
+	rm,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -458,6 +459,7 @@ describe("qretools build", () => {
 					"{}",
 			);
 			expect(map).toEqual({
+				source: "qsf",
 				qretools: expect.any(String),
 				instrument: "urn:ddi:org.example:instrument-x:2",
 				ddi: `sha256:${createHash("sha256").update(json).digest("hex")}`,
@@ -843,18 +845,18 @@ describe("qretools responses", () => {
 	const q = (name: string, rest: string) =>
 		`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
 	const bank = bankOf({
-		"workspace.yaml": "agency: org.bank\n",
+		"workspace.yaml": "agency: org.bank\naccess: [public, secret]\n",
 		"missing.yaml": 'labels:\n  "D": Don\'t know\n',
 		"scales/yesno01.yaml": 'labels:\n  "0": No\n  "1": Yes\n',
 		"questions/a/tenure.yaml": q(
 			"tenure",
-			'responses:\n  "1": Own\n  "2": Rent\n',
+			'access: public\nresponses:\n  "1": Own\n  "2": Rent\n',
 		),
 		"questions/a/modes.yaml": q(
 			"modes",
 			'select: many\nresponses:\n  "b": Bus\n  "9": None\n',
 		),
-		"questions/a/rent.yaml": q("rent", "number: {}\n"),
+		"questions/a/rent.yaml": q("rent", "access: secret\nnumber: {}\n"),
 	});
 	const v = (name: string) => `urn:ddi:org.example:instrument-t.var-${name}:1`;
 	const id = (o: object) => `"${JSON.stringify(o).replaceAll('"', '""')}"`;
@@ -952,6 +954,7 @@ describe("qretools responses", () => {
 			"ID,TENURE,RENT,OTHER\n7,2,-98,x\n8,-100,-100,y\n9,5,1200,z\n",
 		);
 		const json = JSON.stringify({
+			source: "survey",
 			ddi: digest,
 			respondent: "ID",
 			values: { "-98": "D", "-100": null },
@@ -995,7 +998,7 @@ describe("qretools responses", () => {
 			(await run("responses", data, "--map", apart, "--ddi", ddi)).err,
 		).toMatch(/isn't the DDI the map was made from.*\[responses-provenance\]/);
 
-		// Each kind of map is read only under its own name.
+		// A map's `source` says its kind; a name that says another is refused, as is no `source`.
 		await writeFile(join(dir, "t-ddi-qsf.columns.json"), json);
 		expect(
 			(
@@ -1006,8 +1009,217 @@ describe("qretools responses", () => {
 					join(dir, "t-ddi-qsf.columns.json"),
 				)
 			).err,
-		).toMatch(/isn't a QSF column map/);
+		).toMatch(
+			/its name says the source `qsf`, but its `source` field says `survey`/,
+		);
+		await writeFile(
+			beside,
+			JSON.stringify({ ...JSON.parse(json), source: undefined }),
+		);
+		expect((await run("responses", data, "--map", beside)).err).toMatch(
+			/has no `source` field.*Rebuild it/,
+		);
 		expect((await run("responses", data, "--map", ddi)).code).toBe(2);
+	});
+
+	describe("and the provenance of what it read", () => {
+		/** A run folder: the export as source.csv, its map, a copy of the DDI, and what `responses` wrote. */
+		async function folder(rows: readonly string[]) {
+			const { csv, map } = await files();
+			const dir = join(dirname(csv), "wave1-tests");
+			await mkdir(dir);
+			const text = await readFile(map, "utf8");
+			const digest = JSON.parse(text).ddi as string;
+			const stamp = `urn:ddi:org.example:instrument-t:1,${digest},9`;
+			const source = [
+				"StartDate,EndDate,Status,DistributionChannel,ResponseId,qretools_instrument,qretools_ddi,qretools_version,tenure,rent",
+				"Start Date,End Date,Response Type,Distribution Channel,Response ID,qretools_instrument,qretools_ddi,qretools_version,tenure?,rent?",
+				[
+					id({ ImportId: "startDate", timeZone: "Z" }),
+					id({ ImportId: "endDate", timeZone: "Z" }),
+					id({ ImportId: "status" }),
+					id({ ImportId: "distributionChannel" }),
+					id({ ImportId: "_recordId" }),
+					id({ ImportId: "qretools_instrument" }),
+					id({ ImportId: "qretools_ddi" }),
+					id({ ImportId: "qretools_version" }),
+					id({ ImportId: "QID1" }),
+					id({ ImportId: "QID3_TEXT" }),
+				].join(","),
+				...rows.map((r) => r.replace("STAMP", stamp)),
+				"",
+			].join("\r\n");
+			await writeFile(join(dir, "source.csv"), source);
+			await writeFile(join(dir, "t-ddi-qsf.columns.json"), text);
+			await writeFile(
+				join(dir, "ddi.json"),
+				await readFile(join(dirname(csv), "t.json"), "utf8"),
+			);
+			const read = await run(
+				"responses",
+				join(dir, "source.csv"),
+				"--map",
+				join(dir, "t-ddi-qsf.columns.json"),
+				"--ddi",
+				join(dir, "ddi.json"),
+			);
+			await writeFile(join(dir, "answers.csv"), read.out);
+			return dir;
+		}
+		const TESTS = [
+			"2026-11-12 23:15:41,2026-11-12 23:15:50,2,test,R_1,STAMP,2,1200",
+			"2026-11-12 23:14:02,2026-11-12 23:16:02,2,test,R_2,STAMP,1,D",
+		];
+
+		it("writes it from the folder alone, checks the ingest by reading again, and never changes it", async () => {
+			const dir = await folder(TESTS);
+			const r = await run("provenance", dir);
+			expect(r.err).toBe("");
+			expect(r.code).toBe(0);
+			const text = r.written[join(dir, "provenance.json")] ?? "";
+			const doc = JSON.parse(text);
+			expect(Object.values(doc.DataCollection)[0] as object).toMatchObject({
+				CollectionEvent: [
+					{
+						DataCollectionDate: {
+							StartDate: { DateTime: "2026-11-12T23:14:02Z" },
+							EndDate: { DateTime: "2026-11-12T23:16:02Z" },
+						},
+						ModeOfCollection: [
+							{ TypeOfModeOfCollection: { StringValue: "Simulation" } },
+						],
+					},
+				],
+			});
+			// No answer and no respondent: it can be published when the folder can't.
+			expect(text).not.toMatch(/R_1|R_2|1200/);
+			const digest = createHash("sha256")
+				.update(await readFile(join(dir, "answers.csv")))
+				.digest("hex");
+			expect(text).toContain(digest);
+
+			// Written again, it's the same; a provenance.json that differs is never replaced.
+			await writeFile(join(dir, "provenance.json"), text);
+			expect(await run("provenance", dir)).toMatchObject({
+				code: 0,
+				written: {},
+			});
+			await writeFile(join(dir, "provenance.json"), `${text} `);
+			const again = await run("provenance", dir);
+			expect(again).toMatchObject({ code: 1, written: {} });
+			expect(again.err).toMatch(/holds another provenance/);
+			expect(await readFile(join(dir, "provenance.json"), "utf8")).toBe(
+				`${text} `,
+			);
+		});
+
+		it("checks an ingest filtered at run.json's access level, by filtering again", async () => {
+			const dir = await folder(TESTS);
+			await writeFile(join(dir, "run.json"), '{"access":"public"}');
+			// answers.csv still holds rent, which is secret.
+			expect((await run("provenance", dir)).err).toMatch(
+				/and filtering at `public` gives, byte for byte/,
+			);
+			const filtered = await run(
+				"filter",
+				join(dir, "answers.csv"),
+				"--ddi",
+				join(dir, "ddi.json"),
+				"--access",
+				"public",
+			);
+			await writeFile(join(dir, "answers.csv"), filtered.out);
+			const r = await run("provenance", dir);
+			expect(r.err).toBe("");
+			const doc = JSON.parse(r.written[join(dir, "provenance.json")] ?? "");
+			expect(Object.keys(doc.VariableGroup)).toContain(
+				"org.example:group-wave1-tests.removed-by-access:1",
+			);
+			expect(JSON.stringify(doc.InformationClassification)).toContain(
+				'"public"',
+			);
+			await writeFile(join(dir, "run.json"), '{"access":5}');
+			expect((await run("provenance", dir)).err).toMatch(
+				/run\.json: error: `access`/,
+			);
+		});
+
+		it("refuses a source with no map, and a map with no source", async () => {
+			const dir = await folder(TESTS);
+			await rm(join(dir, "t-ddi-qsf.columns.json"));
+			expect((await run("provenance", dir)).err).toMatch(
+				/source\.csv: error: the folder has no column map/,
+			);
+			const other = await folder(TESTS);
+			await rm(join(other, "source.csv"));
+			expect((await run("provenance", other)).err).toMatch(
+				/columns\.json: error: the folder has no source\.csv/,
+			);
+		});
+
+		it("refuses answers that aren't what the source gives, and a folder that disagrees with itself", async () => {
+			const dir = await folder(TESTS);
+			const answers = await readFile(join(dir, "answers.csv"), "utf8");
+			await writeFile(
+				join(dir, "answers.csv"),
+				answers.split("\n").slice(0, -2).join("\n").concat("\n"),
+			);
+			const r = await run("provenance", dir);
+			expect(r.code).toBe(1);
+			expect(r.err).toMatch(/byte for byte\. \[provenance-ingest\]/);
+			expect(r.err).not.toMatch(/R_1|1200/);
+			await writeFile(join(dir, "answers.csv"), answers);
+			await writeFile(join(dir, "run.json"), '{"start":"2026-11-12"}');
+			expect((await run("provenance", dir)).err).toMatch(
+				/run\.json: error: `start`: `start` is given by the folder/,
+			);
+			await writeFile(join(dir, "run.json"), '{"respondent":"synthetic"}');
+			expect((await run("provenance", dir)).err).toMatch(
+				/Only a synthetic run/,
+			);
+		});
+
+		it("refuses an ingest whose source it can't read cleanly again, or that mixes kinds of respondent", async () => {
+			const bad = await folder([
+				"2026-11-12 23:15:41,2026-11-12 23:15:50,2,test,R_1,STAMP,3,1200",
+			]);
+			expect((await run("provenance", bad)).err).toMatch(
+				/finds errors.*\[provenance-ingest\]/,
+			);
+			const mixed = await folder([
+				TESTS[0] ?? "",
+				"2026-11-12 23:14:02,2026-11-12 23:16:02,0,anonymous,R_2,STAMP,1,D",
+			]);
+			expect((await run("provenance", mixed)).err).toMatch(
+				/differ in `status`/,
+			);
+		});
+
+		it("writes a synthetic run's, from run.json", async () => {
+			const dir = await folder(TESTS);
+			await rm(join(dir, "source.csv"));
+			await rm(join(dir, "t-ddi-qsf.columns.json"));
+			await writeFile(join(dir, "config.yaml"), "model: example\n");
+			await writeFile(join(dir, ".DS_Store"), "x");
+			await writeFile(
+				join(dir, "run.json"),
+				JSON.stringify({
+					respondent: "synthetic",
+					runtime: { name: "example-model", version: "1" },
+					reported: { seed: "7" },
+				}),
+			);
+			const r = await run("provenance", dir, "-o", join(dir, "p.json"));
+			expect(r.err).toBe("");
+			const text = r.written[join(dir, "p.json")] ?? "";
+			expect(text).toContain('"OtherValue": "synthetic"');
+			expect(text).toContain("config.yaml");
+			expect(text).not.toContain(".DS_Store");
+			expect((await run("provenance")).code).toBe(2);
+			expect((await run("provenance", dir, "--map", "x")).err).toMatch(
+				/`--map` isn't an option of `provenance`/,
+			);
+		});
 	});
 });
 

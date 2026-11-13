@@ -180,6 +180,21 @@ export {
 	unlockedTags,
 } from "./lock.ts";
 export { tagMessage } from "./manifest.ts";
+// The provenance of one dataset, from its run folder, as DDI.
+export {
+	ANSWERS,
+	type Collection,
+	DDI,
+	PROVENANCE,
+	type ProvenanceProblem,
+	provenanceOf,
+	RUN,
+	type RunFile,
+	type RunFolder,
+	type RunMap,
+	SOURCE,
+	type Term,
+} from "./provenance.ts";
 export {
 	type Exportable,
 	exportRefusal,

@@ -234,16 +234,29 @@ describe("filterAnswers", () => {
 
 describe("aboveLevel, the check after filtering", () => {
 	it("finds what a level may not see, failing closed on what the DDI doesn't know", () => {
-		expect(aboveLevel(index, ANSWERS, "public")).toEqual({
+		expect(
+			aboveLevel(
+				index,
+				ANSWERS.map((a) => a.variable),
+				"public",
+			),
+		).toEqual({
 			ok: true,
 			value: [v("zip"), v("ssn")],
 		});
-		expect(aboveLevel(index, [answer("r", "gone", "x")], "secret")).toEqual({
+		expect(aboveLevel(index, [v("gone")], "secret")).toEqual({
 			ok: true,
 			value: [v("gone")],
 		});
 		const kept = filterAnswers(index, ANSWERS, "public");
-		expect(kept.ok && aboveLevel(index, kept.value.kept, "public")).toEqual({
+		expect(
+			kept.ok &&
+				aboveLevel(
+					index,
+					kept.value.kept.map((a) => a.variable),
+					"public",
+				),
+		).toEqual({
 			ok: true,
 			value: [],
 		});

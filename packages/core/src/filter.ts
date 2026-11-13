@@ -195,24 +195,20 @@ export function accessPoliciesOf(index: DdiIndex): Result<
 }
 
 /**
- * The variables of answers that `level` may not see, each once: those above it in their
+ * The variables (by URN) that `level` may not see, each once: those above it in their
  * own policy and, failing closed, those the DDI doesn't have or whose level can't be
- * traced. Empty means the answers are fit for `level`. `filterAnswers` checks what it
+ * traced. Empty means answers to them are fit for `level`. `filterAnswers` checks what it
  * keeps with this; any program can check an answer set with it.
  */
 export function aboveLevel(
 	index: DdiIndex,
-	answers: readonly Answer[],
+	variables: readonly string[],
 	level: string,
 ): Result<readonly string[], FilterRefusal> {
 	const allowed = allowedIn(index, level);
 	if (!allowed.ok) return allowed;
 	const { standing, allows } = allowed.value;
-	return ok(
-		[...new Set(answers.map((a) => a.variable))].filter(
-			(u) => !allows(standing(u)),
-		),
-	);
+	return ok([...new Set(variables)].filter((u) => !allows(standing(u))));
 }
 
 /**
@@ -242,7 +238,11 @@ export function filterAnswers(
 	const above = new Set(urns.filter((u) => !allows(standing(u))));
 	const kept = answers.filter((a) => !above.has(a.variable));
 	// Checked again on what is kept, answer by answer: a mistake above must not leak.
-	const leak = aboveLevel(index, kept, level);
+	const leak = aboveLevel(
+		index,
+		kept.map((a) => a.variable),
+		level,
+	);
 	if (!leak.ok) return leak;
 	if (leak.value.length > 0) return err({ kind: "leak", urns: leak.value });
 	const removed = [...above].sort().map((urn): Removed => {

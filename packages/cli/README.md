@@ -22,6 +22,7 @@ qretools paths wave1.json -o paths.html      # the paths through an instrument's
 qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
+qretools provenance runs/wave1-tests          # where one dataset came from, as DDI, in runs/wave1-tests/provenance.json
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -144,6 +145,9 @@ and `01`), the QSF column map does not read the two options, and `build` gives a
 (for example `1e999`). Qualtrics writes nothing for this option, and the answer is
 lost.** `build` gives a `qsf-unmapped` warning for this code.
 
+A QSF column map has `"source": "qsf"`. `responses` refuses a QSF column map from an
+earlier version, which has no `source`: run `build` again. The QSF does not change.
+
 A QSF column map from qretools 2.0.0-alpha.9 or earlier does not give these values. To
 get them, run `build` again. The QSF and its QIDs do not change, so a survey that
 collects responses can use the new map.
@@ -234,12 +238,14 @@ the same form: one line for each value, with the URN of the variable.
 qretools responses data.csv --map maps/wave1-ddi-release.columns.json --ddi dist/instruments/wave1.json -o wave1-answers.csv
 ```
 
-The map is JSON. Its name ends in `-ddi-<source>.columns.json`, where `<source>` is a short
-name for the data (letters and digits). The command reads `qsf` as a QSF column map. It
-reads all other names as the map of a data file:
+The map is JSON. Its `source` field is a short name for the data (letters and digits). The
+command reads `"source": "qsf"` as a QSF column map, and all other values as the map of a
+data file. Its name ends in `-ddi-<source>.columns.json`, with the same name. If the name
+gives a different source, the command refuses the map:
 
 ```json
 {
+  "source": "release",
   "ddi": "sha256:3f5a…",
   "respondent": "ID",
   "values": { "-98": "D", "-99": "N", "-100": null },
@@ -253,6 +259,8 @@ reads all other names as the map of a data file:
 }
 ```
 
+- `source`: the short name of the data. A map with no `source` is refused: write it in
+  the map, or make the map again.
 - `ddi`: the SHA-256 digest of the DDI that the map was made from. If the map has a digest,
   the command refuses a different DDI.
 - `respondent`: the header of the column that identifies each respondent.
@@ -378,6 +386,98 @@ its variables. The DDI from `export` has version 1 for each item.
 
 **Caution: a computed value (for example, a value that an instrument computes from a
 restricted answer) has no level. The command does not remove it.**
+
+## The provenance of a dataset
+
+`provenance` writes where one dataset came from, as DDI-Lifecycle 4.0 JSON. It reads one
+run folder and writes `<run-dir>/provenance.json` (or the file that `-o` names). It does
+not write an answer or a respondent. Thus, you can publish `provenance.json` when you
+cannot publish the folder.
+
+```sh
+qretools provenance runs/wave1-tests
+```
+
+A run folder holds these files:
+
+- `answers.csv`: the dataset, as `responses` (and, if necessary, `filter`) writes it.
+- `ddi.json`: a copy of the instrument's DDI, as `build` wrote it. It must hold one
+  instrument.
+- `<name>-ddi-<source>.columns.json` and `source.csv`: an ingest only. The column map, and
+  the file that `responses` read with it.
+- `run.json`: only the facts that no file gives (see below). An ingest of a Qualtrics
+  export of test responses does not need it.
+- Any other file, for example a model's `config.yaml` or the `.sav` file of a published
+  release. The command cites each file by its SHA-256 digest and size. It does not read it.
+
+The command ignores files whose names start with a dot. A run folder cannot hold a folder.
+The name of the run folder is in the ID of each item, so use letters, digits, `-` and `_`.
+
+**The kind of dataset.** The `source` field of the column map gives the kind: `qsf` is a
+Qualtrics export; any other value is a data file. A folder with no map is a synthetic run,
+and its `run.json` must say `"respondent": "synthetic"`.
+
+**An ingest is done again.** The command reads `source.csv` again with the map and
+`ddi.json`, and filters the answers at the `access` level of `run.json`. If the result is
+not `answers.csv` byte for byte, or the reading finds an error, the command refuses.
+
+**What the folder gives.** For a Qualtrics export, the command reads these facts from
+`source.csv`:
+
+- The dates: the earliest `StartDate` and the latest `EndDate`, in the time zone of row 3.
+  The time zone must be `Z` or an offset. Export the responses in UTC.
+- How the respondents were asked, and who answered: if `DistributionChannel` is `test`,
+  the responses are test responses (mode `Simulation`, answered by "generated by the
+  survey platform"). If it is `anonymous` or `email`, the mode is
+  `SelfAdministeredQuestionnaire.CAWI`, and `run.json` gives `answered_by`. The command
+  refuses all other channels.
+- The runtime: Qualtrics.
+
+All rows must have the same `Status` and the same `DistributionChannel`: one dataset holds
+one kind of respondent. If the rows are different, export each kind as a different file.
+
+**`run.json`** holds only these fields:
+
+| Field | For | Example |
+|---|---|---|
+| `respondent` | a synthetic run, always | `"synthetic"` |
+| `start`, `end` | a data file, a synthetic run | `"2010-03-01"`, `"2026-11-12T09:00:00Z"` |
+| `asked_by` | a data file | `["Interview.FaceToFace.CAPIorCAMI"]` |
+| `answered_by` | a data file; a Qualtrics export that is not test responses | `"ResearchData.Published"` |
+| `source` | an ingest | `{ "title": "…", "publisher": "…", "url": "…" }` |
+| `runtime` | a synthetic run, always | `{ "name": "example-model", "version": "2026-10-01" }` |
+| `reported` | a synthetic run | `{ "temperature": "0.7" }` |
+| `access` | any | `"public"` |
+
+`asked_by` is a list of terms of the DDI vocabulary ModeOfCollection. `answered_by` is a
+term of the DDI vocabulary DataSourceType. For a term that a vocabulary does not have,
+write `{ "other": "<your words>" }`. `reported` is what the runtime said about the run. The
+command writes it as it is, and does not read it. `access` is the level of `answers.csv`.
+The command makes sure that no answer is above that level.
+
+The command refuses a field that the folder already gives (for example `start` for a
+Qualtrics export), a field of another kind of folder, and a field that it does not know.
+
+**The output.** One `StudyUnit` holds the collection and the files:
+
+- `DataCollection`, with one `CollectionEvent`: the dates, the mode (`ModeOfCollection`),
+  who answered (`DataSource`), the instrument (`InstrumentReference`, by URN), and
+  `reported` as attribute pairs. The runtime is in `Methodology`.
+- `answers.csv` and `source.csv` are each a `PhysicalInstance`, with the SHA-256 digest
+  (`DataFingerprint`) and the size. `answers.csv` also gives the number of respondents.
+- Each other file is an `OtherMaterial`, with the digest and the size as attribute pairs.
+  The one for `ddi.json` refers to the instrument.
+- `VariableGroup`s: the variables that `answers.csv` holds; for an ingest, the variables
+  of the instrument that the source does not hold; and the variables that the access level
+  removes. These are not missing answers.
+- `InformationClassification`: the access level.
+
+Each item has version 1. A second run of the command on the same folder gives the same
+file. The command does not replace a `provenance.json` that is different: move it, then
+run the command again.
+
+**Caution: a run folder holds the answers (and a Qualtrics export holds IP addresses). Do
+not commit or publish the folder. Publish only `provenance.json`.**
 
 ## Codebook
 

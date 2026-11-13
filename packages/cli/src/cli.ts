@@ -11,12 +11,15 @@
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
 	type Address,
+	ANSWERS,
+	type Answer,
 	accessPoliciesOf,
 	addressOf,
 	agencyWritten,
@@ -26,6 +29,7 @@ import {
 	type BankScope,
 	bankOf,
 	collisions,
+	DDI,
 	type DdiDocument,
 	dataFileMap,
 	dataMapOf,
@@ -48,20 +52,26 @@ import {
 	makeValidator,
 	movedTags,
 	notHere,
+	PROVENANCE,
 	placeFindings,
+	provenanceOf,
 	questionItems,
 	type Range,
 	type Refusal,
 	type RemoteBank,
 	type Representation,
+	type ResponseFinding,
 	type Result,
 	ROOT,
+	RUN,
+	type RunFile,
 	readInstruments,
 	readResponses,
 	releaseFindings,
 	remoteScope,
 	remotesOf,
 	type Severity,
+	SOURCE,
 	scopeOf,
 	shortCommit,
 	status,
@@ -78,6 +88,7 @@ import { readWorkspace } from "@qretools/core/node";
 import { pathsPageOf } from "@qretools/paths";
 import {
 	columnMapOf,
+	exportCollection,
 	exportMap,
 	qsfOf,
 	qsfRefusalReason,
@@ -146,6 +157,14 @@ const USAGE = `Usage:
                                     the DDI has no levels
   qretools filter --ddi <file.json> List each access policy in the DDI: its levels, most open first,
                                     and how many variables stand at each
+  qretools provenance <run-dir> [-o file]
+                                    Write the provenance of one dataset as DDI-Lifecycle 4.0 JSON, to
+                                    <run-dir>/provenance.json unless -o names a file: where its answers came
+                                    from, from the files in the folder (answers.csv, ddi.json, an ingest's
+                                    column map and source.csv, any other file by its digest) and run.json,
+                                    which holds only what no file says. An ingest is checked by reading
+                                    source.csv again. Never writes an answer. Refused when the folder
+                                    disagrees with itself, or when it would change a provenance.json
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -203,7 +222,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "codebook" &&
 		command !== "paths" &&
 		command !== "responses" &&
-		command !== "filter"
+		command !== "filter" &&
+		command !== "provenance"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -257,6 +277,13 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values.output,
 			io,
 		);
+	}
+	if (command === "provenance") {
+		if (args.positionals[1] === undefined) {
+			io.err(`${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return writeProvenance(dir, args.values.output, io);
 	}
 	if (command === "filter") {
 		if (args.values.ddi === undefined) {
@@ -465,76 +492,79 @@ async function writePaths(
 
 /**
  * A map's name: `<name>-ddi-<source>.columns.json`, beside the DDI `<name>.json` it was
- * made from. `qsf` is the QSF column map `build` writes; any other source is a data file's map.
+ * made from. Its `source` field, not its name, says what kind of map it is.
  */
 const MAP_NAME = /-ddi-([a-z0-9]+)\.columns\.json$/;
 
+/** Responses read with a map: refused whole (a line to say), or read, with findings. */
+type ReadWithMap =
+	| { readonly kind: "refused"; readonly line: string }
+	| {
+			readonly kind: "read";
+			readonly source: string;
+			/** The variables the map reads columns into: not those it marks `filtered`. */
+			readonly reads: readonly string[];
+			readonly notes: readonly string[];
+			readonly findings: readonly ResponseFinding<string>[];
+			readonly answers?: readonly Answer[];
+	  };
+
 /**
- * Responses read with a column map, as long CSV: one line per value, keyed by DDI Variable
- * URN (`answersCsv`). A QSF column map reads a Qualtrics response export; any other map
- * reads a data file with one header row, its columns by header name. The DDI (beside the
- * map, or `--ddi`) gives each variable's codes and a select-all option's tick, and must be
- * the DDI the map was made from (its digest). Findings place what can't be read by line
- * and column, never by a response's value. Local files only.
+ * Responses read with a column map, texts in, values out: the map's `source` says which
+ * kind it is (`qsf`: a Qualtrics export, read by ImportId; any other: a data file with one
+ * header row, read by header). The DDI gives each variable's codes and a select-all
+ * option's tick, and must be the DDI the map was made from (its digest). `responses` and
+ * `provenance` both read with this, so an ingest is checked by doing it again.
  */
-async function writeResponses(
-	file: string,
+function readWithMap(
+	csv: string,
 	mapFile: string,
-	ddiOption: string | undefined,
-	output: string | undefined,
-	io: Io,
-): Promise<number> {
-	const named = MAP_NAME.exec(mapFile);
-	if (named === null) {
-		io.err(
-			`${mapFile}: a column map's name ends in \`-ddi-<source>.columns.json\`, as \`build\` writes the QSF one (\`-ddi-qsf.columns.json\`) beside the instrument's DDI.\n`,
-		);
-		return USAGE_ERROR;
-	}
-	const qsf = named[1] === "qsf";
-	const ddiFile = ddiOption ?? `${mapFile.slice(0, named.index)}.json`;
-	const texts: string[] = [];
-	for (const f of [file, mapFile, ddiFile])
-		try {
-			texts.push(await readFile(f, "utf8"));
-		} catch (e) {
-			io.err(
-				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
-	const [csv = "", mapText = "", ddiText = ""] = texts;
+	mapText: string,
+	ddiFile: string,
+	ddiText: string,
+): ReadWithMap {
+	const refused = (line: string): ReadWithMap => ({ kind: "refused", line });
 	const mapJson = jsonOf(mapText);
+	const source =
+		mapJson.ok && typeof mapJson.value === "object" && mapJson.value !== null
+			? (mapJson.value as Record<string, unknown>).source
+			: undefined;
+	if (typeof source !== "string")
+		return refused(
+			`${mapFile}: error: this map has no \`source\` field, which says what it reads (\`"source": "qsf"\` for a Qualtrics export). Rebuild it with \`qretools build\`, or regenerate a data file's map. [responses-unreadable]`,
+		);
+	const named = MAP_NAME.exec(basename(mapFile));
+	if (named !== null && named[1] !== source)
+		return refused(
+			`${mapFile}: error: its name says the source \`${named[1]}\`, but its \`source\` field says \`${source}\`. [responses-unreadable]`,
+		);
+	const qsf = source === "qsf";
 	const map = !mapJson.ok
 		? undefined
 		: qsf
 			? columnMapOf(mapJson.value)
 			: dataMapOf(mapJson.value);
-	if (map === undefined) {
-		io.err(
-			`${mapFile}: error: this isn't a ${qsf ? "QSF column map" : "data file's column map"}. [responses-unreadable]\n`,
+	if (map === undefined)
+		return refused(
+			`${mapFile}: error: this isn't a ${qsf ? "QSF column map" : "data file's column map"}. [responses-unreadable]`,
 		);
-		return PROBLEMS;
-	}
 	const digest = `sha256:${createHash("sha256").update(ddiText).digest("hex")}`;
-	if (map.ddi !== undefined && map.ddi !== digest) {
-		io.err(
-			`${ddiFile}: error: this isn't the DDI the map was made from (its digest differs). Use the files one \`build\` wrote. [responses-provenance]\n`,
+	if (map.ddi !== undefined && map.ddi !== digest)
+		return refused(
+			`${ddiFile}: error: this isn't the DDI the map was made from (its digest differs). Use the files one \`build\` wrote. [responses-provenance]`,
 		);
-		return PROBLEMS;
-	}
-	if (map.ddi === undefined)
-		io.err(
-			`${mapFile}: note: the map names no DDI digest, so ${ddiFile} isn't checked against it. [responses-provenance]\n`,
-		);
+	const notes =
+		map.ddi === undefined
+			? [
+					`${mapFile}: note: the map names no DDI digest, so ${ddiFile} isn't checked against it. [responses-provenance]`,
+				]
+			: [];
 	const ddiJson = jsonOf(ddiText);
 	const read = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
-	if (read?.ok !== true) {
-		io.err(
-			`${ddiFile}: error: this isn't DDI-Lifecycle 4.0 JSON. [responses-unreadable]\n`,
+	if (read?.ok !== true)
+		return refused(
+			`${ddiFile}: error: this isn't DDI-Lifecycle 4.0 JSON. [responses-unreadable]`,
 		);
-		return PROBLEMS;
-	}
 	const index = read.value;
 	// Each variable's codes or format, and each select-all option's tick, as the DDI says.
 	const ticks = tickCodes(index, [...index.byUrn.values()]);
@@ -567,18 +597,71 @@ async function writeResponses(
 		made.map === undefined
 			? undefined
 			: readResponses(made.header, made.rows, made.map, representations);
-	const findings = [...made.findings, ...(answered?.findings ?? [])];
-	for (const f of findings)
+	const reads =
+		"respondent" in map
+			? map.columns.filter((c) => !c.filtered).map((c) => c.variable)
+			: map.columns.map((c) => c.variable);
+	return {
+		kind: "read",
+		source,
+		reads,
+		notes,
+		findings: [...made.findings, ...(answered?.findings ?? [])],
+		...(answered !== undefined && { answers: answered.answers }),
+	};
+}
+
+/** A finding of reading responses, as compilers write one: placed by line and column, never by a value. */
+const responseLine = (file: string, f: ResponseFinding<string>): string =>
+	`${file}${f.line === undefined ? "" : `:${f.line}`}: ${LEVEL[f.severity]}: ${f.column === undefined ? "" : `column \`${f.column}\`: `}${f.message}${f.count > 1 ? ` (${f.count} rows)` : ""} [${f.code}]`;
+
+/**
+ * Responses read with a column map, as long CSV: one line per value, keyed by DDI Variable
+ * URN (`answersCsv`). The DDI is the one beside the map (`<name>.json`) or `--ddi`.
+ * Findings place what can't be read by line and column, never by a response's value.
+ * Local files only.
+ */
+async function writeResponses(
+	file: string,
+	mapFile: string,
+	ddiOption: string | undefined,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	const named = MAP_NAME.exec(mapFile);
+	if (ddiOption === undefined && named === null) {
 		io.err(
-			`${file}${f.line === undefined ? "" : `:${f.line}`}: ${LEVEL[f.severity]}: ${f.column === undefined ? "" : `column \`${f.column}\`: `}${f.message}${f.count > 1 ? ` (${f.count} rows)` : ""} [${f.code}]\n`,
+			`${mapFile}: a column map's name ends in \`-ddi-<source>.columns.json\`, as \`build\` writes the QSF one (\`-ddi-qsf.columns.json\`) beside the instrument's DDI; for any other name, give the DDI with \`--ddi\`.\n`,
 		);
-	if (answered !== undefined)
+		return USAGE_ERROR;
+	}
+	const ddiFile =
+		ddiOption ?? `${mapFile.slice(0, named?.index ?? mapFile.length)}.json`;
+	const texts: string[] = [];
+	for (const f of [file, mapFile, ddiFile])
+		try {
+			texts.push(await readFile(f, "utf8"));
+		} catch (e) {
+			io.err(
+				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return USAGE_ERROR;
+		}
+	const [csv = "", mapText = "", ddi = ""] = texts;
+	const r = readWithMap(csv, mapFile, mapText, ddiFile, ddi);
+	if (r.kind === "refused") {
+		io.err(`${r.line}\n`);
+		return PROBLEMS;
+	}
+	for (const l of r.notes) io.err(`${l}\n`);
+	for (const f of r.findings) io.err(`${responseLine(file, f)}\n`);
+	if (r.answers !== undefined)
 		await emit(
-			{ text: answersCsv(answered.answers), lines: [], problems: false },
+			{ text: answersCsv(r.answers), lines: [], problems: false },
 			output,
 			io,
 		);
-	return findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
+	return r.findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
 }
 
 /**
@@ -663,6 +746,188 @@ async function writeFiltered(
 			`${file}: note: removed \`${r.name}\` (${r.urn}), at \`${r.level}\`. [filter-removed]\n`,
 		);
 	return code;
+}
+
+/**
+ * `provenance <run-dir>`: the folder read (every file but dotfiles and the provenance
+ * itself, each by its SHA-256), an ingest read again from source.csv with its map and
+ * ddi.json (and filtered at run.json's `access`) and refused unless that gives
+ * answers.csv byte for byte, then the core's `provenanceOf`, checked against the DDI
+ * schema. Says what is wrong by file and field, never by a value. An existing
+ * provenance.json is never changed: the same folder gives the same bytes.
+ */
+async function writeProvenance(
+	dir: string,
+	output: string | undefined,
+	io: Io,
+): Promise<number> {
+	const refuse = (lines: readonly string[]) => {
+		for (const l of lines) io.err(`${l}\n`);
+		io.err(`${dir}: error: no provenance is written. [provenance]\n`);
+		return PROBLEMS;
+	};
+	let entries: Dirent[];
+	try {
+		entries = await readdir(dir, { withFileTypes: true });
+	} catch (e) {
+		io.err(
+			`Can't read ${dir}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	// Dotfiles (.DS_Store) are the machine's, not the run's; the provenance can't cite itself.
+	const listed = entries
+		.filter((e) => !e.name.startsWith(".") && e.name !== PROVENANCE)
+		.sort((a, b) => (a.name < b.name ? -1 : 1));
+	const folders = listed.filter((e) => !e.isFile());
+	if (folders.length > 0)
+		return refuse(
+			folders.map(
+				(e) =>
+					`${join(dir, e.name)}: error: a run folder holds files only, so this can't be cited. [provenance]`,
+			),
+		);
+	const files: RunFile[] = [];
+	const texts = new Map<string, string>();
+	for (const e of listed) {
+		// shortcut: each file is read whole; stream the digest when a run holds files too large for memory.
+		const bytes = await readFile(join(dir, e.name));
+		files.push({
+			path: e.name,
+			sha256: createHash("sha256").update(bytes).digest("hex"),
+			size: bytes.length,
+		});
+		texts.set(e.name, bytes.toString("utf8"));
+	}
+	const at = (name: string) => join(dir, name);
+	const maps = files.filter((f) => f.path.endsWith(".columns.json"));
+	if (maps.length > 1)
+		return refuse([
+			`${dir}: error: the folder has ${maps.length} column maps; an ingest reads with one. [provenance]`,
+		]);
+	const answersText = texts.get(ANSWERS);
+	const instrumentText = texts.get(DDI);
+	if (answersText === undefined || instrumentText === undefined)
+		return refuse(
+			[ANSWERS, DDI]
+				.filter((f) => !texts.has(f))
+				.map(
+					(f) =>
+						`${at(f)}: error: the run folder has no such file. [provenance]`,
+				),
+		);
+	const answers = answersOf(answersText);
+	if (!answers.ok)
+		return refuse([
+			`${at(ANSWERS)}${answers.error.line === undefined ? "" : `:${answers.error.line}`}: error: ${answers.error.message} [provenance]`,
+		]);
+	const ddiJson = jsonOf(instrumentText);
+	const read = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
+	if (read?.ok !== true)
+		return refuse([
+			`${at(DDI)}: error: this isn't DDI-Lifecycle 4.0 JSON. [provenance]`,
+		]);
+	const runText = texts.get(RUN);
+	const run = runText === undefined ? undefined : jsonOf(runText);
+	if (run !== undefined && !run.ok)
+		return refuse([`${at(RUN)}: error: this isn't JSON. [provenance]`]);
+
+	// An ingest, done again: the same reading of source.csv, filtered as run.json says.
+	const [mapFile] = maps;
+	let map: Parameters<typeof provenanceOf>[0]["map"];
+	let collection = {};
+	const sourceText = texts.get(SOURCE);
+	if ((mapFile === undefined) !== (sourceText === undefined))
+		return refuse([
+			mapFile === undefined
+				? `${at(SOURCE)}: error: the folder has no column map to read it with: an ingest has both, a synthetic run neither. [provenance]`
+				: `${at(mapFile.path)}: error: the folder has no ${SOURCE} for it to read: an ingest has both, a synthetic run neither. [provenance]`,
+		]);
+	if (mapFile !== undefined && sourceText !== undefined) {
+		const again = readWithMap(
+			sourceText,
+			at(mapFile.path),
+			texts.get(mapFile.path) ?? "",
+			at(DDI),
+			instrumentText,
+		);
+		if (again.kind === "refused") return refuse([again.line]);
+		const errors = again.findings.filter((f) => f.severity === "error");
+		if (errors.length > 0 || again.answers === undefined)
+			return refuse([
+				...errors.map((f) => responseLine(at(SOURCE), f)),
+				`${at(SOURCE)}: error: reading it again with ${mapFile.path} finds errors, so answers.csv can't be checked. [provenance-ingest]`,
+			]);
+		const level =
+			run?.ok === true && typeof run.value === "object" && run.value !== null
+				? (run.value as Record<string, unknown>).access
+				: undefined;
+		let redone: readonly Answer[] = again.answers;
+		if (typeof level === "string") {
+			const filtered = filterAnswers(read.value, redone, level);
+			if (!filtered.ok)
+				return refuse(filterRefusal(filtered.error, at(DDI), at(SOURCE)));
+			redone = filtered.value.kept;
+		}
+		// An `access` that isn't a level is refused by the core, with its field; no comparison means anything then.
+		if (
+			(level === undefined || typeof level === "string") &&
+			answersCsv(redone) !== answersText
+		)
+			return refuse([
+				`${at(ANSWERS)}: error: it isn't what reading ${SOURCE} with ${mapFile.path}${typeof level === "string" ? ` and filtering at \`${level}\`` : ""} gives, byte for byte. [provenance-ingest]`,
+			]);
+		map = { path: mapFile.path, source: again.source, reads: again.reads };
+		if (again.source === "qsf") {
+			const said = exportCollection(sourceText);
+			if (!said.ok)
+				return refuse([`${at(SOURCE)}: error: ${said.error} [provenance]`]);
+			collection = said.value;
+		}
+	}
+
+	const made = provenanceOf({
+		name: basename(resolve(dir)),
+		index: read.value,
+		files,
+		answers: answers.value,
+		run: run?.ok === true ? run.value : undefined,
+		collection,
+		...(map !== undefined && { map }),
+	});
+	if (!made.ok)
+		return refuse(
+			made.error.map(
+				(p) =>
+					`${at(p.file)}: error: ${p.field === undefined ? "" : `\`${p.field}\`: `}${p.message} [provenance]`,
+			),
+		);
+	const invalid = await validate(made.value);
+	if (invalid.length > 0)
+		return refuse(
+			invalid.map(
+				(f) =>
+					`${dir}: error: the provenance isn't valid DDI (${f.message}): a bug in QREtools. [provenance]`,
+			),
+		);
+	const text = ddiText(made.value);
+	const target = output ?? at(PROVENANCE);
+	const before = await readFile(target, "utf8").catch(
+		(e: NodeJS.ErrnoException) => {
+			if (e.code === "ENOENT") return undefined;
+			throw e;
+		},
+	);
+	if (before === text) {
+		io.err(`${target}: note: unchanged. [provenance]\n`);
+		return OK;
+	}
+	if (before !== undefined)
+		return refuse([
+			`${target}: error: it holds another provenance, and its items are version 1, so it isn't changed. Move it aside to write this one. [provenance]`,
+		]);
+	await io.writeFile(target, text);
+	return OK;
 }
 
 /** Why answers weren't filtered, a line each, as `check` writes findings: URNs and levels, never a value. */

@@ -282,16 +282,27 @@ describe("a single-choice column", () => {
 describe("columnMapOf", () => {
 	it("reads the map `build` writes, and nothing else", () => {
 		expect(columnMapOf(JSON.parse(JSON.stringify(MAP)))).toEqual(MAP);
-		expect(columnMapOf({ columns: [{ importId: "QID1" }] })).toBeUndefined();
+		expect(
+			columnMapOf({ source: "qsf", columns: [{ importId: "QID1" }] }),
+		).toBeUndefined();
 		expect(
 			columnMapOf({
+				source: "qsf",
 				columns: [{ importId: "QID1", variable: "v", rounds: 0 }],
 			}),
 		).toBeUndefined();
+		// No `source`: a map from before it, which must be built again.
+		expect(columnMapOf({ columns: [] })).toBeUndefined();
 		const values = { importId: "QID1", variable: "v", values: { "10": "010" } };
-		expect(columnMapOf({ columns: [values] })).toEqual({ columns: [values] });
+		expect(columnMapOf({ source: "qsf", columns: [values] })).toEqual({
+			source: "qsf",
+			columns: [values],
+		});
 		expect(
-			columnMapOf({ columns: [{ ...values, values: { "10": 10 } }] }),
+			columnMapOf({
+				source: "qsf",
+				columns: [{ ...values, values: { "10": 10 } }],
+			}),
 		).toBeUndefined();
 	});
 });
