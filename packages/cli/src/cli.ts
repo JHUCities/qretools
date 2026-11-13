@@ -11,7 +11,6 @@
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -109,6 +108,8 @@ export interface Io {
 	readonly ownRepository: (dir: string) => Promise<OwnRepository | undefined>;
 	/** The workspace in a directory at its last commit, with its history (the command uses git: `readHistory`). */
 	readonly readHistory: (dir: string) => Promise<HistoryRead>;
+	/** All of standard input, as text (`next`'s state). */
+	readonly readStdin: () => Promise<string>;
 }
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
@@ -440,10 +441,6 @@ function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
 }
 
 /**
- * A DDI file's instruments' paths as one HTML page, and a line in `check`'s form for each
- * part of the DDI it can't read. Not written when the file isn't DDI or holds no instrument.
- */
-/**
  * The next step of an interview (`nextStep`), from an instrument's DDI and a state, as
  * JSON on stdout. The DDI's findings go to stderr; a state that can't belong to the
  * instrument is refused, with nothing on stdout.
@@ -459,7 +456,7 @@ async function writeNext(
 		text = await readFile(file, "utf8");
 		stateText =
 			stateFile === undefined || stateFile === "-"
-				? readFileSync(0, "utf8")
+				? await io.readStdin()
 				: await readFile(stateFile, "utf8");
 	} catch (e) {
 		io.err(`Can't read: ${e instanceof Error ? e.message : String(e)}\n`);
@@ -499,10 +496,19 @@ async function writeNext(
 		io.err(`${stateFile ?? "stdin"}: error: ${reply.error} [next-state]\n`);
 		return PROBLEMS;
 	}
-	io.out(`${JSON.stringify(reply.value, null, 2)}\n`);
+	// What the reader couldn't read is missing from the route: say so where the caller reads.
+	const unread = read.findings
+		.filter((f) => f.severity === "error")
+		.map((f) => (f.path === "" ? f.message : `${f.path}: ${f.message}`));
+	const out = { ...reply.value, notes: [...unread, ...reply.value.notes] };
+	io.out(`${JSON.stringify(out, null, 2)}\n`);
 	return OK;
 }
 
+/**
+ * A DDI file's instruments' paths as one HTML page, and a line in `check`'s form for each
+ * part of the DDI it can't read. Not written when the file isn't DDI or holds no instrument.
+ */
 async function writePaths(
 	file: string,
 	output: string | undefined,

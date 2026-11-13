@@ -477,8 +477,12 @@ The reply has one of three kinds:
 
 An `ask` and an `end` also have `statements`: the text to show since the last answered
 question. An `input` reply has no statements, so the program shows each statement one
-time. Each reply has `notes`: what the route so far could not follow as the DDI says, such
-as a condition in another language, which is taken as not true.
+time. Each reply has `notes`: what the route so far could not follow as the DDI says. For
+example, a condition in another language is taken as not true, a part of the DDI that
+the command cannot read is not on the route, and a roster stops at 100 rows.
+
+The reply schema does not refuse a field that it does not name. Thus a later version can
+add a field, and a program that validates replies against the schema does not fail.
 
 The `missing` codes are all the codes in the bank's `missing.yaml`. Some of them are for
 data processing (such as "Not applicable"), and a respondent does not give them. The

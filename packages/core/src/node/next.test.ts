@@ -221,7 +221,10 @@ describe("the next step through the households instrument", () => {
 			problem: '"1.5" has more than 0 decimal places.',
 		});
 		// A number's missing code is taken, and has no value: the roster has no rows.
-		expect(sized("-8")).toMatchObject({ question: "tenure" });
+		expect(sized("-8")).toMatchObject({
+			question: "tenure",
+			notes: [expect.stringMatching(/count has no value, so it has no rows/)],
+		});
 	});
 
 	it("refuses a state that can't belong to the instrument", () => {

@@ -46,6 +46,9 @@ async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
 	return runOver({}, readRemote, ...argv);
 }
 
+/** What a run reads on standard input. */
+let stdin = "";
+
 /** `runWith`, over files an earlier run wrote: a second build into the same folder. */
 async function runOver(
 	files: Readonly<Record<string, string>>,
@@ -67,6 +70,7 @@ async function runOver(
 		readRemote,
 		readHistory,
 		ownRepository,
+		readStdin: async () => stdin,
 	};
 	const code = await main(argv, io);
 	return { code, out: out.join(""), err: err.join(""), written };
@@ -823,6 +827,14 @@ describe("qretools next", () => {
 		expect(reply.domain.missing.map((m: { code: string }) => m.code)).toEqual(
 			consent?.responses?.rows.filter((x) => x.missing).map((x) => x.code),
 		);
+		// The state on standard input, as `-` or with no file named.
+		stdin = JSON.stringify({ inputs: { county: "2" } });
+		expect((await run("next", file, "-")).out).toBe(r.out);
+		expect((await run("next", file)).out).toBe(r.out);
+		stdin = "";
+		// The reply's schema is open, so a field added later doesn't fail a caller's validation.
+		const open = JSON.parse((await run("next", "--schema")).out).reply;
+		expect(JSON.stringify(open)).not.toContain('"additionalProperties":false');
 		await writeFile(state, JSON.stringify({ answers: "none" }));
 		const bad = await run("next", file, state);
 		expect(bad).toMatchObject({ code: 1, out: "" });
