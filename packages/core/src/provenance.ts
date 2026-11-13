@@ -25,9 +25,14 @@ import {
 import type { DdiIndex } from "./ddi/read.ts";
 import type { Citation, MetadataColumn, WeightingAdvice } from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
+import {
+	codeValueOf,
+	DATA_SOURCE_TYPE,
+	MODE_OF_COLLECTION,
+	type Term,
+} from "./vocabularies.ts";
 
-/** A term of a DDI controlled vocabulary, or `Other` with words of our own. */
-export type Term = string | { readonly other: string };
+export type { Term };
 
 /** A mode a data file records for each respondent: its term, and the code of the variable that holds it. */
 export interface Mode {
@@ -86,7 +91,7 @@ export type Fact = keyof typeof FACT_OPTIONS;
  */
 export function factsOf(
 	data: Facts,
-	options: Readonly<Partial<Record<Fact, string>>>,
+	options: Readonly<Partial<Record<Fact, Term>>>,
 ): Result<
 	Facts & Required<Pick<Facts, Fact>>,
 	readonly { readonly fact: Fact; readonly problem: "missing" | "given" }[]
@@ -158,22 +163,6 @@ export interface Described {
 /** What the fingerprint of the DataSet is over, as `canonicalForm` writes it. */
 export const DATA_FINGERPRINT =
 	"SHA-256 of every value of the DataSet (the answers, the values of the dataset's own variables a data file's map describes, and each respondent's identifier and interview times) as long CSV: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent and then variable URN in code-unit order";
-
-/** The DDI vocabularies a term is from (the version-free URI). */
-export const VOCABULARY = {
-	mode: "http://rdf-vocabulary.ddialliance.org/cv/ModeOfCollection/",
-	source: "http://rdf-vocabulary.ddialliance.org/cv/DataSourceType/",
-	unit: "http://rdf-vocabulary.ddialliance.org/cv/ResponseUnit/",
-} as const;
-
-export const codeValueOf = (t: Term, vocabulary: string): JsonObject =>
-	typeof t === "string"
-		? { StringValue: t, ControlledVocabularyURI: vocabulary }
-		: {
-				StringValue: "Other",
-				OtherValue: t.other,
-				ControlledVocabularyURI: vocabulary,
-			};
 
 const pair = (key: string, value: string): JsonObject => ({
 	AttributeKey: { StringValue: key },
@@ -394,7 +383,7 @@ export function provenanceOf(
 					...id("event"),
 					DataSource: [
 						obj({
-							SourceType: [codeValueOf(p.facts.answered_by, VOCABULARY.source)],
+							SourceType: [codeValueOf(p.facts.answered_by, DATA_SOURCE_TYPE)],
 							Origin: p.citation && [
 								obj({
 									Citation: citationOf(p.citation),
@@ -414,7 +403,7 @@ export function provenanceOf(
 					ModeOfCollection: Array.isArray(asked)
 						? asked.map((m: Mode, i) => ({
 								...id(`mode-${i + 1}`),
-								TypeOfModeOfCollection: codeValueOf(m.term, VOCABULARY.mode),
+								TypeOfModeOfCollection: codeValueOf(m.term, MODE_OF_COLLECTION),
 								Description: structured(
 									`Each respondent's mode is in the variable ${m.name}: this mode is its code ${m.code}.`,
 								),
@@ -428,7 +417,7 @@ export function provenanceOf(
 									...id("mode"),
 									TypeOfModeOfCollection: codeValueOf(
 										asked as Term,
-										VOCABULARY.mode,
+										MODE_OF_COLLECTION,
 									),
 								},
 							],

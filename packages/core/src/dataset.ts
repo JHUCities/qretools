@@ -36,15 +36,10 @@ import {
 	filterAnswers,
 	type Removed,
 } from "./filter.ts";
-import {
-	codeValueOf,
-	type Provenance,
-	provenanceOf,
-	refTo,
-	VOCABULARY,
-} from "./provenance.ts";
+import { type Provenance, provenanceOf, refTo } from "./provenance.ts";
 import { type Answer, answersCsv, type Respondent } from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
+import { codeValueOf, RESPONSE_UNIT } from "./vocabularies.ts";
 
 /** What a dataset holds, as `datasetOf` writes it and `readDataset` reads it. */
 export interface Dataset {
@@ -246,7 +241,7 @@ export function datasetOf(
 				obj({
 					VariableName: [intl(m.column)],
 					Label: m.label && [structured(m.label)],
-					SourceUnit: m.unit && codeValueOf(m.unit, VOCABULARY.unit),
+					SourceUnit: m.unit && codeValueOf(m.unit, RESPONSE_UNIT),
 					IsWeight: m.weight,
 					WeightingProcessReference: m.weight && weighting && ref(weighting),
 					VariableRepresentation: obj({

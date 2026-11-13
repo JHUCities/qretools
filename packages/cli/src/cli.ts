@@ -27,6 +27,7 @@ import {
 	canonicalForm,
 	collisions,
 	csvView,
+	DATA_SOURCE_TYPE,
 	DATASET_NAME,
 	type DataMap,
 	type Dataset,
@@ -37,6 +38,7 @@ import {
 	datasetOf,
 	ddiIndexOf,
 	documentOf,
+	err,
 	exportRefusal,
 	FACT_OPTIONS,
 	type Fact,
@@ -57,6 +59,8 @@ import {
 	locate,
 	locksFor,
 	locksWritten,
+	type MapProblem,
+	MODE_OF_COLLECTION,
 	makeValidator,
 	metadataRepresentation,
 	metadataUrn,
@@ -87,11 +91,15 @@ import {
 	shortCommit,
 	status,
 	type TagRef,
+	type Term,
 	tagMessage,
 	tagRefOf,
+	termOf,
+	termsPage,
 	tickCodes,
 	unlockedTags,
 	type Validator,
+	type Vocabulary,
 	versionsOf,
 	WORKSPACE,
 	withLocks,
@@ -184,21 +192,23 @@ const USAGE = `Usage:
                                     that holds each respondent, the start and end of each interview,
                                     and each value, by the URN of its variable in the DDI, and its
                                     provenance: the instrument, the dates, how the respondents were
-                                    asked and who answered, and the digest of each file. Reads the
-                                    DDI from --ddi, else <name>.json beside the map, else the release
-                                    the map names. The dataset's name is the file name of -o without
-                                    .json (else <name>). Survey Preview and test responses are kept;
-                                    one export holds one kind. Refuses to replace a different file.
+                                    asked and where the answers come from, and the digest of
+                                    each file. Reads the DDI from --ddi, else <name>.json beside
+                                    the map, else the release the map names. The dataset's name is
+                                    the file name of -o without .json (else <name>). Survey
+                                    Preview and test responses are kept; one export holds one
+                                    kind. Refuses to replace a different file.
                                     Writes to stdout unless -o names a file: keep it out of anything
                                     published (dist/ goes to Pages)
   qretools responses <data.csv> --map <name>-ddi-<source>.columns.json [--asked-by term]
                     [--ddi file] [-o dataset.json]
                                     Read a data file (CSV, one header row) the same way, with a map
                                     that names each column by its header, with its DDI variable and
-                                    any translations of its values. The map also says who answered,
-                                    and may describe the columns no respondent is asked (a mode, a
-                                    weight: variables of the dataset), the column with each
-                                    interview's date, and the publisher's advice on the weights.
+                                    any translations of its values. The map also says where the
+                                    answers come from, and may describe the columns no respondent
+                                    is asked (a mode, a weight: variables of the dataset), the
+                                    column with each interview's date, and the publisher's advice
+                                    on the weights.
                                     --asked-by is needed only where no mode column says. Every row
                                     is read
   qretools responses <answers.csv> --ddi <file.json> (--synthetic --runtime name [--runtime-version v]
@@ -254,11 +264,18 @@ of a workspace (a tag made with \`build --tag-message\`). The command reads the 
 git, rebuilds the instrument's DDI, and uses it only if its digest is the one the release
 recorded. If not, it names the version of qretools that built the release.
 --access  for dataset export, the access level to keep, with every more open one.
---asked-by     for responses, how the respondents were asked, as a term of DDI's
-               ModeOfCollection vocabulary (Interview.FaceToFace, say). Refused where the
-               source or its map says it.
---answered-by  for responses, who answered, as a term of DDI's DataSourceType vocabulary
-               (PopulationGroup, say). Refused where the source or its map says it.
+--asked-by     for responses, how the respondents were asked: a term of DDI's
+               ModeOfCollection vocabulary, version 5.0.1, spelled as it is there
+               (SelfAdministeredQuestionnaire.CAWI for a web survey), or
+               Other:<words> for a mode it doesn't list. Refused where the source or
+               its map says it. The terms:
+               https://rdf-vocabulary.ddialliance.org/cv/ModeOfCollection/5.0.1/
+--answered-by  for responses, where the answers come from: a term of DDI's DataSourceType
+               vocabulary, version 1.0.2 (PopulationGroup for people who answered a
+               survey you ran), or Other:<words> in quotes
+               ("Other:a language model"). Refused where the source or its map
+               says it. The terms:
+               https://rdf-vocabulary.ddialliance.org/cv/DataSourceType/1.0.2/
 --synthetic   for responses without --map, the answers are a model's, asked in a simulation.
 --runtime     for responses without --map, the software that answered (and --runtime-version).
 --file        for responses without --map, a file of the run to cite by its SHA-256 digest.
@@ -380,14 +397,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			"runtime-version": version,
 			file: files,
 		} = args.values;
-		const options = {
-			...(args.values["asked-by"] !== undefined && {
-				asked_by: args.values["asked-by"],
-			}),
-			...(args.values["answered-by"] !== undefined && {
-				answered_by: args.values["answered-by"],
-			}),
-		};
+		const asked = args.values["asked-by"];
+		const answered = args.values["answered-by"];
 		// A map's source says what it can of itself; answers without one say it through options.
 		const misuse =
 			args.positionals[1] === undefined
@@ -398,8 +409,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 						: undefined
 					: ddi === undefined
 						? "Answers read without `--map` need `--ddi <file>`: the instrument's DDI."
-						: !synthetic && options.answered_by === undefined
-							? "Answers read without `--map` need `--synthetic` (a model's answers) or `--answered-by <term>` (who answered)."
+						: !synthetic && answered === undefined
+							? "Answers read without `--map` need `--synthetic` (a model's answers) or `--answered-by <term>` (where the answers come from)."
 							: synthetic && runtime === undefined
 								? "`--synthetic` needs `--runtime <name>`: the software that answered."
 								: version !== undefined && runtime === undefined
@@ -409,6 +420,26 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			io.err(`${misuse}\n${USAGE}\n`);
 			return USAGE_ERROR;
 		}
+		// Checked before any file is read.
+		const askedTerm =
+			asked === undefined
+				? undefined
+				: optionTerm("--asked-by", MODE_OF_COLLECTION, asked);
+		const answeredTerm =
+			answered === undefined
+				? undefined
+				: optionTerm("--answered-by", DATA_SOURCE_TYPE, answered);
+		const refused = [askedTerm, answeredTerm].flatMap((t) =>
+			t === undefined || t.ok ? [] : [t.error],
+		);
+		if (refused.length > 0) {
+			for (const message of refused) io.err(`${message}\n`);
+			return USAGE_ERROR;
+		}
+		const options = {
+			...(askedTerm?.ok && { asked_by: askedTerm.value }),
+			...(answeredTerm?.ok && { answered_by: answeredTerm.value }),
+		};
 		if (map !== undefined)
 			return writeResponses(dir, map, ddi, output, options, io);
 		return writeAnswers(
@@ -909,13 +940,43 @@ async function writePaths(
  */
 const MAP_NAME = /-ddi-([a-z0-9]+)\.columns\.json$/;
 
+/** That a text isn't a term of a vocabulary, and the terms it may mean. */
+const notATerm = (
+	what: string,
+	v: Vocabulary,
+	suggestions: readonly string[],
+): string => {
+	const named = suggestions.map((t) => `\`${t}\``);
+	const last = named.pop();
+	return `${what} isn't a term of DDI's ${v.name} vocabulary (${v.version}).${last === undefined ? "" : ` Did you mean ${named.length > 0 ? `${named.join(", ")} or ` : ""}${last}?`}`;
+};
+
+/** An option's term, or the message that refuses it. */
+function optionTerm(
+	option: string,
+	v: Vocabulary,
+	text: string,
+): Result<Term, string> {
+	const read = termOf(v, text);
+	if (read.ok) return read;
+	return err(
+		read.error.kind === "unknown"
+			? `error: ${notATerm(`\`${option} ${text}\``, v, read.error.suggestions)} For a ${v.noun} it doesn't list, give \`Other:<words>\`. The terms: ${termsPage(v)} Nothing is written. [responses-term]`
+			: `error: \`${option} ${text}\` needs words: give \`"Other:<words>"\`, such as \`"Other:a language model"\`. Nothing is written. [responses-term]`,
+	);
+}
+
 /** A column map read from its JSON, as its name's source says it is, or why it can't be. */
 type MapRead =
 	| {
 			readonly kind: "read";
 			readonly map: ColumnMap | DataMap;
 	  }
-	| { readonly kind: "unreadable"; readonly reason: string };
+	| { readonly kind: "unreadable"; readonly reason: string }
+	| {
+			readonly kind: "terms";
+			readonly problems: Extract<MapProblem, { kind: "terms" }>["problems"];
+	  };
 
 /**
  * A map's text read as the source its name gives (`MAP_NAME`): its `source` field must
@@ -941,13 +1002,20 @@ function mapOf(named: string, text: string): MapRead {
 			reason: `its name says the source \`${named}\`, but its \`source\` field says \`${source}\`.`,
 		};
 	const qsf = source === "qsf";
-	const map = qsf ? columnMapOf(json.value) : dataMapOf(json.value);
-	return map === undefined
-		? {
-				kind: "unreadable",
-				reason: `this isn't a ${qsf ? "QSF column map" : "data file's column map"}.`,
-			}
-		: { kind: "read", map };
+	const unreadable = {
+		kind: "unreadable",
+		reason: `this isn't a ${qsf ? "QSF column map" : "data file's column map"}.`,
+	} as const;
+	if (qsf) {
+		const map = columnMapOf(json.value);
+		return map === undefined ? unreadable : { kind: "read", map };
+	}
+	const read = dataMapOf(json.value);
+	return read.ok
+		? { kind: "read", map: read.value }
+		: read.error.kind === "terms"
+			? { kind: "terms", problems: read.error.problems }
+			: unreadable;
 }
 
 /**
@@ -966,7 +1034,7 @@ async function writeResponses(
 	mapFile: string,
 	ddiOption: string | undefined,
 	output: string | undefined,
-	options: Readonly<Partial<Record<Fact, string>>>,
+	options: Readonly<Partial<Record<Fact, Term>>>,
 	io: Io,
 ): Promise<number> {
 	const named = MAP_NAME.exec(mapFile);
@@ -998,6 +1066,19 @@ async function writeResponses(
 	const opened = mapOf(named[1] ?? "", mapText);
 	if (opened.kind === "unreadable") {
 		io.err(`${mapFile}: error: ${opened.reason} [responses-unreadable]\n`);
+		return PROBLEMS;
+	}
+	if (opened.kind === "terms") {
+		for (const { field, vocabulary, term, problem } of opened.problems)
+			io.err(
+				`${mapFile}: error: \`${field}\`: ${
+					problem.kind === "unknown"
+						? `${notATerm(`\`${term}\``, vocabulary, problem.suggestions)} For a ${vocabulary.noun} it doesn't list, write \`{ "other": "<words>" }\`. The terms: ${termsPage(vocabulary)}`
+						: problem.kind === "otherInMap"
+							? `in a map, write Other as \`{ "other": "${problem.words || "<words>"}" }\`.`
+							: 'Other needs words: write `{ "other": "<words>" }`.'
+				} Nothing is written. [responses-term]\n`,
+			);
 		return PROBLEMS;
 	}
 	const { map } = opened;
@@ -1095,7 +1176,7 @@ async function writeResponses(
 		);
 	const failed = findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
 	if (made.map === undefined || answered === undefined) return failed;
-	// A data file's map says who answered, and its mode column how each respondent was asked; an export of mixed kinds can't be described.
+	// A data file's map says where the answers come from, and its mode column how each respondent was asked; an export of mixed kinds can't be described.
 	const given =
 		"respondent" in map
 			? {
@@ -1113,8 +1194,8 @@ async function writeResponses(
 		for (const { fact, problem } of facts.error)
 			io.err(
 				problem === "missing"
-					? `${file}: error: the ${qsf ? "export" : "data file"} doesn't say ${fact === "asked_by" ? "how its respondents were asked" : "who answered"}: give \`${FACT_OPTIONS[fact]} <term>\`, a term of DDI's ${fact === "asked_by" ? "ModeOfCollection" : "DataSourceType"} vocabulary. Nothing is written. [responses-facts]\n`
-					: `${qsf ? file : mapFile}: error: the ${qsf ? "export" : "map"} already says ${fact === "asked_by" ? "how its respondents were asked" : "who answered"}, so \`${FACT_OPTIONS[fact]}\` isn't taken. Nothing is written. [responses-facts]\n`,
+					? `${file}: error: the ${qsf ? "export" : "data file"} doesn't say ${fact === "asked_by" ? "how its respondents were asked" : "where its answers come from"}: give \`${FACT_OPTIONS[fact]} <term>\`, a term of DDI's ${fact === "asked_by" ? "ModeOfCollection" : "DataSourceType"} vocabulary. Nothing is written. [responses-facts]\n`
+					: `${qsf ? file : mapFile}: error: the ${qsf ? "export" : "map"} already says ${fact === "asked_by" ? "how its respondents were asked" : "where the answers come from"}, so \`${FACT_OPTIONS[fact]}\` isn't taken. Nothing is written. [responses-facts]\n`,
 			);
 		return USAGE_ERROR;
 	}
@@ -1260,7 +1341,7 @@ async function writeAnswers(
 	output: string | undefined,
 	facts: {
 		readonly given: Facts;
-		readonly options: Readonly<Partial<Record<Fact, string>>>;
+		readonly options: Readonly<Partial<Record<Fact, Term>>>;
 		readonly software?: Facts["software"];
 	},
 	files: readonly string[],
@@ -1308,7 +1389,7 @@ async function writeAnswers(
 				// Only asked_by can be missing: `main` needs --synthetic or --answered-by.
 				problem === "missing"
 					? `${file}: error: the answers don't say how their respondents were asked: give \`${FACT_OPTIONS[fact]} <term>\`, a term of DDI's ModeOfCollection vocabulary. Nothing is written. [responses-facts]\n`
-					: `${file}: error: \`--synthetic\` already says ${fact === "asked_by" ? "how the respondents were asked" : "who answered"}, so \`${FACT_OPTIONS[fact]}\` isn't taken. Nothing is written. [responses-facts]\n`,
+					: `${file}: error: \`--synthetic\` already says ${fact === "asked_by" ? "how the respondents were asked" : "where the answers come from"}, so \`${FACT_OPTIONS[fact]}\` isn't taken. Nothing is written. [responses-facts]\n`,
 			);
 		return USAGE_ERROR;
 	}

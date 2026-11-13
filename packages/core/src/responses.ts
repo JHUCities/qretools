@@ -10,8 +10,16 @@
 
 import { z } from "zod";
 import type { Severity } from "./findings.ts";
-import type { Term } from "./provenance.ts";
 import { err, ok, type Result } from "./result.ts";
+import {
+	DATA_SOURCE_TYPE,
+	MODE_OF_COLLECTION,
+	mapTermOf,
+	RESPONSE_UNIT,
+	type Term,
+	type TermProblem,
+	type Vocabulary,
+} from "./vocabularies.ts";
 
 /** One column of a source, and the variable it records. */
 export interface ResponseColumn {
@@ -621,7 +629,11 @@ export function parseCsv(text: string): {
 export type Values = Readonly<Record<string, string | null>>;
 
 const nonEmpty = z.string().min(1);
-const termSchema = z.union([nonEmpty, z.strictObject({ other: nonEmpty })]);
+// Other's words trimmed, and checked with the term (`mapTermOf`), so a blank one is refused at its field.
+const termSchema = z.union([
+	nonEmpty,
+	z.strictObject({ other: z.string().trim() }),
+]);
 
 /**
  * A column of a data file that no respondent is asked (the mode of each interview, a
@@ -776,8 +788,57 @@ function valuesOf(v: unknown): Values | undefined {
 	return Object.fromEntries(entries);
 }
 
-/** A data file's map read from its JSON, once, or undefined where it isn't one. */
-export function dataMapOf(json: unknown): DataMap | undefined {
+/** Why a data file's map can't be read: its shape, or each term no vocabulary has, at its field (`metadata[0].modes."2"`). */
+export type MapProblem =
+	| { readonly kind: "shape" }
+	| {
+			readonly kind: "terms";
+			readonly problems: readonly {
+				readonly field: string;
+				readonly vocabulary: Vocabulary;
+				readonly term: string;
+				readonly problem: TermProblem;
+			}[];
+	  };
+
+/** A data file's map read from its JSON, once: its shape, then each of its terms against its vocabulary. */
+export function dataMapOf(json: unknown): Result<DataMap, MapProblem> {
+	const map = shapeOf(json);
+	if (map === undefined) return err({ kind: "shape" });
+	const terms: (readonly [string, Vocabulary, Term])[] = [
+		["answered_by", DATA_SOURCE_TYPE, map.answered_by] as const,
+		...(map.metadata ?? []).flatMap((m, i) => [
+			...(m.unit === undefined
+				? []
+				: [[`metadata[${i}].unit`, RESPONSE_UNIT, m.unit] as const]),
+			...Object.entries(m.modes ?? {}).map(
+				([code, t]) =>
+					[
+						`metadata[${i}].modes.${JSON.stringify(code)}`,
+						MODE_OF_COLLECTION,
+						t,
+					] as const,
+			),
+		]),
+	];
+	const problems = terms.flatMap(([field, vocabulary, t]) => {
+		const read = mapTermOf(vocabulary, t);
+		return read.ok
+			? []
+			: [
+					{
+						field,
+						vocabulary,
+						term: typeof t === "string" ? t : JSON.stringify(t),
+						problem: read.error,
+					},
+				];
+	});
+	return problems.length > 0 ? err({ kind: "terms", problems }) : ok(map);
+}
+
+/** A data file's map read from its JSON, or undefined where its shape isn't one. */
+function shapeOf(json: unknown): DataMap | undefined {
 	if (typeof json !== "object" || json === null) return undefined;
 	const { source, ddi, respondent, values, columns } = json as Record<
 		string,

@@ -244,6 +244,7 @@ export {
 	type DataMap,
 	dataFileMap,
 	dataMapOf,
+	type MapProblem,
 	type MetadataColumn,
 	metadataRepresentation,
 	parseCsv,
@@ -346,6 +347,16 @@ export {
 	type Symbols,
 	usedBy,
 } from "./symbols.ts";
+export {
+	DATA_SOURCE_TYPE,
+	MODE_OF_COLLECTION,
+	mapTermOf,
+	RESPONSE_UNIT,
+	type TermProblem,
+	termOf,
+	termsPage,
+	type Vocabulary,
+} from "./vocabularies.ts";
 export {
 	type InstrumentIn,
 	instrumentAt,

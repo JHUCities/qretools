@@ -1,13 +1,17 @@
 import {
 	bankOf,
+	DATA_SOURCE_TYPE,
 	instrumentOf,
+	MODE_OF_COLLECTION,
+	mapTermOf,
 	type Representation,
 	readResponses,
+	type Term,
 } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import type { ColumnMap } from "./columns.ts";
 import { qsfOf } from "./qsf.ts";
-import { columnMapOf, exportMap } from "./responses.ts";
+import { COLLECTED, columnMapOf, exportMap } from "./responses.ts";
 
 const q = (name: string, rest: string) =>
 	`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
@@ -323,5 +327,18 @@ describe("columnMapOf", () => {
 				columns: [{ ...values, values: { "10": 10 } }],
 			}),
 		).toBeUndefined();
+	});
+});
+
+describe("COLLECTED", () => {
+	it("writes only terms of DDI's vocabularies", () => {
+		for (const facts of Object.values(COLLECTED)) {
+			if (facts.answered_by !== undefined)
+				expect(mapTermOf(DATA_SOURCE_TYPE, facts.answered_by).ok).toBe(true);
+			if (facts.asked_by !== undefined && !Array.isArray(facts.asked_by))
+				expect(mapTermOf(MODE_OF_COLLECTION, facts.asked_by as Term).ok).toBe(
+					true,
+				);
+		}
 	});
 });
