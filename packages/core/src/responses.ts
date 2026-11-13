@@ -264,7 +264,7 @@ function censoredMessage(censored: Readonly<Record<string, string>>): string {
 }
 
 /** Whether a variable can hold a value. */
-const holds = (r: Representation | undefined, value: string): boolean =>
+export const holds = (r: Representation | undefined, value: string): boolean =>
 	r === undefined
 		? false
 		: r.kind === "codes"

@@ -21,6 +21,7 @@ qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 qretools qsf-map dist/instruments/wave1.json -o maps  # the QSF column map of an instrument's survey
 qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/instruments/wave1.json  # a Qualtrics export, by DDI variable
+qretools next wave1.json state.json          # the next question of an interview, as JSON
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
 ```
@@ -452,6 +453,97 @@ qretools paths wave1.json -o wave1-paths.html
 
 It reads any DDI-Lifecycle 4.0 JSON with an instrument in it. What it can't read is said
 on stderr as `check` says a finding.
+
+## Next: one step of an interview
+
+`next` tells a program (an interviewer, or a harness that interviews a language model)
+the next step of an interview through an instrument. QREtools decides the routing. The
+program does not evaluate a condition. It calls `next` once for each step:
+
+1. Run `next` with the instrument's DDI and the state (a JSON file, or stdin).
+2. Show the reply to the respondent, or ask the respondent for the input it names.
+3. Add the answer to the state.
+4. Do steps 1 to 3 again until the reply is `end`.
+
+```sh
+qretools next dist/instruments/wave1.json state.json   # or: … | qretools next wave1.json
+qretools next --schema                                 # the JSON Schemas of the state and of the reply
+```
+
+The state holds the inputs by their names in the instrument, and the answers so far. Each
+answer names its DDI Variable by URN, as `responses` does:
+
+```json
+{
+  "inputs": { "self_employed": "1", "last_year": 2009 },
+  "answers": [
+    { "variable": "urn:ddi:us.jhu:instrument-gss_2010.var-wrkstat:4", "value": "1" },
+    { "variable": "urn:ddi:us.jhu:instrument-gss_2010.var-hrs1:4", "value": 40 }
+  ]
+}
+```
+
+- A code is always a string. A number is a JSON number or a string. A missing-value code
+  (such as `"D"`) is a string, and every variable takes its own missing codes.
+- An answer in a roster has a `row`, from 1. An answer outside a roster has no `row`.
+- To go back, remove the answer. The command replays the instrument from the start each
+  time. It ignores an answer to a question that the route does not reach, and no condition
+  reads that answer.
+
+The reply has one of three kinds:
+
+- `ask`: the question to ask. It has the step's URN (`step`), the question's name and URN,
+  the `row` in a roster, the `text` with its fills, the `instructions`, and the `domain`.
+  The domain is `choice` (the codes and labels in the author's order), `select-all` (each
+  option with its own variable and its ticked and unticked codes), `number` (`min`, `max`,
+  `decimals`), `text` (`maxLength`) or `other` (any text). Each variable has its URN, its
+  name and its `missing` codes. If the answer in the state cannot be taken, the reply asks
+  the same question again and `problem` says why.
+- `input`: an input that the route needs and the state does not hold. The reply gives its
+  name, its URN, its domain and its `missing` codes. Send `null` if the value is not known.
+  The command asks for an input only when a condition or a fill on the route needs it.
+- `end`: the end of the interview. `how` is `end`, or `stopped` after a screen-out.
+
+An `ask` and an `end` also have `statements`: the text to show since the last answered
+question. An `input` reply has no statements, so the program shows each statement one
+time. Each reply has `notes`: what the route so far could not follow as the DDI says.
+Each note has a `code` and a `message`. The codes are:
+
+| Code | Meaning |
+|---|---|
+| `ddi-unread` | A part of the DDI that the command cannot read. It is not on the route. |
+| `next-verbatim` | A condition in another language. It is taken as not true. |
+| `next-undecided` | A condition that the command cannot decide. It is taken as not true. |
+| `next-empty-fill` | A fill with no value. The text shows nothing in its place. |
+| `next-unrecorded` | A question that records no variable. The command skips it. |
+| `next-section-order` | A section in random or rotated order. It runs in its written order. |
+| `next-no-count` | A roster count with no value. The roster has no rows. |
+| `next-roster-cap` | A roster with more than 100 rows. It stops at row 100. |
+| `next-loop-skipped` | A loop that the command cannot run. Its questions are never asked. |
+
+A later version can add codes. Read a code that you do not know as information.
+
+The reply schema does not refuse a field that it does not name. Thus a later version can
+add a field, and a program that validates replies against the schema does not fail.
+
+The `missing` codes are all the codes in the bank's `missing.yaml`. Some of them are for
+data processing (such as "Not applicable"), and a respondent does not give them. The
+program chooses which missing codes to offer to the respondent.
+
+How values are read in a condition:
+
+- A missing code of a coded question is that code, so `x in {"2", "R"}` holds for `"R"`.
+- A missing code of a number has no value, so `isnull(x)` holds for it.
+
+If the state cannot belong to the instrument, the command writes nothing on stdout. It
+writes the error on stderr and stops with exit code 1. These are the errors: an unknown
+input or variable, a `row` that is wrong for its variable, an answer given twice, or a
+code sent as a number. Item versions come from git history, so a new build can change the
+URNs. A state from an older build then gives an error.
+
+Limits: a shuffled section and shuffled options run in their written order (the reply
+gives `responseOrder`, so the program can shuffle the options). A roster inside a roster
+is refused. A check that is not `blocking` is not applied.
 
 ## Output
 

@@ -202,6 +202,7 @@ describe("qretools instrument", () => {
 				delete written[p];
 			},
 			ownRepository,
+			readStdin: async () => "",
 			readHistory: async () => ({
 				kind: "unavailable",
 				reason: "not in these tests",
