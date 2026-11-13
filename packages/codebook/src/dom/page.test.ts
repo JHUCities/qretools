@@ -44,6 +44,7 @@ const ask = (id: string, question: string): FlowStep => ({
 	},
 	records: [],
 	text: [],
+	instructions: [],
 	checks: [],
 });
 
