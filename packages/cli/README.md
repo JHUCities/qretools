@@ -26,6 +26,8 @@ qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/i
 qretools next wave1.json state.json          # the next question of an interview, as JSON
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json \
   --asked-by Interview.FaceToFace -o release.json  # a data file, as a DDI dataset
+qretools responses answers.csv --ddi wave1.json --synthetic --runtime model-name \
+  --file traces.jsonl -o run1.json  # a model's answers, as a DDI dataset
 qretools dataset export wave1-data.json --csv --ddi wave1.json     # a dataset's values, one line per value
 qretools dataset export wave1-data.json --provenance --ddi wave1.json --access public  # without its values, at a level
 ```
@@ -408,6 +410,8 @@ If an option gives a fact that the source gives, the command stops. It writes no
 | Qualtrics responses on an anonymous link or by email (`Status` 0) | asked by `SelfAdministeredQuestionnaire.CAWI` | `--answered-by` |
 | Other Qualtrics responses | nothing | `--asked-by`, `--answered-by` |
 | A data file | who answered (its map); how each respondent was asked, if the map has a mode column | `--asked-by`, if the map has no mode column |
+| An answers file, with `--synthetic` | asked by `Simulation`, answered by `Other` ("synthetic") | `--runtime` |
+| An answers file, without `--synthetic` | nothing | `--answered-by`, `--asked-by` |
 
 The command does not check a term against the vocabulary.
 
@@ -566,6 +570,72 @@ range that the DDI gives. This check applies to a Qualtrics export too. The comm
 
 An input of an instrument has the missing values of the questions that the instrument
 asks. Thus, a data file can give "Don't know" (or another missing value) for an input.
+
+## Read an answers file
+
+`responses` also reads answers that are already in the form of QREtools, without a map.
+A program, for example a harness that asks a model the questions of an instrument, writes
+them. The answers file is CSV, with the same header as `dataset export --csv`:
+
+```csv
+respondent,variable,row,value
+s1,start,,2026-11-12T23:14:02Z
+s1,end,,2026-11-12T23:16:02Z
+s1,urn:ddi:org.example:instrument-wave1.var-tenure:3,,2
+s1,urn:ddi:org.example:instrument-wave1.var-rent:3,,D
+```
+
+- `respondent`: the identifier of the respondent.
+- `variable`: the URN of a variable in the DDI of the instrument, or `start` or `end`.
+- `row`: empty. The dataset cannot hold the rows of a roster yet.
+- `value`: a code of the variable, a missing code, a number or text. It is never empty:
+  for no answer, write no line. A ticked select-all
+  option has the code that the DDI gives to a tick. For `start` and `end`, the time of the
+  interview, in ISO 8601 with a time zone: `Z` or an offset such as `-05:00`.
+
+The program does not need the URNs of the dataset: `start` and `end` become the `start`
+and `end` variables of the dataset. Do not give the output of `dataset export --csv` to the
+command: it has the URNs of the dataset, not `start` and `end`.
+
+```sh
+qretools responses runs/run1/answers.csv --ddi dist/instruments/wave1.json --synthetic \
+  --runtime "model-name:Q8_0" --runtime-version b1234 \
+  --file runs/run1/traces.jsonl --file runs/run1/config.toml -o runs/run1/dataset.json
+```
+
+- `--ddi` is necessary. It is the DDI of the instrument.
+- Give `--synthetic` for the answers of a model. The dataset says that the respondents
+  were asked in a simulation (`Simulation`), and that `Other` ("synthetic") answered.
+  `--runtime` is necessary: it is the software that gave the answers. `--runtime-version`
+  is optional. The dataset records them in a `Methodology` as `DataCollectionSoftware`.
+- For real answers from another source, give `--answered-by <term>` and `--asked-by <term>`
+  in place of `--synthetic`. `--runtime` is optional.
+- `--file` cites a file of the run, for example the traces of the model or its
+  configuration. You can give it more than one time. The dataset records each file as an
+  `OtherMaterial`, with its SHA-256 digest and its size. The command refuses `--file` with
+  `--map`.
+
+The dataset is the same as in "Read the responses", with these differences:
+
+- The dataset gets its name from `-o`. Without `-o`, it gets the name of the DDI file.
+- The dataset has the agency of the instrument.
+- The source `PhysicalInstance` is the answers file. No `OtherMaterial` cites a map.
+- The dataset has no `not-in-source` group, because an answers file can hold each variable.
+- The dates of the collection come from `start` and `end`.
+
+The command writes findings at their line in the answers file. A finding never shows a
+value. **If the command finds an error, it writes no dataset.**
+
+- `responses-not-a-code` (error): the value is not a code of the variable, or not a number
+  in the range that the DDI gives.
+- `responses-unknown-variable` (error): the DDI has no variable with the URN.
+- `responses-time` (error): a `start` or an `end` is not a date and time with a zone, or an
+  interview ends before it starts. A warning if a respondent has no `start` or no `end`.
+- `responses-duplicate` (error): the file gives one variable two times for one respondent.
+- `responses-row` (error): the line does not have four cells, a respondent and a variable,
+  or it has a roster row.
+- `responses-unreadable` (error): the header is not `respondent,variable,row,value`, or a
+  quote is not closed.
 
 ## Export a dataset
 

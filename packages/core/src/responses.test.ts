@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	answersCsv,
+	answersOf,
 	type DataMap,
 	dataFileMap,
 	dataMapOf,
@@ -488,5 +489,86 @@ describe("a data file's metadata and interview date", () => {
 		expect(lacking.findings.map((f) => f.code)).toEqual([
 			"responses-missing-column",
 		]);
+	});
+});
+
+describe("answersOf", () => {
+	const file = (...lines: string[]) =>
+		["respondent,variable,row,value", ...lines, ""].join("\n");
+
+	it("reads what answersCsv writes, with each interview's start and end", () => {
+		const r = answersOf(
+			file(
+				"a,start,,2026-11-12T23:14:02Z",
+				"a,end,,2026-11-12T18:16:02-05:00",
+				"a,urn:happy,,D",
+				'a,urn:note,,"say ""hi"", then\nbye"',
+				"b,start,,2026-11-12T23:20:00.5Z",
+				"b,end,,2026-11-12T23:21:00Z",
+			),
+			REPRESENTATIONS,
+		);
+		expect(r.findings).toEqual([]);
+		expect(r.respondents).toEqual([
+			{
+				id: "a",
+				start: "2026-11-12T23:14:02Z",
+				end: "2026-11-12T18:16:02-05:00",
+			},
+			{ id: "b", start: "2026-11-12T23:20:00.5Z", end: "2026-11-12T23:21:00Z" },
+		]);
+		expect(answersCsv(r.answers)).toBe(
+			file("a,urn:happy,,D", 'a,urn:note,,"say ""hi"", then\nbye"'),
+		);
+	});
+
+	it("places each problem by its line and variable, counted, never by its value", () => {
+		const r = answersOf(
+			file(
+				"a,start,,2026-11-12 23:14:02",
+				"a,end,,2026-02-30T23:16:02Z",
+				"a,urn:happy,,secret",
+				"a,urn:age,,9x",
+				"a,urn:gone,,1",
+				"a,urn:tick,2,1",
+				"a,urn:tick,,1",
+				"a,urn:tick,,0",
+				"b,urn:happy,,secret",
+				"b,urn:age",
+			),
+			REPRESENTATIONS,
+		);
+		expect(JSON.stringify(r)).not.toMatch(/secret|9x/);
+		expect(
+			r.findings.map((f) => [f.code, f.severity, f.line, f.count]),
+		).toEqual([
+			["responses-time", "error", 2, 1],
+			["responses-time", "error", 3, 1],
+			["responses-not-a-code", "error", 4, 2],
+			["responses-not-a-code", "error", 5, 1],
+			["responses-unknown-variable", "error", 6, 1],
+			["responses-row", "error", 7, 1],
+			["responses-duplicate", "error", 9, 1],
+			["responses-row", "error", 11, 1],
+			["responses-time", "warning", 2, 2],
+		]);
+		expect(r.answers).toEqual([
+			{ respondent: "a", variable: "urn:tick", value: "1" },
+		]);
+	});
+
+	it("refuses another header, and an interview that ends before it starts", () => {
+		expect(
+			answersOf("id,variable,row,value\n", REPRESENTATIONS).findings,
+		).toMatchObject([{ code: "responses-unreadable", line: 1 }]);
+		expect(
+			answersOf(
+				file(
+					"a,start,,2026-11-12T23:00:00Z",
+					"a,end,,2026-11-12T23:30:00+01:00",
+				),
+				REPRESENTATIONS,
+			).findings,
+		).toMatchObject([{ code: "responses-time", severity: "error", line: 2 }]);
 	});
 });

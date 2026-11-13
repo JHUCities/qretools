@@ -8,7 +8,7 @@ import { ddiIndexOf } from "./ddi/read.ts";
 import { bankOf, questionItems } from "./evaluate.ts";
 import { aboveLevel, accessPoliciesOf, filterAnswers } from "./filter.ts";
 import { instrumentOf } from "./instrument/instrument.ts";
-import { type Answer, answersCsv, answersOf } from "./responses.ts";
+import type { Answer } from "./responses.ts";
 import { remoteScope } from "./workspace.ts";
 
 const q = (name: string, rest = "") =>
@@ -247,30 +247,5 @@ describe("aboveLevel, the check after filtering", () => {
 			ok: true,
 			value: [],
 		});
-	});
-});
-
-describe("answersOf", () => {
-	it("reads back what answersCsv writes", () => {
-		const answers: Answer[] = [
-			{ respondent: "a", variable: "urn:x", value: 'say "hi", then\nbye' },
-			{ respondent: "a", variable: "urn:y", row: 2, value: "" },
-		];
-		expect(answersOf(answersCsv(answers))).toEqual({
-			ok: true,
-			value: answers,
-		});
-	});
-
-	it("refuses another header or a line that isn't an answer, by its line alone", () => {
-		expect(answersOf("id,variable,row,value\n")).toMatchObject({
-			ok: false,
-			error: { line: 1 },
-		});
-		const bad = answersOf(
-			"respondent,variable,row,value\na,urn:x,,1\na,urn:x,0,secret\n",
-		);
-		expect(bad).toMatchObject({ ok: false, error: { line: 3 } });
-		expect(JSON.stringify(bad)).not.toMatch(/secret/);
 	});
 });
