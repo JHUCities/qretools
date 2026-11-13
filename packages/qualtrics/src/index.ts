@@ -9,6 +9,7 @@ export {
 	type Qsf,
 	type QsfObject,
 	type QsfResult,
+	qsfMapOf,
 	qsfOf,
 	qsfRefusalReason,
 	qsfTime,

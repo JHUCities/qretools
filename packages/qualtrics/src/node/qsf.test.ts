@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { bankOf, instrumentOf, placeFindings } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
 import { describe, expect, it } from "vitest";
-import { qsfOf } from "../qsf.ts";
+import { qsfMapOf, qsfOf } from "../qsf.ts";
 import { readInstrument } from "../read.ts";
 import { flowOutline, outline } from "../testing.ts";
 import { writeQsf } from "../write.ts";
@@ -231,5 +231,24 @@ describe("the households survey's column map", () => {
 		);
 		expect(asked.filter((qid) => !mapped.has(qid))).toEqual([]);
 		expect([...new Set(fields)].filter((f) => !mapped.has(f))).toEqual([]);
+	});
+
+	it("is the same map whether or not the survey is made with it", async () => {
+		const ddi = await households();
+		const made = qsfOf(ddi, {
+			name: "households",
+			created: "2026-10-18 12:00:00",
+			digest: "sha256:0",
+			version: "9",
+		});
+		const map = qsfMapOf(ddi, { digest: "sha256:0", version: "9" });
+		expect(made.kind).toBe("made");
+		expect(map).toEqual(
+			made.kind === "made" && {
+				kind: "made",
+				columns: made.columns,
+				findings: made.findings,
+			},
+		);
 	});
 });
