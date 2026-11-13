@@ -20,6 +20,7 @@ qretools codebook path/to/workspace -o codebook.html  # its questions' codebook,
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
 qretools qsf-map dist/instruments/wave1.json -o maps  # the QSF column map of an instrument's survey
+qretools qsf-map acme/survey@v3:wave1 -o maps         # the same, from the release v3 (a tag reference)
 qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/instruments/wave1.json  # a Qualtrics export, by DDI variable
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
@@ -113,10 +114,32 @@ blob is a UserID.
   again: it stays with the release that you fielded.
 
 `--tag-message <file>` also writes the text for a release's tag: a line, a blank line,
-then each file's version, date and blob as JSON. Tag the built commit with it, verbatim,
+then each file's version, date and blob as JSON. The JSON also gives each instrument's
+version, date and blob, the SHA-256 digest of its DDI, and the version of qretools that
+built it, so a tag reference can rebuild the DDI (see "Tag references"). Tag the built commit with it, verbatim,
 so git keeps it whole: `git tag -a --cleanup=verbatim -F <file> v2 HEAD`. A workspace can
 do this in a workflow it runs by hand with the tag's name (qretools-gss's `release.yml`
 is one). The tag points at the default branch's own commit, and only the tag is pushed.
+
+## Tag references
+
+A tag reference names an instrument in a release of a workspace:
+`owner/repo@tag:name`, or `owner/repo/folder@tag:name` for a workspace in a folder. For
+example, `acme/survey@v3:wave1` is the instrument `instruments/wave1.yaml` in the release
+`v3`. `qsf-map` and `responses --ddi` accept a tag reference where they accept a DDI file.
+
+The command reads the tag with git, as it reads a workspace in another repository. It
+rebuilds the DDI of the instrument with the versions in the tag's message. Then it
+compares the digest of the DDI with the digest that the release recorded:
+
+- If the digests are the same, the command uses the DDI.
+- If the digests are different, the command stops. The message gives the version of
+  qretools that built the release. Run the same command again with that version, for example
+  `npx qretools@2.0.0-alpha.12 qsf-map acme/survey@v3:wave1 -o maps`.
+- If the tag was made before tag references, the command stops. Release the workspace
+  again.
+
+Offline, the command reads a tag that it read before from the cache.
 
 ## Make the QSF column map
 
@@ -124,12 +147,14 @@ The QSF column map gives the DDI variable of each column in the response export 
 survey that `build` wrote. Make the map from the DDI of the instrument that you fielded:
 
 ```sh
-qretools qsf-map dist/instruments/wave1.json -o maps
+qretools qsf-map acme/survey@v3:wave1 -o maps
 ```
 
-1. Get `<name>.json` from the release that made the survey that you fielded.
-2. Run `qretools qsf-map <name>.json -o <dir>`. The command writes
-   `<dir>/<name>-ddi-qsf.columns.json`.
+1. Find the release that made the survey that you fielded, for example `v3`.
+2. Run `qretools qsf-map <owner>/<repo>@<tag>:<name> -o <dir>`. The command writes
+   `<dir>/<name>-ddi-qsf.columns.json`. The map records the release in its `release`
+   field. You can also give the file `<name>.json` from the release:
+   `qretools qsf-map <name>.json -o <dir>`.
 3. Read each `qsf-unmapped` warning. The map has no column for the item that the
    warning names.
 4. Commit the map in `maps/`. `build` copies it beside the DDI. Do not make it again
@@ -209,9 +234,11 @@ To read an export, do these steps:
 
 1. Do the steps in "Export from Qualtrics" to get the export.
 2. Find the QSF column map of the survey (see "Make the QSF column map").
-3. Find the DDI that the map was made from.
-4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json --ddi <name>.json`.
-   If `<name>.json` is in the same folder as the map, you can omit `--ddi`.
+3. If the map does not record a release, find the DDI that the map was made from.
+4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json`. The command
+   reads `<name>.json` in the folder of the map. If that file is not there, the command
+   gets the DDI from the release that the map records. If the map records no release,
+   add `--ddi <the DDI>`. `--ddi` can also be a tag reference.
 5. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
    The output holds the responses.** Use `-o` to write the output to a file. Without `-o`,
    the command writes it to stdout.

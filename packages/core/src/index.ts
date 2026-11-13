@@ -12,6 +12,8 @@ export {
 	addressOf,
 	HERE,
 	notHere,
+	type TagRef,
+	tagRefOf,
 } from "./address.ts";
 export {
 	type BankLocation,
@@ -179,7 +181,11 @@ export {
 	shortCommit,
 	unlockedTags,
 } from "./lock.ts";
-export { tagMessage } from "./manifest.ts";
+export {
+	type InstrumentRelease,
+	instrumentRelease,
+	tagMessage,
+} from "./manifest.ts";
 export {
 	type Exportable,
 	exportRefusal,
