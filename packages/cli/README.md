@@ -477,9 +477,22 @@ The reply has one of three kinds:
 
 An `ask` and an `end` also have `statements`: the text to show since the last answered
 question. An `input` reply has no statements, so the program shows each statement one
-time. Each reply has `notes`: what the route so far could not follow as the DDI says. For
-example, a condition in another language is taken as not true, a part of the DDI that
-the command cannot read is not on the route, and a roster stops at 100 rows.
+time. Each reply has `notes`: what the route so far could not follow as the DDI says.
+Each note has a `code` and a `message`. The codes are:
+
+| Code | Meaning |
+|---|---|
+| `ddi-unread` | A part of the DDI that the command cannot read. It is not on the route. |
+| `next-verbatim` | A condition in another language. It is taken as not true. |
+| `next-undecided` | A condition that the command cannot decide. It is taken as not true. |
+| `next-empty-fill` | A fill with no value. The text shows nothing in its place. |
+| `next-unrecorded` | A question that records no variable. The command skips it. |
+| `next-section-order` | A section in random or rotated order. It runs in its written order. |
+| `next-no-count` | A roster count with no value. The roster has no rows. |
+| `next-roster-cap` | A roster with more than 100 rows. It stops at row 100. |
+| `next-loop-skipped` | A loop that the command cannot run. Its questions are never asked. |
+
+A later version can add codes. Read a code that you do not know as information.
 
 The reply schema does not refuse a field that it does not name. Thus a later version can
 add a field, and a program that validates replies against the schema does not fail.
