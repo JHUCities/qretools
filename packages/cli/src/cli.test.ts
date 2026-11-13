@@ -456,23 +456,16 @@ describe("qretools build", () => {
 				"org.example:instrument-x:2",
 			]);
 			expect(r.written[join(ws, "dist", "ddi.json")]).toBeDefined();
-			// Its Qualtrics survey, and the map of the survey's columns to that DDI.
-			const json = r.written[join(ws, "dist", "instruments", "x.json")] ?? "";
-			const map = JSON.parse(
-				r.written[join(ws, "dist", "instruments", "x-ddi-qsf.columns.json")] ??
-					"{}",
-			);
-			expect(map).toEqual({
-				qretools: expect.any(String),
-				instrument: "urn:ddi:org.example:instrument-x:2",
-				ddi: `sha256:${createHash("sha256").update(json).digest("hex")}`,
-				columns: [
-					{
-						importId: "QID1_TEXT",
-						variable: "urn:ddi:org.example:instrument-x.var-q:2",
-					},
-				],
-			});
+			// Its Qualtrics survey, and never a column map: `qsf-map` makes that.
+			expect(
+				Object.keys(r.written)
+					.map((p) => p.slice(ws.length + 1))
+					.sort(),
+			).toEqual([
+				"dist/ddi.json",
+				"dist/instruments/x.json",
+				"dist/instruments/x.qsf",
+			]);
 			const qsf = r.written[join(ws, "dist", "instruments", "x.qsf")] ?? "";
 			// Dated when the instrument last changed, never now: a commit builds the same bytes.
 			const changed = (
@@ -519,10 +512,7 @@ describe("qretools build", () => {
 			const dist = (file: string) => join(ws, "dist", "instruments", file);
 			// What an earlier build wrote: that a release writes these is the test above.
 			const earlier = Object.fromEntries(
-				["x.json", "x.qsf", "x-ddi-qsf.columns.json"].map((f) => [
-					dist(f),
-					"earlier",
-				]),
+				["x.json", "x.qsf"].map((f) => [dist(f), "earlier"]),
 			);
 			// An input named like a field Qualtrics surveys get: a release allows it, a survey can't.
 			await writeFile(
@@ -889,6 +879,54 @@ describe("qretools paths", () => {
 	});
 });
 
+describe("qretools qsf-map", () => {
+	it("writes the QSF column map of an instrument's DDI, with its source and the file's digest", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-qsf-map-"));
+		const file = join(dir, "households.json");
+		const ddi = (
+			await run(
+				"instrument",
+				"export",
+				here("../../core/fixtures/households/instruments/households.yaml"),
+			)
+		).out;
+		await writeFile(file, ddi);
+		const r = await run("qsf-map", file, "-o", "maps");
+		expect(r).toMatchObject({ code: 0, out: "" });
+		expect(Object.keys(r.written)).toEqual([
+			join("maps", "households-ddi-qsf.columns.json"),
+		]);
+		const map = JSON.parse(Object.values(r.written)[0] ?? "{}");
+		expect(map).toMatchObject({
+			source: "qsf",
+			instrument: "urn:ddi:org.example.households:instrument-households:1",
+			ddi: `sha256:${createHash("sha256").update(ddi).digest("hex")}`,
+		});
+		expect(map.columns.length).toBeGreaterThan(0);
+	});
+
+	it("writes nothing for a file that isn't an instrument's DDI, and needs -o", async () => {
+		const file = join(
+			await mkdtemp(join(tmpdir(), "qretools-qsf-map-")),
+			"ddi.json",
+		);
+		await writeFile(file, (await run("export", SAMPLE)).out);
+		const none = await run("qsf-map", file, "-o", "maps");
+		expect(none).toMatchObject({ code: 1, written: {} });
+		expect(none.err).toMatch(
+			/The DDI has no instrument\. \[qsf-unread\]\n.*Not written:/,
+		);
+		await writeFile(file, "{");
+		const bad = await run("qsf-map", file, "-o", "maps");
+		expect(bad).toMatchObject({ code: 1, written: {} });
+		expect(bad.err).toMatch(
+			/isn't DDI-Lifecycle 4.0 JSON.*\[qsf-map-unreadable\]/,
+		);
+		expect((await run("qsf-map", file)).code).toBe(2);
+		expect((await run("qsf-map", "-o", "maps")).code).toBe(2);
+	});
+});
+
 describe("qretools responses", () => {
 	const q = (name: string, rest: string) =>
 		`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
@@ -909,7 +947,7 @@ describe("qretools responses", () => {
 	const v = (name: string) => `urn:ddi:org.example:instrument-t.var-${name}:1`;
 	const id = (o: object) => `"${JSON.stringify(o).replaceAll('"', '""')}"`;
 
-	/** What `build` writes for an instrument, and an export of its survey. */
+	/** An instrument's DDI and its QSF column map, as `build` and `qsf-map` write them, and an export of its survey. */
 	async function files(digestOf = (ddi: string) => ddi) {
 		const dir = await mkdtemp(join(tmpdir(), "qretools-responses-"));
 		const { ddi } = instrumentOf(
@@ -1002,6 +1040,7 @@ describe("qretools responses", () => {
 			"ID,TENURE,RENT,OTHER\n7,2,-98,x\n8,-100,-100,y\n9,5,1200,z\n",
 		);
 		const json = JSON.stringify({
+			source: "survey",
 			ddi: digest,
 			respondent: "ID",
 			values: { "-98": "D", "-100": null },
@@ -1045,7 +1084,7 @@ describe("qretools responses", () => {
 			(await run("responses", data, "--map", apart, "--ddi", ddi)).err,
 		).toMatch(/isn't the DDI the map was made from.*\[responses-provenance\]/);
 
-		// Each kind of map is read only under its own name.
+		// Its `source` says what kind of map it is, and must agree with its name.
 		await writeFile(join(dir, "t-ddi-qsf.columns.json"), json);
 		expect(
 			(
@@ -1056,7 +1095,28 @@ describe("qretools responses", () => {
 					join(dir, "t-ddi-qsf.columns.json"),
 				)
 			).err,
+		).toMatch(
+			/its name says the source `qsf`, but its `source` field says `survey`/,
+		);
+		await writeFile(
+			join(dir, "t-ddi-qsf.columns.json"),
+			JSON.stringify({ ...JSON.parse(json), source: "qsf" }),
+		);
+		expect(
+			(
+				await run(
+					"responses",
+					data,
+					"--map",
+					join(dir, "t-ddi-qsf.columns.json"),
+				)
+			).err,
 		).toMatch(/isn't a QSF column map/);
+		const { source: _, ...unsourced } = JSON.parse(json);
+		await writeFile(beside, JSON.stringify(unsourced));
+		expect((await run("responses", data, "--map", beside)).err).toMatch(
+			/this map has no `source` field.*Add `"source": "survey"`/,
+		);
 		expect((await run("responses", data, "--map", ddi)).code).toBe(2);
 	});
 });

@@ -19,8 +19,9 @@ qretools build path/to/workspace             # its last commit's DDI, versioned 
 qretools codebook path/to/workspace -o codebook.html  # its questions' codebook, one HTML page
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
+qretools qsf-map dist/instruments/wave1.json -o maps  # the QSF column map of an instrument's survey
+qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/instruments/wave1.json  # a Qualtrics export, by DDI variable
 qretools next wave1.json state.json          # the next question of an interview, as JSON
-qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
 ```
@@ -93,16 +94,40 @@ blob is a UserID.
 - It needs the whole history. A shallow clone is refused; in CI, use `fetch-depth: 0`.
 - It writes `<outdir>/ddi.json`. `-o` names the folder (default `<dir>/dist`).
 - It writes the DDI of each instrument to `<outdir>/instruments/<name>.json`. In the same
-  folder, it writes the Qualtrics survey of the instrument, `<name>.qsf`, and its QSF
-  column map, `<name>-ddi-qsf.columns.json`. If Qualtrics cannot run an instrument,
-  `build` gives a warning. It then writes no survey and no QSF column map for that
+  folder, it writes the Qualtrics survey of the instrument, `<name>.qsf`. If Qualtrics
+  cannot run an instrument, `build` gives a warning. It then writes no survey for that
   instrument.
+- It does not write a column map. Use `qsf-map` (see "Make the QSF column map").
 
 `--tag-message <file>` also writes the text for a release's tag: a line, a blank line,
 then each file's version, date and blob as JSON. Tag the built commit with it, verbatim,
 so git keeps it whole: `git tag -a --cleanup=verbatim -F <file> v2 HEAD`. A workspace can
 do this in a workflow it runs by hand with the tag's name (qretools-gss's `release.yml`
 is one). The tag points at the default branch's own commit, and only the tag is pushed.
+
+## Make the QSF column map
+
+The QSF column map gives the DDI variable of each column in the response export of a
+survey that `build` wrote. Make the map from the DDI of the instrument that you fielded:
+
+```sh
+qretools qsf-map dist/instruments/wave1.json -o maps
+```
+
+1. Get `<name>.json` from the release that made the survey that you fielded.
+2. Run `qretools qsf-map <name>.json -o <dir>`. The command writes
+   `<dir>/<name>-ddi-qsf.columns.json`.
+3. Read each `qsf-unmapped` warning. The map has no column for the item that the
+   warning names.
+4. Commit the map. Do not make it again for a survey that you fielded.
+
+The map has `"source": "qsf"` and the SHA-256 digest of the DDI file. `responses` reads
+the export only with that DDI. If Qualtrics cannot run the instrument, the command writes
+no map, and it shows each error. `-o` is necessary.
+
+The map records the version of qretools that ran `qsf-map`. If this is not the version that
+built the survey, `responses` gives a note. To prevent the note, use the same version for
+the two commands.
 
 ## Export from Qualtrics
 
@@ -138,15 +163,15 @@ single-choice question:
 
 The QSF column map gives the code for each name or value that Qualtrics writes
 differently. If two options of one question get the same name or value (for example `1`
-and `01`), the QSF column map does not read the two options, and `build` gives a
+and `01`), the QSF column map does not read the two options, and `build` and `qsf-map` give a
 `qsf-unmapped` warning.
 
 **Caution: do not use the code `Infinity`, or a number that is too large for Qualtrics
 (for example `1e999`). Qualtrics writes nothing for this option, and the answer is
-lost.** `build` gives a `qsf-unmapped` warning for this code.
+lost.** `build` and `qsf-map` give a `qsf-unmapped` warning for this code.
 
 A QSF column map from qretools 2.0.0-alpha.9 or earlier does not give these values. To
-get them, run `build` again. The QSF and its QIDs do not change, so a survey that
+get them, run `qsf-map` again. The QSF and its QIDs do not change, so a survey that
 collects responses can use the new map.
 
 ## Read the responses
@@ -155,7 +180,7 @@ collects responses can use the new map.
 for each value, with the DDI variable that records the value:
 
 ```sh
-qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json -o wave1-responses.csv
+qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/instruments/wave1.json -o wave1-responses.csv
 ```
 
 ```csv
@@ -169,10 +194,10 @@ R_1,urn:ddi:org.example:instrument-wave1.var-age:3,2,D
 To read an export, do these steps:
 
 1. Do the steps in "Export from Qualtrics" to get the export.
-2. Find the QSF column map of the survey. `build` writes it in `<outdir>/instruments/`.
-3. Make sure that `<name>.json` is in the same folder as the map. `build` writes the two
-   files together.
-4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json`.
+2. Find the QSF column map of the survey (see "Make the QSF column map").
+3. Find the DDI that the map was made from.
+4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json --ddi <name>.json`.
+   If `<name>.json` is in the same folder as the map, you can omit `--ddi`.
 5. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
    The output holds the responses.** Use `-o` to write the output to a file. Without `-o`,
    the command writes it to stdout.
@@ -236,11 +261,14 @@ qretools responses data.csv --map maps/wave1-ddi-release.columns.json --ddi dist
 ```
 
 The map is JSON. Its name ends in `-ddi-<source>.columns.json`, where `<source>` is a short
-name for the data (letters and digits). The command reads `qsf` as a QSF column map. It
-reads all other names as the map of a data file:
+name for the data (letters and digits). The `source` field of the map gives the same name.
+If the field is missing, or if it is not the name in the file name, the command refuses the
+map. The command reads `qsf` as a QSF column map. It reads all other sources as the map of a
+data file:
 
 ```json
 {
+  "source": "release",
   "ddi": "sha256:3f5a…",
   "respondent": "ID",
   "values": { "-98": "D", "-99": "N", "-100": null },
@@ -254,6 +282,7 @@ reads all other names as the map of a data file:
 }
 ```
 
+- `source`: the short name of the data, as in the name of the map.
 - `ddi`: the SHA-256 digest of the DDI that the map was made from. If the map has a digest,
   the command refuses a different DDI.
 - `respondent`: the header of the column that identifies each respondent.
