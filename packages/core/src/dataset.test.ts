@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
 import schemaText from "../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
-import { csvView, type Dataset, datasetOf, readDataset } from "./dataset.ts";
+import {
+	canonicalForm,
+	csvView,
+	type Dataset,
+	datasetOf,
+	provenanceView,
+	readDataset,
+} from "./dataset.ts";
+import {
+	type DdiDocument,
+	documentOf,
+	identity,
+	item,
+} from "./ddi/document.ts";
+import { ddiIndexOf, deref, type Indexed } from "./ddi/read.ts";
 import { makeValidator } from "./ddi/validate.ts";
+import { factsOf, type Provenance } from "./provenance.ts";
 import { answersCsv } from "./responses.ts";
 
 const validator = makeValidator(JSON.parse(schemaText));
@@ -24,8 +39,40 @@ const DATASET: Dataset = {
 	],
 };
 
+/** The instrument's DDI: the instrument and its variables, `unread` among them. */
+const INSTRUMENT = documentOf([
+	item("Instrument", identity("org.example", "instrument-t"), {}),
+	...["tenure", "modes_b", "why", "unread"].map((n) =>
+		item("Variable", identity("org.example", `instrument-t.var-${n}`), {}),
+	),
+]);
+
+const digest = (name: string, c: string) => ({
+	name,
+	sha256: c.repeat(64),
+	size: 10,
+});
+
+const PROVENANCE: Provenance = {
+	index: ddiIndexOf(INSTRUMENT),
+	facts: {
+		asked_by: "SelfAdministeredQuestionnaire.CAWI",
+		answered_by: "PopulationGroup",
+		software: "Qualtrics",
+	},
+	reads: [v("tenure"), v("modes_b"), v("why")],
+	fingerprint: "f".repeat(64),
+	source: digest("export.csv", "a"),
+	map: {
+		...digest("t-ddi-qsf.columns.json", "b"),
+		ddi: `sha256:${"c".repeat(64)}`,
+	},
+	ddi: digest("t.json", "d"),
+	claimed: [`sha256:${"e".repeat(64)}`],
+};
+
 const made = (d: Dataset) => {
-	const r = datasetOf(d);
+	const r = datasetOf(d, PROVENANCE);
 	if (!r.ok) throw new Error(r.error);
 	return r.value;
 };
@@ -134,7 +181,7 @@ describe("a dataset as DDI", () => {
 
 	it("refuses what it can't say: roster rows, a bad name, an unlisted respondent", () => {
 		const refused = (d: Dataset) => {
-			const r = datasetOf(d);
+			const r = datasetOf(d, PROVENANCE);
 			return r.ok ? "" : r.error;
 		};
 		expect(
@@ -225,5 +272,204 @@ describe("a dataset as DDI", () => {
 				},
 			}),
 		).toMatch(/one variable, one respondent and one value/);
+	});
+});
+
+/** The top-level item a nested object is in. */
+const top = (it: Indexed): Indexed => (it.owner ? top(it.owner) : it);
+
+describe("a dataset's provenance", () => {
+	const doc = made(DATASET) as DdiDocument;
+	const index = ddiIndexOf(doc);
+	const study = "urn:ddi:org.example:dataset-wave1.study:1";
+
+	it("resolves every reference, in the dataset or the instrument's DDI, and reaches every item from its StudyUnit without the values", () => {
+		const instrument = ddiIndexOf(INSTRUMENT);
+		expect(
+			index.references.filter(
+				// A record is named by the respondent's own string, not by a reference.
+				(r) =>
+					r.field !== "RecordReference" &&
+					(deref(index, r.ref) ?? deref(instrument, r.ref)) === undefined,
+			),
+		).toEqual([]);
+		const view = ddiIndexOf(provenanceView(JSON.parse(JSON.stringify(doc))));
+		const reached = new Set([study]);
+		for (const at of reached)
+			for (const r of view.references)
+				if (r.from && top(r.from).urn === at) {
+					const to = deref(index, r.ref);
+					if (to) reached.add(top(to).urn);
+				}
+		expect(
+			[...index.byUrn.values()]
+				.filter((it) => it.owner === undefined && !reached.has(it.urn))
+				.map((it) => it.urn),
+		).toEqual([]);
+	});
+
+	it("says what the dataset is, from what, and when, and groups its variables", () => {
+		const event = doc.DataCollection?.["org.example:dataset-wave1.collection:1"]
+			?.CollectionEvent as unknown[];
+		expect(event[0]).toMatchObject({
+			// The earliest start and the latest end.
+			DataCollectionDate: {
+				StartDate: { DateTime: "2026-11-12T23:14:02Z" },
+				EndDate: { DateTime: "2026-11-12T23:16:02Z" },
+			},
+			InstrumentReference: [
+				{ $type: "Instrument", value: ["org.example", "instrument-t", "1"] },
+			],
+			ModeOfCollection: [
+				{
+					TypeOfModeOfCollection: {
+						StringValue: "SelfAdministeredQuestionnaire.CAWI",
+					},
+				},
+			],
+			DataSource: [{ SourceType: [{ StringValue: "PopulationGroup" }] }],
+		});
+		const ids = (key: string) =>
+			(
+				doc.VariableGroup?.[key]?.VariableReference as
+					| { value: string[] }[]
+					| undefined
+			)?.map((r) => r.value[1]);
+		expect(ids("org.example:dataset-wave1.present:1")).toEqual([
+			"dataset-wave1.end",
+			"dataset-wave1.respondent",
+			"dataset-wave1.start",
+			"instrument-t.var-modes_b",
+			"instrument-t.var-tenure",
+			"instrument-t.var-why",
+		]);
+		expect(ids("org.example:dataset-wave1.not-in-source:1")).toEqual([
+			"instrument-t.var-unread",
+		]);
+		expect(
+			doc.PhysicalInstance?.["org.example:dataset-wave1.data:1"],
+		).toMatchObject({
+			DataFingerprint: [
+				{ Type: "data", DigitalFingerprintValue: "f".repeat(64) },
+			],
+			RecordLayoutReference: [
+				{ $type: "DataSet", value: ["org.example", "dataset-wave1", "1"] },
+			],
+		});
+		// Each digest, the ones the map and the export name included.
+		const text = JSON.stringify(doc);
+		for (const c of "abcde") expect(text).toContain(c.repeat(64));
+	});
+
+	it("compares times as instants, whatever their offsets", () => {
+		const shifted = made({
+			...DATASET,
+			respondents: [
+				{
+					id: "R_1",
+					start: "2026-11-12T20:00:00-05:00",
+					end: "2026-11-13T00:30:00Z",
+				},
+				{
+					id: "R_2",
+					start: "2026-11-13T00:00:00Z",
+					end: "2026-11-12T20:00:00-05:00",
+				},
+			],
+		});
+		expect(
+			(
+				shifted.DataCollection?.["org.example:dataset-wave1.collection:1"]
+					?.CollectionEvent as { DataCollectionDate: unknown }[] | undefined
+			)?.[0]?.DataCollectionDate,
+		).toEqual({
+			// As text, R_1's start would sort first and R_1's end last.
+			StartDate: { DateTime: "2026-11-13T00:00:00Z" },
+			EndDate: { DateTime: "2026-11-12T20:00:00-05:00" },
+		});
+	});
+
+	it("has a view without values, valid DDI, that no reader takes for a dataset", () => {
+		const view = provenanceView(JSON.parse(JSON.stringify(doc)));
+		expect(validator.ok && validator.value(view)).toEqual([]);
+		const text = JSON.stringify(view);
+		expect(text).not.toMatch(/ItemSet|RecordReference|mostly|R_\d/);
+		expect(text).toContain("org.example:dataset-wave1:1");
+		const read = readDataset(view);
+		expect(read.ok ? "" : read.error).toMatch(/holds no values/);
+	});
+
+	it("refuses a DDI that doesn't hold one instrument", () => {
+		const r = datasetOf(DATASET, {
+			...PROVENANCE,
+			index: ddiIndexOf(documentOf([])),
+		});
+		expect(r.ok ? "" : r.error).toMatch(/holds 0 instruments/);
+	});
+});
+
+describe("the canonical form of a dataset", () => {
+	it("holds every value of the DataSet, so a time, an identifier or a respondent with no answers changes it", () => {
+		const form = canonicalForm(DATASET);
+		expect(form).toContain(
+			"R_3,urn:ddi:org.example:dataset-wave1.respondent:1,,R_3",
+		);
+		expect(form).toContain(
+			"R_1,urn:ddi:org.example:dataset-wave1.start:1,,2026-11-12T23:14:02Z",
+		);
+		const [first, ...rest] = DATASET.respondents;
+		const changed = (d: Dataset) => expect(canonicalForm(d)).not.toBe(form);
+		changed({
+			...DATASET,
+			respondents: [
+				{ ...first, id: "R_1", start: "2026-11-12T23:14:03Z" },
+				...rest,
+			],
+		});
+		changed({
+			...DATASET,
+			respondents: DATASET.respondents.map((r) =>
+				r.id === "R_3" ? { id: "R_4" } : r,
+			),
+		});
+		changed({
+			...DATASET,
+			respondents: [...DATASET.respondents, { id: "R_5" }],
+		});
+		// A reader recomputes it from the document.
+		const read = readDataset(JSON.parse(JSON.stringify(made(DATASET))));
+		expect(read.ok && canonicalForm(read.value)).toBe(form);
+	});
+});
+
+describe("the facts of a collection", () => {
+	it("takes the data's first, an option only for what the data doesn't say, and names what is missing", () => {
+		expect(
+			factsOf(
+				{ asked_by: "Simulation", answered_by: { other: "platform" } },
+				{},
+			),
+		).toEqual({
+			ok: true,
+			value: { asked_by: "Simulation", answered_by: { other: "platform" } },
+		});
+		expect(
+			factsOf(
+				{ asked_by: "SelfAdministeredQuestionnaire.CAWI" },
+				{ answered_by: "PopulationGroup" },
+			).ok,
+		).toBe(true);
+		expect(
+			factsOf(
+				{ asked_by: "SelfAdministeredQuestionnaire.CAWI" },
+				{ asked_by: "SelfAdministeredQuestionnaire.CAWI" },
+			),
+		).toEqual({
+			ok: false,
+			error: [
+				{ fact: "asked_by", problem: "given" },
+				{ fact: "answered_by", problem: "missing" },
+			],
+		});
 	});
 });

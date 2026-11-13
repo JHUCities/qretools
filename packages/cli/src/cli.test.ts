@@ -19,11 +19,13 @@ import {
 	bankOf,
 	csvView,
 	instrumentOf,
+	makeValidator,
 	questionItems,
 	readDataset,
 	remoteScope,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
+import schema from "@qretools/core/schema.json" with { type: "json" };
 import { qsfOf } from "@qretools/qualtrics";
 import { describe, expect, it } from "vitest";
 import { exportOfSurvey } from "../../qualtrics/src/testing.ts";
@@ -917,7 +919,21 @@ describe("qretools build", () => {
 					"",
 				].join("\r\n"),
 			);
-			const r = await runWith(readRemote, "responses", csv, "--map", mapFile);
+			// The export says neither fact: the options give them.
+			const facts = [
+				"--asked-by",
+				"SelfAdministeredQuestionnaire.CAWI",
+				"--answered-by",
+				"PopulationGroup",
+			];
+			const r = await runWith(
+				readRemote,
+				"responses",
+				csv,
+				"--map",
+				mapFile,
+				...facts,
+			);
 			expect(r.err).toBe("");
 			const read = readDataset(JSON.parse(r.out));
 			expect(read.ok && csvView(read.value)).toBe(
@@ -941,8 +957,15 @@ describe("qretools build", () => {
 				mapFile,
 				"--ddi",
 				"acme/ws/sub@v2:x",
+				...facts,
 			);
-			expect(given.out).toBe(r.out);
+			// The same values; the map differs (no release), so its digest does too.
+			const back = readDataset(JSON.parse(given.out));
+			expect(back.ok && csvView(back.value)).toBe(
+				read.ok && csvView(read.value),
+			);
+			// The DDI from the release is named by its tag reference.
+			expect(r.out).toContain('"Value": "acme/ws/sub@v2:x"');
 			await writeFile(
 				mapFile,
 				JSON.stringify({ ...unreleased, release: "x.json" }),
@@ -1397,7 +1420,10 @@ describe("qretools responses", () => {
 	const id = (o: object) => `"${JSON.stringify(o).replaceAll('"', '""')}"`;
 
 	/** An instrument's DDI and its QSF column map, as `build` and `qsf-map` write them, and an export of its survey. */
-	async function files(digestOf = (ddi: string) => ddi) {
+	async function files(
+		digestOf = (ddi: string) => ddi,
+		kind = { status: "2", channel: "test" },
+	) {
 		const dir = await mkdtemp(join(tmpdir(), "qretools-responses-"));
 		const { ddi } = instrumentOf(
 			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n  - ask: b.modes\n  - ask: b.rent\n",
@@ -1419,11 +1445,13 @@ describe("qretools responses", () => {
 		await writeFile(
 			csv,
 			[
-				"StartDate,EndDate,ResponseId,qretools_instrument,qretools_ddi,qretools_version,tenure,modes_1,modes_9,rent",
-				"Start Date,End Date,Response ID,qretools_instrument,qretools_ddi,qretools_version,tenure?,modes? - Bus,modes? - None,rent?",
+				"StartDate,EndDate,Status,DistributionChannel,ResponseId,qretools_instrument,qretools_ddi,qretools_version,tenure,modes_1,modes_9,rent",
+				"Start Date,End Date,Response Type,Distribution Channel,Response ID,qretools_instrument,qretools_ddi,qretools_version,tenure?,modes? - Bus,modes? - None,rent?",
 				[
 					id({ ImportId: "startDate", timeZone: "Z" }),
 					id({ ImportId: "endDate", timeZone: "Z" }),
+					id({ ImportId: "status" }),
+					id({ ImportId: "distributionChannel" }),
 					id({ ImportId: "_recordId" }),
 					id({ ImportId: "qretools_instrument" }),
 					id({ ImportId: "qretools_ddi" }),
@@ -1433,8 +1461,8 @@ describe("qretools responses", () => {
 					id({ ImportId: "QID2", choiceId: "9" }),
 					id({ ImportId: "QID3_TEXT" }),
 				].join(","),
-				`2026-11-12 23:14:02,2026-11-12 23:16:02,R_1,urn:ddi:org.example:instrument-t:1,${digest},9,2,1,,1200`,
-				`2026-11-12 23:15:41,2026-11-12 23:15:50,R_2,urn:ddi:org.example:instrument-t:1,${digest},9,3,,1,D`,
+				`2026-11-12 23:14:02,2026-11-12 23:16:02,${kind.status},${kind.channel},R_1,urn:ddi:org.example:instrument-t:1,${digest},9,2,1,,1200`,
+				`2026-11-12 23:15:41,2026-11-12 23:15:50,${kind.status},${kind.channel},R_2,urn:ddi:org.example:instrument-t:1,${digest},9,3,,1,D`,
 				"",
 			].join("\r\n"),
 		);
@@ -1554,7 +1582,19 @@ describe("qretools responses", () => {
 		});
 		const beside = join(dir, "t-ddi-survey.columns.json");
 		await writeFile(beside, json);
-		const r = await run("responses", data, "--map", beside);
+		// A data file says nothing of how it was collected: both options do.
+		const missing = await run("responses", data, "--map", beside);
+		expect(missing).toMatchObject({ code: 2, out: "" });
+		expect(missing.err).toMatch(
+			/give `--asked-by <term>`.*\[responses-facts\]\n.*give `--answered-by <term>`/,
+		);
+		const facts = [
+			"--asked-by",
+			"Interview",
+			"--answered-by",
+			"ResearchData.Published",
+		];
+		const r = await run("responses", data, "--map", beside, ...facts);
 		expect((await csvOf(r.out)).out).toBe(
 			[
 				"respondent,variable,row,value",
@@ -1580,14 +1620,39 @@ describe("qretools responses", () => {
 		await mkdir(elsewhere);
 		const apart = join(elsewhere, "t-ddi-survey.columns.json");
 		await writeFile(apart, json);
-		expect((await run("responses", data, "--map", apart)).code).toBe(2);
-		expect(
-			(await run("responses", data, "--map", apart, "--ddi", ddi)).out,
-		).toBe(r.out);
-		await writeFile(ddi, " ");
-		expect(
-			(await run("responses", data, "--map", apart, "--ddi", ddi)).err,
-		).toMatch(/isn't the DDI the map was made from.*\[responses-provenance\]/);
+		expect((await run("responses", data, "--map", apart, ...facts)).code).toBe(
+			2,
+		);
+		const kept = await run(
+			"responses",
+			data,
+			"--map",
+			apart,
+			"--ddi",
+			ddi,
+			...facts,
+		);
+		// The same files give the same dataset: only the map's name differs, and the map isn't its path.
+		expect(kept.out).toBe(r.out);
+		// Another DDI than the map's: a warning, and the dataset records both digests.
+		const other = `${await readFile(ddi, "utf8")}\n`;
+		await writeFile(ddi, other);
+		const differs = await run(
+			"responses",
+			data,
+			"--map",
+			apart,
+			"--ddi",
+			ddi,
+			...facts,
+		);
+		expect(differs.err).toMatch(
+			/warning: this isn't the DDI the map was made from.*\[responses-provenance\]/,
+		);
+		expect(differs.out).toContain(digest.slice(7));
+		expect(differs.out).toContain(
+			createHash("sha256").update(other).digest("hex"),
+		);
 
 		// Its `source` says what kind of map it is, and must agree with its name.
 		await writeFile(join(dir, "t-ddi-qsf.columns.json"), json);
@@ -1623,6 +1688,109 @@ describe("qretools responses", () => {
 			/this map has no `source` field.*Add `"source": "survey"`/,
 		);
 		expect((await run("responses", data, "--map", ddi)).code).toBe(2);
+	});
+
+	it("takes the facts the export gives, refuses an option that repeats one, and needs one for the rest", async () => {
+		const { csv, map } = await files(undefined, {
+			status: "0",
+			channel: "anonymous",
+		});
+		const missing = await run("responses", csv, "--map", map);
+		expect(missing).toMatchObject({ code: 2, out: "" });
+		expect(missing.err).toMatch(
+			/doesn't say who answered: give `--answered-by <term>`/,
+		);
+		const repeated = await run(
+			"responses",
+			csv,
+			"--map",
+			map,
+			"--asked-by",
+			"SelfAdministeredQuestionnaire.CAWI",
+			"--answered-by",
+			"PopulationGroup",
+		);
+		expect(repeated).toMatchObject({ code: 2, out: "" });
+		expect(repeated.err).toMatch(/`--asked-by` isn't taken/);
+		const r = await run(
+			"responses",
+			csv,
+			"--map",
+			map,
+			"--answered-by",
+			"PopulationGroup",
+		);
+		const event = Object.values(
+			JSON.parse(r.out).DataCollection as Record<
+				string,
+				{ CollectionEvent: unknown[] }
+			>,
+		)[0]?.CollectionEvent[0];
+		expect(event).toMatchObject({
+			DataCollectionDate: {
+				StartDate: { DateTime: "2026-11-12T23:14:02Z" },
+				EndDate: { DateTime: "2026-11-12T23:16:02Z" },
+			},
+			ModeOfCollection: [
+				{
+					TypeOfModeOfCollection: {
+						StringValue: "SelfAdministeredQuestionnaire.CAWI",
+					},
+				},
+			],
+			DataSource: [{ SourceType: [{ StringValue: "PopulationGroup" }] }],
+		});
+		expect(r.out).toContain('"Qualtrics"');
+		expect((await run("check", ".", "--asked-by", "Interview")).err).toMatch(
+			/`--asked-by` isn't an option of `check`/,
+		);
+	});
+
+	it("exports a dataset's provenance: valid DDI, without a value or a respondent", async () => {
+		const { csv, map } = await files();
+		const dataset = join(dirname(csv), "d.json");
+		await writeFile(dataset, (await run("responses", csv, "--map", map)).out);
+		const r = await run("dataset", "export", dataset, "--provenance");
+		expect(r.code).toBe(0);
+		const view = JSON.parse(r.out);
+		const validator = makeValidator(schema);
+		expect(validator.ok && validator.value(view)).toEqual([]);
+		expect(r.out).not.toMatch(/ItemSet|R_1|R_2|1200/);
+		expect(Object.keys(view.DataSet)).toEqual(["org.example:dataset-t:1"]);
+		expect(Object.keys(view.StudyUnit)).toEqual([
+			"org.example:dataset-t.study:1",
+		]);
+		// The fingerprint covers the whole DataSet: an interview's time changes it.
+		const fingerprint = (doc: string) =>
+			Object.values(
+				JSON.parse(doc).PhysicalInstance as Record<
+					string,
+					{
+						DataFingerprint: {
+							Type: string;
+							DigitalFingerprintValue: string;
+						}[];
+					}
+				>,
+			)
+				.flatMap((p) => p.DataFingerprint)
+				.find((f) => f.Type === "data")?.DigitalFingerprintValue;
+		await writeFile(
+			csv,
+			(await readFile(csv, "utf8")).replace("23:16:02", "23:16:03"),
+		);
+		const later = await run("responses", csv, "--map", map);
+		expect(fingerprint(later.out)).toMatch(/^[0-9a-f]{64}$/);
+		expect(fingerprint(later.out)).not.toBe(fingerprint(r.out));
+		// The provenance is no dataset, and one view at a time.
+		const file = join(dirname(csv), "p.json");
+		await writeFile(file, r.out);
+		expect((await run("dataset", "export", file, "--csv")).err).toMatch(
+			/holds no values.*\[dataset-unreadable\]/,
+		);
+		expect(
+			(await run("dataset", "export", dataset, "--csv", "--provenance")).code,
+		).toBe(2);
 	});
 });
 

@@ -48,10 +48,12 @@ export {
 } from "./copy.ts";
 // A dataset as DDI: the answers in a DataSet, and its views.
 export {
+	canonicalForm,
 	csvView,
 	DATASET_NAME,
 	type Dataset,
 	datasetOf,
+	provenanceView,
 	readDataset,
 } from "./dataset.ts";
 export type {
@@ -202,6 +204,16 @@ export {
 	instrumentRelease,
 	tagMessage,
 } from "./manifest.ts";
+export {
+	DATA_FINGERPRINT,
+	FACT_OPTIONS,
+	type Fact,
+	type Facts,
+	type FileDigest,
+	factsOf,
+	type Provenance,
+	type Term,
+} from "./provenance.ts";
 export {
 	type Exportable,
 	exportRefusal,

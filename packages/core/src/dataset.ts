@@ -6,7 +6,9 @@
  * one value per respondent, so a respondent with no answers is kept) and each
  * interview's `start` and `end` where the source gives them. Values are sorted by
  * respondent, then variable URN, so the same answers give the same bytes. `readDataset`
- * reads such a document back, once, into the value `datasetOf` writes from.
+ * reads such a document back, once, into the value `datasetOf` writes from. Beside the
+ * DataSet, the document holds its provenance (`provenanceOf`); `provenanceView` is the
+ * document without the values.
  */
 
 import {
@@ -21,6 +23,7 @@ import {
 	ref,
 } from "./ddi/document.ts";
 import { asList, asObj, str } from "./ddi/read.ts";
+import { type Provenance, provenanceOf } from "./provenance.ts";
 import { type Answer, answersCsv, type Respondent } from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
 
@@ -82,28 +85,51 @@ const variable = (
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
+ * Every value the DataSet holds, as `Answer`s: the answers, then each respondent's
+ * identifier and times on the dataset's own variables, sorted by respondent and then
+ * variable URN. The ItemSet is written from it, and the fingerprint is over it.
+ */
+const valuesOf = (d: Dataset): Answer[] => {
+	const ids = owned(d.agency, d.name);
+	return [
+		...d.answers,
+		...d.respondents.flatMap((r) => [
+			{ respondent: r.id, variable: ids.respondent.URN, value: r.id },
+			...(r.start === undefined
+				? []
+				: [{ respondent: r.id, variable: ids.start.URN, value: r.start }]),
+			...(r.end === undefined
+				? []
+				: [{ respondent: r.id, variable: ids.end.URN, value: r.end }]),
+		]),
+	].sort(
+		(a, b) =>
+			compare(a.respondent, b.respondent) || compare(a.variable, b.variable),
+	);
+};
+
+/**
+ * The whole DataSet in one canonical form, which its fingerprint is over: every value,
+ * the dataset's own included, as `answersCsv` writes it, in the ItemSet's order.
+ */
+export const canonicalForm = (d: Dataset): string => answersCsv(valuesOf(d));
+
+/**
  * The dataset as DDI. Refused, with nothing written, where it can't say what it was
  * given: a name that isn't one ID part, an answer in a roster row (not yet described), a
- * variable that isn't a DDI URN, or an answer for a respondent it doesn't list.
+ * variable that isn't a DDI URN, an answer for a respondent it doesn't list, or a
+ * provenance that can't be written (`provenanceOf`).
  */
-export function datasetOf(d: Dataset): Result<DdiDocument, string> {
+export function datasetOf(
+	d: Dataset,
+	provenance: Provenance,
+): Result<DdiDocument, string> {
 	if (!DATASET_NAME.test(d.name))
 		return err(
 			`The dataset's name \`${d.name}\` isn't one a DDI ID can hold: use letters, digits, \`-\` and \`_\` only.`,
 		);
 	const ids = owned(d.agency, d.name);
 	const listed = new Set(d.respondents.map((r) => r.id));
-	const values: { respondent: string; urn: string; value: JsonObject }[] = [];
-	const put = (respondent: string, target: Identity, v: string) =>
-		values.push({
-			respondent,
-			urn: target.URN,
-			value: {
-				VariableReference: ref({ type: "Variable", identity: target }),
-				RecordReference: respondent,
-				Value: [{ StringValue: v }],
-			},
-		});
 	for (const a of d.answers) {
 		if (a.row !== undefined)
 			return err(
@@ -116,33 +142,50 @@ export function datasetOf(d: Dataset): Result<DdiDocument, string> {
 			);
 		if (!listed.has(a.respondent))
 			return err("An answer names a respondent the dataset doesn't list.");
-		const [Agency, ID, Version] = parts;
-		put(a.respondent, { URN: urnOf(parts), Agency, ID, Version }, a.value);
 	}
-	for (const r of d.respondents) {
-		put(r.id, ids.respondent, r.id);
-		if (r.start !== undefined) put(r.id, ids.start, r.start);
-		if (r.end !== undefined) put(r.id, ids.end, r.end);
-	}
-	values.sort(
-		(a, b) => compare(a.respondent, b.respondent) || compare(a.urn, b.urn),
-	);
+	// Every variable is a DDI URN now, so its parts are read again without a check.
+	const values = valuesOf(d).map((v) => {
+		const [Agency = "", ID = "", Version = ""] = partsOf(v.variable) ?? [];
+		return {
+			urn: v.variable,
+			value: {
+				VariableReference: ref({
+					type: "Variable",
+					identity: { URN: v.variable, Agency, ID, Version },
+				}),
+				RecordReference: v.respondent,
+				Value: [{ StringValue: v.value }],
+			},
+		};
+	});
 	const timed = (k: "start" | "end") =>
 		d.respondents.some((r) => r[k] !== undefined);
 	const respondent = variable(ids.respondent, "respondent", {}, "TextDomain");
 	// 4.0 beta 4's DateTimeDomain has no type code: the values are ISO 8601 date-times with a zone.
 	const time = (id: Identity, name: string) =>
 		variable(id, name, { IsTemporal: true }, "DateTimeDomain");
+	const set = item("DataSet", ids.dataset, {
+		DataSetName: [intl(d.name)],
+		IdentifyingVariableReference: ref(respondent),
+		ItemSet: { ItemValue: values.map((v) => v.value) },
+	});
+	const described = provenanceOf(provenance, {
+		name: d.name,
+		base: ids.dataset.ID,
+		agency: d.agency,
+		dataset: set,
+		present: values.map((v) => v.urn),
+		starts: d.respondents.flatMap((r) => r.start ?? []),
+		ends: d.respondents.flatMap((r) => r.end ?? []),
+	});
+	if (!described.ok) return described;
 	return ok(
 		documentOf([
-			item("DataSet", ids.dataset, {
-				DataSetName: [intl(d.name)],
-				IdentifyingVariableReference: ref(respondent),
-				ItemSet: { ItemValue: values.map((v) => v.value) },
-			}),
+			set,
 			respondent,
 			...(timed("start") ? [time(ids.start, "start")] : []),
 			...(timed("end") ? [time(ids.end, "end")] : []),
+			...described.value,
 		]),
 	);
 }
@@ -169,6 +212,10 @@ export function readDataset(json: unknown): Result<Dataset, string> {
 			"This isn't a dataset QREtools wrote: its DataSet's ID isn't `dataset-<name>`.",
 		);
 	const ids = owned(agency, name);
+	if (asObj(head.ItemSet) === undefined)
+		return err(
+			"This is a dataset's provenance: it holds no values, so it has no view but itself.",
+		);
 	const identifying = asObj(head.IdentifyingVariableReference)?.value;
 	if (
 		!Array.isArray(identifying) ||
@@ -222,5 +269,29 @@ export function readDataset(json: unknown): Result<Dataset, string> {
 	return ok({ name, agency, respondents: [...respondents.values()], answers });
 }
 
-/** The answers as long CSV, as `answersCsv` writes them: the dataset's own variables aren't answers. */
-export const csvView = (d: Dataset): string => answersCsv(d.answers);
+/**
+ * The answers as long CSV, as `answersCsv` writes them, sorted by respondent and then
+ * variable URN: the canonical form the dataset's fingerprint is over. The dataset's own
+ * variables aren't answers.
+ */
+export const csvView = (d: Dataset): string =>
+	answersCsv(
+		[...d.answers].sort(
+			(a, b) =>
+				compare(a.respondent, b.respondent) || compare(a.variable, b.variable),
+		),
+	);
+
+/**
+ * A dataset document without its values: its DataSet is kept, without the ItemSet, so
+ * every reference to it still resolves. Read with `readDataset` first.
+ */
+export const provenanceView = (doc: unknown): DdiDocument => ({
+	...asObj(doc),
+	DataSet: Object.fromEntries(
+		Object.entries(asObj(asObj(doc)?.DataSet) ?? {}).map(([key, set]) => {
+			const { ItemSet: _, ...kept } = asObj(set) ?? {};
+			return [key, kept];
+		}),
+	),
+});
