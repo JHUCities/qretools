@@ -25,6 +25,9 @@ const io: Io = {
 	readHistory,
 	ownRepository,
 	readStdin: async () => "",
+	fetch: async () => {
+		throw new Error("no network in this test");
+	},
 };
 
 it("compiles the DDI schema once for two exports", async () => {

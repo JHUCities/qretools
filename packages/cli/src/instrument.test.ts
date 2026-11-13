@@ -203,6 +203,9 @@ describe("qretools instrument", () => {
 			},
 			ownRepository,
 			readStdin: async () => "",
+			fetch: async () => {
+				throw new Error("no network in this test");
+			},
 			readHistory: async () => ({
 				kind: "unavailable",
 				reason: "not in these tests",

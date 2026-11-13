@@ -134,6 +134,8 @@ export interface Io {
 	readonly readHistory: (dir: string) => Promise<HistoryRead>;
 	/** All of standard input, as text (`next`'s state). */
 	readonly readStdin: () => Promise<string>;
+	/** An `https://` URL's reply (the command uses `fetch`): a DDI given by URL. */
+	readonly fetch: (url: string) => Promise<Response>;
 }
 
 type RemoteAddress = Extract<Address, { kind: "remote" }>;
@@ -242,6 +244,10 @@ moves after that, check warns until the next export records it again.
           <name>.json beside the map or the release the map names; for qsf-map --export,
           the DDI to map to; for dataset export, the DDI the dataset was made from.
 --export  for qsf-map, the Qualtrics response export to make the map from.
+
+DDI by URL: where a command reads a DDI file (next, qsf-map, responses, dataset export), it
+also reads an https:// URL, such as a release's DDI on its workspace's site. It reads the URL
+once, and a dataset records the URL and the SHA-256 digest of what it read. Not http://.
 
 Tag references: owner/repo[/folder]@tag:name names the instrument \`name\` in a release
 of a workspace (a tag made with \`build --tag-message\`). The command reads the tag with
@@ -540,6 +546,60 @@ const ddiText = (document: DdiDocument): string =>
 const digestOf = (text: string): string =>
 	`sha256:${createHash("sha256").update(text).digest("hex")}`;
 
+/** Anything written `scheme://…` is a URL, never a path (`C:\\x`, `owner/repo@tag:name`). */
+const isUrl = (input: string): boolean => /^[a-z][a-z\d+.-]*:\/\//i.test(input);
+
+/** A DDI's file name: a path's last part, or a URL's last path segment (no query). */
+const ddiName = (input: string): string =>
+	basename(
+		URL.canParse(input) && isUrl(input) ? new URL(input).pathname : input,
+	);
+
+/**
+ * A DDI given as a file or an `https://` URL, read once: its text, and its digest as a
+ * dataset records it (a URL's with the URL). Where it can't be read, says why, naming the
+ * file or URL, and gives undefined: the caller writes nothing.
+ */
+async function ddiOf(
+	input: string,
+	io: Io,
+): Promise<{ readonly text: string; readonly digest: FileDigest } | undefined> {
+	let bytes: Buffer;
+	try {
+		if (!isUrl(input)) bytes = await readFile(input);
+		else {
+			if (new URL(input).protocol !== "https:")
+				throw new Error("a DDI is read from a file or an https:// URL only.");
+			const reply = await io.fetch(input);
+			// Redirects are followed; to http, they'd undo the https asked for.
+			if (reply.redirected && !reply.url.startsWith("https://"))
+				throw new Error(`it redirects to ${reply.url}, which isn't https.`);
+			if (reply.status !== 200)
+				throw new Error(`HTTP ${reply.status} ${reply.statusText}`.trim());
+			bytes = Buffer.from(await reply.arrayBuffer());
+		}
+	} catch (e) {
+		// Node's `fetch failed` says why only in its cause.
+		const cause =
+			e instanceof Error && e.cause instanceof Error
+				? ` (${e.cause.message})`
+				: "";
+		io.err(
+			`Can't read ${input}: ${e instanceof Error ? e.message : String(e)}${cause}\n`,
+		);
+		return undefined;
+	}
+	return {
+		text: bytes.toString("utf8"),
+		digest: {
+			name: ddiName(input),
+			sha256: sha256Of(bytes),
+			size: bytes.length,
+			...(isUrl(input) && { url: input }),
+		},
+	};
+}
+
 /** The DDI as `export` writes it. */
 const asJson = (document: DdiDocument): Rendered => ({
 	text: ddiText(document),
@@ -656,15 +716,11 @@ async function writeQsfMap(
 			return PROBLEMS;
 		}
 		text = got.text;
-	} else
-		try {
-			text = await readFile(input, "utf8");
-		} catch (e) {
-			io.err(
-				`Can't read ${input}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
+	} else {
+		const ddi = await ddiOf(input, io);
+		if (ddi === undefined) return USAGE_ERROR;
+		text = ddi.text;
+	}
 	let csv: string | undefined;
 	if (exportFile !== undefined)
 		try {
@@ -714,7 +770,10 @@ async function writeQsfMap(
 	}
 	const { columns, ...head } = made.columns;
 	await io.writeFile(
-		join(out, `${ref?.name ?? basename(input, ".json")}-ddi-qsf.columns.json`),
+		join(
+			out,
+			`${ref?.name ?? basename(ddiName(input), ".json")}-ddi-qsf.columns.json`,
+		),
 		`${JSON.stringify(ref === undefined ? made.columns : { ...head, release: ref.text, columns }, null, 2)}\n`,
 	);
 	return OK;
@@ -730,10 +789,11 @@ async function writeNext(
 	stateFile: string | undefined,
 	io: Io,
 ): Promise<number> {
-	let text: string;
+	const ddi = await ddiOf(file, io);
+	if (ddi === undefined) return USAGE_ERROR;
+	const { text } = ddi;
 	let stateText: string;
 	try {
-		text = await readFile(file, "utf8");
 		stateText =
 			stateFile === undefined || stateFile === "-"
 				? await io.readStdin()
@@ -965,6 +1025,7 @@ async function writeResponses(
 		return PROBLEMS;
 	}
 	let ddiSource: string;
+	let ddiRead: FileDigest;
 	if (ref !== undefined) {
 		const got = await ddiAtRelease(ref, io);
 		if (!got.ok) {
@@ -972,22 +1033,15 @@ async function writeResponses(
 			return PROBLEMS;
 		}
 		ddiSource = got.text;
-	} else
-		try {
-			ddiSource = await readFile(ddiFile, "utf8");
-		} catch (e) {
-			io.err(
-				`Can't read ${ddiFile}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
-	// A DDI from a release is recorded by its tag reference.
-	const ddiBytes = Buffer.from(ddiSource, "utf8");
-	const ddiRead: FileDigest = {
-		name: ref === undefined ? basename(ddiFile) : ddiFile,
-		sha256: sha256Of(ddiBytes),
-		size: ddiBytes.length,
-	};
+		// A DDI from a release is recorded by its tag reference.
+		const bytes = Buffer.from(ddiSource, "utf8");
+		ddiRead = { name: ddiFile, sha256: sha256Of(bytes), size: bytes.length };
+	} else {
+		const ddi = await ddiOf(ddiFile, io);
+		if (ddi === undefined) return USAGE_ERROR;
+		ddiSource = ddi.text;
+		ddiRead = ddi.digest;
+	}
 	// The dataset records both digests: a difference is worth a warning, not a refusal.
 	if (map.ddi !== undefined && map.ddi !== digestOf(ddiSource))
 		io.err(
@@ -1212,7 +1266,7 @@ async function writeAnswers(
 	files: readonly string[],
 	io: Io,
 ): Promise<number> {
-	const named = output ?? ddiFile;
+	const named = output ?? ddiName(ddiFile);
 	const name = basename(named, extname(named));
 	if (!DATASET_NAME.test(name)) {
 		io.err(
@@ -1220,10 +1274,12 @@ async function writeAnswers(
 		);
 		return USAGE_ERROR;
 	}
-	const read = await readDigested([file, ddiFile, ...files], io);
+	const read = await readDigested([file, ...files], io);
 	if (read === undefined) return USAGE_ERROR;
-	// The answers and the DDI, then each --file, in that order.
-	const [answersRead, ddiRead, ...others] = read as [Read, Read, ...Read[]];
+	// The answers, then each --file, in that order.
+	const [answersRead, ...others] = read as [Read, ...Read[]];
+	const ddiRead = await ddiOf(ddiFile, io);
+	if (ddiRead === undefined) return USAGE_ERROR;
 	const ddiJson = jsonOf(ddiRead.text);
 	const ddiIndex = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
 	if (ddiIndex?.ok !== true) {
@@ -1319,17 +1375,17 @@ async function dataset(
 		(help ? io.out : io.err)(`${USAGE}\n`);
 		return help ? OK : USAGE_ERROR;
 	}
-	const read: Buffer[] = [];
-	for (const f of [file, ddi])
-		try {
-			read.push(await readFile(f));
-		} catch (e) {
-			io.err(
-				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
-	const [text = Buffer.alloc(0), ddiBytes = Buffer.alloc(0)] = read;
+	let text: Buffer;
+	try {
+		text = await readFile(file);
+	} catch (e) {
+		io.err(
+			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const ddiRead = await ddiOf(ddi, io);
+	if (ddiRead === undefined) return USAGE_ERROR;
 	const json = jsonOf(text.toString("utf8"));
 	const got = json.ok ? readDataset(json.value) : undefined;
 	if (!json.ok || got?.ok !== true) {
@@ -1339,16 +1395,13 @@ async function dataset(
 		return PROBLEMS;
 	}
 	// Levels read from another DDI than the dataset's could let a value through.
-	if (
-		recordedDdiOf(json.value, got.value) !==
-		createHash("sha256").update(ddiBytes).digest("hex")
-	) {
+	if (recordedDdiOf(json.value, got.value) !== ddiRead.digest.sha256) {
 		io.err(
 			`${ddi}: error: this isn't the DDI the dataset was made from (its digest differs), so its access levels can't be trusted. Nothing is written. [dataset-ddi]\n`,
 		);
 		return PROBLEMS;
 	}
-	const ddiJson = jsonOf(ddiBytes.toString("utf8"));
+	const ddiJson = jsonOf(ddiRead.text);
 	// The dataset's own metadata variables beside the instrument's: a level their map stated is read as a question's.
 	const index = ddiJson.ok
 		? readDdi(withMetadataVariables(ddiJson.value, json.value, got.value))

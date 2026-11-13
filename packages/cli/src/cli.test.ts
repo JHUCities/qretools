@@ -54,6 +54,12 @@ async function runWith(readRemote: Io["readRemote"], ...argv: string[]) {
 /** What a run reads on standard input. */
 let stdin = "";
 
+/** What a run fetches: each URL's body, by URL (any other is a 404), and each URL asked. */
+let served: Record<string, string> = {};
+let fetched: string[] = [];
+/** Where a run's fetch says it was redirected, if anywhere. */
+let redirectedTo: string | undefined;
+
 /** `runWith`, over files an earlier run wrote: a second build into the same folder. */
 async function runOver(
 	files: Readonly<Record<string, string>>,
@@ -76,6 +82,18 @@ async function runOver(
 		readHistory,
 		ownRepository,
 		readStdin: async () => stdin,
+		fetch: async (url) => {
+			fetched.push(url);
+			const body = served[url];
+			return body === undefined
+				? new Response("", { status: 404, statusText: "Not Found" })
+				: redirectedTo === undefined
+					? new Response(body)
+					: Object.defineProperties(new Response(body), {
+							redirected: { value: true },
+							url: { value: redirectedTo },
+						});
+		},
 	};
 	const code = await main(argv, io);
 	return { code, out: out.join(""), err: err.join(""), written };
@@ -827,6 +845,16 @@ describe("qretools build", () => {
 				r.written[join(out, "x-ddi-qsf.columns.json")] ?? "{}",
 			);
 			expect(map).toMatchObject({ ddi: sha(ddi), release: "acme/ws/sub@v2:x" });
+			// The release's DDI as its site publishes it: the same map, named by the URL.
+			const url = "https://acme.example/ws/v2/instruments/x.json";
+			served = { [url]: ddi };
+			const byUrl = await run("qsf-map", url, "-o", out);
+			expect(byUrl).toMatchObject({ code: 0, err: "" });
+			const { release: _, ...unreleased } = map;
+			expect(
+				JSON.parse(byUrl.written[join(out, "x-ddi-qsf.columns.json")] ?? "{}"),
+			).toEqual(unreleased);
+			served = {};
 			// Offline, the tag read once is served from the cache.
 			offline();
 			const again = await runWith(
@@ -890,7 +918,7 @@ describe("qretools build", () => {
 		}, 30000);
 
 		it("reads responses with the release a map names, and asks for --ddi when there's none", async () => {
-			const { ws, readRemote } = await released();
+			const { ws, readRemote, ddi } = await released();
 			const out = join(ws, "maps");
 			const made = await runWith(
 				readRemote,
@@ -972,6 +1000,27 @@ describe("qretools build", () => {
 			);
 			// The DDI from the release is named by its tag reference.
 			expect(r.out).toContain('"Value": "acme/ws/sub@v2:x"');
+			// The same DDI by URL: the same values, and the URL recorded.
+			const url = "https://acme.example/ws/v2/instruments/x.json";
+			served = { [url]: ddi };
+			const byUrl = await run(
+				"responses",
+				csv,
+				"--map",
+				mapFile,
+				"--ddi",
+				url,
+				...facts,
+			);
+			expect(byUrl.err).toBe("");
+			const fetchedBack = readDataset(JSON.parse(byUrl.out));
+			expect(fetchedBack.ok && csvView(fetchedBack.value)).toBe(
+				read.ok && csvView(read.value),
+			);
+			expect(byUrl.out).toContain(
+				`"ExternalURLReference": [\n        "${url}"`,
+			);
+			served = {};
 			await writeFile(
 				mapFile,
 				JSON.stringify({ ...unreleased, release: "x.json" }),
@@ -1242,6 +1291,44 @@ describe("qretools next", () => {
 		const schemas = JSON.parse((await run("next", "--schema")).out);
 		expect(Object.keys(schemas)).toEqual(["state", "reply"]);
 		expect((await run("check", "--schema")).code).toBe(2);
+	});
+
+	it("reads the DDI from an https URL, fetched once, and refuses http and a reply that isn't 200", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-next-"));
+		const file = join(dir, "ddi.json");
+		const ddi = (
+			await run(
+				"instrument",
+				"export",
+				here("../../core/fixtures/households/instruments/households.yaml"),
+			)
+		).out;
+		await writeFile(file, ddi);
+		const url = "https://example.org/survey/v1/instruments/households.json";
+		served = { [url]: ddi };
+		fetched = [];
+		stdin = JSON.stringify({ inputs: { county: "2" } });
+		const byUrl = await run("next", url);
+		expect(byUrl).toMatchObject({ code: 0, err: "" });
+		expect(byUrl.out).toBe((await run("next", file)).out);
+		expect(fetched).toEqual([url]);
+		const http = await run("next", url.replace("https", "http"));
+		expect(http).toMatchObject({ code: 2, out: "" });
+		expect(http.err).toMatch(
+			/^Can't read http:\/\/example\.org\S+: .*https:\/\/ URL only/,
+		);
+		redirectedTo = "http://example.org/elsewhere.json";
+		const downgraded = await run("next", url);
+		redirectedTo = undefined;
+		expect(downgraded).toMatchObject({ code: 2, out: "" });
+		expect(downgraded.err).toMatch(
+			/redirects to http:\/\/example\.org\/elsewhere\.json, which isn't https/,
+		);
+		const gone = await run("next", `${url}x`);
+		expect(gone).toMatchObject({ code: 2, out: "" });
+		expect(gone.err).toBe(`Can't read ${url}x: HTTP 404 Not Found\n`);
+		stdin = "";
+		served = {};
 	});
 });
 
@@ -1953,6 +2040,85 @@ describe("qretools responses", () => {
 		);
 		expect(provenance.code).toBe(0);
 		expect(provenance.out).not.toMatch(/ItemSet|s1|s2/);
+	});
+
+	it("reads the DDI from an https URL: names the dataset by it, records it, and checks it by its digest", async () => {
+		const { file, ddi, dir } = await answers();
+		const url = "https://example.org/survey/v2/instruments/t.json?download=1";
+		served = { [url]: await readFile(ddi, "utf8") };
+		const made = await run("responses", file, "--ddi", url, ...synthetic);
+		expect(made).toMatchObject({ code: 0, err: "" });
+		// Named by the URL's last path segment, as a file would be.
+		expect(made.out).toMatch(/"dataset-t\./);
+		const out = join(dir, "by-url.json");
+		const r = await run(
+			"responses",
+			file,
+			"--ddi",
+			url,
+			...synthetic,
+			"-o",
+			out,
+		);
+		const text = r.written[out] ?? "";
+		const validator = makeValidator(schema);
+		expect(validator.ok && validator.value(JSON.parse(text))).toEqual([]);
+		const sha = createHash("sha256")
+			.update(served[url] ?? "")
+			.digest("hex");
+		expect(Object.values(JSON.parse(text).OtherMaterial)).toContainEqual(
+			expect.objectContaining({
+				TypeOfMaterial: { StringValue: "instrument DDI" },
+				Citation: {
+					Title: {
+						String: [
+							{
+								MultilingualStringValue: { LanguageTag: "en", Value: "t.json" },
+							},
+						],
+					},
+				},
+				ExternalURLReference: [url],
+				UserID: [
+					{ StringValue: sha, TypeOfUserID: { StringValue: "SHA-256" } },
+				],
+			}),
+		);
+		await writeFile(out, text);
+		expect(
+			(await run("responses", file, "--ddi", url, ...synthetic, "-o", out)).err,
+		).toBe(`${out}: unchanged\n`);
+		// The same bytes by file or by URL: the digest is what's checked.
+		for (const given of [url, ddi])
+			expect(
+				(await run("dataset", "export", out, "--provenance", "--ddi", given))
+					.code,
+			).toBe(0);
+		served = { [url]: `${served[url]}\n` };
+		const other = await run("dataset", "export", out, "--csv", "--ddi", url);
+		expect(other).toMatchObject({ code: 1, out: "" });
+		expect(other.err).toMatch(/^https:\S+: error: .*\[dataset-ddi\]/);
+		served = {};
+		const gone = await run(
+			"responses",
+			file,
+			"--ddi",
+			url,
+			...synthetic,
+			"-o",
+			join(dir, "gone.json"),
+		);
+		expect(gone).toMatchObject({ code: 2, written: {} });
+		// A malformed URL can't be read, as a missing file can't.
+		const malformed = await run(
+			"responses",
+			file,
+			"--ddi",
+			"https://[x/t.json",
+			...synthetic,
+		);
+		expect(malformed).toMatchObject({ code: 2, out: "" });
+		expect(malformed.err).toMatch(/^Can't read https:\/\/\[x\/t\.json: /);
 	});
 
 	it("refuses answers it can't check, and options that don't fit", async () => {

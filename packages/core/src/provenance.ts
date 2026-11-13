@@ -105,11 +105,12 @@ export function factsOf(
 	return ok({ ...data, asked_by, answered_by });
 }
 
-/** A file the dataset was made from: its name (no folder), SHA-256 (hex) and size in bytes. */
+/** A file the dataset was made from: its name (no folder), SHA-256 (hex) and size in bytes, and the URL it was read from, if it was. */
 export interface FileDigest {
 	readonly name: string;
 	readonly sha256: string;
 	readonly size: number;
+	readonly url?: string;
 }
 
 /** What the shell gives of a dataset's provenance: the files, read and hashed, and the facts. */
@@ -279,6 +280,7 @@ export function provenanceOf(
 			obj({
 				TypeOfMaterial: { StringValue: type },
 				Citation: { Title: intl(f.name) },
+				ExternalURLReference: f.url === undefined ? undefined : [f.url],
 				UserID: [
 					{ StringValue: f.sha256, TypeOfUserID: { StringValue: "SHA-256" } },
 				],

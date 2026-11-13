@@ -28,6 +28,8 @@ process.exitCode = await main(process.argv.slice(2), {
 	readHistory,
 	ownRepository,
 	readStdin: () => text(process.stdin),
+	// A DDI by URL: a minute, then the command says it couldn't read it.
+	fetch: (url) => fetch(url, { signal: AbortSignal.timeout(60_000) }),
 }).catch((e: unknown) => {
 	process.stderr.write(
 		`qretools failed: ${e instanceof Error ? e.stack : String(e)}\n`,
