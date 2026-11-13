@@ -176,6 +176,7 @@ describe("dataMapOf", () => {
 	it("reads a map, and refuses one that isn't", () => {
 		const json = {
 			ddi: "sha256:0",
+			source: "survey",
 			respondent: "id",
 			values: { "-98": "D", "-100": null },
 			columns: [{ column: "happy", variable: "urn:happy", values: { x: "1" } }],
@@ -183,7 +184,9 @@ describe("dataMapOf", () => {
 		expect(dataMapOf(json)).toEqual(json);
 		// A key JSON can hold is kept as data, never as the object's prototype.
 		const proto = dataMapOf(
-			JSON.parse('{"respondent":"id","columns":[],"values":{"__proto__":"D"}}'),
+			JSON.parse(
+				'{"source":"s","respondent":"id","columns":[],"values":{"__proto__":"D"}}',
+			),
 		);
 		expect(proto?.values && Object.hasOwn(proto.values, "__proto__")).toBe(
 			true,
@@ -192,6 +195,7 @@ describe("dataMapOf", () => {
 			null,
 			[],
 			{ ...json, respondent: 1 },
+			{ ...json, source: undefined },
 			{ ...json, columns: {} },
 			{ ...json, values: { "-98": 1 } },
 			{ ...json, columns: [{ column: "happy" }] },
@@ -203,6 +207,7 @@ describe("dataMapOf", () => {
 
 describe("dataFileMap", () => {
 	const MAP: DataMap = {
+		source: "survey",
 		respondent: "id",
 		values: { "-98": "D", "-100": null },
 		columns: [
@@ -287,6 +292,7 @@ describe("filtered and censored columns", () => {
 
 	it("reads nothing from a filtered column, with one note, whether or not the file has it", () => {
 		const map = dataMapOf({
+			source: "survey",
 			respondent: "id",
 			columns: [
 				{ column: "happy", variable: "urn:happy", filtered: true },
@@ -309,6 +315,7 @@ describe("filtered and censored columns", () => {
 		for (const bad of [{ filtered: false }, { censored: { "6": null } }])
 			expect(
 				dataMapOf({
+					source: "survey",
 					respondent: "id",
 					columns: [{ column: "age", variable: "urn:age", ...bad }],
 				}),

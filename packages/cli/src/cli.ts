@@ -5,8 +5,8 @@
  * instrument's test `form` (an HTML page that runs its routing, from its DDI), report its
  * `paths` (an HTML page of how many ways through its routing, and what each reaches),
  * or `build` it: the DDI of its last commit, each item at the version its history gives,
- * with each instrument's Qualtrics survey and the map of its columns to that DDI; and read
- * that survey's `responses` back, keyed by DDI Variable URN. `main` takes its
+ * with each instrument's Qualtrics survey; make that survey's column map (`qsf-map`); and read
+ * its `responses` back, keyed by DDI Variable URN. `main` takes its
  * output as values (`Io`), so it runs in a
  * test as it runs in a shell; the bin only wires it to the process.
  */
@@ -79,6 +79,7 @@ import { pathsPageOf } from "@qretools/paths";
 import {
 	columnMapOf,
 	exportMap,
+	qsfMapOf,
 	qsfOf,
 	qsfRefusalReason,
 	qsfTime,
@@ -122,15 +123,18 @@ const USAGE = `Usage:
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist),
                                     and each instrument's to outdir/instruments/<name>.json, with its Qualtrics
-                                    survey (<name>.qsf) and its QSF column map, from the survey's response columns to its DDI
-                                    variables (<name>-ddi-qsf.columns.json); an instrument Qualtrics can't run gets a
-                                    warning instead of those two. Refused while an instrument is incomplete, reads
-                                    this workspace as \`../\`, or reads a tag it hasn't locked or that has moved
-  qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [-o file]
+                                    survey (<name>.qsf); an instrument Qualtrics can't run gets a warning instead
+                                    of the survey. Refused while an instrument is incomplete, reads this
+                                    workspace as \`../\`, or reads a tag it hasn't locked or that has moved
+  qretools qsf-map <name.json> -o <dir>
+                                    Write the QSF column map of an instrument's DDI (as \`build\` writes it), from
+                                    the response columns of its Qualtrics survey to its DDI variables, to
+                                    dir/<name>-ddi-qsf.columns.json. Not written if Qualtrics can't run the survey
+  qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [--ddi file] [-o file]
                                     Read a Qualtrics response export (CSV, export values, multi-value
                                     fields split into columns) into long CSV, one line per value:
                                     respondent,variable,row,value, each variable by its DDI URN. Reads
-                                    the DDI <name>.json beside the map. Survey Preview and test
+                                    the DDI <name>.json beside the map, or --ddi. Survey Preview and test
                                     responses are kept. Writes to stdout unless -o names a file:
                                     keep it out of anything published (dist/ goes to Pages)
   qretools responses <data.csv> --map <name>-ddi-<source>.columns.json [--ddi file] [-o file]
@@ -203,7 +207,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "codebook" &&
 		command !== "paths" &&
 		command !== "responses" &&
-		command !== "filter"
+		command !== "filter" &&
+		command !== "qsf-map"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -270,6 +275,14 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values.output,
 			io,
 		);
+	}
+	if (command === "qsf-map") {
+		// A file, always, and a folder: the map's name says its kind, so it has no stdout form.
+		if (args.positionals[1] === undefined || args.values.output === undefined) {
+			io.err(`${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return writeQsfMap(dir, args.values.output, io);
 	}
 	if (command === "paths") {
 		// A file, always: there's no workspace default to fall back on.
@@ -356,6 +369,10 @@ async function emit(
 const ddiText = (document: DdiDocument): string =>
 	`${JSON.stringify(document, null, 2)}\n`;
 
+/** A file's SHA-256 digest as a map and a survey record it, so `shasum -a 256` agrees. */
+const digestOf = (text: string): string =>
+	`sha256:${createHash("sha256").update(text).digest("hex")}`;
+
 /** The DDI as `export` writes it. */
 const asJson = (document: DdiDocument): Rendered => ({
 	text: ddiText(document),
@@ -407,6 +424,56 @@ function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
 		),
 		problems: strict && codebook.findings.length > 0,
 	};
+}
+
+/**
+ * The QSF column map of an instrument's DDI file (as `build` writes it), to
+ * `<out>/<name>-ddi-qsf.columns.json`: made as the survey is, by `qsfMapOf`, with the
+ * file's digest, so `responses` reads an export only with that DDI. Written with warnings
+ * for columns it can't name; not written when Qualtrics can't run the survey.
+ */
+async function writeQsfMap(file: string, out: string, io: Io): Promise<number> {
+	let text: string;
+	try {
+		text = await readFile(file, "utf8");
+	} catch (e) {
+		io.err(
+			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const json = jsonOf(text);
+	// The trust boundary: DDI the official schema accepts, before the package reads it.
+	const invalid = json.ok ? await validate(json.value as DdiDocument) : [];
+	if (!json.ok || invalid.length > 0) {
+		for (const f of invalid)
+			io.err(
+				`${file}: error: ${f.path === "" ? "" : `${f.path}: `}${f.message}\n`,
+			);
+		io.err(
+			`${file}: error: Not written: this isn't DDI-Lifecycle 4.0 JSON. [qsf-map-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const made = qsfMapOf(json.value as DdiDocument, {
+		digest: digestOf(text),
+		version: pkg.version,
+	});
+	for (const f of made.findings.filter(
+		(f) => f.code === "qsf-unmapped" || f.severity === "error",
+	))
+		io.err(
+			`${file}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]\n`,
+		);
+	if (made.kind === "refused") {
+		io.err(`${file}: error: Not written: ${qsfRefusalReason(made.errors)}\n`);
+		return PROBLEMS;
+	}
+	await io.writeFile(
+		join(out, `${basename(file, ".json")}-ddi-qsf.columns.json`),
+		`${JSON.stringify(made.columns, null, 2)}\n`,
+	);
+	return OK;
 }
 
 /**
@@ -465,7 +532,8 @@ async function writePaths(
 
 /**
  * A map's name: `<name>-ddi-<source>.columns.json`, beside the DDI `<name>.json` it was
- * made from. `qsf` is the QSF column map `build` writes; any other source is a data file's map.
+ * made from. Its `source` field says what kind of map it is, and must agree with the name:
+ * `qsf` is the QSF column map `qsf-map` writes; any other source is a data file's map.
  */
 const MAP_NAME = /-ddi-([a-z0-9]+)\.columns\.json$/;
 
@@ -487,11 +555,10 @@ async function writeResponses(
 	const named = MAP_NAME.exec(mapFile);
 	if (named === null) {
 		io.err(
-			`${mapFile}: a column map's name ends in \`-ddi-<source>.columns.json\`, as \`build\` writes the QSF one (\`-ddi-qsf.columns.json\`) beside the instrument's DDI.\n`,
+			`${mapFile}: a column map's name ends in \`-ddi-<source>.columns.json\`, as \`qsf-map\` names the QSF one (\`-ddi-qsf.columns.json\`).\n`,
 		);
 		return USAGE_ERROR;
 	}
-	const qsf = named[1] === "qsf";
 	const ddiFile = ddiOption ?? `${mapFile.slice(0, named.index)}.json`;
 	const texts: string[] = [];
 	for (const f of [file, mapFile, ddiFile])
@@ -505,6 +572,23 @@ async function writeResponses(
 		}
 	const [csv = "", mapText = "", ddiText = ""] = texts;
 	const mapJson = jsonOf(mapText);
+	const source =
+		mapJson.ok && typeof mapJson.value === "object" && mapJson.value !== null
+			? (mapJson.value as Record<string, unknown>).source
+			: undefined;
+	if (typeof source !== "string") {
+		io.err(
+			`${mapFile}: error: this map has no \`source\` field, which says what it reads. ${named[1] === "qsf" ? "Make it again with `qretools qsf-map`." : `Add \`"source": "${named[1]}"\`.`} [responses-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	if (source !== named[1]) {
+		io.err(
+			`${mapFile}: error: its name says the source \`${named[1]}\`, but its \`source\` field says \`${source}\`. [responses-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const qsf = source === "qsf";
 	const map = !mapJson.ok
 		? undefined
 		: qsf
@@ -516,10 +600,9 @@ async function writeResponses(
 		);
 		return PROBLEMS;
 	}
-	const digest = `sha256:${createHash("sha256").update(ddiText).digest("hex")}`;
-	if (map.ddi !== undefined && map.ddi !== digest) {
+	if (map.ddi !== undefined && map.ddi !== digestOf(ddiText)) {
 		io.err(
-			`${ddiFile}: error: this isn't the DDI the map was made from (its digest differs). Use the files one \`build\` wrote. [responses-provenance]\n`,
+			`${ddiFile}: error: this isn't the DDI the map was made from (its digest differs). [responses-provenance]\n`,
 		);
 		return PROBLEMS;
 	}
@@ -928,8 +1011,8 @@ async function exportBank(
  * `qretools build [dir]`: the workspace as committed at HEAD, each file at the version its
  * first-parent history gives (`versionsOf`), exported as `export` does to `out/ddi.json`;
  * and each instrument to `out/instruments/<name>.json`, with its Qualtrics survey
- * (`<name>.qsf`) and column map (`<name>-ddi-qsf.columns.json`), or a warning where Qualtrics can't
- * run it. Uncommitted changes are left out, and said to be.
+ * (`<name>.qsf`), or a warning where Qualtrics can't run it. It never makes a column map:
+ * `qsf-map` does, once the survey is fielded. Uncommitted changes are left out, and said to be.
  */
 async function build(
 	dir: string,
@@ -990,7 +1073,7 @@ async function build(
 			join(out, WORKSPACE.instruments, `${name}${ext}`);
 		const ddi = asJson(instrument.ddi);
 		await emit(ddi, file(".json"), io);
-		// Its Qualtrics survey and column map, from that DDI: dated when the instrument last
+		// Its Qualtrics survey, from that DDI: dated when the instrument last
 		// changed (never now), so a commit always builds the same bytes.
 		const date = versions[path]?.date;
 		const made =
@@ -1000,15 +1083,12 @@ async function build(
 						name: instrument.draft.name ?? name,
 						created: qsfTime(new Date(date)),
 						// Of the bytes `<name>.json` holds, so `shasum -a 256` on that file agrees.
-						digest: `sha256:${createHash("sha256")
-							.update(ddi.text ?? "")
-							.digest("hex")}`,
+						digest: digestOf(ddi.text ?? ""),
 						version: pkg.version,
 					});
 		if (made?.kind !== "made") {
 			// A release goes ahead without its survey; one an earlier build left isn't this one.
 			await io.removeFile(file(".qsf"));
-			await io.removeFile(file("-ddi-qsf.columns.json"));
 			io.err(
 				`[WARNING] ${join(dir, path)}: not built as a Qualtrics survey. ${
 					made === undefined
@@ -1018,6 +1098,7 @@ async function build(
 			);
 			continue;
 		}
+		// Columns the survey's map can't read back, said where the author can fix them.
 		for (const f of placeFindings(
 			made.findings.filter((f) => f.code === "qsf-unmapped"),
 			instrument.places,
@@ -1026,10 +1107,6 @@ async function build(
 				`${findingLine(join(dir, path), read.files[path] ?? "", instrument.ranges, f)}\n`,
 			);
 		await io.writeFile(file(".qsf"), `${JSON.stringify(made.qsf, null, 2)}\n`);
-		await io.writeFile(
-			file("-ddi-qsf.columns.json"),
-			`${JSON.stringify(made.columns, null, 2)}\n`,
-		);
 	}
 	// Only for a build that exported: a refused one is no release. Workspaces that use this
 	// release read banks from the message, never instruments, so it lists the bank's files.
@@ -1338,10 +1415,10 @@ async function exportQsf(
 		name: result.draft.name ?? basename(file, extname(file)),
 		created: qsfTime(new Date()),
 		// Of the DDI as `instrument export` writes it, so `shasum -a 256` on that file agrees.
-		digest: `sha256:${createHash("sha256").update(ddiText(result.ddi)).digest("hex")}`,
+		digest: digestOf(ddiText(result.ddi)),
 		version: pkg.version,
 	});
-	// Not the column map's: it's written by `build`, never here.
+	// Not the column map's: `qsf-map` writes it, never this.
 	for (const f of placeFindings(
 		made.findings.filter((f) => f.code !== "qsf-unmapped"),
 		result.places,

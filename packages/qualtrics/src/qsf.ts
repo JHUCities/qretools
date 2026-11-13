@@ -50,6 +50,28 @@ export function qsfOf(ddi: DdiDocument, options: QsfOptions): QsfResult {
 		: { kind: "refused", errors, findings: all };
 }
 
+/**
+ * The column map of the survey `qsfOf` makes from `ddi`, or why there's none. Made by the
+ * same code as the survey, so the map and a survey built from the same DDI number their
+ * questions alike.
+ */
+export function qsfMapOf(
+	ddi: DdiDocument,
+	options: Pick<QsfOptions, "digest" | "version">,
+):
+	| {
+			readonly kind: "made";
+			readonly columns: ColumnMap;
+			readonly findings: readonly Finding[];
+	  }
+	| Extract<QsfResult, { kind: "refused" }> {
+	// The name and date reach only the survey's header, never its columns.
+	const made = qsfOf(ddi, { ...options, name: "", created: "" });
+	return made.kind === "made"
+		? { kind: "made", columns: made.columns, findings: made.findings }
+		: made;
+}
+
 /** Why the survey isn't exported, as the CLI and the app both say it. */
 export const qsfRefusalReason = (errors: number): string =>
 	`${errors === 1 ? "1 thing" : `${errors} things`} in this instrument can't be run in Qualtrics.`;
