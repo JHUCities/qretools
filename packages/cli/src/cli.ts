@@ -53,6 +53,9 @@ import {
 	locksFor,
 	locksWritten,
 	makeValidator,
+	metadataRepresentation,
+	metadataUrn,
+	modesOf,
 	movedTags,
 	notHere,
 	placeFindings,
@@ -82,6 +85,7 @@ import {
 	versionsOf,
 	WORKSPACE,
 	withLocks,
+	withMetadataVariables,
 	workspaceOf,
 } from "@qretools/core";
 import { readWorkspace } from "@qretools/core/node";
@@ -149,11 +153,16 @@ const USAGE = `Usage:
                                     export holds one kind. Refuses to replace a different file. Writes
                                     to stdout unless -o names a file: keep it out of anything published
                                     (dist/ goes to Pages)
-  qretools responses <data.csv> --map <name>-ddi-<source>.columns.json --asked-by term --answered-by term
+  qretools responses <data.csv> --map <name>-ddi-<source>.columns.json [--asked-by term]
                     [--ddi file] [-o dataset.json]
                                     Read a data file (CSV, one header row) the same way, with a map
                                     that names each column by its header, with its DDI variable and
-                                    any translations of its values. Every row is read
+                                    any translations of its values. The map also says who answered,
+                                    and may describe the columns no respondent is asked (a mode, a
+                                    weight: variables of the dataset), the column with each
+                                    interview's date, and the publisher's advice on the weights.
+                                    --asked-by is needed only where no mode column says. Every row
+                                    is read
   qretools dataset export <dataset.json> --csv | --provenance --ddi <file.json> [--access <level>] [-o file]
                                     Write a view of a dataset: --csv its values as long CSV, one line
                                     per value: respondent,variable,row,value, each variable by its DDI
@@ -162,8 +171,9 @@ const USAGE = `Usage:
                                     access levels, --access is required: the view leaves out each
                                     variable above that level, by the access policy of its own
                                     workspace, and names each one on stderr, never a value. The
-                                    dataset's own variables (respondent, start, end) stand at the most
-                                    closed level; below it, the CSV numbers the respondents from 1
+                                    dataset's own variables (respondent, start, end, and a map's
+                                    metadata columns unless the map states their level) stand at the
+                                    most closed level; below it, the CSV numbers the respondents from 1
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -186,9 +196,9 @@ moves after that, check warns until the next export records it again.
 --access  for dataset export, the access level to keep, with every more open one.
 --asked-by     for responses, how the respondents were asked, as a term of DDI's
                ModeOfCollection vocabulary (Interview.FaceToFace, say). Refused where the
-               source says it.
+               source or its map says it.
 --answered-by  for responses, who answered, as a term of DDI's DataSourceType vocabulary
-               (PopulationGroup, say). Refused where the source says it.
+               (PopulationGroup, say). Refused where the source or its map says it.
 --csv     for dataset export, write the values as long CSV.
 --provenance  for dataset export, write the dataset without its values.
 --qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
@@ -614,8 +624,29 @@ async function writeResponses(
 			.find((t) => t !== undefined);
 		if (tick !== undefined) ticked.set(e.urn, tick);
 	}
+	// Every URN is `urn:ddi:<agency>:…`: the dataset is its variables' agency's.
+	const agencies = new Set(
+		map.columns.flatMap((c) =>
+			"filtered" in c && c.filtered ? [] : [c.variable.split(":")[2]],
+		),
+	);
+	const [agency] = agencies;
+	if (agencies.size !== 1 || agency === undefined || agency === "") {
+		io.err(
+			`${mapFile}: error: the map's variables don't share one DDI agency, so the dataset has none. Nothing is written. [responses-agency]\n`,
+		);
+		return PROBLEMS;
+	}
+	const metadata = "respondent" in map ? (map.metadata ?? []) : [];
+	for (const m of metadata)
+		representations.set(
+			metadataUrn(agency, name, m.column),
+			metadataRepresentation(m),
+		);
 	const made =
-		"respondent" in map ? dataFileMap(csv, map) : exportMap(csv, map, ticked);
+		"respondent" in map
+			? dataFileMap(csv, map, (c) => metadataUrn(agency, name, c))
+			: exportMap(csv, map, ticked);
 	const answered =
 		made.map === undefined
 			? undefined
@@ -626,31 +657,29 @@ async function writeResponses(
 			`${file}${f.line === undefined ? "" : `:${f.line}`}: ${LEVEL[f.severity]}: ${f.column === undefined ? "" : `column \`${f.column}\`: `}${f.message}${f.count > 1 ? ` (${f.count} rows)` : ""} [${f.code}]\n`,
 		);
 	const failed = findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
-	// A data file says nothing yet of how it was collected; an export of mixed kinds can't be described.
+	if (made.map === undefined || answered === undefined) return failed;
+	// A data file's map says who answered, and its mode column how each respondent was asked; an export of mixed kinds can't be described.
 	const given =
-		"respondent" in map ? {} : "facts" in made ? made.facts : undefined;
-	if (made.map === undefined || answered === undefined || given === undefined)
-		return failed;
+		"respondent" in map
+			? {
+					answered_by: map.answered_by,
+					asked_by: modesOf(metadata, answered.answers, (c) =>
+						metadataUrn(agency, name, c),
+					),
+				}
+			: "facts" in made
+				? made.facts
+				: undefined;
+	if (given === undefined) return failed;
 	const facts = factsOf(given, options);
 	if (!facts.ok) {
 		for (const { fact, problem } of facts.error)
 			io.err(
 				problem === "missing"
 					? `${file}: error: the ${qsf ? "export" : "data file"} doesn't say ${fact === "asked_by" ? "how its respondents were asked" : "who answered"}: give \`${FACT_OPTIONS[fact]} <term>\`, a term of DDI's ${fact === "asked_by" ? "ModeOfCollection" : "DataSourceType"} vocabulary. Nothing is written. [responses-facts]\n`
-					: `${file}: error: the export already says ${fact === "asked_by" ? "how its respondents were asked" : "who answered"}, so \`${FACT_OPTIONS[fact]}\` isn't taken. Nothing is written. [responses-facts]\n`,
+					: `${qsf ? file : mapFile}: error: the ${qsf ? "export" : "map"} already says ${fact === "asked_by" ? "how its respondents were asked" : "who answered"}, so \`${FACT_OPTIONS[fact]}\` isn't taken. Nothing is written. [responses-facts]\n`,
 			);
 		return USAGE_ERROR;
-	}
-	// Every URN is `urn:ddi:<agency>:…`: the dataset is its variables' agency's.
-	const agencies = new Set(
-		made.map.columns.map((c) => c.variable.split(":")[2]),
-	);
-	const [agency] = agencies;
-	if (agencies.size !== 1 || agency === undefined || agency === "") {
-		io.err(
-			`${mapFile}: error: the map's variables don't share one DDI agency, so the dataset has none. Nothing is written. [responses-agency]\n`,
-		);
-		return PROBLEMS;
 	}
 	const values: Dataset = {
 		name,
@@ -670,6 +699,11 @@ async function writeResponses(
 		ddi: ddiRead,
 		map: { ...mapRead, ...(map.ddi !== undefined && { ddi: map.ddi }) },
 		claimed: "claimed" in made ? (made.claimed ?? []) : [],
+		...("respondent" in map && {
+			metadata,
+			...(map.citation !== undefined && { citation: map.citation }),
+			...(map.weighting !== undefined && { weighting: map.weighting }),
+		}),
 	});
 	if (!built.ok) {
 		io.err(
@@ -759,7 +793,10 @@ async function dataset(
 		return PROBLEMS;
 	}
 	const ddiJson = jsonOf(ddiBytes.toString("utf8"));
-	const index = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
+	// The dataset's own metadata variables beside the instrument's: a level their map stated is read as a question's.
+	const index = ddiJson.ok
+		? readDdi(withMetadataVariables(ddiJson.value, json.value, got.value))
+		: undefined;
 	if (index?.ok !== true) {
 		io.err(
 			`${ddi}: error: this isn't DDI-Lifecycle 4.0 JSON. [dataset-unreadable]\n`,

@@ -4,7 +4,9 @@
  * embedded) and the respondent as the source spells them. The dataset owns three
  * Variables of its own: the respondent's identifier (its `IdentifyingVariableReference`,
  * one value per respondent, so a respondent with no answers is kept) and each
- * interview's `start` and `end` where the source gives them. Values are sorted by
+ * interview's `start` and `end` where the source gives them (a date-time with a zone, or a
+ * date where the source gives only that), and one for each column of a data file that no
+ * respondent is asked (`metadata` in its map: a mode, a weight). Values are sorted by
  * respondent, then variable URN, so the same answers give the same bytes. `readDataset`
  * reads such a document back, once, into the value `datasetOf` writes from. Beside the
  * DataSet, the document holds its provenance (`provenanceOf`); `provenanceView` is the
@@ -22,17 +24,25 @@ import {
 	item,
 	type Json,
 	type JsonObject,
+	obj,
 	ref,
 	structured,
 } from "./ddi/document.ts";
-import { asList, asObj, type DdiIndex, str } from "./ddi/read.ts";
+import { embargo } from "./ddi/elaborate.ts";
+import { asList, asObj, type DdiIndex, deref, str, words } from "./ddi/read.ts";
 import {
 	accessPoliciesOf,
 	type FilterRefusal,
 	filterAnswers,
 	type Removed,
 } from "./filter.ts";
-import { type Provenance, provenanceOf, refTo } from "./provenance.ts";
+import {
+	codeValueOf,
+	type Provenance,
+	provenanceOf,
+	refTo,
+	VOCABULARY,
+} from "./provenance.ts";
 import { type Answer, answersCsv, type Respondent } from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
 
@@ -48,10 +58,15 @@ export interface Dataset {
 /** What a dataset's name may be: one part of a DDI ID, without a dot. */
 export const DATASET_NAME = /^[A-Za-z0-9_-]+$/;
 
-/** The dataset's own items' identities, all hung off `dataset-<name>`. */
+/**
+ * The dataset's own items' identities, all hung off `dataset-<name>`. A data file's
+ * metadata column is `var-<header>`, as an instrument's variables are `var-<name>`: no
+ * other part starts so, so a header such as `mode` never meets the provenance's `.mode`.
+ */
 const owned = (agency: string, name: string) => {
 	const base = `dataset-${name}`;
 	return {
+		variable: (column: string) => identity(agency, `${base}.var-${column}`),
 		dataset: identity(agency, base),
 		respondent: identity(agency, `${base}.respondent`),
 		start: identity(agency, `${base}.start`),
@@ -60,6 +75,13 @@ const owned = (agency: string, name: string) => {
 		ddi: identity(agency, `${base}.ddi`),
 	};
 };
+
+/** The URN of the dataset's own variable for a data file's metadata column. */
+export const metadataUrn = (
+	agency: string,
+	name: string,
+	column: string,
+): string => owned(agency, name).variable(column).URN;
 
 /** `[agency, id, version]` of a URN as `urn:ddi:agency:id:version` writes it. */
 const partsOf = (
@@ -186,19 +208,101 @@ export function datasetOf(
 		agency: d.agency,
 		dataset: set,
 		present: values.map((v) => v.urn),
+		metadata: (provenance.metadata ?? []).map(
+			(m) => ids.variable(m.column).URN,
+		),
 		starts: d.respondents.flatMap((r) => r.start ?? []),
 		ends: d.respondents.flatMap((r) => r.end ?? []),
 	});
 	if (!described.ok) return described;
+	const weighting = described.value.find((it) => it.type === "Weighting");
+	const metadata: Item[] = [];
+	for (const m of provenance.metadata ?? []) {
+		const id = ids.variable(m.column);
+		const level =
+			m.access === undefined
+				? undefined
+				: policyFor(provenance.index, m.access);
+		if (level !== undefined && !level.ok)
+			return err(`The map's column \`${m.column}\` ${level.error}`);
+		const codes = Object.entries(m.codes ?? {});
+		const part = (p: string) => identity(d.agency, `${id.ID}-${p}`);
+		const categories = codes.map(([, label], i) =>
+			item("Category", part(`cat-${i + 1}`), { Label: [structured(label)] }),
+		);
+		const list =
+			m.codes &&
+			item("CodeList", part("codes"), {
+				Code: codes.map(([code], i) => ({
+					...part(`code-${i + 1}`),
+					Value: { StringValue: code },
+					CategoryReference: ref(categories[i] as Item),
+				})),
+			});
+		metadata.push(
+			item(
+				"Variable",
+				id,
+				obj({
+					VariableName: [intl(m.column)],
+					Label: m.label && [structured(m.label)],
+					SourceUnit: m.unit && codeValueOf(m.unit, VOCABULARY.unit),
+					IsWeight: m.weight,
+					WeightingProcessReference: m.weight && weighting && ref(weighting),
+					VariableRepresentation: obj({
+						VariableRole: m.role && { StringValue: m.role },
+						ValueRepresentation: list
+							? { $type: "CodeDomain", CodeListReference: ref(list) }
+							: { $type: "NumericDomain" },
+					}),
+					// Without a level stated, no embargo: the most closed level, as the respondent's.
+					EmbargoReference:
+						level &&
+						embargo(
+							identity(d.agency, `${id.ID}-embargo`),
+							m.access ?? "",
+							level.value.open,
+							level.value.policy,
+						),
+				}),
+			),
+			...(list ? [list] : []),
+			...categories,
+		);
+	}
 	return ok(
 		documentOf([
 			set,
 			respondent,
 			...(timed("start") ? [time(ids.start, "start")] : []),
 			...(timed("end") ? [time(ids.end, "end")] : []),
+			...metadata,
 			...described.value,
 		]),
 	);
+}
+
+/**
+ * The policy a level a map states belongs to, and whether it is that policy's most open:
+ * only where the DDI holds exactly one policy and it lists the level, so the order it is
+ * read in is never a guess.
+ */
+function policyFor(
+	index: DdiIndex,
+	level: string,
+): Result<{ readonly policy: string; readonly open: boolean }, string> {
+	const listed = accessPoliciesOf(index);
+	const policies = listed.ok ? listed.value.policies : [];
+	const [policy] = policies;
+	if (policies.length !== 1 || policy === undefined)
+		return err(
+			`states the access level \`${level}\`, and the DDI holds ${policies.length} access policies: a level is read against exactly one.`,
+		);
+	if (!policy.levels.includes(level))
+		return err(
+			`states the access level \`${level}\`, which the DDI's access policy doesn't list: its levels are ${policy.levels.map((l) => `\`${l}\``).join(", ")}.`,
+		);
+	return ok({ policy: policy.urn, open: policy.levels[0] === level });
 }
 
 /**
@@ -208,7 +312,7 @@ export function datasetOf(
  * variables become its respondents and their times; every other value is an answer, of a
  * respondent the dataset identifies.
  */
-// shortcut: start and end values aren't checked as date-times, nor the variables' items read; check them when another program writes datasets.
+// shortcut: start and end values aren't checked as dates or date-times, nor the variables' items read; check them when another program writes datasets.
 export function readDataset(json: unknown): Result<Dataset, string> {
 	const sets = Object.values(asObj(asObj(json)?.DataSet) ?? {});
 	const [set] = sets;
@@ -285,6 +389,8 @@ export function readDataset(json: unknown): Result<Dataset, string> {
  * (never a value), and whether the dataset's own variables (respondent, start, end) are
  * kept. They have no question to take a level from and can identify a respondent, so
  * they stand at the most closed level: kept only at the most closed level of every policy.
+ * So does a metadata column's variable, unless its map stated a level, which its embargo
+ * records as a question's does.
  */
 export interface Access {
 	readonly level: string;
@@ -310,13 +416,27 @@ export function accessOf(
 		return policies.length === 0
 			? ok(undefined)
 			: err({ kind: "level-required", policies });
-	const filtered = filterAnswers(index, d.answers, level);
+	// A metadata variable with no embargo (or none in the index) stands with the respondent's.
+	const ids = owned(d.agency, d.name);
+	const closed = new Set(
+		d.answers
+			.map((a) => a.variable)
+			.filter(
+				(u) =>
+					partsOf(u)?.[1].startsWith(`${ids.dataset.ID}.var-`) &&
+					deref(index, u)?.item.EmbargoReference === undefined,
+			),
+	);
+	const filtered = filterAnswers(
+		index,
+		d.answers.filter((a) => !closed.has(a.variable)),
+		level,
+	);
 	if (!filtered.ok) return filtered;
 	// Above the level in some policy: the most closed level there is what it stands at.
 	const above = policies
 		.map((p) => p.levels.at(-1) ?? "")
 		.find((closed) => closed !== level);
-	const ids = owned(d.agency, d.name);
 	const ownedRemoved = (
 		[
 			[ids.respondent, "respondent"],
@@ -327,10 +447,23 @@ export function accessOf(
 				? ([[ids.end, "end"]] as const)
 				: []),
 		] as const
-	).map(([id, name]): Removed => ({ urn: id.URN, name, level: above ?? "" }));
+	)
+		.map(([id, name]): Removed => ({ urn: id.URN, name, level: above ?? "" }))
+		.concat(
+			[...closed].sort().map((urn) => ({
+				urn,
+				name: words(deref(index, urn)?.item.VariableName) ?? urn,
+				level: above ?? "",
+			})),
+		);
 	return ok({
 		level,
-		kept: filtered.value.kept,
+		kept: [
+			...filtered.value.kept,
+			...(above === undefined
+				? d.answers.filter((a) => closed.has(a.variable))
+				: []),
+		],
 		removed: [
 			...filtered.value.removed,
 			...(above === undefined ? [] : ownedRemoved),
@@ -448,6 +581,31 @@ export const provenanceView = (doc: unknown, access?: Access): DdiDocument => {
 		InformationClassification: added.InformationClassification ?? {},
 		VariableGroup: { ...asObj(view.VariableGroup), ...added.VariableGroup },
 	} as DdiDocument;
+};
+
+/**
+ * The instrument's DDI with the dataset's metadata variables beside its own, so a level
+ * their map stated is read as a question's is. Only `dataset-<name>.var-…` items: a
+ * dataset can never restate an instrument's variable.
+ */
+export const withMetadataVariables = (
+	ddi: unknown,
+	doc: unknown,
+	d: Dataset,
+): unknown => {
+	const prefix = `${owned(d.agency, d.name).dataset.ID}.var-`;
+	const root = asObj(ddi) ?? {};
+	return {
+		...root,
+		Variable: {
+			...asObj(root.Variable),
+			...Object.fromEntries(
+				Object.entries(asObj(asObj(doc)?.Variable) ?? {}).filter(([, v]) =>
+					str(asObj(v)?.ID)?.startsWith(prefix),
+				),
+			),
+		},
+	};
 };
 
 /** The SHA-256 (hex) of the instrument DDI the dataset was made from, as its provenance records it. */

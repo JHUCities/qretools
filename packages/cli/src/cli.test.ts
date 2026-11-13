@@ -1021,6 +1021,7 @@ describe("qretools responses", () => {
 		);
 		const json = JSON.stringify({
 			ddi: digest,
+			answered_by: "ResearchData.Published",
 			respondent: "ID",
 			values: { "-98": "D", "-100": null },
 			columns: [
@@ -1030,18 +1031,27 @@ describe("qretools responses", () => {
 		});
 		const beside = join(dir, "t-ddi-survey.columns.json");
 		await writeFile(beside, json);
-		// A data file says nothing of how it was collected: both options do.
+		// The map says who answered, so only how they were asked needs an option, and the map's fact no option.
 		const missing = await run("responses", data, "--map", beside);
 		expect(missing).toMatchObject({ code: 2, out: "" });
 		expect(missing.err).toMatch(
-			/give `--asked-by <term>`.*\[responses-facts\]\n.*give `--answered-by <term>`/,
+			`${data}: error: the data file doesn't say how its respondents were asked: give \`--asked-by <term>\`, a term of DDI's ModeOfCollection vocabulary. Nothing is written. [responses-facts]\n`,
 		);
-		const facts = [
+		const repeated = await run(
+			"responses",
+			data,
+			"--map",
+			beside,
 			"--asked-by",
 			"Interview",
 			"--answered-by",
 			"ResearchData.Published",
-		];
+		);
+		expect(repeated).toMatchObject({ code: 2, out: "" });
+		expect(repeated.err).toMatch(
+			`${beside}: error: the map already says who answered, so \`--answered-by\` isn't taken. Nothing is written. [responses-facts]\n`,
+		);
+		const facts = ["--asked-by", "Interview"];
 		const r = await run("responses", data, "--map", beside, ...facts);
 		expect((await csvOf(r.out, ddi)).out).toBe(
 			[
@@ -1303,12 +1313,7 @@ describe("qretools dataset export at an access level", () => {
 	const q = (name: string, rest = "") =>
 		`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
 	const v = (name: string) => `urn:ddi:org.example:instrument-t.var-${name}:1`;
-	const facts = [
-		"--asked-by",
-		"Interview",
-		"--answered-by",
-		"ResearchData.Published",
-	];
+	const facts = ["--asked-by", "Interview"];
 
 	/** A dataset `responses` writes from a data file, and the DDI it was made from. */
 	async function made(levels: boolean) {
@@ -1338,20 +1343,57 @@ describe("qretools dataset export at an access level", () => {
 		await writeFile(
 			map,
 			JSON.stringify({
+				answered_by: "ResearchData.Published",
 				respondent: "ID",
 				columns: [
 					{ column: "TENURE", variable: v("tenure") },
 					{ column: "ZIP", variable: v("zip") },
 				],
+				metadata: [
+					{
+						column: "W",
+						number: true,
+						weight: true,
+						...(levels && { access: "public" }),
+					},
+					{
+						column: "SHIFT",
+						codes: { "1": "Day", "2": "Night" },
+						modes: { "1": "Interview.Telephone" },
+					},
+				],
+				weighting: {
+					advice: "Use W.",
+					source: { title: "A codebook" },
+					read: "2026-11-12",
+				},
+				interview_date: { column: "DAY", form: "MMDD", year: "YR" },
 			}),
 		);
 		const data = join(dir, "data.csv");
-		await writeFile(data, "ID,TENURE,ZIP\nR_7,own,21218\n");
-		const dataset = join(dir, "d.json");
 		await writeFile(
-			dataset,
-			(await run("responses", data, "--map", map, ...facts)).out,
+			data,
+			"ID,TENURE,ZIP,W,SHIFT,DAY,YR\nR_7,own,21218,0.5,1,315,2010\n",
 		);
+		const dataset = join(dir, "d.json");
+		// The map's mode column says how the respondent was asked: no option may.
+		const asked = await run("responses", data, "--map", map, ...facts);
+		expect(asked.err).toMatch(
+			/the map already says how its respondents were asked/,
+		);
+		const written = await run("responses", data, "--map", map);
+		expect(written.err).toMatch(/^[^\n]*\[responses-provenance\]\n$/);
+		expect(written.out).toContain('"Date": "2010-03-15"');
+		await writeFile(dataset, written.out);
+		// A reserved code for the date: that interview has no time, with a warning, and the run doesn't fail.
+		await writeFile(
+			join(dir, "late.csv"),
+			"ID,TENURE,ZIP,W,SHIFT,DAY,YR\nR_7,own,21218,0.5,1,-1,2010\n",
+		);
+		const late = await run("responses", join(dir, "late.csv"), "--map", map);
+		expect(late.code).toBe(0);
+		expect(late.err).toMatch(/warning: column `DAY`: .*\[responses-date\]/);
+		expect(late.out).not.toContain('"Date"');
 		return { dir, ddi: file, dataset };
 	}
 
@@ -1368,13 +1410,17 @@ describe("qretools dataset export at an access level", () => {
 
 		// Below the most closed level: no zip, and the respondent numbered, never named.
 		const open = await view("--csv", "--access", "public");
+		// The weight the map puts at `public` stays; the mode, at no stated level, goes with the respondent.
 		expect(open.out).toBe(
-			`respondent,variable,row,value\n1,${v("tenure")},,own\n`,
+			`respondent,variable,row,value\n1,urn:ddi:org.example:dataset-t.var-W:1,,0.5\n1,${v("tenure")},,own\n`,
 		);
 		expect(open.err).toBe(
 			[
 				`${dataset}: note: removed \`zip\` (${v("zip")}), at \`restricted\`. [dataset-access-removed]`,
-				`${dataset}: note: removed \`respondent\` (urn:ddi:org.example:dataset-t.respondent:1), at \`restricted\`. [dataset-access-removed]`,
+				...["respondent", "start", "end", "var-SHIFT"].map(
+					(part) =>
+						`${dataset}: note: removed \`${part.replace("var-", "")}\` (urn:ddi:org.example:dataset-t.${part}:1), at \`restricted\`. [dataset-access-removed]`,
+				),
 				"",
 			].join("\n"),
 		);

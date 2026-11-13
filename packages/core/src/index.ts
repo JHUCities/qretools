@@ -53,9 +53,11 @@ export {
 	DATASET_NAME,
 	type Dataset,
 	datasetOf,
+	metadataUrn,
 	provenanceView,
 	readDataset,
 	recordedDdiOf,
+	withMetadataVariables,
 } from "./dataset.ts";
 export type {
 	Collision,
@@ -200,6 +202,8 @@ export {
 	type Facts,
 	type FileDigest,
 	factsOf,
+	type Mode,
+	modesOf,
 	type Provenance,
 	type Term,
 } from "./provenance.ts";
@@ -226,6 +230,8 @@ export {
 	type DataMap,
 	dataFileMap,
 	dataMapOf,
+	type MetadataColumn,
+	metadataRepresentation,
 	parseCsv,
 	type Representation,
 	type Respondent,
