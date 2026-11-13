@@ -49,15 +49,15 @@ const Missing = z.array(Code);
 const Variable = { variable: z.string(), name: z.string(), missing: Missing };
 
 const AskDomain = z.discriminatedUnion("kind", [
-	z.strictObject({
+	z.object({
 		kind: z.literal("choice"),
 		...Variable,
 		choices: z.array(Code),
 	}),
-	z.strictObject({
+	z.object({
 		kind: z.literal("select-all"),
 		options: z.array(
-			z.strictObject({
+			z.object({
 				...Code.shape,
 				...Variable,
 				/** The value of this option's variable when it's chosen, and when it isn't. */
@@ -66,32 +66,32 @@ const AskDomain = z.discriminatedUnion("kind", [
 			}),
 		),
 	}),
-	z.strictObject({
+	z.object({
 		kind: z.literal("number"),
 		...Variable,
 		min: z.number().optional(),
 		max: z.number().optional(),
 		decimals: z.int(),
 	}),
-	z.strictObject({
+	z.object({
 		kind: z.literal("text"),
 		...Variable,
 		maxLength: z.int().optional(),
 	}),
 	/** A domain this doesn't read (a date, say): any text is taken. */
-	z.strictObject({ kind: z.literal("other"), ...Variable }),
+	z.object({ kind: z.literal("other"), ...Variable }),
 ]);
 
 const InputDomain = z.discriminatedUnion("kind", [
-	z.strictObject({ kind: z.literal("choice"), choices: z.array(Code) }),
-	z.strictObject({
+	z.object({ kind: z.literal("choice"), choices: z.array(Code) }),
+	z.object({
 		kind: z.literal("number"),
 		min: z.number().optional(),
 		max: z.number().optional(),
 		decimals: z.int(),
 	}),
-	z.strictObject({ kind: z.literal("text"), maxLength: z.int().optional() }),
-	z.strictObject({ kind: z.literal("other") }),
+	z.object({ kind: z.literal("text"), maxLength: z.int().optional() }),
+	z.object({ kind: z.literal("other") }),
 ]);
 
 /** What was said since the last answer, and why the route so far may not be what the DDI means. */
@@ -104,7 +104,7 @@ const Along = {
 
 /** What `next` replies. */
 export const Next = z.discriminatedUnion("kind", [
-	z.strictObject({
+	z.object({
 		kind: z.literal("ask"),
 		/** The QuestionConstruct's URN: one question may be asked at two steps. */
 		step: z.string(),
@@ -122,7 +122,7 @@ export const Next = z.discriminatedUnion("kind", [
 		problem: z.string().optional(),
 		...Along,
 	}),
-	z.strictObject({
+	z.object({
 		kind: z.literal("input"),
 		/** The input's name, as `inputs` keys it. */
 		name: z.string(),
@@ -134,7 +134,7 @@ export const Next = z.discriminatedUnion("kind", [
 		// No statements: those on the way come once, with the ask or the end that follows.
 		notes: Along.notes,
 	}),
-	z.strictObject({
+	z.object({
 		kind: z.literal("end"),
 		/** At the end of the flow, or screened out. */
 		how: z.enum(["end", "stopped"]),
@@ -153,7 +153,8 @@ export type ParsedState = z.output<typeof NextState>;
 /** The JSON Schemas of the state `next` reads and the reply it writes: its contract. */
 export const nextSchemas = () => ({
 	state: z.toJSONSchema(NextState, { io: "input" }),
-	reply: z.toJSONSchema(Next),
+	// Open objects (no `additionalProperties: false`, as `input` writes them): a field added later mustn't fail a caller's validation.
+	reply: z.toJSONSchema(Next, { io: "input" }),
 });
 
 type Ask = Extract<Step, { kind: "ask" }>;
@@ -564,6 +565,14 @@ export function nextStep(
 				const went = pauseForInput();
 				if (went !== undefined) return went;
 				const cap = Math.min(s.max ?? MAX_ROWS, MAX_ROWS);
+				const name = s.name ?? s.id;
+				if (n === null)
+					note(`Roster \`${name}\`'s count has no value, so it has no rows.`);
+				if (
+					typeof n === "number" &&
+					Math.min(Math.floor(n), s.max ?? Infinity) > MAX_ROWS
+				)
+					note(`Roster \`${name}\` stops at ${MAX_ROWS} rows here.`);
 				const count = typeof n === "number" ? Math.min(Math.floor(n), cap) : 0;
 				for (let r = 1; r <= count; r++) {
 					const went = go(s.flow, [...rows, { loop: s.id, row: r }]);
@@ -580,12 +589,16 @@ export function nextStep(
 					const paused = pauseForInput();
 					if (paused !== undefined) return paused;
 					if (!more) break;
+					if (r === MAX_ROWS && s.max > MAX_ROWS)
+						note(
+							`Roster \`${s.name ?? s.id}\` stops at ${MAX_ROWS} rows here.`,
+						);
 				}
 				return undefined;
 			}
 			case "loop":
 				note(
-					`A loop this can't run (${s.construct}: ${s.cond.command.text}) was skipped.`,
+					`A loop this can't run (${s.construct}: ${s.cond.command.text}) was skipped, so its questions are never asked.`,
 				);
 				return undefined;
 			default:
