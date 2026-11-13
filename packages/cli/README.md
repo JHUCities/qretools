@@ -619,7 +619,8 @@ s1,urn:ddi:org.example:instrument-wave1.var-rent:3,,D
 
 The program does not need the URNs of the dataset: `start` and `end` become the `start`
 and `end` variables of the dataset. Do not give the output of `dataset export --csv` to the
-command: it has the URNs of the dataset, not `start` and `end`.
+command. That output has no lines for `start` and `end`. For a data file, it can also have
+lines for the `metadata` columns of the map, which are not variables of the instrument.
 
 ```sh
 qretools responses runs/run1/answers.csv --ddi dist/instruments/wave1.json --synthetic \
@@ -699,13 +700,16 @@ To export a dataset, do these steps:
 
 The output is long CSV (one value on one line), in four columns:
 
-- `respondent`: the respondent, as the source writes it.
-- `variable`: the URN of the DDI variable.
-- `row`: the row of a roster or a loop, from 1. The column is empty for other variables.
+- `respondent`: the respondent, as the source writes it. Below the most closed access
+  level, a number (see "Access levels").
+- `variable`: the URN of a variable in the DDI of the instrument. For a `metadata` column
+  of a map, the URN of a variable of the dataset (`dataset-<name>.var-<column>`).
+- `row`: empty. The dataset cannot hold the rows of a roster yet.
 - `value`: a code of the variable, a number or text.
 
-The lines are sorted by respondent, then by the URN of the variable. The output does not include the variables of
-the dataset (`respondent`, `start` and `end`). A long file does not need a column for each
+The lines are sorted by respondent, then by the URN of the variable. The output has no
+lines for `respondent`, `start` and `end`: the `respondent` column identifies the
+respondent. A long file does not need a column for each
 round of each loop. Thus, a tool can compare two files (for example real and synthetic
 responses) one variable at a time. The format is our own.
 
