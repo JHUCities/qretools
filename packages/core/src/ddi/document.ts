@@ -29,7 +29,8 @@ export type ItemType =
 	| "RepeatUntil"
 	| "StatementItem"
 	| "ComputationItem"
-	| "GenerationInstruction";
+	| "GenerationInstruction"
+	| "DataSet";
 
 export interface Identity {
 	readonly URN: string;

@@ -26,9 +26,12 @@ import {
 	type BankScope,
 	bankOf,
 	collisions,
+	csvView,
+	DATASET_NAME,
 	type DdiDocument,
 	dataFileMap,
 	dataMapOf,
+	datasetOf,
 	ddiIndexOf,
 	documentOf,
 	exportRefusal,
@@ -56,6 +59,7 @@ import {
 	type Representation,
 	type Result,
 	ROOT,
+	readDataset,
 	readInstruments,
 	readResponses,
 	releaseFindings,
@@ -126,19 +130,24 @@ const USAGE = `Usage:
                                     variables (<name>-ddi-qsf.columns.json); an instrument Qualtrics can't run gets a
                                     warning instead of those two. Refused while an instrument is incomplete, reads
                                     this workspace as \`../\`, or reads a tag it hasn't locked or that has moved
-  qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [-o file]
+  qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [-o dataset.json]
                                     Read a Qualtrics response export (CSV, export values, multi-value
-                                    fields split into columns) into long CSV, one line per value:
-                                    respondent,variable,row,value, each variable by its DDI URN. Reads
-                                    the DDI <name>.json beside the map. Survey Preview and test
-                                    responses are kept. Writes to stdout unless -o names a file:
-                                    keep it out of anything published (dist/ goes to Pages)
-  qretools responses <data.csv> --map <name>-ddi-<source>.columns.json [--ddi file] [-o file]
+                                    fields split into columns) into a dataset: DDI-Lifecycle 4.0 JSON
+                                    that holds each respondent, the start and end of each interview,
+                                    and each value, by the URN of its variable in the DDI <name>.json
+                                    beside the map. The dataset's name is the file name of -o without
+                                    .json (else <name>). Survey Preview and test responses are
+                                    kept. Refuses to replace a different file. Writes to stdout unless
+                                    -o names a file: keep it out of anything published (dist/ goes to Pages)
+  qretools responses <data.csv> --map <name>-ddi-<source>.columns.json [--ddi file] [-o dataset.json]
                                     Read a data file (CSV, one header row) the same way, with a map
                                     that names each column by its header, with its DDI variable and
                                     any translations of its values. Every row is read
+  qretools dataset export <dataset.json> --csv [-o file]
+                                    Write a dataset's values as long CSV, one line per value:
+                                    respondent,variable,row,value, each variable by its DDI URN
   qretools filter <answers.csv> --ddi <file.json> --access <level> [-o file]
-                                    Keep the answers (long CSV, as \`responses\` writes it) to
+                                    Keep the answers (long CSV, as \`dataset export --csv\` writes it) to
                                     variables at that access level or a more open one, each by the
                                     access policy of its own workspace, as the DDI gives it; name each
                                     variable removed on stderr, never a value. Refused, with nothing
@@ -166,6 +175,7 @@ moves after that, check warns until the next export records it again.
 --ddi     the DDI a column map was made from, in place of <name>.json beside the map;
           for filter, the DDI the answers refer to.
 --access  for filter, the access level to keep, with every more open one.
+--csv     for dataset export, write the values as long CSV.
 --qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
           if any part of it can't work in Qualtrics as the DDI says.`;
 
@@ -191,6 +201,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		return USAGE_ERROR;
 	}
 	if (args.positionals[0] === "instrument") return instrument(args, io);
+	if (args.positionals[0] === "dataset") return dataset(args, io);
 	const [command, dir = ".", ...extra] = args.positionals;
 	if (args.values.help || command === undefined || extra.length > 0) {
 		(args.values.help ? io.out : io.err)(`${USAGE}\n`);
@@ -218,20 +229,22 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 				? "--ddi"
 				: command !== "filter" && args.values.access !== undefined
 					? "--access"
-					: args.values.bank !== undefined
-						? "--bank"
-						: args.values.agency !== undefined
-							? "--agency"
-							: args.values.qsf === true
-								? "--qsf"
-								: command !== "build" &&
-										args.values["tag-message"] !== undefined
-									? "--tag-message"
-									: command === "check"
-										? args.values.output !== undefined && "--output"
-										: command !== "codebook" &&
-											args.values.strict === true &&
-											"--strict";
+					: args.values.csv === true
+						? "--csv"
+						: args.values.bank !== undefined
+							? "--bank"
+							: args.values.agency !== undefined
+								? "--agency"
+								: args.values.qsf === true
+									? "--qsf"
+									: command !== "build" &&
+											args.values["tag-message"] !== undefined
+										? "--tag-message"
+										: command === "check"
+											? args.values.output !== undefined && "--output"
+											: command !== "codebook" &&
+												args.values.strict === true &&
+												"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -470,12 +483,15 @@ async function writePaths(
 const MAP_NAME = /-ddi-([a-z0-9]+)\.columns\.json$/;
 
 /**
- * Responses read with a column map, as long CSV: one line per value, keyed by DDI Variable
- * URN (`answersCsv`). A QSF column map reads a Qualtrics response export; any other map
+ * Responses read with a column map, as a dataset (`datasetOf`): DDI that holds each
+ * respondent, their interview's times where the source gives them, and each value, keyed
+ * by DDI Variable URN. Its name is the output's file name (else the map's instrument), and its
+ * agency the one every variable the map names shares. A QSF column map reads a Qualtrics response export; any other map
  * reads a data file with one header row, its columns by header name. The DDI (beside the
  * map, or `--ddi`) gives each variable's codes and a select-all option's tick, and must be
  * the DDI the map was made from (its digest). Findings place what can't be read by line
- * and column, never by a response's value. Local files only.
+ * and column, never by a response's value. Local files only. An output file is written
+ * only where there is none: the same dataset again is "unchanged", another is refused.
  */
 async function writeResponses(
 	file: string,
@@ -491,6 +507,17 @@ async function writeResponses(
 		);
 		return USAGE_ERROR;
 	}
+	// Without -o, the instrument's name, from the map's: a source's file name (Qualtrics') rarely is one.
+	const name =
+		output === undefined
+			? basename(mapFile.slice(0, named.index))
+			: basename(output, extname(output));
+	if (!DATASET_NAME.test(name)) {
+		io.err(
+			`${output ?? mapFile}: a dataset is named by its file name, without \`.json\`, so it may hold only letters, digits, \`-\` and \`_\`. Use -o to name it.\n`,
+		);
+		return USAGE_ERROR;
+	}
 	const qsf = named[1] === "qsf";
 	const ddiFile = ddiOption ?? `${mapFile.slice(0, named.index)}.json`;
 	const texts: string[] = [];
@@ -503,7 +530,7 @@ async function writeResponses(
 			);
 			return USAGE_ERROR;
 		}
-	const [csv = "", mapText = "", ddiText = ""] = texts;
+	const [csv = "", mapText = "", ddiSource = ""] = texts;
 	const mapJson = jsonOf(mapText);
 	const map = !mapJson.ok
 		? undefined
@@ -516,7 +543,7 @@ async function writeResponses(
 		);
 		return PROBLEMS;
 	}
-	const digest = `sha256:${createHash("sha256").update(ddiText).digest("hex")}`;
+	const digest = `sha256:${createHash("sha256").update(ddiSource).digest("hex")}`;
 	if (map.ddi !== undefined && map.ddi !== digest) {
 		io.err(
 			`${ddiFile}: error: this isn't the DDI the map was made from (its digest differs). Use the files one \`build\` wrote. [responses-provenance]\n`,
@@ -527,7 +554,7 @@ async function writeResponses(
 		io.err(
 			`${mapFile}: note: the map names no DDI digest, so ${ddiFile} isn't checked against it. [responses-provenance]\n`,
 		);
-	const ddiJson = jsonOf(ddiText);
+	const ddiJson = jsonOf(ddiSource);
 	const read = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
 	if (read?.ok !== true) {
 		io.err(
@@ -572,17 +599,101 @@ async function writeResponses(
 		io.err(
 			`${file}${f.line === undefined ? "" : `:${f.line}`}: ${LEVEL[f.severity]}: ${f.column === undefined ? "" : `column \`${f.column}\`: `}${f.message}${f.count > 1 ? ` (${f.count} rows)` : ""} [${f.code}]\n`,
 		);
-	if (answered !== undefined)
-		await emit(
-			{ text: answersCsv(answered.answers), lines: [], problems: false },
-			output,
-			io,
+	const failed = findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
+	if (made.map === undefined || answered === undefined) return failed;
+	// Every URN is `urn:ddi:<agency>:…`: the dataset is its variables' agency's.
+	const agencies = new Set(
+		made.map.columns.map((c) => c.variable.split(":")[2]),
+	);
+	const [agency] = agencies;
+	if (agencies.size !== 1 || agency === undefined || agency === "") {
+		io.err(
+			`${mapFile}: error: the map's variables don't share one DDI agency, so the dataset has none. Nothing is written. [responses-agency]\n`,
 		);
-	return findings.some((f) => f.severity === "error") ? PROBLEMS : OK;
+		return PROBLEMS;
+	}
+	const built = datasetOf({
+		name,
+		agency,
+		respondents: answered.respondents,
+		answers: answered.answers,
+	});
+	if (!built.ok) {
+		io.err(
+			`${file}: error: ${built.error} Nothing is written. [responses-dataset]\n`,
+		);
+		return PROBLEMS;
+	}
+	const text = ddiText(built.value);
+	if (output === undefined) {
+		io.out(text);
+		return failed;
+	}
+	const before = await readFile(output, "utf8").catch(() => undefined);
+	if (before === text) {
+		io.err(`${output}: unchanged\n`);
+		return failed;
+	}
+	if (before !== undefined) {
+		io.err(
+			`${output}: error: this file holds something else, and a dataset never replaces it. Remove it, or write to another file. [responses-exists]\n`,
+		);
+		return PROBLEMS;
+	}
+	await io.writeFile(output, text);
+	return failed;
+}
+
+/** `dataset export <dataset.json> --csv`: the values of a dataset `responses` wrote, as long CSV. */
+async function dataset(
+	args: ReturnType<typeof parse>,
+	io: Io,
+): Promise<number> {
+	const [, command, file, ...extra] = args.positionals;
+	const { output, csv, help, ...others } = args.values;
+	const stray = Object.keys(others).find(
+		(k) => others[k as keyof typeof others] !== undefined,
+	);
+	if (stray !== undefined) {
+		io.err(`\`--${stray}\` isn't an option of \`dataset export\`.\n${USAGE}\n`);
+		return USAGE_ERROR;
+	}
+	if (
+		command !== "export" ||
+		file === undefined ||
+		extra.length > 0 ||
+		csv !== true ||
+		help
+	) {
+		(help ? io.out : io.err)(`${USAGE}\n`);
+		return help ? OK : USAGE_ERROR;
+	}
+	let text: string;
+	try {
+		text = await readFile(file, "utf8");
+	} catch (e) {
+		io.err(
+			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const json = jsonOf(text);
+	const read = json.ok ? readDataset(json.value) : undefined;
+	if (read?.ok !== true) {
+		io.err(
+			`${file}: error: ${read === undefined ? "this isn't JSON." : read.error} [dataset-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	return emit(
+		{ text: csvView(read.value), lines: [], problems: false },
+		output,
+		io,
+	);
 }
 
 /**
- * Answers (long CSV, as `responses` writes them) filtered to an access level and every
+ * Answers (long CSV, as `dataset export --csv` writes them) filtered to an access level and every
  * more open one of each variable's own policy, by the DDI alone (`filterAnswers`);
  * without a level, each policy the DDI holds, its URN then its levels, most open first,
  * each with how many variables stand at it. Says which variables it removed, never a
@@ -717,6 +828,7 @@ function parse(argv: readonly string[]) {
 			bank: { type: "string", multiple: true },
 			agency: { type: "string" },
 			qsf: { type: "boolean" },
+			csv: { type: "boolean" },
 			map: { type: "string" },
 			ddi: { type: "string" },
 			access: { type: "string" },

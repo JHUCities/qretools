@@ -1,0 +1,201 @@
+import {
+	type Answer,
+	answersCsv,
+	bankOf,
+	csvView,
+	datasetOf,
+	instrumentOf,
+	type Representation,
+	readDataset,
+	readResponses,
+} from "@qretools/core";
+import { describe, expect, it } from "vitest";
+import { qsfOf } from "./qsf.ts";
+import { exportMap } from "./responses.ts";
+
+const q = (name: string, rest: string) =>
+	`name: ${name}\ntext: ${name}?\nintent: i\n${rest}`;
+const BANK = bankOf({
+	"workspace.yaml": "agency: org.bank\n",
+	"missing.yaml": 'labels:\n  "D": Don\'t know\n',
+	"scales/yesno01.yaml": 'labels:\n  "0": No\n  "1": Yes\n',
+	"questions/a/tenure.yaml": q(
+		"tenure",
+		'responses:\n  "1": Own\n  "2": Rent\n',
+	),
+	"questions/a/modes.yaml": q(
+		"modes",
+		'select: many\nresponses:\n  "b": Bus\n  "9": None\n',
+	),
+	"questions/a/rent.yaml": q("rent", "number: {}\n"),
+	"questions/a/why.yaml": q("why", "open: {}\n"),
+});
+/** An input, a choice, a select-all, a number, a computed value and text. */
+const made = qsfOf(
+	instrumentOf(
+		`name: t
+uses:
+  b: here
+inputs:
+  wave:
+    number: {}
+flow:
+  - ask: b.tenure
+  - ask: b.modes
+  - ask: b.rent
+  - compute: total
+    value: b.rent + 1
+  - ask: b.why
+`,
+		{ banks: { b: BANK }, agency: "org.example" },
+	).ddi,
+	{
+		name: "t",
+		created: "2026-11-12 00:00:00",
+		digest: "sha256:abc",
+		version: "9",
+	},
+);
+if (made.kind !== "made") throw new Error("the test survey isn't made");
+const v = (name: string) => `urn:ddi:org.example:instrument-t.var-${name}:1`;
+const number: Representation = { kind: "number", missing: ["D"] };
+const REPRESENTATIONS = new Map<string, Representation>([
+	[v("wave"), number],
+	[v("tenure"), { kind: "codes", codes: ["1", "2", "D"] }],
+	[v("modes_b"), { kind: "codes", codes: ["0", "1", "D"] }],
+	[v("modes_9"), { kind: "codes", codes: ["0", "1", "D"] }],
+	[v("rent"), number],
+	[v("total"), number],
+	[v("why"), { kind: "text" }],
+]);
+const TICKED = new Map([
+	[v("modes_b"), "1"],
+	[v("modes_9"), "1"],
+]);
+const id = (o: object) => `"${JSON.stringify(o).replaceAll('"', '""')}"`;
+
+/** An export in Qualtrics' shape, its times in `zone`. */
+const exportOf = (zone: unknown, ...responses: string[]) =>
+	[
+		"StartDate,EndDate,ResponseId,wave,tenure,modes_1,modes_9,rent,total,why",
+		"Start Date,End Date,Response ID,wave,tenure?,modes? - Bus,modes? - None,rent?,total,why?",
+		[
+			id({ ImportId: "startDate", timeZone: zone }),
+			id({ ImportId: "endDate", timeZone: zone }),
+			id({ ImportId: "_recordId" }),
+			id({ ImportId: "wave" }),
+			id({ ImportId: "QID1" }),
+			id({ ImportId: "QID2", choiceId: "1" }),
+			id({ ImportId: "QID2", choiceId: "9" }),
+			id({ ImportId: "QID3_TEXT" }),
+			id({ ImportId: "total" }),
+			id({ ImportId: "QID4_TEXT" }),
+		].join(","),
+		...responses,
+	].join("\r\n");
+const RESPONSES = [
+	`2026-11-12 23:15:41,2026-11-12 23:15:50,R_2,2,D,,1,D,,"Near the bus, ""mostly"""`,
+	"2026-11-12 23:14:02,2026-11-12 23:16:02,R_10,2,1,1,,1200,1201,",
+	"2026-11-12 23:20:00,2026-11-12 23:21:00,R_1,2,,,,,,",
+];
+
+const read = (text: string) => {
+	const e = exportMap(text, made.columns, TICKED);
+	if (e.map === undefined) throw new Error("the export isn't read");
+	// The export has no `qretools_*` fields: what they'd say isn't this test's.
+	const findings = e.findings.filter((f) => f.code !== "responses-provenance");
+	return {
+		...readResponses(e.header, e.rows, e.map, REPRESENTATIONS),
+		e: { findings },
+	};
+};
+
+/** Code-unit order, respondent then variable: the dataset's. */
+const sorted = (answers: readonly Answer[]) =>
+	[...answers].sort((a, b) =>
+		a.respondent !== b.respondent
+			? a.respondent < b.respondent
+				? -1
+				: 1
+			: a.variable < b.variable
+				? -1
+				: a.variable > b.variable
+					? 1
+					: 0,
+	);
+
+describe("a dataset made from a Qualtrics export", () => {
+	it("has a CSV view that is the long CSV `responses` wrote before, in the dataset's order", () => {
+		const r = read(exportOf("Z", ...RESPONSES));
+		expect(r.findings).toEqual([]);
+		expect(r.e.findings).toEqual([]);
+		const dataset = datasetOf({
+			name: "t",
+			agency: "org.example",
+			respondents: r.respondents,
+			answers: r.answers,
+		});
+		if (!dataset.ok) throw new Error(dataset.error);
+		const back = readDataset(JSON.parse(JSON.stringify(dataset.value)));
+		if (!back.ok) throw new Error(back.error);
+		const before = answersCsv(sorted(r.answers));
+		expect(csvView(back.value)).toBe(before);
+		// Every kind of value is there: input, choice, missing code, tick, number, computed, text.
+		expect(before.split("\n").slice(1, -1)).toEqual([
+			`R_1,${v("wave")},,2`,
+			`R_10,${v("modes_b")},,1`,
+			`R_10,${v("rent")},,1200`,
+			`R_10,${v("tenure")},,1`,
+			`R_10,${v("total")},,1201`,
+			`R_10,${v("wave")},,2`,
+			`R_2,${v("modes_9")},,1`,
+			`R_2,${v("rent")},,D`,
+			`R_2,${v("tenure")},,D`,
+			`R_2,${v("wave")},,2`,
+			`R_2,${v("why")},,"Near the bus, ""mostly"""`,
+		]);
+	});
+
+	it("gives each respondent the start and end of their interview, in the export's zone", () => {
+		expect(read(exportOf("-05:00", ...RESPONSES)).respondents).toEqual([
+			{
+				id: "R_2",
+				start: "2026-11-12T23:15:41-05:00",
+				end: "2026-11-12T23:15:50-05:00",
+			},
+			{
+				id: "R_10",
+				start: "2026-11-12T23:14:02-05:00",
+				end: "2026-11-12T23:16:02-05:00",
+			},
+			{
+				id: "R_1",
+				start: "2026-11-12T23:20:00-05:00",
+				end: "2026-11-12T23:21:00-05:00",
+			},
+		]);
+	});
+
+	it("reads no time in a zone it would have to guess, or in another form, and says so", () => {
+		const named = read(exportOf("America/New_York", ...RESPONSES));
+		expect(named.respondents.map((r) => Object.keys(r))).toEqual([
+			["id"],
+			["id"],
+			["id"],
+		]);
+		expect(named.e.findings.map((f) => `${f.code} ${f.severity}`)).toEqual([
+			"responses-time error",
+		]);
+		// The answers are still read.
+		expect(named.answers.length).toBe(11);
+		const odd = read(
+			exportOf("Z", `11/12/2026 23:15,2026-11-12 23:15:50,R_2,2,,,,,,`),
+		);
+		expect(odd.respondents).toEqual([
+			{ id: "R_2", end: "2026-11-12T23:15:50Z" },
+		]);
+		expect(odd.findings).toMatchObject([
+			{ code: "responses-time", line: 4, column: "StartDate", count: 1 },
+		]);
+	});
+});

@@ -19,8 +19,9 @@ qretools build path/to/workspace             # its last commit's DDI, versioned 
 qretools codebook path/to/workspace -o codebook.html  # its questions' codebook, one HTML page
 qretools codebook ddi.json -o codebook.html  # the codebook of any DDI-Lifecycle 4.0 JSON
 qretools paths wave1.json -o paths.html      # the paths through an instrument's DDI, one HTML page
-qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json  # a Qualtrics export, by DDI variable
-qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json  # a data file, by DDI variable
+qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json -o wave1.json  # a Qualtrics export, as a DDI dataset
+qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json -o release.json  # a data file, as a DDI dataset
+qretools dataset export wave1.json --csv     # a dataset's values, one line per value
 qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
 ```
 
@@ -150,19 +151,11 @@ collects responses can use the new map.
 
 ## Read the responses
 
-`responses` reads a Qualtrics response export with its QSF column map. It writes one line
-for each value, with the DDI variable that records the value:
+`responses` reads a Qualtrics response export with its QSF column map. It writes a
+dataset: a DDI-Lifecycle 4.0 document that holds the responses.
 
 ```sh
-qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json -o wave1-responses.csv
-```
-
-```csv
-respondent,variable,row,value
-R_1,urn:ddi:org.example:instrument-wave1.var-tenure:3,,2
-R_1,urn:ddi:org.example:instrument-wave1.var-modes_b:3,,1
-R_1,urn:ddi:org.example:instrument-wave1.var-age:3,1,40
-R_1,urn:ddi:org.example:instrument-wave1.var-age:3,2,D
+qretools responses export.csv --map dist/instruments/wave1-ddi-qsf.columns.json -o wave1-data.json
 ```
 
 To read an export, do these steps:
@@ -171,26 +164,41 @@ To read an export, do these steps:
 2. Find the QSF column map of the survey. `build` writes it in `<outdir>/instruments/`.
 3. Make sure that `<name>.json` is in the same folder as the map. `build` writes the two
    files together.
-4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json`.
+4. Run `qretools responses <export.csv> --map <name>-ddi-qsf.columns.json -o <dataset.json>`.
 5. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
-   The output holds the responses.** Use `-o` to write the output to a file. Without `-o`,
-   the command writes it to stdout.
+   The output holds the responses.** Without `-o`, the command writes the dataset to
+   stdout.
 
-The output is long CSV (one value on one line), in four columns:
+The dataset holds a `DataSet` item. Its `ItemSet` has one `ItemValue` for each value:
 
-- `respondent`: the ResponseId of the response.
-- `variable`: the URN of the DDI variable.
-- `row`: the row of a roster or a loop, from 1. The column is empty for other variables.
-- `value`: a code of the variable, a number or text. A ticked select-all option has the
+- `VariableReference`: the DDI variable that records the value. The dataset refers to the
+  variable in the DDI of the instrument. It does not hold a copy of the variable.
+- `RecordReference`: the ResponseId of the response.
+- `Value`: a code of the variable, a number or text. A ticked select-all option has the
   code that the DDI gives to a tick.
 
-A blank cell gives no line, because the export cannot tell "not asked" from "not ticked".
-A long file does not need a column for each round of each loop. Thus, a tool can compare
-two files (for example real and synthetic responses) one variable at a time. The format is
-our own.
+The dataset also holds three variables of its own:
 
-**Caution: open the output as data (in R, Python or a spreadsheet's import), not with a
-double click. A text answer can hold a formula, and a spreadsheet can run it.**
+- `respondent`: the ResponseId. Each respondent has one value of this variable, also a
+  respondent with no answers. The `DataSet` identifies each respondent with it.
+- `start` and `end`: the time when the interview started and ended. The command reads
+  them from `StartDate` and `EndDate`, in the time zone that row 3 gives.
+
+The dataset gets its name from the file name of `-o`, without `.json`. Without `-o`, it
+gets the name of the instrument: `<name>` in the name of the map. The name can have only letters, digits, `-` and `_`. The IDs
+of the dataset and of its variables start with `dataset-<name>`. The dataset has the DDI
+agency of the variables in the map.
+
+The command sorts the values by respondent, then by the URN of the variable. Thus, the
+same input always gives the same file. If the file of `-o` holds the same dataset, the
+command writes nothing and says `unchanged`. If the file of `-o` holds something else, the
+command refuses to replace it. Remove the file, or write to another file.
+
+A blank cell gives no value, because the export cannot tell "not asked" from "not ticked".
+To get the values as CSV, see "Export a dataset".
+
+The dataset cannot yet hold the rows of a roster or a loop. If the export has an answer in
+a row, the command writes no dataset.
 
 The command reads the DDI in `<name>.json` to get the codes of each variable. It refuses a
 `<name>.json` that is not the DDI that the map was made from. It reads local files only.
@@ -217,8 +225,17 @@ command exit with 1. The command still writes the values that it can read.
 - `responses-row` (error): a row has more or fewer cells than the header.
 - `responses-duplicate` (error): two columns give one variable, in one row, for one
   respondent.
+- `responses-time` (error): the command cannot read the time of an interview. The time
+  zone in row 3 is not `Z` or an offset such as `-05:00`, or a cell is not a time such as
+  `2026-11-12 23:15:41`. The command still writes the values.
 - `responses-import-id`, `responses-unknown-variable` and `responses-unreadable`: the
   command cannot read a header, a variable or the file.
+
+These errors stop the command before it writes the dataset:
+
+- `responses-dataset`: an answer is in the row of a roster or a loop.
+- `responses-agency`: the variables in the map do not have one DDI agency.
+- `responses-exists`: the file of `-o` holds something that is not this dataset.
 
 The command reads the columns of a Qualtrics loop as `1_<ImportId>` to
 `<rounds>_<ImportId>`. This form is not yet tested with a real export of a loop.
@@ -228,10 +245,10 @@ The command reads the columns of a Qualtrics loop as `1_<ImportId>` to
 `responses` also reads a data file, for example a published data release. The data file
 must be CSV, with one header row. A column map tells the command which DDI variable each
 column records. Thus, the answers of a data file and the answers of a Qualtrics export have
-the same form: one line for each value, with the URN of the variable.
+the same form: a dataset, with the URN of the variable of each value.
 
 ```sh
-qretools responses data.csv --map maps/wave1-ddi-release.columns.json --ddi dist/instruments/wave1.json -o wave1-answers.csv
+qretools responses data.csv --map maps/wave1-ddi-release.columns.json --ddi dist/instruments/wave1.json -o wave1-release.json
 ```
 
 The map is JSON. Its name ends in `-ddi-<source>.columns.json`, where `<source>` is a short
@@ -297,7 +314,8 @@ To read a data file, do these steps:
 If `build` changes the DDI, the digest of the DDI changes. Then write the new digest in
 the map.
 
-The output is the same as in "Read the responses". A number is read only if it is in the
+The output is the same as in "Read the responses". A data file gives no time of an
+interview, so the dataset has no `start` or `end` variable. A number is read only if it is in the
 range that the DDI gives. This check applies to a Qualtrics export too. The command writes these findings, in addition to those of
 "Read the responses":
 
@@ -312,15 +330,54 @@ range that the DDI gives. This check applies to a Qualtrics export too. The comm
 - `responses-filtered` (note): the map marks the column `filtered`. The command reads no
   value from it.
 - `responses-censored` (note): a value of the column is in its `censored` list. The command
-  writes no line for it.
+  writes no value for it.
 
 An input of an instrument has the missing values of the questions that the instrument
 asks. Thus, a data file can give "Don't know" (or another missing value) for an input.
 
+## Export a dataset
+
+`dataset export` writes the values of a dataset as long CSV, for analysis tools:
+
+```sh
+qretools dataset export wave1-data.json --csv -o wave1-answers.csv
+```
+
+```csv
+respondent,variable,row,value
+R_1,urn:ddi:org.example:instrument-wave1.var-modes_b:3,,1
+R_1,urn:ddi:org.example:instrument-wave1.var-tenure:3,,2
+```
+
+To export a dataset, do these steps:
+
+1. Do the steps in "Read the responses" to get the dataset.
+2. Run `qretools dataset export <dataset.json> --csv -o <file.csv>`.
+3. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
+   The output holds the responses.** Without `-o`, the command writes the CSV to stdout.
+
+The output is long CSV (one value on one line), in four columns:
+
+- `respondent`: the respondent, as the source writes it.
+- `variable`: the URN of the DDI variable.
+- `row`: the row of a roster or a loop, from 1. The column is empty for other variables.
+- `value`: a code of the variable, a number or text.
+
+The lines are in the order of the dataset. The output does not include the variables of
+the dataset (`respondent`, `start` and `end`). A long file does not need a column for each
+round of each loop. Thus, a tool can compare two files (for example real and synthetic
+responses) one variable at a time. The format is our own.
+
+**Caution: open the output as data (in R, Python or a spreadsheet's import), not with a
+double click. A text answer can hold a formula, and a spreadsheet can run it.**
+
+If the file is not a dataset that `responses` wrote, the command refuses it
+(`dataset-unreadable`).
+
 ## Filter the answers by access level
 
 `filter` keeps the answers that a person at one access level can see. It reads the
-answers as `responses` writes them, and the DDI that the answers refer to:
+answers as `dataset export --csv` writes them, and the DDI that the answers refer to:
 
 ```sh
 qretools filter wave1-answers.csv --ddi dist/instruments/wave1.json --access public -o wave1-public.csv
@@ -368,7 +425,7 @@ the answers. It writes nothing and exits with 1, in these conditions:
   level of the embargo.
 - `filter-levels`: the command cannot read a policy. The command reads each code list
   with an ID of the form `access-<levels>.codes` as a policy.
-- `filter-unreadable`: the answers are not in the form that `responses` writes.
+- `filter-unreadable`: the answers are not in the form that `dataset export --csv` writes.
 - `filter-leak`: after the filter, an answer above the level is still in the output. This
   is a bug in QREtools. Please report it.
 
