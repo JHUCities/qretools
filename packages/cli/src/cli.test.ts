@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { codebookOf, parse as parseDdi } from "@qretools/codebook";
 import {
 	addressOf,
 	bankOf,
@@ -792,6 +793,43 @@ describe("qretools codebook", () => {
 		);
 		expect(gone).toMatchObject({ code: 2, out: "" });
 		expect(gone.err).toMatch(/^Can't read/);
+	});
+});
+
+describe("qretools next", () => {
+	it("says the next step from an instrument's DDI and a state, and refuses a state that isn't one", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "qretools-next-"));
+		const file = join(dir, "ddi.json");
+		const ddi = (
+			await run(
+				"instrument",
+				"export",
+				here("../../core/fixtures/households/instruments/households.yaml"),
+			)
+		).out;
+		await writeFile(file, ddi);
+		const state = join(dir, "state.json");
+		await writeFile(state, JSON.stringify({ inputs: { county: "2" } }));
+		const r = await run("next", file, state);
+		expect(r).toMatchObject({ code: 0, err: "" });
+		const reply = JSON.parse(r.out);
+		expect(reply).toMatchObject({ kind: "ask", question: "consent" });
+		// The missing codes are the codebook's, read from the same DDI.
+		const index = parseDdi(JSON.parse(ddi));
+		if (!index.ok) throw new Error("not DDI");
+		const consent = codebookOf(index.value).entries.find(
+			(e) => e.urn === reply.domain.variable,
+		);
+		expect(reply.domain.missing.map((m: { code: string }) => m.code)).toEqual(
+			consent?.responses?.rows.filter((x) => x.missing).map((x) => x.code),
+		);
+		await writeFile(state, JSON.stringify({ answers: "none" }));
+		const bad = await run("next", file, state);
+		expect(bad).toMatchObject({ code: 1, out: "" });
+		expect(bad.err).toMatch(/this isn't a state: .*answers.*\[next-state\]/s);
+		const schemas = JSON.parse((await run("next", "--schema")).out);
+		expect(Object.keys(schemas)).toEqual(["state", "reply"]);
+		expect((await run("check", "--schema")).code).toBe(2);
 	});
 });
 

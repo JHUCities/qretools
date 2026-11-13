@@ -11,6 +11,7 @@
  * test as it runs in a shell; the bin only wires it to the process.
  */
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -47,6 +48,9 @@ import {
 	locksWritten,
 	makeValidator,
 	movedTags,
+	nextSchemas,
+	nextStateOf,
+	nextStep,
 	notHere,
 	placeFindings,
 	questionItems,
@@ -119,6 +123,13 @@ const USAGE = `Usage:
                                     Write a report of an instrument's paths, one HTML page: how many
                                     ways through its routing, and which questions each reaches, from
                                     its DDI (as \`instrument export\` writes it)
+  qretools next <file.json> [state.json]
+                                    Say the next step of an interview through an instrument, from its
+                                    DDI (as \`build\` writes it): the question to ask, with its fills, or
+                                    an input the route needs, or the end. The state (stdin when no file
+                                    is named, or \`-\`) holds the inputs by name and the answers so far,
+                                    by DDI Variable URN. Writes JSON to stdout
+  qretools next --schema            Write the JSON Schemas of the state and of the reply
   qretools build [dir] [-o outdir] [--tag-message file]
                                     Write its last commit's DDI, versioned from its git history, to outdir/ddi.json (default dir/dist),
                                     and each instrument's to outdir/instruments/<name>.json, with its Qualtrics
@@ -192,7 +203,9 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 	}
 	if (args.positionals[0] === "instrument") return instrument(args, io);
 	const [command, dir = ".", ...extra] = args.positionals;
-	if (args.values.help || command === undefined || extra.length > 0) {
+	// `next` alone takes a second file: the state.
+	const tooMany = extra.length > (command === "next" ? 1 : 0);
+	if (args.values.help || command === undefined || tooMany) {
 		(args.values.help ? io.out : io.err)(`${USAGE}\n`);
 		return args.values.help ? OK : USAGE_ERROR;
 	}
@@ -202,6 +215,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "build" &&
 		command !== "codebook" &&
 		command !== "paths" &&
+		command !== "next" &&
 		command !== "responses" &&
 		command !== "filter"
 	) {
@@ -232,8 +246,13 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 										: command !== "codebook" &&
 											args.values.strict === true &&
 											"--strict";
-	if (stray) {
-		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
+	const misplaced =
+		stray ||
+		(command === "next"
+			? args.values.output !== undefined && "--output"
+			: args.values.schema === true && "--schema");
+	if (misplaced) {
+		io.err(`\`${misplaced}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
 	}
 	if (command === "check")
@@ -270,6 +289,17 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			args.values.output,
 			io,
 		);
+	}
+	if (command === "next") {
+		if (args.values.schema === true) {
+			io.out(`${JSON.stringify(nextSchemas(), null, 2)}\n`);
+			return OK;
+		}
+		if (args.positionals[1] === undefined) {
+			io.err(`${USAGE}\n`);
+			return USAGE_ERROR;
+		}
+		return writeNext(dir, args.positionals[2], io);
 	}
 	if (command === "paths") {
 		// A file, always: there's no workspace default to fall back on.
@@ -413,6 +443,66 @@ function renderCodebook(json: Json, input: string, strict: boolean): Rendered {
  * A DDI file's instruments' paths as one HTML page, and a line in `check`'s form for each
  * part of the DDI it can't read. Not written when the file isn't DDI or holds no instrument.
  */
+/**
+ * The next step of an interview (`nextStep`), from an instrument's DDI and a state, as
+ * JSON on stdout. The DDI's findings go to stderr; a state that can't belong to the
+ * instrument is refused, with nothing on stdout.
+ */
+async function writeNext(
+	file: string,
+	stateFile: string | undefined,
+	io: Io,
+): Promise<number> {
+	let text: string;
+	let stateText: string;
+	try {
+		text = await readFile(file, "utf8");
+		stateText =
+			stateFile === undefined || stateFile === "-"
+				? readFileSync(0, "utf8")
+				: await readFile(stateFile, "utf8");
+	} catch (e) {
+		io.err(`Can't read: ${e instanceof Error ? e.message : String(e)}\n`);
+		return USAGE_ERROR;
+	}
+	const json = jsonOf(text);
+	if (!json.ok) {
+		io.err(
+			`${file}: error: this isn't JSON (${json.detail}). [next-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const read = readInstruments(ddiIndexOf(json.value));
+	for (const f of read.findings)
+		io.err(
+			`${file}: ${LEVEL[f.severity]}: ${f.path === "" ? "" : `${f.path}: `}${f.message} [${f.code}]\n`,
+		);
+	const [instrument, ...others] = read.value.instruments;
+	if (instrument === undefined || others.length > 0) {
+		io.err(
+			`${file}: error: ${instrument === undefined ? "there's no instrument in this DDI" : "this DDI holds more than one instrument; use the file `build` writes for one"}. [next-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const stateJson = jsonOf(stateText);
+	const state = stateJson.ok
+		? nextStateOf(stateJson.value)
+		: { ok: false as const, error: stateJson.detail };
+	if (!state.ok) {
+		io.err(
+			`${stateFile ?? "stdin"}: error: this isn't a state: ${state.error} [next-state]\n`,
+		);
+		return PROBLEMS;
+	}
+	const reply = nextStep(instrument, read.value.inputs, state.value);
+	if (!reply.ok) {
+		io.err(`${stateFile ?? "stdin"}: error: ${reply.error} [next-state]\n`);
+		return PROBLEMS;
+	}
+	io.out(`${JSON.stringify(reply.value, null, 2)}\n`);
+	return OK;
+}
+
 async function writePaths(
 	file: string,
 	output: string | undefined,
@@ -721,6 +811,7 @@ function parse(argv: readonly string[]) {
 			ddi: { type: "string" },
 			access: { type: "string" },
 			"tag-message": { type: "string" },
+			schema: { type: "boolean" },
 			help: { type: "boolean", short: "h" },
 		},
 	});
