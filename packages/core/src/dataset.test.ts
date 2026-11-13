@@ -547,16 +547,18 @@ describe("a view at an access level", () => {
 			"end restricted",
 		]);
 		expect(open.owned).toBe(false);
-		// Respondents numbered in their own order, never named.
-		expect(csvView(d, open)).toBe(
+		// Respondents numbered in the order of their digests, never named: here R_2,
+		// then R_3 (no answers), then R_1, so not in the order of the identifiers.
+		const digest = (id: string) => (id === "R_1" ? "z" : id);
+		expect(csvView(d, open, digest)).toBe(
 			answersCsv([
-				{ respondent: "1", variable: v("tenure"), value: "2" },
-				{ respondent: "2", variable: v("tenure"), value: "1" },
+				{ respondent: "1", variable: v("tenure"), value: "1" },
+				{ respondent: "3", variable: v("tenure"), value: "2" },
 			]),
 		);
 		const closed = at("restricted");
 		expect(closed).toMatchObject({ owned: true, removed: [] });
-		expect(csvView(d, closed)).toBe(csvView(d));
+		expect(csvView(d, closed, digest)).toBe(csvView(d));
 	});
 
 	it("records the level and what it removed in the provenance view, and leaves no time", () => {
@@ -840,10 +842,10 @@ describe("a data file's metadata, weights and dates", () => {
 			"end",
 			"phase",
 		]);
-		expect(csvView(d, open.value)).not.toContain(m("phase"));
-		expect(csvView(d, open.value)).toContain(m("w"));
+		expect(csvView(d, open.value, (id) => id)).not.toContain(m("phase"));
+		expect(csvView(d, open.value, (id) => id)).toContain(m("w"));
 		const closed = accessOf(index, d, "restricted");
-		expect(closed.ok && csvView(d, closed.value)).toBe(csvView(d));
+		expect(closed.ok && csvView(d, closed.value, (id) => id)).toBe(csvView(d));
 		// Without the dataset's variables beside the DDI, nothing tells a stated level: all stand closed.
 		const bare = accessOf(ddiIndexOf(LEVELED), d, "public");
 		expect(bare.ok && bare.value?.removed.map((r) => r.urn)).toEqual(

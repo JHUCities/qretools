@@ -2150,7 +2150,7 @@ describe("qretools dataset export at an access level", () => {
 		const data = join(dir, "data.csv");
 		await writeFile(
 			data,
-			"ID,TENURE,ZIP,W,SHIFT,DAY,YR\nR_7,own,21218,0.5,1,315,2010\n",
+			"ID,TENURE,ZIP,W,SHIFT,DAY,YR\nR_7,own,21218,0.5,1,315,2010\nR_9,rent,21201,0.25,1,315,2010\n",
 		);
 		const dataset = join(dir, "d.json");
 		// The map's mode column says how the respondent was asked: no option may.
@@ -2185,11 +2185,13 @@ describe("qretools dataset export at an access level", () => {
 			/give `--access <level>`.*`public`, `restricted`, most open first.*\[dataset-access-level-required\]/,
 		);
 
-		// Below the most closed level: no zip, and the respondent numbered, never named.
+		// Below the most closed level: no zip, and the respondents numbered, never named,
+		// in the order of the SHA-256 of their identifiers: R_9 (217d…) before R_7 (a147…).
 		const open = await view("--csv", "--access", "public");
 		// The weight the map puts at `public` stays; the mode, at no stated level, goes with the respondent.
+		const w = "urn:ddi:org.example:dataset-t.var-W:1";
 		expect(open.out).toBe(
-			`respondent,variable,row,value\n1,urn:ddi:org.example:dataset-t.var-W:1,,0.5\n1,${v("tenure")},,own\n`,
+			`respondent,variable,row,value\n1,${w},,0.25\n1,${v("tenure")},,rent\n2,${w},,0.5\n2,${v("tenure")},,own\n`,
 		);
 		expect(open.err).toBe(
 			[

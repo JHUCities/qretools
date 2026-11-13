@@ -476,31 +476,41 @@ export function accessOf(
  * The answers as long CSV, as `answersCsv` writes them, sorted by respondent and then
  * variable URN: the canonical form the dataset's fingerprint is over. The dataset's own
  * variables aren't answers. At an access level, only the answers it keeps; where the
- * respondent variable is above it, each respondent is numbered from 1 in that order
- * instead, so a respondent's answers stay together without the identifier.
+ * respondent variable is above it, each respondent is numbered from 1 instead, in the
+ * order of the `digest` of their identifier (the shell gives SHA-256 in hex), so the
+ * numbers keep a respondent's answers together but don't show the identifiers' order.
  */
-export const csvView = (d: Dataset, access?: Access): string => {
-	const answers = [...(access?.kept ?? d.answers)].sort(
-		(a, b) =>
-			compare(a.respondent, b.respondent) || compare(a.variable, b.variable),
-	);
-	if (access === undefined || access.owned) return answersCsv(answers);
+export const csvView = (
+	d: Dataset,
+	...at: [] | [access: Access | undefined, digest: (id: string) => string]
+): string => {
+	const [access, digest] = at;
+	if (access === undefined || access.owned || digest === undefined)
+		return answersCsv(
+			[...(access?.kept ?? d.answers)].sort(
+				(a, b) =>
+					compare(a.respondent, b.respondent) ||
+					compare(a.variable, b.variable),
+			),
+		);
 	// Every respondent named anywhere is numbered, so none can come out blank.
+	const ids = [
+		...new Set([
+			...d.respondents.map((r) => r.id),
+			...access.kept.map((a) => a.respondent),
+		]),
+	].map((id) => ({ id, key: digest(id) }));
 	const numbers = new Map(
-		[
-			...new Set([
-				...d.respondents.map((r) => r.id),
-				...answers.map((a) => a.respondent),
-			]),
-		]
-			.sort(compare)
-			.map((id, i) => [id, String(i + 1)]),
+		ids
+			.sort((a, b) => compare(a.key, b.key) || compare(a.id, b.id))
+			.map(({ id }, i) => [id, i + 1]),
 	);
+	// Never 0: every kept respondent is numbered above; 0 rather than the identifier.
+	const num = (a: Answer) => numbers.get(a.respondent) ?? 0;
 	return answersCsv(
-		answers.map((a) => ({
-			...a,
-			respondent: numbers.get(a.respondent) ?? a.respondent,
-		})),
+		[...access.kept]
+			.sort((a, b) => num(a) - num(b) || compare(a.variable, b.variable))
+			.map((a) => ({ ...a, respondent: String(num(a)) })),
 	);
 };
 

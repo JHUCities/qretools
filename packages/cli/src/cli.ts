@@ -218,7 +218,8 @@ const USAGE = `Usage:
                                     workspace, and names each one on stderr, never a value. The
                                     dataset's own variables (respondent, start, end, and a map's
                                     metadata columns unless the map states their level) stand at the
-                                    most closed level; below it, the CSV numbers the respondents from 1
+                                    most closed level; below it, the CSV numbers the respondents from 1,
+                                    in the order of the SHA-256 of their identifiers
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -1367,7 +1368,7 @@ async function dataset(
 	const code = await emit(
 		{
 			text: csv
-				? csvView(got.value, level.value)
+				? csvView(got.value, level.value, sha256Of)
 				: ddiText(provenanceView(json.value, level.value)),
 			lines: [],
 			problems: false,
