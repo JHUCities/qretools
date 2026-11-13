@@ -4,7 +4,8 @@
  * instrument, the dates (the earliest start and the latest end of the interviews), how
  * the respondents were asked and who answered; the dataset and its source file as
  * PhysicalInstances with their fingerprints; the map and the DDI as OtherMaterial, each
- * by its digest; and the variables in groups. Every fact comes from the data first, then
+ * by its digest; the variables in groups; and, from a data file's map, the publisher's
+ * citation and its advice on the weights. Every fact comes from the data first, then
  * from an option (`factsOf`). Pure: the shell reads, hashes and measures the files. It
  * never holds an answer's value: only which variables have values.
  */
@@ -21,19 +22,52 @@ import {
 	structured,
 } from "./ddi/document.ts";
 import type { DdiIndex } from "./ddi/read.ts";
+import type { Citation, MetadataColumn, WeightingAdvice } from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
 
 /** A term of a DDI controlled vocabulary, or `Other` with words of our own. */
 export type Term = string | { readonly other: string };
 
+/** A mode a data file records for each respondent: its term, and the code of the variable that holds it. */
+export interface Mode {
+	readonly term: Term;
+	/** The URN and name of the variable, and the code that is this mode. */
+	readonly variable: string;
+	readonly name: string;
+	readonly code: string;
+}
+
 /** What the data (or an option) says of its collection. */
 export interface Facts {
-	/** A DDI ModeOfCollection term. */
-	readonly asked_by?: Term;
+	/** A DDI ModeOfCollection term, or the modes a variable records, each by its code. */
+	readonly asked_by?: Term | readonly Mode[] | undefined;
 	/** A DDI DataSourceType term. */
 	readonly answered_by?: Term;
 	/** The software the data were collected with, as the data names it. */
 	readonly software?: string;
+}
+
+/**
+ * How a data file's respondents were asked, from its map's mode column (its variable's
+ * URN given): each mode whose code a respondent has, in the order JSON reads `modes` (an
+ * integer code first, in number order). None when no
+ * column says, or no respondent has a mode, so an option must.
+ */
+export function modesOf(
+	metadata: readonly MetadataColumn[],
+	answers: readonly { readonly variable: string; readonly value: string }[],
+	urnOf: (column: string) => string,
+): readonly Mode[] | undefined {
+	const column = metadata.find((m) => m.modes !== undefined);
+	if (column === undefined) return undefined;
+	const variable = urnOf(column.column);
+	const used = new Set(
+		answers.filter((a) => a.variable === variable).map((a) => a.value),
+	);
+	const modes = Object.entries(column.modes ?? {})
+		.filter(([code]) => used.has(code))
+		.map(([code, term]) => ({ term, variable, name: column.column, code }));
+	return modes.length === 0 ? undefined : modes;
 }
 
 /** The options that give a fact the data doesn't. */
@@ -57,17 +91,14 @@ export function factsOf(
 	readonly { readonly fact: Fact; readonly problem: "missing" | "given" }[]
 > {
 	const problems: { fact: Fact; problem: "missing" | "given" }[] = [];
-	const pick = (fact: Fact): Term | undefined => {
-		const given = data[fact];
-		const option = options[fact];
-		if (given !== undefined && option !== undefined)
-			problems.push({ fact, problem: "given" });
-		else if (given === undefined && option === undefined)
-			problems.push({ fact, problem: "missing" });
-		return given ?? option;
-	};
-	const asked_by = pick("asked_by");
-	const answered_by = pick("answered_by");
+	for (const fact of ["asked_by", "answered_by"] as const) {
+		const given = data[fact] !== undefined;
+		const option = options[fact] !== undefined;
+		if (given && option) problems.push({ fact, problem: "given" });
+		else if (!given && !option) problems.push({ fact, problem: "missing" });
+	}
+	const asked_by = data.asked_by ?? options.asked_by;
+	const answered_by = data.answered_by ?? options.answered_by;
 	if (asked_by === undefined || answered_by === undefined || problems.length)
 		return err(problems);
 	return ok({ ...data, asked_by, answered_by });
@@ -85,6 +116,12 @@ export interface Provenance {
 	/** The DDI given, read: it holds the instrument and its variables. */
 	readonly index: DdiIndex;
 	readonly facts: Facts & Required<Pick<Facts, Fact>>;
+	/** The columns of a data file no respondent is asked: the dataset owns their variables. */
+	readonly metadata?: readonly MetadataColumn[];
+	/** The published data file, as its map cites it. */
+	readonly citation?: Citation;
+	/** What the publisher advises of its weights, as the map says. */
+	readonly weighting?: WeightingAdvice;
 	/** The variables (URNs) the map reads a column into. */
 	readonly reads: readonly string[];
 	/** SHA-256 (hex) of the whole DataSet in its canonical form (`canonicalForm`). */
@@ -107,22 +144,25 @@ export interface Described {
 	readonly dataset: Pick<Item, "type" | "identity">;
 	/** The variables (URNs) with at least one value, the dataset's own included. */
 	readonly present: readonly string[];
-	/** The interview times (ISO 8601 date-times with a zone). */
+	/** The dataset's own variables for a data file's metadata columns (URNs). */
+	readonly metadata: readonly string[];
+	/** The interview times (ISO 8601 date-times with a zone, or dates). */
 	readonly starts: readonly string[];
 	readonly ends: readonly string[];
 }
 
 /** What the fingerprint of the DataSet is over, as `canonicalForm` writes it. */
 export const DATA_FINGERPRINT =
-	"SHA-256 of every value of the DataSet (the answers, and each respondent's identifier and interview times on the dataset's own variables) as long CSV: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent and then variable URN in code-unit order";
+	"SHA-256 of every value of the DataSet (the answers, the values of the dataset's own variables a data file's map describes, and each respondent's identifier and interview times) as long CSV: UTF-8, LF line ends, the header respondent,variable,row,value, then one line for each value, sorted by respondent and then variable URN in code-unit order";
 
 /** The DDI vocabularies a term is from (the version-free URI). */
-const VOCABULARY = {
+export const VOCABULARY = {
 	mode: "http://rdf-vocabulary.ddialliance.org/cv/ModeOfCollection/",
 	source: "http://rdf-vocabulary.ddialliance.org/cv/DataSourceType/",
+	unit: "http://rdf-vocabulary.ddialliance.org/cv/ResponseUnit/",
 } as const;
 
-const codeValueOf = (t: Term, vocabulary: string): JsonObject =>
+export const codeValueOf = (t: Term, vocabulary: string): JsonObject =>
 	typeof t === "string"
 		? { StringValue: t, ControlledVocabularyURI: vocabulary }
 		: {
@@ -149,6 +189,17 @@ const extreme = (
 		const d = Date.parse(t) - Date.parse(best);
 		return (later ? d > 0 : d < 0) ? t : best;
 	}, undefined);
+
+/** A date (`2010-03-15`) or a date-time, as DDI's date keeps each. */
+const dateOf = (t: string): JsonObject =>
+	t.length === 10 ? { Date: t } : { DateTime: t };
+
+/** A published work as DDI cites it. */
+const citationOf = (c: Citation): JsonObject =>
+	obj({
+		Title: intl(c.title),
+		Publisher: c.publisher && [{ PublisherName: intl(c.publisher) }],
+	});
 
 /** A reference to an item by its URN (`urn:ddi:agency:id:version`). */
 export const refTo = (type: string, urn: string): JsonObject => ({
@@ -197,6 +248,15 @@ export function provenanceOf(
 					.map((it) => it.urn),
 			),
 		),
+		...(d.metadata.length === 0
+			? []
+			: [
+					group(
+						"not-asked",
+						"The variables of the data file's columns no respondent is asked (a mode, a sample phase, a weight), as its map describes them. They have no question.",
+						sorted(d.metadata),
+					),
+				]),
 	];
 	const ddi = item(
 		"OtherMaterial",
@@ -270,6 +330,37 @@ export function provenanceOf(
 			: item("Methodology", id("methodology"), {
 					DataCollectionSoftware: [{ SoftwareName: [intl(p.facts.software)] }],
 				});
+	const advice = p.weighting;
+	const adviceMaterial =
+		advice &&
+		item(
+			"OtherMaterial",
+			id("advice"),
+			obj({
+				TypeOfMaterial: { StringValue: "weighting advice" },
+				Citation: citationOf(advice.source),
+				ExternalURLReference: advice.source.url && [advice.source.url],
+				UserAttributePair: [pair("read", advice.read)],
+			}),
+		);
+	const weighting =
+		advice &&
+		adviceMaterial &&
+		item("Weighting", id("weighting"), {
+			UsageGuide: { UsageRecommendations: structured(advice.advice) },
+			RelatedOtherMaterialReference: [ref(adviceMaterial)],
+		});
+	const processingEvent =
+		weighting &&
+		item("ProcessingEvent", id("processing"), {
+			WeightingReference: [ref(weighting)],
+		});
+	const processing =
+		processingEvent &&
+		item("ProcessingEventScheme", id("processing-scheme"), {
+			ProcessingEventReference: [ref(processingEvent)],
+		});
+	const asked = p.facts.asked_by;
 	const start = extreme(d.starts, false);
 	const end = extreme(d.ends, true);
 	const collection = item(
@@ -277,30 +368,50 @@ export function provenanceOf(
 		id("collection"),
 		obj({
 			MethodologyReference: methodology && ref(methodology),
+			ProcessingEventSchemeReference: processing && [ref(processing)],
 			CollectionEvent: [
 				obj({
 					...id("event"),
 					DataSource: [
-						{
+						obj({
 							SourceType: [codeValueOf(p.facts.answered_by, VOCABULARY.source)],
-						},
+							Origin: p.citation && [
+								obj({
+									Citation: citationOf(p.citation),
+									OriginLocation: p.citation.url,
+								}),
+							],
+						}),
 					],
 					DataCollectionDate:
 						start === undefined && end === undefined
 							? undefined
 							: obj({
-									StartDate: start && { DateTime: start },
-									EndDate: end && { DateTime: end },
+									StartDate: start && dateOf(start),
+									EndDate: end && dateOf(end),
 								}),
-					ModeOfCollection: [
-						{
-							...id("mode"),
-							TypeOfModeOfCollection: codeValueOf(
-								p.facts.asked_by,
-								VOCABULARY.mode,
-							),
-						},
-					],
+					// Modes a variable records: which respondents each asked is in that variable, by code.
+					ModeOfCollection: Array.isArray(asked)
+						? asked.map((m: Mode, i) => ({
+								...id(`mode-${i + 1}`),
+								TypeOfModeOfCollection: codeValueOf(m.term, VOCABULARY.mode),
+								Description: structured(
+									`Each respondent's mode is in the variable ${m.name}: this mode is its code ${m.code}.`,
+								),
+								UserAttributePair: [
+									pair("variable", m.variable),
+									pair("code", m.code),
+								],
+							}))
+						: [
+								{
+									...id("mode"),
+									TypeOfModeOfCollection: codeValueOf(
+										asked as Term,
+										VOCABULARY.mode,
+									),
+								},
+							],
 					InstrumentReference: [refTo("Instrument", instrument.urn)],
 				}),
 			],
@@ -316,6 +427,9 @@ export function provenanceOf(
 		study,
 		collection,
 		...(methodology ? [methodology] : []),
+		...[processing, processingEvent, weighting, adviceMaterial].filter(
+			(x) => x !== undefined,
+		),
 		data,
 		source,
 		map,

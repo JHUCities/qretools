@@ -735,7 +735,12 @@ function variableItem(
 				MissingValuesReference: maybe(refs.missing, ref),
 			}),
 			EmbargoReference: maybe(refs.access, (access) =>
-				embargo(identity(ctx.agency, `${id}.embargo`, ctx.own.number), access),
+				embargo(
+					identity(ctx.agency, `${id}.embargo`, ctx.own.number),
+					access.level,
+					access.open,
+					access.policy.identity.URN,
+				),
 			),
 		}),
 	);
@@ -756,17 +761,22 @@ interface Access {
  * policy. The 4.0 schema has the embargo inline on the Variable, so it has an identity
  * of its own, hung off the variable's.
  */
-const embargo = (id: Identity, access: Access): JsonObject =>
+export const embargo = (
+	id: Identity,
+	level: string,
+	open: boolean,
+	policy: string,
+): JsonObject =>
 	obj({
 		...id,
 		UserAttributePair: [
 			{
 				AttributeKey: codeValue(ACCESS_POLICY_KEY),
-				AttributeValue: codeValue(access.policy.identity.URN),
+				AttributeValue: codeValue(policy),
 			},
 		],
-		EmbargoName: [intl(access.level)],
-		Description: access.open
+		EmbargoName: [intl(level)],
+		Description: open
 			? structured("The most open access level: it restricts nothing.")
 			: undefined,
 	});

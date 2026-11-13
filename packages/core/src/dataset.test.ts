@@ -6,8 +6,10 @@ import {
 	csvView,
 	type Dataset,
 	datasetOf,
+	metadataUrn,
 	provenanceView,
 	readDataset,
+	withMetadataVariables,
 } from "./dataset.ts";
 import {
 	type DdiDocument,
@@ -19,7 +21,7 @@ import { ddiIndexOf, deref, type Indexed } from "./ddi/read.ts";
 import { makeValidator } from "./ddi/validate.ts";
 import { bankOf } from "./evaluate.ts";
 import { instrumentOf } from "./instrument/instrument.ts";
-import { factsOf, type Provenance } from "./provenance.ts";
+import { factsOf, modesOf, type Provenance } from "./provenance.ts";
 import { answersCsv } from "./responses.ts";
 
 const validator = makeValidator(JSON.parse(schemaText));
@@ -610,5 +612,268 @@ describe("a view at an access level", () => {
 			provenanceView(JSON.parse(JSON.stringify(doc.value)), at("restricted")),
 		);
 		expect(closed).toContain("DataCollectionDate");
+	});
+});
+
+describe("a data file's metadata, weights and dates", () => {
+	const m = (column: string) => metadataUrn("org.example", "wave1", column);
+	const q = (name: string, rest = "") =>
+		`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
+	const instrument = (levels: string) =>
+		instrumentOf("name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n", {
+			banks: {
+				b: bankOf({
+					"workspace.yaml": `agency: org.bank\n${levels}`,
+					"questions/a/tenure.yaml": q(
+						"tenure",
+						levels === "" ? "" : "access: public\n",
+					),
+				}),
+			},
+			agency: "org.example",
+		}).ddi;
+	const LEVELED = instrument("access: [public, restricted]\n");
+	const tenure = Object.values(LEVELED.Variable ?? {})[0]?.URN as string;
+	const d: Dataset = {
+		name: "wave1",
+		agency: "org.example",
+		respondents: [
+			{ id: "a", start: "2010-03-15", end: "2010-03-15" },
+			{ id: "b", start: "2010-04-02", end: "2010-04-02" },
+		],
+		answers: [
+			{ respondent: "a", variable: tenure, value: "own" },
+			{ respondent: "a", variable: m("mode"), value: "1" },
+			{ respondent: "b", variable: m("mode"), value: "2" },
+			{ respondent: "a", variable: m("w"), value: "0.5" },
+			{ respondent: "a", variable: m("phase"), value: "1" },
+		],
+	};
+	const P: Provenance = {
+		...PROVENANCE,
+		index: ddiIndexOf(LEVELED),
+		facts: {
+			asked_by: [
+				{
+					term: "Interview.Telephone",
+					variable: m("mode"),
+					name: "mode",
+					code: "1",
+				},
+				{
+					term: "Interview.FaceToFace",
+					variable: m("mode"),
+					name: "mode",
+					code: "2",
+				},
+			],
+			answered_by: "ResearchData.Published",
+		},
+		reads: [tenure],
+		citation: {
+			title: "A release",
+			publisher: "A publisher",
+			url: "https://example.org/r",
+		},
+		metadata: [
+			{
+				column: "mode",
+				label: "Mode",
+				role: "mode",
+				unit: "Interviewer",
+				codes: { "1": "Phone", "2": "In person" },
+				access: "public",
+			},
+			{
+				column: "w",
+				role: "weight",
+				number: true,
+				weight: true,
+				access: "public",
+			},
+			{ column: "phase", codes: { "1": "First" } },
+		],
+		weighting: {
+			advice: "Use w.",
+			source: { title: "A codebook", url: "https://example.org/c" },
+			read: "2026-11-12",
+		},
+	};
+	const doc = datasetOf(d, P);
+	if (!doc.ok) throw new Error(doc.error);
+
+	it("owns a variable per metadata column, valid DDI, its values in the ItemSet", () => {
+		expect(validator.ok && validator.value(doc.value)).toEqual([]);
+		// `var-mode`, never the provenance's own `.mode`.
+		const mode = doc.value.Variable?.["org.example:dataset-wave1.var-mode:1"];
+		expect(mode).toMatchObject({
+			VariableName: [
+				{ String: [{ MultilingualStringValue: { Value: "mode" } }] },
+			],
+			SourceUnit: { StringValue: "Interviewer" },
+			VariableRepresentation: {
+				VariableRole: { StringValue: "mode" },
+				ValueRepresentation: {
+					$type: "CodeDomain",
+					CodeListReference: {
+						value: ["org.example", "dataset-wave1.var-mode-codes", "1"],
+					},
+				},
+			},
+			EmbargoReference: {
+				EmbargoName: [
+					{ String: [{ MultilingualStringValue: { Value: "public" } }] },
+				],
+			},
+		});
+		const w = doc.value.Variable?.["org.example:dataset-wave1.var-w:1"];
+		expect(w).toMatchObject({
+			IsWeight: true,
+			WeightingProcessReference: {
+				value: ["org.example", "dataset-wave1.weighting", "1"],
+			},
+			VariableRepresentation: {
+				ValueRepresentation: { $type: "NumericDomain" },
+			},
+		});
+		// No level stated: no embargo, the most closed level.
+		expect(
+			doc.value.Variable?.["org.example:dataset-wave1.var-phase:1"]
+				?.EmbargoReference,
+		).toBeUndefined();
+		const back = readDataset(JSON.parse(JSON.stringify(doc.value)));
+		expect(back.ok && csvView(back.value)).toBe(csvView(d));
+		expect(canonicalForm(d)).toContain(`a,${m("w")},,0.5`);
+	});
+
+	it("cites the data file, describes the weighting and each mode, and keeps dates as dates", () => {
+		const event = (
+			doc.value.DataCollection?.["org.example:dataset-wave1.collection:1"]
+				?.CollectionEvent as never[] | undefined
+		)?.[0];
+		expect(event).toMatchObject({
+			DataCollectionDate: {
+				StartDate: { Date: "2010-03-15" },
+				EndDate: { Date: "2010-04-02" },
+			},
+			DataSource: [
+				{
+					SourceType: [{ StringValue: "ResearchData.Published" }],
+					Origin: [{ OriginLocation: "https://example.org/r" }],
+				},
+			],
+			ModeOfCollection: [
+				{
+					TypeOfModeOfCollection: { StringValue: "Interview.Telephone" },
+					UserAttributePair: [
+						{
+							AttributeKey: { StringValue: "variable" },
+							AttributeValue: { StringValue: m("mode") },
+						},
+						{
+							AttributeKey: { StringValue: "code" },
+							AttributeValue: { StringValue: "1" },
+						},
+					],
+				},
+				{ TypeOfModeOfCollection: { StringValue: "Interview.FaceToFace" } },
+			],
+		});
+		expect(Object.values(doc.value.Weighting ?? {})).toMatchObject([
+			{
+				UsageGuide: {
+					UsageRecommendations: {
+						Content: [{ MultilingualStringValue: { Value: "Use w." } }],
+					},
+				},
+			},
+		]);
+		expect(Object.keys(doc.value.ProcessingEventScheme ?? {})).toHaveLength(1);
+		expect(
+			doc.value.OtherMaterial?.["org.example:dataset-wave1.advice:1"],
+		).toMatchObject({
+			TypeOfMaterial: { StringValue: "weighting advice" },
+			ExternalURLReference: ["https://example.org/c"],
+		});
+	});
+
+	it("refuses a stated level the DDI's one policy doesn't list, or a DDI with none", () => {
+		const level = (access: string, index = P.index) =>
+			datasetOf(d, {
+				...P,
+				index,
+				metadata: [{ column: "w", number: true, weight: true, access }],
+			});
+		expect(level("secret")).toMatchObject({ ok: false });
+		expect(level("public", ddiIndexOf(instrument("")))).toMatchObject({
+			ok: false,
+		});
+		expect(level("restricted").ok).toBe(true);
+	});
+
+	it("asks by the modes respondents have, in the map's order, and by none when no respondent has one", () => {
+		const column = {
+			column: "mode",
+			codes: { "1": "Phone", "2": "In person", "9": "Not recorded" },
+			modes: { "1": "Interview.Telephone", "2": "Interview.FaceToFace" },
+		};
+		const has = (...values: string[]) =>
+			values.map((value) => ({ variable: m("mode"), value }));
+		expect(
+			modesOf([column], has("1", "9", "1", "2"), m)?.map((x) => x.code),
+		).toEqual(["1", "2"]);
+		expect(modesOf([column], has("9"), m)).toBeUndefined();
+		expect(
+			modesOf([{ column: "mode", codes: column.codes }], has("1"), m),
+		).toBeUndefined();
+	});
+
+	it("keeps a metadata variable in a view at its stated level, and one with none only at the most closed", () => {
+		const index = ddiIndexOf(
+			withMetadataVariables(LEVELED, doc.value, d) as DdiDocument,
+		);
+		const open = accessOf(index, d, "public");
+		if (!open.ok || open.value === undefined) throw new Error("no access");
+		expect(open.value.removed.map((r) => r.name)).toEqual([
+			"respondent",
+			"start",
+			"end",
+			"phase",
+		]);
+		expect(csvView(d, open.value)).not.toContain(m("phase"));
+		expect(csvView(d, open.value)).toContain(m("w"));
+		const closed = accessOf(index, d, "restricted");
+		expect(closed.ok && csvView(d, closed.value)).toBe(csvView(d));
+		// Without the dataset's variables beside the DDI, nothing tells a stated level: all stand closed.
+		const bare = accessOf(ddiIndexOf(LEVELED), d, "public");
+		expect(bare.ok && bare.value?.removed.map((r) => r.urn)).toEqual(
+			expect.arrayContaining([m("mode"), m("w"), m("phase")]),
+		);
+		// A level under a policy the DDI given lacks is refused, never kept.
+		const other = JSON.parse(
+			JSON.stringify(doc.value).replaceAll(
+				"access-public-restricted",
+				"access-public-secret",
+			),
+		);
+		expect(
+			accessOf(
+				ddiIndexOf(withMetadataVariables(LEVELED, other, d) as DdiDocument),
+				d,
+				"public",
+			),
+		).toMatchObject({ ok: false, error: { kind: "untraced" } });
+		// A dataset can't restate an instrument's variable beside the DDI.
+		const forged = JSON.parse(JSON.stringify(doc.value));
+		forged.Variable.x = {
+			...forged.Variable["org.example:dataset-wave1.var-w:1"],
+			ID: "instrument-t.var-tenure",
+		};
+		expect(
+			Object.keys(
+				(withMetadataVariables(LEVELED, forged, d) as DdiDocument).Variable ??
+					{},
+			),
+		).not.toContain("x");
 	});
 });
