@@ -407,51 +407,163 @@ export const answersCsv = (answers: readonly Answer[]): string =>
 
 const ANSWERS_HEADER = "respondent,variable,row,value";
 
+/** An interview's time in an answers file: an ISO 8601 date-time with its zone, `Z` or an offset. */
+const ZONED_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/;
+
 /**
- * Answers read back from long CSV as `answersCsv` writes them, all or none: a file with
- * another header, a row of another width, a row that isn't a number from 1, or a blank
- * respondent or variable is refused, by its line, never by a value.
+ * An answers file read: long CSV as `answersCsv` writes it, each variable by its DDI URN,
+ * and each interview's times on lines whose variable is the bare word `start` or `end`
+ * (a program that writes answers can't know the dataset's own URNs). Each respondent named
+ * is listed. Every value is checked against its variable, as `readResponses` checks a
+ * source's, and findings say where, never what: one per code and variable, at its first
+ * line, with a count. A roster row isn't read: a dataset can't hold one yet.
  */
 export function answersOf(
 	text: string,
-): Result<
-	readonly Answer[],
-	{ readonly line?: number; readonly message: string }
-> {
+	representations: ReadonlyMap<string, Representation>,
+): {
+	readonly respondents: readonly Respondent[];
+	readonly answers: readonly Answer[];
+	readonly findings: readonly ResponseFinding[];
+} {
+	const found = new Map<string, ResponseFinding>();
+	const note = (
+		code: ResponseCode,
+		severity: Severity,
+		message: string,
+		line: number,
+		variable = "",
+	) => {
+		const key = `${code}\u0000${variable}`;
+		const seen = found.get(key);
+		if (seen !== undefined) found.set(key, { ...seen, count: seen.count + 1 });
+		else found.set(key, { code, severity, message, line, count: 1 });
+	};
 	const { rows, unclosed } = parseCsv(text);
-	if (unclosed !== undefined)
-		return err({
-			line: unclosed,
-			message: "A quote opened here is never closed.",
-		});
 	const [header, ...records] = rows;
-	if (header?.cells.join(",") !== ANSWERS_HEADER)
-		return err({
-			line: 1,
-			message: `The header isn't \`${ANSWERS_HEADER}\`, as \`dataset export --csv\` writes it.`,
-		});
+	if (header?.cells.join(",") !== ANSWERS_HEADER) {
+		note(
+			"responses-unreadable",
+			"error",
+			`The header isn't \`${ANSWERS_HEADER}\`, so nothing is read.`,
+			1,
+		);
+		return { respondents: [], answers: [], findings: [...found.values()] };
+	}
+	if (unclosed !== undefined)
+		note(
+			"responses-unreadable",
+			"error",
+			"A quote opened here is never closed.",
+			unclosed,
+		);
 	const answers: Answer[] = [];
+	const times = new Map<string, { id: string; start?: string; end?: string }>();
+	const lines = new Map<string, number>();
+	const given = new Set<string>();
 	for (const { line, cells } of records) {
 		const [respondent = "", variable = "", row = "", value = ""] = cells;
-		if (
-			cells.length !== 4 ||
-			respondent === "" ||
-			variable === "" ||
-			(row !== "" && !/^[1-9]\d*$/.test(row))
-		)
-			return err({
+		if (cells.length !== 4 || respondent === "" || variable === "") {
+			note(
+				"responses-row",
+				"error",
+				"This line isn't an answer (four cells, a respondent and a variable), so it isn't read.",
 				line,
-				message:
-					"This line isn't an answer: four cells, a respondent, a variable, and a row that is empty or a number from 1.",
-			});
-		answers.push({
-			respondent,
-			variable,
-			...(row !== "" && { row: Number(row) }),
-			value,
-		});
+			);
+			continue;
+		}
+		const entry = times.get(respondent) ?? { id: respondent };
+		if (!times.has(respondent)) {
+			times.set(respondent, entry);
+			lines.set(respondent, line);
+		}
+		if (row !== "") {
+			note(
+				"responses-row",
+				"error",
+				`\`${variable}\` is answered in a roster row, and a dataset can't hold roster rows yet, so it isn't read.`,
+				line,
+				variable,
+			);
+			continue;
+		}
+		const key = `${respondent}\u0000${variable}`;
+		if (given.has(key)) {
+			note(
+				"responses-duplicate",
+				"error",
+				`An earlier line gives \`${variable}\` for this respondent too, so this one isn't read.`,
+				line,
+				variable,
+			);
+			continue;
+		}
+		given.add(key);
+		if (variable === "start" || variable === "end") {
+			// The date checked on its own: Date.parse rolls 30 February into March.
+			if (
+				ZONED_TIME.test(value) &&
+				dateOf(value.slice(0, 10), "YYYY-MM-DD") !== undefined &&
+				!Number.isNaN(Date.parse(value))
+			)
+				entry[variable] = value;
+			else
+				note(
+					"responses-time",
+					"error",
+					`This \`${variable}\` isn't a date and time with its zone, such as \`2026-11-12T23:15:41Z\` or \`2026-11-12T18:15:41-05:00\`, so it isn't read.`,
+					line,
+					variable,
+				);
+			continue;
+		}
+		const r = representations.get(variable);
+		if (r === undefined) {
+			note(
+				"responses-unknown-variable",
+				"error",
+				`The DDI has no variable \`${variable}\`, so its values aren't read.`,
+				line,
+				variable,
+			);
+			continue;
+		}
+		if (value === "" || !holds(r, value)) {
+			note(
+				"responses-not-a-code",
+				"error",
+				`This value isn't one \`${variable}\` can hold, so it isn't read.`,
+				line,
+				variable,
+			);
+			continue;
+		}
+		answers.push({ respondent, variable, value });
 	}
-	return ok(answers);
+	for (const t of times.values()) {
+		const line = lines.get(t.id) ?? 1;
+		if (t.start === undefined || t.end === undefined)
+			note(
+				"responses-time",
+				"warning",
+				"This respondent's interview has no `start` or no `end`, so it has no time.",
+				line,
+				"missing",
+			);
+		else if (Date.parse(t.end) < Date.parse(t.start))
+			note(
+				"responses-time",
+				"error",
+				"This respondent's interview ends before it starts.",
+				line,
+				"order",
+			);
+	}
+	return {
+		respondents: [...times.values()],
+		answers,
+		findings: [...found.values()],
+	};
 }
 
 /**

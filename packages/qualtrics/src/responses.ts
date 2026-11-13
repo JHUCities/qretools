@@ -337,7 +337,7 @@ export function exportMap(
 	const facts =
 		kinds.size > 1
 			? undefined
-			: { ...(kind && COLLECTED[kind]), software: "Qualtrics" };
+			: { ...(kind && COLLECTED[kind]), software: { name: "Qualtrics" } };
 	const at = byImportId.get(PROVENANCE.ddi);
 	const claimed =
 		at === undefined

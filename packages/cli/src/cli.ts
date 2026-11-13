@@ -20,7 +20,7 @@ import {
 	accessOf,
 	addressOf,
 	agencyWritten,
-	answersCsv,
+	answersOf,
 	type Bank,
 	type BankScope,
 	bankOf,
@@ -30,6 +30,7 @@ import {
 	DATASET_NAME,
 	type Dataset,
 	type DdiDocument,
+	type DdiIndex,
 	dataFileMap,
 	dataMapOf,
 	datasetOf,
@@ -38,6 +39,7 @@ import {
 	exportRefusal,
 	FACT_OPTIONS,
 	type Fact,
+	type Facts,
 	type FileDigest,
 	type FilterRefusal,
 	type Finding,
@@ -163,6 +165,15 @@ const USAGE = `Usage:
                                     interview's date, and the publisher's advice on the weights.
                                     --asked-by is needed only where no mode column says. Every row
                                     is read
+  qretools responses <answers.csv> --ddi <file.json> (--synthetic --runtime name [--runtime-version v]
+                    | --answered-by term --asked-by term) [--file path]... [-o dataset.json]
+                                    Read answers already in QREtools' form (as a model harness writes
+                                    them) the same way: long CSV respondent,variable,row,value, each
+                                    variable by its URN in the DDI, and each interview's times on
+                                    lines whose variable is start or end (ISO 8601 with a zone).
+                                    --synthetic says a model answered, in a simulation; --runtime
+                                    names the software that ran it. Each --file (a trace, a config)
+                                    is cited by its digest. Any error writes nothing
   qretools dataset export <dataset.json> --csv | --provenance --ddi <file.json> [--access <level>] [-o file]
                                     Write a view of a dataset: --csv its values as long CSV, one line
                                     per value: respondent,variable,row,value, each variable by its DDI
@@ -199,6 +210,9 @@ moves after that, check warns until the next export records it again.
                source or its map says it.
 --answered-by  for responses, who answered, as a term of DDI's DataSourceType vocabulary
                (PopulationGroup, say). Refused where the source or its map says it.
+--synthetic   for responses without --map, the answers are a model's, asked in a simulation.
+--runtime     for responses without --map, the software that answered (and --runtime-version).
+--file        for responses without --map, a file of the run to cite by its SHA-256 digest.
 --csv     for dataset export, write the values as long CSV.
 --provenance  for dataset export, write the dataset without its values.
 --qsf     write the instrument as a Qualtrics survey (QSF) instead of its DDI. Refused
@@ -260,20 +274,26 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 								: command !== "responses" &&
 										args.values["answered-by"] !== undefined
 									? "--answered-by"
-									: args.values.bank !== undefined
-										? "--bank"
-										: args.values.agency !== undefined
-											? "--agency"
-											: args.values.qsf === true
-												? "--qsf"
-												: command !== "build" &&
-														args.values["tag-message"] !== undefined
-													? "--tag-message"
-													: command === "check"
-														? args.values.output !== undefined && "--output"
-														: command !== "codebook" &&
-															args.values.strict === true &&
-															"--strict";
+									: command !== "responses" &&
+											(args.values.synthetic === true ||
+												args.values.runtime !== undefined ||
+												args.values["runtime-version"] !== undefined ||
+												args.values.file !== undefined)
+										? "--synthetic, --runtime or --file"
+										: args.values.bank !== undefined
+											? "--bank"
+											: args.values.agency !== undefined
+												? "--agency"
+												: args.values.qsf === true
+													? "--qsf"
+													: command !== "build" &&
+															args.values["tag-message"] !== undefined
+														? "--tag-message"
+														: command === "check"
+															? args.values.output !== undefined && "--output"
+															: command !== "codebook" &&
+																args.values.strict === true &&
+																"--strict";
 	if (stray) {
 		io.err(`\`${stray}\` isn't an option of \`${command}\`.\n${USAGE}\n`);
 		return USAGE_ERROR;
@@ -288,23 +308,62 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			io,
 		);
 	if (command === "responses") {
-		if (args.positionals[1] === undefined || args.values.map === undefined) {
-			io.err(`${USAGE}\n`);
+		const {
+			map,
+			ddi,
+			output,
+			synthetic,
+			runtime,
+			"runtime-version": version,
+			file: files,
+		} = args.values;
+		const options = {
+			...(args.values["asked-by"] !== undefined && {
+				asked_by: args.values["asked-by"],
+			}),
+			...(args.values["answered-by"] !== undefined && {
+				answered_by: args.values["answered-by"],
+			}),
+		};
+		// A map's source says what it can of itself; answers without one say it through options.
+		const misuse =
+			args.positionals[1] === undefined
+				? "`responses` reads one file."
+				: map !== undefined
+					? synthetic || runtime || version || files
+						? "`--synthetic`, `--runtime`, `--runtime-version` and `--file` are for answers read without `--map`."
+						: undefined
+					: ddi === undefined
+						? "Answers read without `--map` need `--ddi <file>`: the instrument's DDI."
+						: !synthetic && options.answered_by === undefined
+							? "Answers read without `--map` need `--synthetic` (a model's answers) or `--answered-by <term>` (who answered)."
+							: synthetic && runtime === undefined
+								? "`--synthetic` needs `--runtime <name>`: the software that answered."
+								: version !== undefined && runtime === undefined
+									? "`--runtime-version` needs `--runtime`."
+									: undefined;
+		if (misuse !== undefined) {
+			io.err(`${misuse}\n${USAGE}\n`);
 			return USAGE_ERROR;
 		}
-		return writeResponses(
+		if (map !== undefined)
+			return writeResponses(dir, map, ddi, output, options, io);
+		return writeAnswers(
 			dir,
-			args.values.map,
-			args.values.ddi,
-			args.values.output,
+			// Checked above: `misuse` names a missing --ddi.
+			ddi as string,
+			output,
 			{
-				...(args.values["asked-by"] !== undefined && {
-					asked_by: args.values["asked-by"],
-				}),
-				...(args.values["answered-by"] !== undefined && {
-					answered_by: args.values["answered-by"],
+				given: synthetic ? SYNTHETIC : {},
+				options,
+				...(runtime !== undefined && {
+					software: {
+						name: runtime,
+						...(version !== undefined && { version }),
+					},
 				}),
 			},
+			files ?? [],
 			io,
 		);
 	}
@@ -545,28 +604,14 @@ async function writeResponses(
 	}
 	const qsf = named[1] === "qsf";
 	const ddiFile = ddiOption ?? `${mapFile.slice(0, named.index)}.json`;
-	// Each file's bytes, for its digest and size, and its text.
-	const read: { name: string; bytes: Buffer; text: string }[] = [];
-	for (const f of [file, mapFile, ddiFile])
-		try {
-			const bytes = await readFile(f);
-			read.push({ name: basename(f), bytes, text: bytes.toString("utf8") });
-		} catch (e) {
-			io.err(
-				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
-			);
-			return USAGE_ERROR;
-		}
-	const sha256 = (data: string | Buffer) =>
-		createHash("sha256").update(data).digest("hex");
+	const read = await readDigested([file, mapFile, ddiFile], io);
+	if (read === undefined) return USAGE_ERROR;
 	// Three files read, in that order.
-	const [sourceFile, mapRead, ddiRead] = read.map(
-		(f): FileDigest => ({
-			name: f.name,
-			sha256: sha256(f.bytes),
-			size: f.bytes.length,
-		}),
-	) as [FileDigest, FileDigest, FileDigest];
+	const [sourceFile, mapRead, ddiRead] = read.map((f) => f.digest) as [
+		FileDigest,
+		FileDigest,
+		FileDigest,
+	];
 	const [csv = "", mapText = "", ddiSource = ""] = read.map((f) => f.text);
 	const mapJson = jsonOf(mapText);
 	const map = !mapJson.ok
@@ -599,31 +644,7 @@ async function writeResponses(
 		return PROBLEMS;
 	}
 	const index = ddiIndex.value;
-	// Each variable's codes or format, and each select-all option's tick, as the DDI says.
-	const ticks = tickCodes(index, [...index.byUrn.values()]);
-	const representations = new Map<string, Representation>();
-	const ticked = new Map<string, string>();
-	for (const e of codebookOf(index).entries) {
-		if (e.type !== "Variable") continue;
-		const codes = (e.responses?.rows ?? []).map((r) => r.code);
-		// shortcut: missing values written as ranges aren't read (the codebook reads codes only), so a number in one is a finding.
-		if (e.format?.kind === "number")
-			representations.set(e.urn, {
-				kind: "number",
-				missing: codes,
-				...(e.format.min !== undefined && { min: e.format.min }),
-				...(e.format.max !== undefined && { max: e.format.max }),
-			});
-		else if (e.format?.kind === "text")
-			representations.set(e.urn, { kind: "text" });
-		else if (e.responses !== undefined)
-			representations.set(e.urn, { kind: "codes", codes });
-		// Anything else (a date, say) isn't read: its column is a finding, never taken as text.
-		const tick = e.responses?.from
-			.map((f) => (f.kind === "ref" ? ticks.get(f.urn)?.ticked : undefined))
-			.find((t) => t !== undefined);
-		if (tick !== undefined) ticked.set(e.urn, tick);
-	}
+	const { representations, ticked } = representationsOf(index);
 	// Every URN is `urn:ddi:<agency>:…`: the dataset is its variables' agency's.
 	const agencies = new Set(
 		map.columns.flatMap((c) =>
@@ -694,7 +715,7 @@ async function writeResponses(
 		reads: map.columns.flatMap((c) =>
 			"filtered" in c && c.filtered ? [] : [c.variable],
 		),
-		fingerprint: sha256(canonicalForm(values)),
+		fingerprint: sha256Of(canonicalForm(values)),
 		source: sourceFile,
 		ddi: ddiRead,
 		map: { ...mapRead, ...(map.ddi !== undefined && { ddi: map.ddi }) },
@@ -711,7 +732,19 @@ async function writeResponses(
 		);
 		return PROBLEMS;
 	}
-	const text = ddiText(built.value);
+	return writeOnce(ddiText(built.value), output, failed, io);
+}
+
+/**
+ * A dataset written where `-o` says, or to stdout: never over another file, and the same
+ * dataset again is "unchanged". `failed` is the exit code its findings gave.
+ */
+async function writeOnce(
+	text: string,
+	output: string | undefined,
+	failed: number,
+	io: Io,
+): Promise<number> {
 	if (output === undefined) {
 		io.out(text);
 		return failed;
@@ -729,6 +762,167 @@ async function writeResponses(
 	}
 	await io.writeFile(output, text);
 	return failed;
+}
+
+const sha256Of = (data: string | Buffer) =>
+	createHash("sha256").update(data).digest("hex");
+
+/** A file read whole, for its digest and its text. */
+type Read = { readonly digest: FileDigest; readonly text: string };
+
+/** Files read whole: each one's digest (its bytes, not its text) and its text; undefined, said, where one can't be read. */
+async function readDigested(
+	paths: readonly string[],
+	io: Io,
+): Promise<Read[] | undefined> {
+	const read: Read[] = [];
+	for (const f of paths)
+		try {
+			const bytes = await readFile(f);
+			read.push({
+				digest: {
+					name: basename(f),
+					sha256: sha256Of(bytes),
+					size: bytes.length,
+				},
+				text: bytes.toString("utf8"),
+			});
+		} catch (e) {
+			io.err(
+				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
+			);
+			return undefined;
+		}
+	return read;
+}
+
+/** Each variable's codes or format, and each select-all option's tick, as the DDI says. */
+function representationsOf(index: DdiIndex) {
+	const ticks = tickCodes(index, [...index.byUrn.values()]);
+	const representations = new Map<string, Representation>();
+	const ticked = new Map<string, string>();
+	for (const e of codebookOf(index).entries) {
+		if (e.type !== "Variable") continue;
+		const codes = (e.responses?.rows ?? []).map((r) => r.code);
+		// shortcut: missing values written as ranges aren't read (the codebook reads codes only), so a number in one is a finding.
+		if (e.format?.kind === "number")
+			representations.set(e.urn, {
+				kind: "number",
+				missing: codes,
+				...(e.format.min !== undefined && { min: e.format.min }),
+				...(e.format.max !== undefined && { max: e.format.max }),
+			});
+		else if (e.format?.kind === "text")
+			representations.set(e.urn, { kind: "text" });
+		else if (e.responses !== undefined)
+			representations.set(e.urn, { kind: "codes", codes });
+		// Anything else (a date, say) isn't read: its column is a finding, never taken as text.
+		const tick = e.responses?.from
+			.map((f) => (f.kind === "ref" ? ticks.get(f.urn)?.ticked : undefined))
+			.find((t) => t !== undefined);
+		if (tick !== undefined) ticked.set(e.urn, tick);
+	}
+	return { representations, ticked };
+}
+
+/** What `--synthetic` says of a collection: a model, run as a simulation, answered. */
+const SYNTHETIC: Facts = {
+	asked_by: "Simulation",
+	answered_by: { other: "synthetic" },
+};
+
+/**
+ * Answers already in QREtools' form (`answersOf`: long CSV, each variable by its URN in
+ * the DDI given, each interview's `start` and `end`), as a program such as a model
+ * harness writes them, into a dataset as `writeResponses` writes one. No map: the facts
+ * come from `--synthetic` or `--answered-by` (and `--asked-by`), the software from
+ * `--runtime`, and each `--file` is cited by its digest. Any error writes nothing.
+ */
+async function writeAnswers(
+	file: string,
+	ddiFile: string,
+	output: string | undefined,
+	facts: {
+		readonly given: Facts;
+		readonly options: Readonly<Partial<Record<Fact, string>>>;
+		readonly software?: Facts["software"];
+	},
+	files: readonly string[],
+	io: Io,
+): Promise<number> {
+	const named = output ?? ddiFile;
+	const name = basename(named, extname(named));
+	if (!DATASET_NAME.test(name)) {
+		io.err(
+			`${output ?? ddiFile}: a dataset is named by its file name, without \`.json\`, so it may hold only letters, digits, \`-\` and \`_\`. Use -o to name it.\n`,
+		);
+		return USAGE_ERROR;
+	}
+	const read = await readDigested([file, ddiFile, ...files], io);
+	if (read === undefined) return USAGE_ERROR;
+	// The answers and the DDI, then each --file, in that order.
+	const [answersRead, ddiRead, ...others] = read as [Read, Read, ...Read[]];
+	const ddiJson = jsonOf(ddiRead.text);
+	const ddiIndex = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
+	if (ddiIndex?.ok !== true) {
+		io.err(
+			`${ddiFile}: error: this isn't DDI-Lifecycle 4.0 JSON. [responses-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const index = ddiIndex.value;
+	const checked = answersOf(
+		answersRead.text,
+		representationsOf(index).representations,
+	);
+	for (const f of checked.findings)
+		io.err(
+			`${file}:${f.line}: ${LEVEL[f.severity]}: ${f.message}${f.count > 1 ? ` (${f.count} lines)` : ""} [${f.code}]\n`,
+		);
+	if (checked.findings.some((f) => f.severity === "error")) {
+		io.err(`${file}: error: the answers have errors, so nothing is written.\n`);
+		return PROBLEMS;
+	}
+	const given = factsOf(facts.given, facts.options);
+	if (!given.ok) {
+		for (const { fact, problem } of given.error)
+			io.err(
+				// Only asked_by can be missing: `main` needs --synthetic or --answered-by.
+				problem === "missing"
+					? `${file}: error: the answers don't say how their respondents were asked: give \`${FACT_OPTIONS[fact]} <term>\`, a term of DDI's ModeOfCollection vocabulary. Nothing is written. [responses-facts]\n`
+					: `${file}: error: \`--synthetic\` already says ${fact === "asked_by" ? "how the respondents were asked" : "who answered"}, so \`${FACT_OPTIONS[fact]}\` isn't taken. Nothing is written. [responses-facts]\n`,
+			);
+		return USAGE_ERROR;
+	}
+	// The dataset is its instrument's agency's: the one instrument the DDI holds (`provenanceOf` refuses any other count).
+	const instrument = [...index.byUrn.values()].find(
+		(it) => it.type === "Instrument" && it.owner === undefined,
+	);
+	const values: Dataset = {
+		name,
+		agency: instrument?.urn.split(":")[2] ?? "",
+		respondents: checked.respondents,
+		answers: checked.answers,
+	};
+	const built = datasetOf(values, {
+		index,
+		facts: {
+			...given.value,
+			...(facts.software !== undefined && { software: facts.software }),
+		},
+		fingerprint: sha256Of(canonicalForm(values)),
+		source: answersRead.digest,
+		ddi: ddiRead.digest,
+		files: others.map((f) => f.digest),
+		claimed: [],
+	});
+	if (!built.ok) {
+		io.err(
+			`${file}: error: ${built.error} Nothing is written. [responses-dataset]\n`,
+		);
+		return PROBLEMS;
+	}
+	return writeOnce(ddiText(built.value), output, OK, io);
 }
 
 /**
@@ -889,6 +1083,10 @@ function parse(argv: readonly string[]) {
 			provenance: { type: "boolean" },
 			"asked-by": { type: "string" },
 			"answered-by": { type: "string" },
+			synthetic: { type: "boolean" },
+			runtime: { type: "string" },
+			"runtime-version": { type: "string" },
+			file: { type: "string", multiple: true },
 			map: { type: "string" },
 			ddi: { type: "string" },
 			access: { type: "string" },

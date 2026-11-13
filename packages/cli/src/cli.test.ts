@@ -1237,6 +1237,196 @@ describe("qretools responses", () => {
 			(await run("dataset", "export", dataset, "--csv", "--provenance")).code,
 		).toBe(2);
 	});
+
+	/** Answers as a model harness writes them, beside the DDI `build` writes. */
+	async function answers(...lines: string[]) {
+		const { csv } = await files();
+		const dir = dirname(csv);
+		const file = join(dir, "answers.csv");
+		await writeFile(
+			file,
+			[
+				"respondent,variable,row,value",
+				"s1,start,,2026-11-12T23:14:02Z",
+				"s1,end,,2026-11-12T23:16:02Z",
+				`s1,${v("tenure")},,2`,
+				`s1,${v("modes_b")},,1`,
+				`s1,${v("rent")},,D`,
+				"s2,start,,2026-11-13T00:10:00+01:00",
+				"s2,end,,2026-11-13T00:20:00+01:00",
+				// A missing code of a coded variable.
+				`s2,${v("tenure")},,D`,
+				...lines,
+				"",
+			].join("\n"),
+		);
+		const traces = join(dir, "traces.jsonl");
+		await writeFile(traces, '{"call":1}\n');
+		return { file, ddi: join(dir, "t.json"), traces, dir };
+	}
+	const synthetic = [
+		"--synthetic",
+		"--runtime",
+		"model:Q8",
+		"--runtime-version",
+		"b1",
+	];
+
+	it("reads a model's answers into a dataset, with its runtime and files, and exports both views", async () => {
+		const { file, ddi, traces, dir } = await answers();
+		const out = join(dir, "run1.json");
+		const r = await run(
+			"responses",
+			file,
+			"--ddi",
+			ddi,
+			...synthetic,
+			"--file",
+			traces,
+			"-o",
+			out,
+		);
+		expect(r).toMatchObject({ code: 0, err: "" });
+		const text = r.written[out] ?? "";
+		const validator = makeValidator(schema);
+		expect(validator.ok && validator.value(JSON.parse(text))).toEqual([]);
+		const doc = JSON.parse(text);
+		const event = Object.values(
+			doc.DataCollection as Record<
+				string,
+				{
+					CollectionEvent: {
+						DataCollectionDate: unknown;
+						ModeOfCollection: unknown;
+						DataSource: unknown;
+					}[];
+				}
+			>,
+		)[0]?.CollectionEvent[0];
+		expect(event?.DataCollectionDate).toEqual({
+			// Compared as instants: 00:10 at +01:00 is before 23:14 UTC the day before.
+			StartDate: { DateTime: "2026-11-13T00:10:00+01:00" },
+			EndDate: { DateTime: "2026-11-13T00:20:00+01:00" },
+		});
+		expect(JSON.stringify(event?.ModeOfCollection)).toMatch(
+			/"StringValue":"Simulation"/,
+		);
+		expect(JSON.stringify(event?.DataSource)).toMatch(
+			/"StringValue":"Other","OtherValue":"synthetic"/,
+		);
+		expect(JSON.stringify(doc.Methodology)).toMatch(
+			/"Value":"model:Q8".*"SoftwareVersion":"b1"/,
+		);
+		const traced = createHash("sha256").update('{"call":1}\n').digest("hex");
+		expect(Object.values(doc.OtherMaterial)).toContainEqual(
+			expect.objectContaining({
+				TypeOfMaterial: { StringValue: "supporting file" },
+				UserID: [
+					{ StringValue: traced, TypeOfUserID: { StringValue: "SHA-256" } },
+				],
+				SizeInBytes: 11,
+			}),
+		);
+		// No map: no column map cited, and no variable called "not in source".
+		expect(text).not.toMatch(/column map|not-in-source/);
+		await writeFile(out, text);
+		expect(
+			(
+				await run(
+					"responses",
+					file,
+					"--ddi",
+					ddi,
+					...synthetic,
+					"--file",
+					traces,
+					"-o",
+					out,
+				)
+			).err,
+		).toBe(`${out}: unchanged\n`);
+		expect(
+			(await run("dataset", "export", out, "--csv", "--ddi", ddi)).out,
+		).toBe(
+			[
+				"respondent,variable,row,value",
+				`s1,${v("modes_b")},,1`,
+				`s1,${v("rent")},,D`,
+				`s1,${v("tenure")},,2`,
+				`s2,${v("tenure")},,D`,
+				"",
+			].join("\n"),
+		);
+		const provenance = await run(
+			"dataset",
+			"export",
+			out,
+			"--provenance",
+			"--ddi",
+			ddi,
+		);
+		expect(provenance.code).toBe(0);
+		expect(provenance.out).not.toMatch(/ItemSet|s1|s2/);
+	});
+
+	it("refuses answers it can't check, and options that don't fit", async () => {
+		const { file, ddi, traces } = await answers(
+			`s2,${v("rent")},,lots`,
+			"s2,urn:ddi:org.example:instrument-t.var-gone:1,,1",
+			"s3,start,,2026-11-13 09:00:00",
+		);
+		const bad = await run("responses", file, "--ddi", ddi, ...synthetic);
+		expect(bad).toMatchObject({ code: 1, out: "", written: {} });
+		expect(bad.err).toMatch(
+			/answers.csv:10: error: .*\[responses-not-a-code\]/,
+		);
+		expect(bad.err).toMatch(
+			/answers.csv:11: error: .*\[responses-unknown-variable\]/,
+		);
+		expect(bad.err).toMatch(
+			/answers.csv:12: error: .*isn't a date and time with its zone.*\[responses-time\]/,
+		);
+		expect(bad.err).toMatch(/nothing is written/);
+		const { file: good } = await answers();
+		const usage = async (...argv: string[]) => {
+			const r = await run("responses", good, ...argv);
+			expect(r.code).toBe(2);
+			return r.err.split("\n")[0];
+		};
+		expect(await usage("--ddi", ddi)).toMatch(
+			/need `--synthetic`.*or `--answered-by/,
+		);
+		expect(await usage("--ddi", ddi, "--synthetic")).toMatch(
+			/needs `--runtime/,
+		);
+		expect(await usage("--synthetic", "--runtime", "m")).toMatch(/need `--ddi/);
+		expect(
+			await usage("--ddi", ddi, "--answered-by", "x", "--runtime-version", "1"),
+		).toMatch(/needs `--runtime`/);
+		expect(
+			await usage("--map", "t-ddi-qsf.columns.json", "--file", traces),
+		).toMatch(/are for answers read without `--map`/);
+		expect(
+			await usage("--ddi", ddi, ...synthetic, "--asked-by", "Interview"),
+		).toMatch(/`--synthetic` already says how.*`--asked-by` isn't taken/);
+		expect(
+			await usage("--ddi", ddi, "--answered-by", "PopulationGroup"),
+		).toMatch(/give `--asked-by <term>`/);
+		expect((await run("check", ".", "--file", traces)).code).toBe(2);
+		// Real answers from elsewhere: who answered, and how they were asked.
+		const real = await run(
+			"responses",
+			good,
+			"--ddi",
+			ddi,
+			"--answered-by",
+			"PopulationGroup",
+			"--asked-by",
+			"SelfAdministeredQuestionnaire.CAWI",
+		);
+		expect(real).toMatchObject({ code: 0, err: "" });
+		expect(real.out).not.toMatch(/Methodology/);
+	});
 });
 
 describe("access levels, through the commands", () => {

@@ -63,7 +63,7 @@ const PROVENANCE: Provenance = {
 	facts: {
 		asked_by: "SelfAdministeredQuestionnaire.CAWI",
 		answered_by: "PopulationGroup",
-		software: "Qualtrics",
+		software: { name: "Qualtrics" },
 	},
 	reads: [v("tenure"), v("modes_b"), v("why")],
 	fingerprint: "f".repeat(64),

@@ -16,6 +16,7 @@ import {
 	identity,
 	intl,
 	item,
+	type Json,
 	type JsonObject,
 	obj,
 	ref,
@@ -43,8 +44,8 @@ export interface Facts {
 	readonly asked_by?: Term | readonly Mode[] | undefined;
 	/** A DDI DataSourceType term. */
 	readonly answered_by?: Term;
-	/** The software the data were collected with, as the data names it. */
-	readonly software?: string;
+	/** The software the data were collected with, as the data (or an option) names it. */
+	readonly software?: { readonly name: string; readonly version?: string };
 }
 
 /**
@@ -122,13 +123,15 @@ export interface Provenance {
 	readonly citation?: Citation;
 	/** What the publisher advises of its weights, as the map says. */
 	readonly weighting?: WeightingAdvice;
-	/** The variables (URNs) the map reads a column into. */
-	readonly reads: readonly string[];
+	/** The variables (URNs) the map reads a column into; none without a map, which reads any. */
+	readonly reads?: readonly string[];
 	/** SHA-256 (hex) of the whole DataSet in its canonical form (`canonicalForm`). */
 	readonly fingerprint: string;
 	readonly source: FileDigest;
-	/** The map, and the DDI digest it names. */
-	readonly map: FileDigest & { readonly ddi?: string };
+	/** The map, and the DDI digest it names, where the source was read with one. */
+	readonly map?: FileDigest & { readonly ddi?: string };
+	/** Other files of the collection (a model's traces, its settings), cited by digest. */
+	readonly files?: readonly FileDigest[];
 	readonly ddi: FileDigest;
 	/** The DDI digests the source names of itself (a Qualtrics export's `qretools_ddi`). */
 	readonly claimed: readonly string[];
@@ -226,7 +229,7 @@ export function provenanceOf(
 		);
 	const id = (part: string): Identity =>
 		identity(d.agency, `${d.base}.${part}`);
-	const reads = new Set(p.reads);
+	const reads = p.reads && new Set(p.reads);
 	const group = (part: string, description: string, urns: readonly string[]) =>
 		item("VariableGroup", id(part), {
 			VariableGroupName: [intl(part)],
@@ -239,15 +242,20 @@ export function provenanceOf(
 			"The variables the dataset holds at least one value of, its own included.",
 			sorted(d.present),
 		),
-		group(
-			"not-in-source",
-			"The instrument's variables the map reads no column into: the source doesn't hold them. Not missing answers.",
-			sorted(
-				all
-					.filter((it) => it.type === "Variable" && !reads.has(it.urn))
-					.map((it) => it.urn),
-			),
-		),
+		// Without a map, a variable with no value can't be told from one nobody answered.
+		...(reads === undefined
+			? []
+			: [
+					group(
+						"not-in-source",
+						"The instrument's variables the map reads no column into: the source doesn't hold them. Not missing answers.",
+						sorted(
+							all
+								.filter((it) => it.type === "Variable" && !reads.has(it.urn))
+								.map((it) => it.urn),
+						),
+					),
+				]),
 		...(d.metadata.length === 0
 			? []
 			: [
@@ -258,38 +266,43 @@ export function provenanceOf(
 					),
 				]),
 	];
-	const ddi = item(
-		"OtherMaterial",
-		id("ddi"),
-		obj({
-			TypeOfMaterial: { StringValue: "instrument DDI" },
-			Citation: { Title: intl(p.ddi.name) },
-			UserID: [
-				{ StringValue: p.ddi.sha256, TypeOfUserID: { StringValue: "SHA-256" } },
-			],
-			SizeInBytes: p.ddi.size,
-			Relationship: [
-				{
-					RelatedToReference_Versionable: refTo("Instrument", instrument.urn),
-					TypeOfRelationship: { StringValue: "describes" },
-				},
-			],
-		}),
-	);
-	const map = item(
-		"OtherMaterial",
-		id("map"),
-		obj({
-			TypeOfMaterial: { StringValue: "column map" },
-			Citation: { Title: intl(p.map.name) },
-			UserID: [
-				{ StringValue: p.map.sha256, TypeOfUserID: { StringValue: "SHA-256" } },
-			],
-			SizeInBytes: p.map.size,
+	// A file the dataset was made from, by its digest and size.
+	const material = (
+		part: string,
+		type: string,
+		f: FileDigest,
+		more: Readonly<Record<string, Json | undefined>> = {},
+	) =>
+		item(
+			"OtherMaterial",
+			id(part),
+			obj({
+				TypeOfMaterial: { StringValue: type },
+				Citation: { Title: intl(f.name) },
+				UserID: [
+					{ StringValue: f.sha256, TypeOfUserID: { StringValue: "SHA-256" } },
+				],
+				SizeInBytes: f.size,
+				...more,
+			}),
+		);
+	const ddi = material("ddi", "instrument DDI", p.ddi, {
+		Relationship: [
+			{
+				RelatedToReference_Versionable: refTo("Instrument", instrument.urn),
+				TypeOfRelationship: { StringValue: "describes" },
+			},
+		],
+	});
+	const map =
+		p.map &&
+		material("map", "column map", p.map, {
 			// The DDI digest the map names, which may not be the DDI given's.
 			UserAttributePair:
 				p.map.ddi === undefined ? undefined : [pair("ddi", p.map.ddi)],
-		}),
+		});
+	const files = (p.files ?? []).map((f, i) =>
+		material(`file-${i + 1}`, "supporting file", f),
 	);
 	const source = item(
 		"PhysicalInstance",
@@ -328,7 +341,12 @@ export function provenanceOf(
 		p.facts.software === undefined
 			? undefined
 			: item("Methodology", id("methodology"), {
-					DataCollectionSoftware: [{ SoftwareName: [intl(p.facts.software)] }],
+					DataCollectionSoftware: [
+						obj({
+							SoftwareName: [intl(p.facts.software.name)],
+							SoftwareVersion: p.facts.software.version,
+						}),
+					],
 				});
 	const advice = p.weighting;
 	const adviceMaterial =
@@ -421,7 +439,9 @@ export function provenanceOf(
 		Citation: { Title: intl(d.name) },
 		DataCollectionReference: [ref(collection)],
 		PhysicalInstanceReference: [ref(data), ref(source)],
-		RelatedOtherMaterialReference: [ref(map), ref(ddi)],
+		RelatedOtherMaterialReference: [...(map ? [map] : []), ddi, ...files].map(
+			ref,
+		),
 	});
 	return ok([
 		study,
@@ -432,8 +452,9 @@ export function provenanceOf(
 		),
 		data,
 		source,
-		map,
+		...(map ? [map] : []),
 		ddi,
+		...files,
 		...groups,
 	]);
 }
