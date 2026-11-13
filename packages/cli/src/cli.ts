@@ -177,7 +177,7 @@ const USAGE = `Usage:
                                     export matched to one of the DDI's by its ImportId, export tag or text, each
                                     guess a finding. Reads the export's header rows and qretools_* fields, never
                                     an answer. Not written if an answer column matches no question
-  qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [--ddi file | owner/repo@tag:name]
+  qretools responses <export.csv> --map <name>-ddi-qsf.columns.json [--ddi file | https-url | owner/repo@tag:name]
                     [--asked-by term] [--answered-by term] [-o dataset.json]
                                     Read a Qualtrics response export (CSV, export values, multi-value
                                     fields split into columns) into a dataset: DDI-Lifecycle 4.0 JSON
