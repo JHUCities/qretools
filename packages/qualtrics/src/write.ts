@@ -741,6 +741,7 @@ export function writeQsf(
 	const qsf = toQsf(nodes, instrument, options);
 	// The map's header: what the survey's own `qretools_*` fields say, so the two agree.
 	const columns: ColumnMap = {
+		source: "qsf",
 		...(options.version !== undefined && { qretools: options.version }),
 		...(read.urn !== undefined && { instrument: read.urn }),
 		...(options.digest !== undefined && { ddi: options.digest }),

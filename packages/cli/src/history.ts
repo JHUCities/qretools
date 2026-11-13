@@ -13,10 +13,15 @@ import {
 	ROOT,
 	readsInWorkspace,
 	type Snapshot,
+	WORKSPACE,
 } from "@qretools/core";
 import { isNoGit, noGit } from "./git.ts";
 
 const run = promisify(execFile);
+
+const MAPS = `${WORKSPACE.maps}/`;
+/** A map is JSON at the top of `maps/`; anything else there isn't read. */
+const MAP = new RegExp(`^${MAPS}[^/]+\\.json$`);
 
 export type HistoryRead =
 	| {
@@ -24,6 +29,8 @@ export type HistoryRead =
 			/** The workspace's files at HEAD, by path in it, as `readWorkspace` gives them. */
 			readonly files: Readonly<Record<string, string>>;
 			readonly history: History;
+			/** The column maps at HEAD, `maps/*.json`, by file name: copied by `build`, never versioned. */
+			readonly maps: Readonly<Record<string, string>>;
 			/** Whether the folder has changes not committed, which the build leaves out. */
 			readonly uncommitted: boolean;
 	  }
@@ -70,6 +77,7 @@ async function blobsAt(
 	top: string,
 	commit: string,
 	prefix: string,
+	keep: (path: string) => boolean = readsInWorkspace,
 ): Promise<Record<string, string>> {
 	const listed = await git(
 		top,
@@ -87,8 +95,7 @@ async function blobsAt(
 		if (tab < 0) continue;
 		const [, type, sha] = entry.slice(0, tab).split(" ");
 		const path = entry.slice(tab + 1).slice(prefix.length);
-		if (type === "blob" && sha !== undefined && readsInWorkspace(path))
-			blobs[path] = sha;
+		if (type === "blob" && sha !== undefined && keep(path)) blobs[path] = sha;
 	}
 	return blobs;
 }
@@ -149,10 +156,11 @@ export async function readHistory(dir: string): Promise<HistoryRead> {
 	for (const { sha, date } of commits)
 		snapshots.push({ date, blobs: await blobsAt(top, sha, prefix) });
 	const head = await blobsAt(top, "HEAD", prefix);
+	const maps = await blobsAt(top, "HEAD", prefix, (p) => MAP.test(p));
 	// Text for every file at HEAD, and in history for what its version depends on: each
 	// question's (what it names), each instrument's (the tags it pins) and each
 	// workspace.yaml's (the commits it locks them at).
-	const wanted = new Set(Object.values(head));
+	const wanted = new Set([...Object.values(head), ...Object.values(maps)]);
 	for (const { blobs } of snapshots)
 		for (const [path, blob] of Object.entries(blobs))
 			if (
@@ -170,6 +178,13 @@ export async function readHistory(dir: string): Promise<HistoryRead> {
 		kind: "read",
 		files,
 		history: { snapshots, texts },
+		// shortcut: read as text with CRLF made LF, as every file is; byte-exact copies would need the raw blob.
+		maps: Object.fromEntries(
+			Object.entries(maps).map(([path, blob]) => [
+				path.slice(MAPS.length),
+				texts[blob] ?? "",
+			]),
+		),
 		uncommitted: status.trim() !== "",
 	};
 }

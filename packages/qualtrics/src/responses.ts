@@ -37,11 +37,11 @@ export type ExportCode =
 export type ExportFinding = ResponseFinding<ExportCode>;
 
 /** A column's key: its ImportId and, for a select-all option, its choiceId. */
-const keyOf = (importId: string, choice: string | undefined): string =>
+export const keyOf = (importId: string, choice: string | undefined): string =>
 	`${importId}\u0000${choice ?? ""}`;
 
 /** A row-3 cell's ImportId and choiceId, or undefined where it isn't that JSON. */
-function importIdOf(
+export function importIdOf(
 	cell: string,
 ): { readonly importId: string; readonly choice?: string } | undefined {
 	let json: unknown;
@@ -68,7 +68,7 @@ function importIdOf(
  * with the round (`1_QID6_TEXT`), each at its row.
  */
 // shortcut: the looped ImportId form `<round>_<importId>` follows the columns' names; it is unmeasured in a real Loop & Merge export. Check it against one.
-const expand = (
+export const expand = (
 	c: Column,
 ): readonly { readonly importId: string; readonly row?: number }[] =>
 	c.rounds === undefined
@@ -361,12 +361,16 @@ export function exportMap(
 /** A QSF column map read from its JSON, once, or undefined where it isn't one. */
 export function columnMapOf(json: unknown): ColumnMap | undefined {
 	if (typeof json !== "object" || json === null) return undefined;
-	const { qretools, instrument, ddi, columns } = json as Record<
-		string,
-		unknown
-	>;
+	const { source, qretools, instrument, ddi, release, columns } =
+		json as Record<string, unknown>;
+	if (source !== "qsf") return undefined;
 	const optional = (v: unknown) => v === undefined || typeof v === "string";
-	if (!optional(qretools) || !optional(instrument) || !optional(ddi))
+	if (
+		!optional(qretools) ||
+		!optional(instrument) ||
+		!optional(ddi) ||
+		!optional(release)
+	)
 		return undefined;
 	if (!Array.isArray(columns)) return undefined;
 	const read: Column[] = [];
@@ -405,9 +409,11 @@ export function columnMapOf(json: unknown): ColumnMap | undefined {
 		});
 	}
 	return {
+		source,
 		...(typeof qretools === "string" && { qretools }),
 		...(typeof instrument === "string" && { instrument }),
 		...(typeof ddi === "string" && { ddi }),
+		...(typeof release === "string" && { release }),
 		columns: read,
 	};
 }
