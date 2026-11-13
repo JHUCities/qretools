@@ -599,8 +599,9 @@ The variables of the dataset (`respondent`, `start`, `end` and the `metadata` co
 a map) are not questions. They can identify a respondent. Thus, they are at the most
 closed level of each policy. Below that level:
 
-- The CSV view numbers the respondents from 1, in the order of their identifiers, and
-  does not show the identifiers.
+- The CSV view numbers the respondents from 1 and does not show the identifiers. The
+  order of the numbers is the order of the SHA-256 digests of the identifiers, not the
+  order of the identifiers. The same dataset always gives the same numbers.
 - The provenance view does not show the dates of the collection.
 
 A map can give a `metadata` column a level with `access`, for example `"access": "public"`
