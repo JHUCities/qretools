@@ -5,7 +5,12 @@ import { ddiIndexOf } from "../ddi/read.ts";
 import { bankOf } from "../evaluate.ts";
 import { instrumentOf } from "../instrument/instrument.ts";
 import { Next, NextState, nextStep } from "../instrument/next.ts";
-import { readInstruments } from "../instrument/read.ts";
+import {
+	type Condition,
+	type Parsed,
+	readInstruments,
+	type Step,
+} from "../instrument/read.ts";
 import { readWorkspace } from "./index.ts";
 
 const root = fileURLToPath(
@@ -223,7 +228,14 @@ describe("the next step through the households instrument", () => {
 		// A number's missing code is taken, and has no value: the roster has no rows.
 		expect(sized("-8")).toMatchObject({
 			question: "tenure",
-			notes: [expect.stringMatching(/count has no value, so it has no rows/)],
+			notes: [
+				{
+					code: "next-no-count",
+					message: expect.stringMatching(
+						/count has no value, so it has no rows/,
+					),
+				},
+			],
 		});
 	});
 
@@ -356,5 +368,47 @@ flow:
 				flow,
 			),
 		).toMatchObject({ question: "comments" });
+	});
+});
+
+describe("a note's code", () => {
+	const at = (id: string) => ({ id, urn: `urn:ddi:org.example:${id}:1` });
+	const number = (n: number): Parsed => ({
+		kind: "parsed",
+		command: { text: String(n) },
+		expr: { kind: "number", value: n, text: String(n), range: [0, 1] },
+		sources: new Map(),
+	});
+	const verbatim: Condition = {
+		kind: "verbatim",
+		command: { text: "x > 1", language: "other" },
+	};
+	const asked = households.instrument.flow.find((s) => s.kind === "ask");
+	if (asked === undefined) throw new Error("no ask in the fixture");
+	const codesOf = (...flow: Step[]) => {
+		const r = nextStep({ ...at("i"), flow }, [], NextState.parse({}));
+		if (!r.ok) throw new Error(r.error);
+		return r.value.notes.map((n) => n.code);
+	};
+	it.each<[string, Step]>([
+		[
+			"next-section-order",
+			{ ...at("s"), kind: "section", order: "Random", flow: [] },
+		],
+		[
+			"next-verbatim",
+			{ ...at("f"), kind: "stop", cond: verbatim, say: [], else: [] },
+		],
+		["next-unrecorded", { ...asked, records: [] }],
+		[
+			"next-loop-skipped",
+			{ ...at("l"), kind: "loop", construct: "Loop", cond: verbatim, flow: [] },
+		],
+		[
+			"next-roster-cap",
+			{ ...at("c"), kind: "count", count: number(150), flow: [] },
+		],
+	])("is %s", (code, step) => {
+		expect(codesOf(step)).toEqual([code]);
 	});
 });

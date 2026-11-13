@@ -499,7 +499,10 @@ async function writeNext(
 	// What the reader couldn't read is missing from the route: say so where the caller reads.
 	const unread = read.findings
 		.filter((f) => f.severity === "error")
-		.map((f) => (f.path === "" ? f.message : `${f.path}: ${f.message}`));
+		.map((f) => ({
+			code: f.code,
+			message: f.path === "" ? f.message : `${f.path}: ${f.message}`,
+		}));
 	const out = { ...reply.value, notes: [...unread, ...reply.value.notes] };
 	io.out(`${JSON.stringify(out, null, 2)}\n`);
 	return OK;

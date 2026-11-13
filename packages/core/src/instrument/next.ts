@@ -94,12 +94,31 @@ const InputDomain = z.discriminatedUnion("kind", [
 	z.object({ kind: z.literal("other") }),
 ]);
 
+/** The kinds of note `nextStep` gives: stable, for a caller to switch on. */
+const NOTE_CODES = [
+	"next-verbatim",
+	"next-undecided",
+	"next-empty-fill",
+	"next-unrecorded",
+	"next-section-order",
+	"next-no-count",
+	"next-roster-cap",
+	"next-loop-skipped",
+] as const;
+type NoteCode = (typeof NOTE_CODES)[number];
+
 /** What was said since the last answer, and why the route so far may not be what the DDI means. */
 const Along = {
 	/** The statements shown since the last question answered, in order. */
 	statements: z.array(z.string()),
 	/** What the route so far couldn't follow as the DDI says (a condition it can't evaluate, a fill with no value). */
-	notes: z.array(z.string()),
+	notes: z.array(
+		z
+			.object({ code: z.string(), message: z.string() })
+			.describe(
+				`A note: \`code\` names its kind (${NOTE_CODES.join(", ")}, or a DDI reader finding's code such as ddi-unread). Later versions may add codes: take one you don't know as information.`,
+			),
+	),
 };
 
 /** What `next` replies. */
@@ -317,9 +336,10 @@ export function nextStep(
 
 	type Rows = readonly { readonly loop: string; readonly row: number }[];
 	const held = new Map<string, Held>();
-	const notes: string[] = [];
-	const note = (n: string) => {
-		if (!notes.includes(n)) notes.push(n);
+	const notes: { code: NoteCode; message: string }[] = [];
+	const note = (code: NoteCode, message: string) => {
+		if (!notes.some((n) => n.code === code && n.message === message))
+			notes.push({ code, message });
 	};
 	let statements: string[] = [];
 	let reply: Next | undefined;
@@ -346,6 +366,7 @@ export function nextStep(
 	const value = (c: Condition, rows: Rows): Value => {
 		if (c.kind === "verbatim") {
 			note(
+				"next-verbatim",
 				`\`${c.command.text}\` can't be evaluated here, so it was taken as not true.`,
 			);
 			return null;
@@ -366,6 +387,7 @@ export function nextStep(
 		}
 		if (v === UNKNOWN)
 			note(
+				"next-undecided",
 				`\`${c.command.text}\` can't be decided here, so it was taken as not true.`,
 			);
 		return v;
@@ -390,6 +412,7 @@ export function nextStep(
 					// An input not sent yet is asked for, not noted.
 					if (wanted !== undefined) return "";
 					note(
+						"next-empty-fill",
 						`The fill \`${name}\` has no value, so nothing is shown in its place.`,
 					);
 					return "";
@@ -474,6 +497,7 @@ export function nextStep(
 		if (first === undefined) {
 			// Nothing names its answer, so it can't be answered by a variable.
 			note(
+				"next-unrecorded",
 				`Question \`${s.question.name}\` records no variable, so it was skipped.`,
 			);
 			return undefined;
@@ -557,6 +581,7 @@ export function nextStep(
 				// shortcut: no randomness in the core, so a shuffled section runs in its written order; take an order in the state if a survey needs one.
 				if (s.order !== undefined)
 					note(
+						"next-section-order",
 						`Section \`${s.label ?? s.name ?? s.id}\` is in ${s.order} order in the DDI; it runs in its written order here.`,
 					);
 				return go(s.flow, rows);
@@ -567,12 +592,18 @@ export function nextStep(
 				const cap = Math.min(s.max ?? MAX_ROWS, MAX_ROWS);
 				const name = s.name ?? s.id;
 				if (n === null)
-					note(`Roster \`${name}\`'s count has no value, so it has no rows.`);
+					note(
+						"next-no-count",
+						`Roster \`${name}\`'s count has no value, so it has no rows.`,
+					);
 				if (
 					typeof n === "number" &&
 					Math.min(Math.floor(n), s.max ?? Infinity) > MAX_ROWS
 				)
-					note(`Roster \`${name}\` stops at ${MAX_ROWS} rows here.`);
+					note(
+						"next-roster-cap",
+						`Roster \`${name}\` stops at ${MAX_ROWS} rows here.`,
+					);
 				const count = typeof n === "number" ? Math.min(Math.floor(n), cap) : 0;
 				for (let r = 1; r <= count; r++) {
 					const went = go(s.flow, [...rows, { loop: s.id, row: r }]);
@@ -591,6 +622,7 @@ export function nextStep(
 					if (!more) break;
 					if (r === MAX_ROWS && s.max > MAX_ROWS)
 						note(
+							"next-roster-cap",
 							`Roster \`${s.name ?? s.id}\` stops at ${MAX_ROWS} rows here.`,
 						);
 				}
@@ -598,6 +630,7 @@ export function nextStep(
 			}
 			case "loop":
 				note(
+					"next-loop-skipped",
 					`A loop this can't run (${s.construct}: ${s.cond.command.text}) was skipped, so its questions are never asked.`,
 				);
 				return undefined;
