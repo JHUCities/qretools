@@ -17,11 +17,10 @@ import { parseArgs } from "node:util";
 import { codebookOf, pageOf, parse as readDdi } from "@qretools/codebook";
 import {
 	type Address,
-	accessPoliciesOf,
+	accessOf,
 	addressOf,
 	agencyWritten,
 	answersCsv,
-	answersOf,
 	type Bank,
 	type BankScope,
 	bankOf,
@@ -44,7 +43,6 @@ import {
 	type FilterRefusal,
 	type Finding,
 	factsOf,
-	filterAnswers,
 	HERE,
 	type Host,
 	type Item,
@@ -75,6 +73,7 @@ import {
 	readDataset,
 	readInstruments,
 	readResponses,
+	recordedDdiOf,
 	releaseFindings,
 	remoteScope,
 	remotesOf,
@@ -189,19 +188,16 @@ const USAGE = `Usage:
                                     Read a data file (CSV, one header row) the same way, with a map
                                     that names each column by its header, with its DDI variable and
                                     any translations of its values. Every row is read
-  qretools dataset export <dataset.json> --csv | --provenance [-o file]
+  qretools dataset export <dataset.json> --csv | --provenance --ddi <file.json> [--access <level>] [-o file]
                                     Write a view of a dataset: --csv its values as long CSV, one line
                                     per value: respondent,variable,row,value, each variable by its DDI
-                                    URN; --provenance the dataset without its values
-  qretools filter <answers.csv> --ddi <file.json> --access <level> [-o file]
-                                    Keep the answers (long CSV, as \`dataset export --csv\` writes it) to
-                                    variables at that access level or a more open one, each by the
-                                    access policy of its own workspace, as the DDI gives it; name each
-                                    variable removed on stderr, never a value. Refused, with nothing
-                                    written, when a variable's level can't be traced to its policy, or
-                                    the DDI has no levels
-  qretools filter --ddi <file.json> List each access policy in the DDI: its levels, most open first,
-                                    and how many variables stand at each
+                                    URN; --provenance the dataset without its values. --ddi is the DDI
+                                    the dataset was made from (checked by its digest). If it defines
+                                    access levels, --access is required: the view leaves out each
+                                    variable above that level, by the access policy of its own
+                                    workspace, and names each one on stderr, never a value. The
+                                    dataset's own variables (respondent, start, end) stand at the most
+                                    closed level; below it, the CSV numbers the respondents from 1
   qretools instrument check <file> [--agency <agency>] [--bank alias=dir]... [--strict]
   qretools instrument export <file> [--agency <agency>] [--bank alias=dir]... [--qsf] [-o file]
 
@@ -221,15 +217,15 @@ moves after that, check warns until the next export records it again.
 --agency  the instrument's DDI agency, in place of its workspace's (workspace.yaml).
           Needed for a file outside a workspace's instruments/.
 --ddi     the DDI a column map was made from (a file or a tag reference), in place of
-          <name>.json beside the map or the release the map names; for filter, the DDI the
-          answers refer to; for qsf-map --export, the DDI to map to.
+          <name>.json beside the map or the release the map names; for qsf-map --export,
+          the DDI to map to; for dataset export, the DDI the dataset was made from.
 --export  for qsf-map, the Qualtrics response export to make the map from.
 
 Tag references: owner/repo[/folder]@tag:name names the instrument \`name\` in a release
 of a workspace (a tag made with \`build --tag-message\`). The command reads the tag with
 git, rebuilds the instrument's DDI, and uses it only if its digest is the one the release
 recorded. If not, it names the version of qretools that built the release.
---access  for filter, the access level to keep, with every more open one.
+--access  for dataset export, the access level to keep, with every more open one.
 --asked-by     for responses, how the respondents were asked, as a term of DDI's
                ModeOfCollection vocabulary (Interview.FaceToFace, say). Refused where the
                source says it.
@@ -278,7 +274,6 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 		command !== "paths" &&
 		command !== "next" &&
 		command !== "responses" &&
-		command !== "filter" &&
 		command !== "qsf-map"
 	) {
 		io.err(`Unknown command \`${command}\`.\n${USAGE}\n`);
@@ -291,11 +286,10 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 			: command !== "qsf-map" && args.values.export !== undefined
 				? "--export"
 				: command !== "responses" &&
-						command !== "filter" &&
 						command !== "qsf-map" &&
 						args.values.ddi !== undefined
 					? "--ddi"
-					: command !== "filter" && args.values.access !== undefined
+					: args.values.access !== undefined
 						? "--access"
 						: args.values.csv === true
 							? "--csv"
@@ -357,19 +351,6 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
 					answered_by: args.values["answered-by"],
 				}),
 			},
-			io,
-		);
-	}
-	if (command === "filter") {
-		if (args.values.ddi === undefined) {
-			io.err(`${USAGE}\n`);
-			return USAGE_ERROR;
-		}
-		return writeFiltered(
-			args.positionals[1],
-			args.values.ddi,
-			args.values.access,
-			args.values.output,
 			io,
 		);
 	}
@@ -1079,16 +1060,19 @@ async function writeResponses(
 }
 
 /**
- * `dataset export <dataset.json> --csv | --provenance`: a view of a dataset `responses`
- * wrote. `--csv` is its values as long CSV; `--provenance` is the document without its
- * values, which says where they came from.
+ * `dataset export <dataset.json> --csv | --provenance --ddi <file> [--access <level>]`: a
+ * view of a dataset `responses` wrote. `--csv` is its values as long CSV; `--provenance`
+ * is the document without its values, which says where they came from. Each variable's
+ * access level is the instrument DDI's, so `--ddi` must be the DDI the dataset records
+ * (by digest); where it declares levels, `--access` is required and the view holds only
+ * what that level may see (`accessOf`). Names each variable removed, never a value.
  */
 async function dataset(
 	args: ReturnType<typeof parse>,
 	io: Io,
 ): Promise<number> {
 	const [, command, file, ...extra] = args.positionals;
-	const { output, csv, provenance, help, ...others } = args.values;
+	const { output, csv, provenance, ddi, access, help, ...others } = args.values;
 	const stray = Object.keys(others).find(
 		(k) => others[k as keyof typeof others] !== undefined,
 	);
@@ -1099,6 +1083,7 @@ async function dataset(
 	if (
 		command !== "export" ||
 		file === undefined ||
+		ddi === undefined ||
 		extra.length > 0 ||
 		(csv === true) === (provenance === true) ||
 		help
@@ -1106,120 +1091,70 @@ async function dataset(
 		(help ? io.out : io.err)(`${USAGE}\n`);
 		return help ? OK : USAGE_ERROR;
 	}
-	let text: string;
-	try {
-		text = await readFile(file, "utf8");
-	} catch (e) {
-		io.err(
-			`Can't read ${file}: ${e instanceof Error ? e.message : String(e)}\n`,
-		);
-		return USAGE_ERROR;
-	}
-	const json = jsonOf(text);
-	const read = json.ok ? readDataset(json.value) : undefined;
-	if (!json.ok || read?.ok !== true) {
-		io.err(
-			`${file}: error: ${read?.ok === false ? read.error : "this isn't JSON."} [dataset-unreadable]\n`,
-		);
-		return PROBLEMS;
-	}
-	return emit(
-		{
-			text: csv ? csvView(read.value) : ddiText(provenanceView(json.value)),
-			lines: [],
-			problems: false,
-		},
-		output,
-		io,
-	);
-}
-
-/**
- * Answers (long CSV, as `dataset export --csv` writes them) filtered to an access level and every
- * more open one of each variable's own policy, by the DDI alone (`filterAnswers`);
- * without a level, each policy the DDI holds, its URN then its levels, most open first,
- * each with how many variables stand at it. Says which variables it removed, never a
- * value. Refused, with nothing written, whenever a level can't be told (`FilterRefusal`).
- */
-async function writeFiltered(
-	file: string | undefined,
-	ddiFile: string,
-	level: string | undefined,
-	output: string | undefined,
-	io: Io,
-): Promise<number> {
-	if (level !== undefined && file === undefined) {
-		io.err(`${USAGE}\n`);
-		return USAGE_ERROR;
-	}
-	const texts: string[] = [];
-	for (const f of level === undefined ? [ddiFile] : [ddiFile, file ?? ""])
+	const read: Buffer[] = [];
+	for (const f of [file, ddi])
 		try {
-			texts.push(await readFile(f, "utf8"));
+			read.push(await readFile(f));
 		} catch (e) {
 			io.err(
 				`Can't read ${f}: ${e instanceof Error ? e.message : String(e)}\n`,
 			);
 			return USAGE_ERROR;
 		}
-	const [ddiText = "", csv = ""] = texts;
-	const ddiJson = jsonOf(ddiText);
-	const read = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
-	if (read?.ok !== true) {
+	const [text = Buffer.alloc(0), ddiBytes = Buffer.alloc(0)] = read;
+	const json = jsonOf(text.toString("utf8"));
+	const got = json.ok ? readDataset(json.value) : undefined;
+	if (!json.ok || got?.ok !== true) {
 		io.err(
-			`${ddiFile}: error: this isn't DDI-Lifecycle 4.0 JSON. [filter-unreadable]\n`,
+			`${file}: error: ${got?.ok === false ? got.error : "this isn't JSON."} [dataset-unreadable]\n`,
 		);
 		return PROBLEMS;
 	}
-	const index = read.value;
-	const refuse = (lines: readonly string[]) => {
-		for (const l of lines) io.err(`${l} Nothing is written.\n`);
+	// Levels read from another DDI than the dataset's could let a value through.
+	if (
+		recordedDdiOf(json.value, got.value) !==
+		createHash("sha256").update(ddiBytes).digest("hex")
+	) {
+		io.err(
+			`${ddi}: error: this isn't the DDI the dataset was made from (its digest differs), so its access levels can't be trusted. Nothing is written. [dataset-ddi]\n`,
+		);
 		return PROBLEMS;
-	};
-	if (level === undefined) {
-		const listed = accessPoliciesOf(index);
-		if (!listed.ok)
-			return refuse(filterRefusal(listed.error, ddiFile, ddiFile));
-		const { policies, untraced } = listed.value;
-		if (policies.length === 0)
-			io.err(
-				`${ddiFile}: note: this DDI defines no access levels. [filter-no-levels]\n`,
-			);
-		for (const p of policies) {
-			io.out(`${p.urn}\n`);
-			p.levels.forEach((l, i) => {
-				io.out(`  ${l} ${p.counts[i] ?? 0}\n`);
-			});
-		}
-		if (untraced.length > 0)
-			io.err(
-				`${ddiFile}: warning: ${untraced.length} variables have no access level that can be traced to a policy, so \`filter\` refuses their answers. [filter-untraced]\n`,
-			);
-		return OK;
 	}
-	const answers = answersOf(csv);
-	if (!answers.ok)
-		return refuse([
-			`${file}${answers.error.line === undefined ? "" : `:${answers.error.line}`}: error: ${answers.error.message} [filter-unreadable]`,
-		]);
-	const filtered = filterAnswers(index, answers.value, level);
-	if (!filtered.ok)
-		return refuse(filterRefusal(filtered.error, ddiFile, file ?? ""));
+	const ddiJson = jsonOf(ddiBytes.toString("utf8"));
+	const index = ddiJson.ok ? readDdi(ddiJson.value) : undefined;
+	if (index?.ok !== true) {
+		io.err(
+			`${ddi}: error: this isn't DDI-Lifecycle 4.0 JSON. [dataset-unreadable]\n`,
+		);
+		return PROBLEMS;
+	}
+	const level = accessOf(index.value, got.value, access);
+	if (!level.ok) {
+		for (const l of accessRefusal(level.error, ddi, file))
+			io.err(`${l} Nothing is written.\n`);
+		return PROBLEMS;
+	}
 	const code = await emit(
-		{ text: answersCsv(filtered.value.kept), lines: [], problems: false },
+		{
+			text: csv
+				? csvView(got.value, level.value)
+				: ddiText(provenanceView(json.value, level.value)),
+			lines: [],
+			problems: false,
+		},
 		output,
 		io,
 	);
-	// Said once the answers are written: a write that fails has removed nothing.
-	for (const r of filtered.value.removed)
+	// Said once the view is written: a write that fails has removed nothing.
+	for (const r of level.value?.removed ?? [])
 		io.err(
-			`${file}: note: removed \`${r.name}\` (${r.urn}), at \`${r.level}\`. [filter-removed]\n`,
+			`${file}: note: removed \`${r.name}\` (${r.urn}), at \`${r.level}\`. [dataset-access-removed]\n`,
 		);
 	return code;
 }
 
-/** Why answers weren't filtered, a line each, as `check` writes findings: URNs and levels, never a value. */
-function filterRefusal(
+/** Why a view wasn't written at a level, a line each, as `check` writes findings: URNs and levels, never a value. */
+function accessRefusal(
 	r: FilterRefusal,
 	ddiFile: string,
 	file: string,
@@ -1228,31 +1163,36 @@ function filterRefusal(
 	switch (r.kind) {
 		case "unreadable-levels":
 			return [
-				`${ddiFile}: error: The DDI's access levels can't be read: ${r.reason}. [filter-levels]`,
+				`${ddiFile}: error: The DDI's access levels can't be read: ${r.reason}. [dataset-access-levels]`,
 			];
 		case "unknown-level":
 			return r.policies.map(
 				(p) =>
-					`${ddiFile}: error: The access policy ${p.urn} has no level \`${r.level}\`. Its levels are ${named(p.levels)}, most open first. [filter-unknown-level]`,
+					`${ddiFile}: error: The access policy ${p.urn} has no level \`${r.level}\`. Its levels are ${named(p.levels)}, most open first. [dataset-access-unknown-level]`,
 			);
 		case "no-levels":
 			return [
-				`${ddiFile}: error: This DDI defines no access levels, so \`--access\` means nothing here. [filter-no-levels]`,
+				`${ddiFile}: error: This DDI defines no access levels, so \`--access\` means nothing here. [dataset-access-no-levels]`,
 			];
+		case "level-required":
+			return r.policies.map(
+				(p) =>
+					`${ddiFile}: error: This DDI defines access levels, so give \`--access <level>\`. The access policy ${p.urn} has the levels ${named(p.levels)}, most open first. [dataset-access-level-required]`,
+			);
 		case "unknown-variables":
 			return r.urns.map(
 				(u) =>
-					`${file}: error: The DDI has no variable \`${u}\`, so its access level isn't known. [filter-unknown-variable]`,
+					`${file}: error: The DDI has no variable \`${u}\`, so its access level isn't known. [dataset-access-unknown-variable]`,
 			);
 		case "untraced":
 			return r.urns.map(
 				(u) =>
-					`${ddiFile}: error: The access level of \`${u}\` can't be traced to one access policy in the DDI. [filter-untraced]`,
+					`${ddiFile}: error: The access level of \`${u}\` can't be traced to one access policy in the DDI. [dataset-access-untraced]`,
 			);
 		case "leak":
 			return r.urns.map(
 				(u) =>
-					`${file}: error: Answers to \`${u}\`, above the level, remained after filtering: a bug in QREtools. [filter-leak]`,
+					`${file}: error: Values of \`${u}\`, above the level, remained after filtering: a bug in QREtools. [dataset-access-leak]`,
 			);
 		default:
 			return r satisfies never;

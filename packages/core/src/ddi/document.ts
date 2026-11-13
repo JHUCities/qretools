@@ -37,6 +37,7 @@ export type ItemType =
 	| "Methodology"
 	| "PhysicalInstance"
 	| "OtherMaterial"
+	| "InformationClassification"
 	| "VariableGroup";
 
 export interface Identity {

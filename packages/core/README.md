@@ -162,8 +162,9 @@ The levels in their order are the access policy of the workspace. In the DDI:
   question, not the policy of the instrument.
 - When the levels of a workspace change, the version of each of its questions changes.
 - A level is a mark in the DDI. It does not remove data from an export. To remove the
-  answers above a level, use `filterAnswers(index, answers, level)` (the command
-  `qretools filter`). `accessPoliciesOf(index)` gives the policies and the number of
+  answers above a level, use `filterAnswers(index, answers, level)`. For a view of a
+  dataset at a level, use `accessOf(index, dataset, level)` (the command
+  `qretools dataset export --access`). `accessPoliciesOf(index)` gives the policies and the number of
   variables at each level. `aboveLevel(index, answers, level)` gives the variables of an
   answer set that a level must not see.
 

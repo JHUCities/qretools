@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import schemaText from "../ddi/ddi-lifecycle-4.0-beta4.schema.json?raw";
 import {
+	accessOf,
 	canonicalForm,
 	csvView,
 	type Dataset,
@@ -16,6 +17,8 @@ import {
 } from "./ddi/document.ts";
 import { ddiIndexOf, deref, type Indexed } from "./ddi/read.ts";
 import { makeValidator } from "./ddi/validate.ts";
+import { bankOf } from "./evaluate.ts";
+import { instrumentOf } from "./instrument/instrument.ts";
 import { factsOf, type Provenance } from "./provenance.ts";
 import { answersCsv } from "./responses.ts";
 
@@ -471,5 +474,141 @@ describe("the facts of a collection", () => {
 				{ fact: "answered_by", problem: "missing" },
 			],
 		});
+	});
+});
+
+describe("a view at an access level", () => {
+	const q = (name: string, rest = "") =>
+		`name: ${name}\ntext: ${name}?\nintent: i\nopen: {}\n${rest}`;
+	const instrument = (workspace: string, levels = true) =>
+		instrumentOf(
+			"name: t\nuses:\n  b: here\nflow:\n  - ask: b.tenure\n  - ask: b.why\n",
+			{
+				banks: {
+					b: bankOf({
+						"workspace.yaml": `agency: org.bank\n${workspace}`,
+						"questions/a/tenure.yaml": q(
+							"tenure",
+							levels ? "access: public\n" : "",
+						),
+						"questions/a/why.yaml": q(
+							"why",
+							levels ? "access: restricted\n" : "",
+						),
+					}),
+				},
+				agency: "org.example",
+			},
+		).ddi;
+	const LEVELED = ddiIndexOf(instrument("access: [public, restricted]\n"));
+	const d: Dataset = {
+		...DATASET,
+		answers: DATASET.answers.filter((a) => a.variable !== v("modes_b")),
+	};
+	const doc = datasetOf(d, { ...PROVENANCE, index: LEVELED });
+	if (!doc.ok) throw new Error(doc.error);
+	const at = (level: string | undefined) => {
+		const a = accessOf(LEVELED, d, level);
+		if (!a.ok || a.value === undefined) throw new Error("no access");
+		return a.value;
+	};
+
+	it("is required where the DDI declares levels, and refused where it declares none", () => {
+		expect(accessOf(LEVELED, d, undefined)).toMatchObject({
+			ok: false,
+			error: {
+				kind: "level-required",
+				policies: [{ levels: ["public", "restricted"] }],
+			},
+		});
+		const open = ddiIndexOf(instrument("", false));
+		expect(accessOf(open, d, undefined)).toEqual({
+			ok: true,
+			value: undefined,
+		});
+		expect(accessOf(open, d, "public")).toMatchObject({
+			ok: false,
+			error: { kind: "no-levels" },
+		});
+		expect(accessOf(LEVELED, d, "secret")).toMatchObject({
+			ok: false,
+			error: { kind: "unknown-level" },
+		});
+	});
+
+	it("removes the variables above it, the dataset's own at any but the most closed", () => {
+		const open = at("public");
+		expect(open.removed.map((r) => `${r.name} ${r.level}`)).toEqual([
+			"why restricted",
+			"respondent restricted",
+			"start restricted",
+			"end restricted",
+		]);
+		expect(open.owned).toBe(false);
+		// Respondents numbered in their own order, never named.
+		expect(csvView(d, open)).toBe(
+			answersCsv([
+				{ respondent: "1", variable: v("tenure"), value: "2" },
+				{ respondent: "2", variable: v("tenure"), value: "1" },
+			]),
+		);
+		const closed = at("restricted");
+		expect(closed).toMatchObject({ owned: true, removed: [] });
+		expect(csvView(d, closed)).toBe(csvView(d));
+	});
+
+	it("records the level and what it removed in the provenance view, and leaves no time", () => {
+		const view = provenanceView(
+			JSON.parse(JSON.stringify(doc.value)),
+			at("public"),
+		);
+		expect(validator.ok && validator.value(view)).toEqual([]);
+		const text = JSON.stringify(view);
+		expect(text).not.toMatch(/DataCollectionDate|2026-11-12T/);
+		expect(Object.values(view.InformationClassification ?? {})).toMatchObject([
+			{ LevelOfInformationClassification: { StringValue: "public" } },
+		]);
+		const group = (part: string) =>
+			(
+				view.VariableGroup?.[`org.example:dataset-wave1.${part}:1`]
+					?.VariableReference as { value: string[] }[] | undefined
+			)?.map((r) => r.value[1]);
+		expect(group("present")).toEqual(["instrument-t.var-tenure"]);
+		expect(group("removed-by-access")).toEqual([
+			"instrument-t.var-why",
+			"dataset-wave1.respondent",
+			"dataset-wave1.start",
+			"dataset-wave1.end",
+		]);
+		const data = view.PhysicalInstance?.["org.example:dataset-wave1.data:1"];
+		expect(JSON.stringify(data)).toContain("removed-by-access");
+		expect(data?.InformationClassificationReference).toEqual([
+			{
+				$type: "InformationClassification",
+				value: ["org.example", "dataset-wave1.access", "1"],
+			},
+		]);
+		// Every group and collection is filtered, not one found by its key: another version is no way out.
+		const moved = JSON.parse(JSON.stringify(doc.value));
+		moved.VariableGroup = Object.fromEntries(
+			Object.entries(moved.VariableGroup).map(([k, g]) => [
+				k.replace(/present:1$/, "present:2"),
+				g,
+			]),
+		);
+		moved.DataCollection = Object.fromEntries(
+			Object.entries(moved.DataCollection).map(([k, c]) => [
+				k.replace(/:1$/, ":2"),
+				c,
+			]),
+		);
+		const still = JSON.stringify(provenanceView(moved, at("public")));
+		expect(still).not.toMatch(/DataCollectionDate/);
+		expect(still.match(/instrument-t\.var-why/g)?.length).toBe(1); // only in removed-by-access
+		// At the most closed level the dataset's own variables and the dates stay.
+		const closed = JSON.stringify(
+			provenanceView(JSON.parse(JSON.stringify(doc.value)), at("restricted")),
+		);
+		expect(closed).toContain("DataCollectionDate");
 	});
 });

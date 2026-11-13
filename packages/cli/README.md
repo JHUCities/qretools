@@ -26,9 +26,8 @@ qretools responses export.csv --map maps/wave1-ddi-qsf.columns.json --ddi dist/i
 qretools next wave1.json state.json          # the next question of an interview, as JSON
 qretools responses data.csv --map wave1-ddi-release.columns.json --ddi wave1.json \
   --asked-by Interview.FaceToFace --answered-by ResearchData.Published -o release.json  # a data file, as a DDI dataset
-qretools dataset export wave1.json --csv     # a dataset's values, one line per value
-qretools dataset export wave1.json --provenance  # a dataset without its values: where they came from
-qretools filter answers.csv --ddi wave1.json --access public  # the answers a level can see
+qretools dataset export wave1-data.json --csv --ddi wave1.json     # a dataset's values, one line per value
+qretools dataset export wave1-data.json --provenance --ddi wave1.json --access public  # without its values, at a level
 ```
 
 A workspace is one folder: `workspace.yaml` (its settings), `questions/<folder>/`, the
@@ -508,20 +507,24 @@ asks. Thus, a data file can give "Don't know" (or another missing value) for an 
 
 ## Export a dataset
 
-`dataset export` writes a view of a dataset. Give `--csv` or `--provenance`.
+`dataset export` writes a view of a dataset. Give `--csv` or `--provenance`, and `--ddi`
+with the DDI that the dataset was made from. The command compares the SHA-256 digest of
+that file with the digest that the dataset records. If the digests are different, the
+command writes nothing (`dataset-ddi`). The command gets the access level of each
+variable from this DDI. See "Access levels" below.
 
 `--provenance` writes the dataset without its values: the `DataSet` item without its
 `ItemSet`, and the provenance. The output holds no value and no respondent. Thus, you can
 publish it. `dataset export --csv` refuses it, because it holds no values.
 
 ```sh
-qretools dataset export wave1-data.json --provenance -o wave1-provenance.json
+qretools dataset export wave1-data.json --provenance --ddi wave1.json --access public -o wave1-provenance.json
 ```
 
 `--csv` writes the values of a dataset as long CSV, for analysis tools:
 
 ```sh
-qretools dataset export wave1-data.json --csv -o wave1-answers.csv
+qretools dataset export wave1-data.json --csv --ddi wave1.json -o wave1-answers.csv
 ```
 
 ```csv
@@ -533,7 +536,8 @@ R_1,urn:ddi:org.example:instrument-wave1.var-tenure:3,,2
 To export a dataset, do these steps:
 
 1. Do the steps in "Read the responses" to get the dataset.
-2. Run `qretools dataset export <dataset.json> --csv -o <file.csv>`.
+2. Run `qretools dataset export <dataset.json> --csv --ddi <ddi.json> -o <file.csv>`. If
+   the DDI defines access levels, also give `--access <level>`.
 3. **Caution: do not write the output into `dist/` or into a folder that CI publishes.
    The output holds the responses.** Without `-o`, the command writes the CSV to stdout.
 
@@ -555,19 +559,14 @@ double click. A text answer can hold a formula, and a spreadsheet can run it.**
 If the file is not a dataset that `responses` wrote, the command refuses it
 (`dataset-unreadable`).
 
-## Filter the answers by access level
+### Access levels
 
-`filter` keeps the answers that a person at one access level can see. It reads the
-answers as `dataset export --csv` writes them, and the DDI that the answers refer to:
+The dataset holds all the values. The command never filters the dataset. It filters
+only the view:
 
-```sh
-qretools filter wave1-answers.csv --ddi dist/instruments/wave1.json --access public -o wave1-public.csv
-qretools filter --ddi dist/instruments/wave1.json   # list the access policies and their levels
-```
-
-The command keeps the answers to the variables at the level and at each more open level.
-It removes the other answers, by the URN of the variable. The output has the same form as
-the input. Thus, real answers and synthetic answers are filtered in the same way.
+- If the DDI defines access levels, you must give `--access <level>`. The view keeps the
+  values of the variables at that level and at each more open level.
+- If the DDI defines no access levels, the command refuses `--access`.
 
 The command uses only the DDI. A workspace that lists access levels has an access policy:
 its levels in their order. In the DDI, a policy is a code list. Its ID spells the levels,
@@ -577,42 +576,44 @@ of the level, and the URN of the policy of the workspace of the question. This a
 the most open level too. Thus, the level of a question from another workspace is always
 read against the policy of its own workspace, never against the policy of the instrument.
 
-The list of the policies shows each policy, then each level with the number of variables
-at that level:
+The variables of the dataset (`respondent`, `start` and `end`) are not questions. They
+can identify a respondent. Thus, they are at the most closed level of each policy. Below
+that level:
 
-```text
-urn:ddi:org.example:access-public-restricted.codes:1
-  public 12
-  restricted 3
-```
+- The CSV view numbers the respondents from 1, in the order of their identifiers, and
+  does not show the identifiers.
+- The provenance view does not show the dates of the collection.
 
-To filter answers, do these steps:
+The provenance view records the level (an `InformationClassification` item) and a
+`VariableGroup` named `removed-by-access` with the variables that it removed. The
+`present` group does not include them. The "data" fingerprint is not changed: it is the
+fingerprint of the full dataset.
 
-1. Run `qretools filter --ddi <file.json>` to see the policies and their levels.
-2. Run `qretools filter <answers.csv> --ddi <file.json> --access <level> -o <file>`.
-3. Read the notes on stderr. Each `filter-removed` note gives the name and the URN of one
-   variable that the command removed. A note never shows a value.
+To export a view at a level, do these steps:
 
-The answers and the DDI are one unit. If the command refuses one variable, it refuses all
-the answers. It writes nothing and exits with 1, in these conditions:
+1. Run `qretools dataset export <dataset.json> --csv --ddi <ddi.json>`. If the DDI defines
+   access levels, the command refuses and gives the levels of each policy.
+2. Run `qretools dataset export <dataset.json> --csv --ddi <ddi.json> --access <level> -o <file>`.
+3. Read the notes on stderr. Each `dataset-access-removed` note gives the name and the
+   URN of one variable that the command removed. A note never shows a value.
 
-- `filter-unknown-level`: a policy in the DDI has no level with that name. The message
-  gives the levels of that policy.
-- `filter-no-levels`: the DDI has no access levels.
-- `filter-unknown-variable`: the answers have a variable that the DDI does not have. The
-  level of that variable is not known.
-- `filter-untraced`: the level of a variable cannot be traced to one policy. For example,
-  the variable has no embargo, the embargo has no policy, or the policy does not have the
-  level of the embargo.
-- `filter-levels`: the command cannot read a policy. The command reads each code list
-  with an ID of the form `access-<levels>.codes` as a policy.
-- `filter-unreadable`: the answers are not in the form that `dataset export --csv` writes.
-- `filter-leak`: after the filter, an answer above the level is still in the output. This
-  is a bug in QREtools. Please report it.
+The values and the DDI are one unit. If the command refuses one variable, it refuses all
+the values. It writes nothing and exits with 1, in these conditions:
 
-The command does not compare the answers with the DDI file that `responses` read. Use the
-DDI from `build`: its URNs have versions, so answers from a different build do not match
-its variables. The DDI from `export` has version 1 for each item.
+- `dataset-access-level-required`: the DDI defines access levels, and you did not give
+  `--access`. The message gives the levels of each policy.
+- `dataset-access-unknown-level`: a policy in the DDI has no level with that name. The
+  message gives the levels of that policy.
+- `dataset-access-no-levels`: the DDI has no access levels, and you gave `--access`.
+- `dataset-access-unknown-variable`: the dataset has a variable that the DDI does not have.
+  The level of that variable is not known.
+- `dataset-access-untraced`: the level of a variable cannot be traced to one policy. For
+  example, the variable has no embargo, the embargo has no policy, or the policy does not
+  have the level of the embargo.
+- `dataset-access-levels`: the command cannot read a policy. The command reads each code
+  list with an ID of the form `access-<levels>.codes` as a policy.
+- `dataset-access-leak`: after the filter, a value above the level is still in the view.
+  This is a bug in QREtools. Please report it.
 
 **Caution: a computed value (for example, a value that an instrument computes from a
 restricted answer) has no level. The command does not remove it.**

@@ -8,7 +8,8 @@
  * respondent, then variable URN, so the same answers give the same bytes. `readDataset`
  * reads such a document back, once, into the value `datasetOf` writes from. Beside the
  * DataSet, the document holds its provenance (`provenanceOf`); `provenanceView` is the
- * document without the values.
+ * document without the values. A view can be filtered to an access level (`accessOf`);
+ * the dataset itself never is.
  */
 
 import {
@@ -19,11 +20,19 @@ import {
 	identity,
 	intl,
 	item,
+	type Json,
 	type JsonObject,
 	ref,
+	structured,
 } from "./ddi/document.ts";
-import { asList, asObj, str } from "./ddi/read.ts";
-import { type Provenance, provenanceOf } from "./provenance.ts";
+import { asList, asObj, type DdiIndex, str } from "./ddi/read.ts";
+import {
+	accessPoliciesOf,
+	type FilterRefusal,
+	filterAnswers,
+	type Removed,
+} from "./filter.ts";
+import { type Provenance, provenanceOf, refTo } from "./provenance.ts";
 import { type Answer, answersCsv, type Respondent } from "./responses.ts";
 import { err, ok, type Result } from "./result.ts";
 
@@ -47,6 +56,8 @@ const owned = (agency: string, name: string) => {
 		respondent: identity(agency, `${base}.respondent`),
 		start: identity(agency, `${base}.start`),
 		end: identity(agency, `${base}.end`),
+		// The OtherMaterial of the instrument DDI (`provenanceOf`'s `ddi`).
+		ddi: identity(agency, `${base}.ddi`),
 	};
 };
 
@@ -270,28 +281,180 @@ export function readDataset(json: unknown): Result<Dataset, string> {
 }
 
 /**
+ * What a view at an access level holds: the answers it keeps, the variables it removes
+ * (never a value), and whether the dataset's own variables (respondent, start, end) are
+ * kept. They have no question to take a level from and can identify a respondent, so
+ * they stand at the most closed level: kept only at the most closed level of every policy.
+ */
+export interface Access {
+	readonly level: string;
+	readonly kept: readonly Answer[];
+	readonly removed: readonly Removed[];
+	readonly owned: boolean;
+}
+
+/**
+ * A view's access, by the instrument DDI the dataset was made from: none when the DDI
+ * declares no levels and none is asked for; refused when it declares levels and none is
+ * given (`level-required`), or as `filterAnswers` refuses.
+ */
+export function accessOf(
+	index: DdiIndex,
+	d: Dataset,
+	level: string | undefined,
+): Result<Access | undefined, FilterRefusal> {
+	const listed = accessPoliciesOf(index);
+	if (!listed.ok) return listed;
+	const { policies } = listed.value;
+	if (level === undefined)
+		return policies.length === 0
+			? ok(undefined)
+			: err({ kind: "level-required", policies });
+	const filtered = filterAnswers(index, d.answers, level);
+	if (!filtered.ok) return filtered;
+	// Above the level in some policy: the most closed level there is what it stands at.
+	const above = policies
+		.map((p) => p.levels.at(-1) ?? "")
+		.find((closed) => closed !== level);
+	const ids = owned(d.agency, d.name);
+	const ownedRemoved = (
+		[
+			[ids.respondent, "respondent"],
+			...(d.respondents.some((r) => r.start !== undefined)
+				? ([[ids.start, "start"]] as const)
+				: []),
+			...(d.respondents.some((r) => r.end !== undefined)
+				? ([[ids.end, "end"]] as const)
+				: []),
+		] as const
+	).map(([id, name]): Removed => ({ urn: id.URN, name, level: above ?? "" }));
+	return ok({
+		level,
+		kept: filtered.value.kept,
+		removed: [
+			...filtered.value.removed,
+			...(above === undefined ? [] : ownedRemoved),
+		],
+		owned: above === undefined,
+	});
+}
+
+/**
  * The answers as long CSV, as `answersCsv` writes them, sorted by respondent and then
  * variable URN: the canonical form the dataset's fingerprint is over. The dataset's own
- * variables aren't answers.
+ * variables aren't answers. At an access level, only the answers it keeps; where the
+ * respondent variable is above it, each respondent is numbered from 1 in that order
+ * instead, so a respondent's answers stay together without the identifier.
  */
-export const csvView = (d: Dataset): string =>
-	answersCsv(
-		[...d.answers].sort(
-			(a, b) =>
-				compare(a.respondent, b.respondent) || compare(a.variable, b.variable),
-		),
+export const csvView = (d: Dataset, access?: Access): string => {
+	const answers = [...(access?.kept ?? d.answers)].sort(
+		(a, b) =>
+			compare(a.respondent, b.respondent) || compare(a.variable, b.variable),
 	);
+	if (access === undefined || access.owned) return answersCsv(answers);
+	// Every respondent named anywhere is numbered, so none can come out blank.
+	const numbers = new Map(
+		[
+			...new Set([
+				...d.respondents.map((r) => r.id),
+				...answers.map((a) => a.respondent),
+			]),
+		]
+			.sort(compare)
+			.map((id, i) => [id, String(i + 1)]),
+	);
+	return answersCsv(
+		answers.map((a) => ({
+			...a,
+			respondent: numbers.get(a.respondent) ?? a.respondent,
+		})),
+	);
+};
 
 /**
  * A dataset document without its values: its DataSet is kept, without the ItemSet, so
- * every reference to it still resolves. Read with `readDataset` first.
+ * every reference to it still resolves. Read with `readDataset` first. At an access
+ * level, the variables it removes leave the group of variables with values, and the
+ * collection's dates leave with the interview times; the view records the level (an
+ * InformationClassification) and the variables removed (a VariableGroup), both
+ * referenced from the data's PhysicalInstance.
  */
-export const provenanceView = (doc: unknown): DdiDocument => ({
-	...asObj(doc),
-	DataSet: Object.fromEntries(
-		Object.entries(asObj(asObj(doc)?.DataSet) ?? {}).map(([key, set]) => {
-			const { ItemSet: _, ...kept } = asObj(set) ?? {};
-			return [key, kept];
-		}),
-	),
-});
+export const provenanceView = (doc: unknown, access?: Access): DdiDocument => {
+	const root = asObj(doc) ?? {};
+	const view: Record<string, Json> = {
+		...root,
+		DataSet: Object.fromEntries(
+			Object.entries(asObj(root.DataSet) ?? {}).map(([key, set]) => {
+				const { ItemSet: _, ...kept } = asObj(set) ?? {};
+				return [key, kept];
+			}),
+		),
+	};
+	if (access === undefined) return view as DdiDocument;
+	// The DataSet `readDataset` read: `dataset-<name>`, the base of every ID the dataset owns.
+	const set = asObj(Object.values(asObj(root.DataSet) ?? {})[0]);
+	const agency = str(set?.Agency) ?? "";
+	const base = str(set?.ID) ?? "";
+	const id = (part: string) => identity(agency, `${base}.${part}`);
+	const gone = new Set(access.removed.map((r) => r.urn));
+	const classification = item("InformationClassification", id("access"), {
+		LevelOfInformationClassification: { StringValue: access.level },
+	});
+	const removed = item("VariableGroup", id("removed-by-access"), {
+		VariableGroupName: [intl("removed-by-access")],
+		Description: structured(
+			`The variables with values above the access level \`${access.level}\`, so not in this view. Not missing answers.`,
+		),
+		VariableReference: access.removed.map((r) => refTo("Variable", r.urn)),
+	});
+	// Every item of a type, not one found by its key: a key that missed would leave a removed variable in.
+	const each = (type: string, f: (o: JsonObject) => JsonObject) => {
+		view[type] = Object.fromEntries(
+			Object.entries(asObj(view[type]) ?? {}).map(([k, o]) => [
+				k,
+				f(asObj(o) ?? {}),
+			]),
+		);
+	};
+	each("VariableGroup", (g) => ({
+		...g,
+		VariableReference: asList(g.VariableReference).filter(
+			(r) => !Array.isArray(r.value) || !gone.has(urnOf(r.value.map(String))),
+		),
+	}));
+	// The collection's dates are the earliest start and the latest end: values of the dataset's own variables.
+	if (!access.owned)
+		each("DataCollection", (c) => ({
+			...c,
+			CollectionEvent: asList(c.CollectionEvent).map(
+				({ DataCollectionDate: _, ...e }) => e,
+			),
+		}));
+	each("PhysicalInstance", (p) =>
+		p.RecordLayoutReference === undefined
+			? p
+			: {
+					...p,
+					VariableGroupReference: [
+						...asList(p.VariableGroupReference),
+						ref(removed),
+					],
+					InformationClassificationReference: [ref(classification)],
+				},
+	);
+	const added = documentOf([classification, removed]);
+	return {
+		...view,
+		InformationClassification: added.InformationClassification ?? {},
+		VariableGroup: { ...asObj(view.VariableGroup), ...added.VariableGroup },
+	} as DdiDocument;
+};
+
+/** The SHA-256 (hex) of the instrument DDI the dataset was made from, as its provenance records it. */
+export const recordedDdiOf = (doc: unknown, d: Dataset): string | undefined => {
+	const { ddi } = owned(d.agency, d.name);
+	const material = Object.values(asObj(asObj(doc)?.OtherMaterial) ?? {})
+		.map(asObj)
+		.find((m) => m?.Agency === ddi.Agency && m.ID === ddi.ID);
+	return str(asList(material?.UserID)[0]?.StringValue);
+};

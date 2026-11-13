@@ -151,7 +151,7 @@ const extreme = (
 	}, undefined);
 
 /** A reference to an item by its URN (`urn:ddi:agency:id:version`). */
-const refTo = (type: string, urn: string): JsonObject => ({
+export const refTo = (type: string, urn: string): JsonObject => ({
 	$type: type,
 	value: urn.split(":").slice(2),
 });
