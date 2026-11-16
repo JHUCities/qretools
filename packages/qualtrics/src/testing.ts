@@ -239,11 +239,14 @@ export interface ExportOptions {
 	readonly extra?: readonly (readonly [string, string, object])[];
 	/** Whether a question's column (by ImportId and tag) is left out. */
 	readonly drop?: (importId: string, tag: string) => boolean;
+	/** The response's answer in a column, by its row-3 ImportId (`2_QID6_TEXT` in a loop's round 2). */
+	readonly value?: (importId: string) => string;
 }
 
 /**
  * The response export of a survey `qsfOf` made, in Qualtrics' shape (three header rows, a
- * column per round and option), with one response whose every answer is `SECRET`.
+ * column per round and option), with one response whose every answer is `value`'s, else
+ * `SECRET`.
  */
 export function exportOfSurvey(
 	made: { readonly qsf: QsfObject; readonly columns: ColumnMap },
@@ -254,6 +257,7 @@ export function exportOfSurvey(
 		stamp = ["", "", ""],
 		extra = [],
 		drop = () => false,
+		value = () => "SECRET",
 	}: ExportOptions = {},
 ): string {
 	const payloads = new Map(
@@ -304,9 +308,11 @@ export function exportOfSurvey(
 		columns.map((c) => cell(c[2])).join(","),
 		csv([
 			"R_1",
-			"2026-01-01",
+			"2026-01-01 00:00:00",
 			...stamp,
-			...columns.slice(5).map(() => "SECRET"),
+			...columns
+				.slice(5)
+				.map((c) => value((c[2] as { ImportId: string }).ImportId)),
 		]),
 	].join("\r\n");
 }
