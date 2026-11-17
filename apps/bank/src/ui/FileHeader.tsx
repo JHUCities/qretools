@@ -162,7 +162,7 @@ export function FileHeader({
 								aria-describedby={cantRename ? why : undefined}
 								onClick={when(!cantRename, on.rename, cantRename)}
 							>
-								Rename…
+								Rename
 							</Button>,
 						)}
 					{on.move !== undefined &&
