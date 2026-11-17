@@ -93,6 +93,8 @@ export type Step =
 				readonly variable: string;
 				readonly urn?: string;
 				readonly code?: string;
+				/** The text typed in the box beside option `code`, not the option itself. */
+				readonly typed?: true;
 			}[];
 			/** The question's text with its fills piped in. */
 			readonly text: readonly Part[];

@@ -137,7 +137,8 @@ export function columnsOf(
 							else
 								add(
 									{ importId: qid, choice },
-									s.records.find((r) => r.code === c.code)?.urn,
+									// The option's own record, never the text typed beside it.
+									s.records.find((r) => r.code === c.code && !r.typed)?.urn,
 									s.id,
 									`for option \`${c.code}\` of \`${s.question.name}\``,
 									rounds,

@@ -683,8 +683,20 @@ button.hole {
 	flex-direction: column;
 	gap: var(--base-size-4);
 }
+/* An option with a box to type in: the box follows its label on the same line. */
+.options .specify {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--base-size-8);
+}
 .respondent .number input {
 	width: 8em;
+	font: inherit;
+	padding: var(--base-size-4) var(--base-size-6);
+}
+.respondent .specify input[type="text"] {
+	flex: 1 1 12em;
 	font: inherit;
 	padding: var(--base-size-4) var(--base-size-6);
 }

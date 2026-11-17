@@ -239,27 +239,45 @@ export function elaborateItems(
 		(domain === undefined ? [] : definedVariables(draft)).map((d) => {
 			const id = identity(ctx.agency, named(`out-${d.name}`), ctx.own.number);
 			const code =
-				d.option !== undefined && draft.domain?.kind === "responses"
+				d.kind === "option" && draft.domain?.kind === "responses"
 					? codes[draft.domain.codes.indexOf(d.option)]
 					: undefined;
 			const parameter = obj({
 				...id,
 				ParameterName: [intl(d.name)],
 				ValueRepresentation:
-					code === undefined
-						? domain?.value
-						: {
-								...domain?.value,
-								CodeSubsetInformation: {
-									IncludedCode: {
-										CodeReference: [codeIdentity(code)],
+					d.kind === "specify"
+						? TYPED
+						: code === undefined
+							? domain?.value
+							: {
+									...domain?.value,
+									CodeSubsetInformation: {
+										IncludedCode: {
+											CodeReference: [codeIdentity(code)],
+										},
 									},
 								},
-							},
 			});
-			return [d.name, { id, parameter }] as const;
+			return [
+				d.name,
+				{
+					id,
+					parameter,
+					// A box's parameter goes on its own text domain (`mixed`), not the question.
+					// By the option itself, never its code: codes may repeat while being edited.
+					box: d.kind === "specify" ? d.option : undefined,
+				},
+			] as const;
 		}),
 	);
+	const boxed =
+		draft.domain?.kind === "responses"
+			? draft.domain.codes.filter((c) => c.specify !== undefined)
+			: [];
+	const own = [...outputs.values()]
+		.filter((o) => o.box === undefined)
+		.map((o) => o.parameter);
 	const question = versioned(
 		ctx,
 		"QuestionItem",
@@ -271,12 +289,22 @@ export function elaborateItems(
 			Description: maybe(draft.note, structured),
 			QuestionText: maybe(draft.text, (t) => [questionText(t, fills)]),
 			InParameter: fills.length > 0 ? fills.map((f) => f.parameter) : undefined,
-			OutParameter:
-				outputs.size > 0
-					? [...outputs.values()].map((o) => o.parameter)
-					: undefined,
+			OutParameter: own.length > 0 ? own : undefined,
 			QuestionIntent: maybe(draft.intent, structured),
-			ResponseDomain: domain?.responseDomain,
+			// With a box beside an option, the list and the boxes together (`mixed`).
+			ResponseDomain: boxed.length === 0 ? domain?.responseDomain : undefined,
+			StructuredMixedResponseDomain:
+				boxed.length === 0
+					? undefined
+					: maybe(domain, (d) =>
+							mixed(
+								d,
+								boxed,
+								(option) =>
+									[...outputs.values()].find((o) => o.box === option)
+										?.parameter,
+							),
+						),
 			ConceptReference: maybe(concept, (c) => [ref(c)]),
 			InterviewerInstructionAttachment: maybe(instruction, (i) => [
 				{ InterviewerInstructionReference: ref(i) },
@@ -653,7 +681,8 @@ interface VariableSpec {
  * comes with them as `items`. The two labels differ on
  * purpose: a question's variable is labelled by the author's title or nothing (the
  * previews fall back to other text, DDI does not invent one); an option's falls back
- * to the option's label, which is exactly what "chosen" means for that variable.
+ * to the option's label, which is exactly what "chosen" means for that variable. The
+ * text typed in an option's box is a text variable labelled by that option's words.
  */
 function variableSpecs(
 	defined: readonly DefinedVariable[],
@@ -661,47 +690,84 @@ function variableSpecs(
 	value: JsonObject | undefined,
 	ctx: Ctx,
 ): { variables: readonly VariableSpec[]; items: readonly Item[] } {
-	const [first] = defined;
-	if (first === undefined || value === undefined)
-		return { variables: [], items: [] };
-	if (first.option === undefined)
-		return {
-			variables: [compact({ name: first.name, label: title, value })],
-			items: [],
-		};
+	if (value === undefined) return { variables: [], items: [] };
 	// The bank's coding of a select-all option (its `select_all.yaml`), under an identity
 	// of the tool's own, as the missing list's is: no question or scale can have this
 	// name. Its version is that file's, which holds nothing else.
-	const binary = codeListItems(
-		ctx,
-		ctx.shared("select_all", "select_all"),
-		SELECT_ALL_ID,
-		selectAllCodes(ctx.selectAll),
-		{
-			principal: true,
-			// Which value is a tick, said in DDI's terms, not only in its label.
-			generation: (c) => ({
-				IsDerived: false,
-				Qualification:
-					c.code === ctx.selectAll.chosen.code ? TICKED : NOT_TICKED,
-			}),
-		},
-	);
-	const yesNo = {
+	const binary = defined.some((d) => d.kind === "option")
+		? codeListItems(
+				ctx,
+				ctx.shared("select_all", "select_all"),
+				SELECT_ALL_ID,
+				selectAllCodes(ctx.selectAll),
+				{
+					principal: true,
+					// Which value is a tick, said in DDI's terms, not only in its label.
+					generation: (c) => ({
+						IsDerived: false,
+						Qualification:
+							c.code === ctx.selectAll.chosen.code ? TICKED : NOT_TICKED,
+					}),
+				},
+			)
+		: undefined;
+	const yesNo = maybe(binary, (b) => ({
 		$type: "CodeDomain",
-		CodeListReference: ref(binary.codeList),
-	};
+		CodeListReference: ref(b.codeList),
+	}));
 	return {
-		variables: defined.map((d) =>
-			compact({
-				name: d.name,
-				label: d.option?.title ?? d.option?.label,
-				value: yesNo,
-			}),
-		),
-		items: [binary.codeList, ...binary.categories],
+		variables: defined.flatMap((d): VariableSpec[] => {
+			switch (d.kind) {
+				case "question":
+					return [compact({ name: d.name, label: title, value })];
+				case "option":
+					// `yesNo` is there whenever an option is.
+					return yesNo === undefined
+						? []
+						: [
+								compact({
+									name: d.name,
+									label: d.option.title ?? d.option.label,
+									value: yesNo,
+								}),
+							];
+				case "specify":
+					// What was typed beside the option: labelled by the option's own words.
+					return [{ name: d.name, label: d.option.label, value: TYPED }];
+				default:
+					return d satisfies never;
+			}
+		}),
+		items: binary === undefined ? [] : [binary.codeList, ...binary.categories],
 	};
 }
+
+/** Text typed in an option's box: words, as an open answer's are. */
+const TYPED: JsonObject = { $type: "TextDomain" };
+
+/**
+ * A list of options with a box beside some of them, as DDI joins them: the list is
+ * domain 1, and each box a text domain attached to its option's value in it, holding the
+ * parameter its variable records (so the variable finds its option through it).
+ */
+const mixed = (
+	domain: ElaboratedDomain,
+	boxed: readonly Code[],
+	parameterOf: (option: Code) => JsonObject | undefined,
+): JsonObject => ({
+	ResponseDomainInMixed: [
+		{ ResponseDomain: [domain.responseDomain], AttachmentBase: 1 },
+		...boxed.map((c) => ({
+			ResponseDomain: [obj({ ...TYPED, OutParameter: parameterOf(c) })],
+			AttachmentLocation: {
+				DomainSpecificValue: [
+					// Spelled as the Code's own Value is, by the same function.
+					{ Value: [codeValue(c.code)], AttachmentDomain: 1 },
+				],
+			},
+		})),
+	],
+});
 
 function variableItem(
 	v: VariableSpec,

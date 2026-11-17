@@ -85,6 +85,23 @@ export const OptionSchema = z
 			.string()
 			.optional()
 			.describe("A note on this option. Respondents don't see it."),
+		specify: z
+			.union([
+				z.boolean(),
+				z.strictObject({
+					variable: z
+						.string()
+						.regex(NAME_PATTERN, NAME_RULE_TEXT)
+						.optional()
+						.describe(
+							"The variable for what respondents type, if it isn't <option variable>_text.",
+						),
+				}),
+			])
+			.optional()
+			.describe(
+				"A box beside this option for respondents to type in, such as Other (please specify). true, or { variable: name } to name what they type.",
+			),
 	})
 	.describe("An option with its own notes.");
 

@@ -18,11 +18,13 @@ import { NOT_TICKED, TICKED } from "../ddi/elaborate.ts";
 import {
 	asList,
 	asObj,
+	boxesOf,
 	DDI_DEPTH,
 	type DdiIndex,
 	deref,
 	type Indexed,
 	latestOf,
+	questionDomain,
 	refUrn,
 	str,
 	words,
@@ -158,6 +160,8 @@ export type Step =
 				/** The Variable's URN. */
 				readonly urn: string;
 				readonly code?: string;
+				/** The text typed in the box beside option `code`, not the option itself. */
+				readonly typed?: true;
 				/** For a select-all option: the values that are a tick and none. */
 				readonly ticked?: string;
 				readonly unticked?: string;
@@ -313,8 +317,9 @@ export function readInstruments(
 		return undefined;
 	};
 
-	// Each question's outputs, by key: an option's code where the output is one option's.
-	const outputs = new Map<string, { code?: string }>();
+	// Each question's outputs, by key: an option's code where the output is one option's,
+	// and `typed` for the text typed in the box beside that option.
+	const outputs = new Map<string, { code?: string; typed?: true }>();
 	const questions = new Map<string, Question>();
 	for (const q of ofType("QuestionItem")) {
 		let many = false;
@@ -334,7 +339,11 @@ export function readInstruments(
 			if (key !== "")
 				outputs.set(key, value === undefined ? {} : { code: value });
 		}
-		const domain = domainOf(asObj(q.item.ResponseDomain)) ?? {
+		for (const box of boxesOf(q.item)) {
+			const key = keyOf(box.parameter);
+			if (key !== "") outputs.set(key, { code: box.code, typed: true });
+		}
+		const domain = domainOf(questionDomain(q.item)) ?? {
 			kind: "other" as const,
 		};
 		questions.set(q.urn, {
@@ -410,12 +419,16 @@ export function readInstruments(
 			str(representation?.$type) === "CodeDomain"
 				? ticks.get(keyOf(representation?.CodeListReference))
 				: undefined;
+		// The text typed in an option's box: the question has options, this answer is words.
+		// From the variable's own parameter, so whether it's asked doesn't matter.
+		const typed =
+			outputs.get(keyOf(v.item.SourceParameterReference))?.typed === true;
 		params.set(key, {
 			kind: "answer",
 			urn: v.urn,
 			variable,
 			asks: asks.map((a) => a.ask),
-			question,
+			question: typed ? { ...question, domain: { kind: "text" } } : question,
 			...(code !== undefined &&
 				ticked !== undefined && { option: { code, ...ticked } }),
 		});
@@ -627,11 +640,12 @@ export function readInstruments(
 			const target = keyOf(b.TargetParameterReference);
 			const recorded = params.get(target);
 			if (outputs.has(source) && recorded?.kind === "answer") {
-				const code = outputs.get(source)?.code;
+				const { code, typed } = outputs.get(source) ?? {};
 				records.push({
 					variable: recorded.variable,
 					urn: recorded.urn,
 					...(code !== undefined && { code }),
+					...(typed && { typed }),
 					...(recorded.option !== undefined && {
 						ticked: recorded.option.ticked,
 						unticked: recorded.option.unticked,

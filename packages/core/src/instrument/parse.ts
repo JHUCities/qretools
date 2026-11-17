@@ -29,7 +29,11 @@ import type { BankScope } from "../evaluate.ts";
 import type { Finding, Range } from "../findings.ts";
 import { selectAllCodes } from "../selectAll.ts";
 import { readCodeMap } from "../surface/codes.ts";
-import { type Code, definedVariables } from "../surface/draft.ts";
+import {
+	type Code,
+	type DefinedVariable,
+	definedVariables,
+} from "../surface/draft.ts";
 import { EMPTY_ENV } from "../surface/env.ts";
 import { placeholderSpans } from "../surface/fills.ts";
 import { pointAt, readNumber, readOpen } from "../surface/parse.ts";
@@ -794,10 +798,12 @@ const asMissing = (missing: readonly Code[]) =>
 export function answerType(
 	q: QuestionRef,
 	bank: BankScope | undefined,
-	option = false,
+	role: DefinedVariable["kind"] = "question",
 ): Type {
 	const missing = bank?.env.missing ?? [];
-	if (option)
+	// The text typed in an option's box: words, as an open answer's are.
+	if (role === "specify") return typeOfDomain({ kind: "open" }, missing);
+	if (role === "option")
 		return {
 			kind: "code",
 			codes: [
@@ -1458,6 +1464,20 @@ function readAsk(
 					"Remove `as` if this is the only place it's asked.",
 				),
 			);
+		} else if (
+			domain?.kind === "responses" &&
+			domain.codes.some((c) => c.specify !== undefined)
+		) {
+			accepted = false;
+			ctx.say(
+				problem(
+					"not-yet",
+					"error",
+					`${path}.as`,
+					"Asking a question with a box to type in again under a new name isn't possible yet.",
+					"Remove `as` if this is the only place it's asked.",
+				),
+			);
 		} else if (!NAME_PATTERN.test(asName))
 			ctx.say(
 				problem(
@@ -1642,7 +1662,7 @@ function resolve(name: string, ctx: Context): Named | undefined {
 		path,
 		evaluation,
 	};
-	const type = answerType(question, bank, defined?.option !== undefined);
+	const type = answerType(question, bank, defined?.kind);
 	return { kind: "bank", alias, variable, question, type };
 }
 
@@ -1828,6 +1848,7 @@ function selectAllHint(
 	return `Each option of \`${name}\` has its own answer: ${definedVariables(
 		draft,
 	)
+		.filter((d) => d.kind === "option")
 		.map((d) => `\`${alias}.${d.name}\``)
 		.join(
 			", ",

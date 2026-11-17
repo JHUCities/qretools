@@ -154,7 +154,16 @@ export function questionsOf(ctx: Ctx, instrument: ReadInstrument) {
 			// Position from 1: the column map names a select-all option by it when its code is letters.
 			const keys = domain.choices.map((_, i) => String(i + 1));
 			const exportTag = domain.many
-				? tag(q.name, `m:${s.records.map((r) => r.variable).join()}`, qid, s.id)
+				? tag(
+						q.name,
+						// The options' variables: text typed beside one isn't a choice's.
+						`m:${s.records
+							.filter((r) => !r.typed)
+							.map((r) => r.variable)
+							.join()}`,
+						qid,
+						s.id,
+					)
 				: tag(
 						s.records[0]?.variable ?? qid,
 						`v:${s.records[0]?.variable}`,

@@ -15,6 +15,8 @@ export interface Code {
 	/** Select all that apply only: this option's variable name, when it isn't the default. */
 	readonly variable?: string;
 	readonly note?: string;
+	/** A box beside the option for respondents to type in (`specify`), and its variable's name if chosen. */
+	readonly specify?: { readonly variable?: string };
 }
 
 export type Domain =
@@ -88,27 +90,90 @@ export const optionVariable = (
 ): string | undefined =>
 	code.variable ?? (name === undefined ? undefined : `${name}_${code.code}`);
 
-/** A dataset variable a question defines, where in the question it is defined, and its option if it is one. */
-export interface DefinedVariable {
-	readonly name: string;
-	readonly path: string;
-	readonly option?: Code;
-}
+/**
+ * The variable for the text typed in an option's box: its own name if given, else
+ * `<question>_<code>_text`; in select all that apply, the option's own variable (which
+ * may be named) with `_text`. Undefined without a box, or while `name` is a hole.
+ */
+export const specifyVariable = (
+	name: string | undefined,
+	code: Code,
+	select: "one" | "many",
+): string | undefined => {
+	if (code.specify === undefined) return undefined;
+	if (code.specify.variable !== undefined) return code.specify.variable;
+	// Under select one an option's `variable` is ignored (with a warning), so it names nothing.
+	const option =
+		select === "many"
+			? optionVariable(name, code)
+			: name === undefined
+				? undefined
+				: `${name}_${code.code}`;
+	return option === undefined ? undefined : `${option}_text`;
+};
+
+/**
+ * A dataset variable a question defines, and where in the question it is defined: the
+ * question's own (select one, a number, an open answer), one option's (select all that
+ * apply), or the text typed in an option's box.
+ */
+export type DefinedVariable =
+	| { readonly kind: "question"; readonly name: string; readonly path: string }
+	| {
+			readonly kind: "option";
+			readonly name: string;
+			readonly path: string;
+			readonly option: Code;
+	  }
+	| {
+			readonly kind: "specify";
+			readonly name: string;
+			readonly path: string;
+			/** The option whose box it is. */
+			readonly option: Code;
+	  };
 
 /**
  * The variables a question defines: one named like the question, or one per option
- * in select all that apply. None without a name or a way to answer. The DDI and the
+ * in select all that apply; and one per option box, after the question's variable or
+ * right after its option's. None without a name or a way to answer. The DDI and the
  * bank index both read this, so they can't disagree.
  */
 export function definedVariables(draft: Draft): readonly DefinedVariable[] {
 	const { name, domain } = draft;
 	if (name === undefined || domain === undefined) return [];
-	if (domain.kind !== "responses" || domain.select === "one")
-		return [{ name, path: "name" }];
+	if (domain.kind !== "responses")
+		return [{ kind: "question", name, path: "name" }];
+	const box = (option: Code): DefinedVariable[] => {
+		const variable = specifyVariable(name, option, domain.select);
+		return variable === undefined
+			? []
+			: [
+					{
+						kind: "specify",
+						name: variable,
+						path: `responses.${option.code}.specify`,
+						option,
+					},
+				];
+	};
+	if (domain.select === "one")
+		return [
+			{ kind: "question", name, path: "name" },
+			...domain.codes.flatMap(box),
+		];
 	return domain.codes.flatMap((option) => {
 		const variable = optionVariable(name, option);
 		return variable === undefined
 			? []
-			: [{ name: variable, path: `responses.${option.code}`, option }];
+			: [
+					{
+						kind: "option" as const,
+						name: variable,
+						path: `responses.${option.code}`,
+						option,
+					},
+					...box(option),
+				];
 	});
 }

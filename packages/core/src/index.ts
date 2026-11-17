@@ -84,6 +84,7 @@ export {
 export {
 	asList,
 	asObj,
+	boxesOf,
 	DDI_DEPTH,
 	type DdiIndex,
 	type DdiReference,
@@ -93,6 +94,7 @@ export {
 	type Indexed,
 	itemKeyOf,
 	latestOf,
+	questionDomain,
 	refUrn,
 	str,
 	words,
@@ -313,6 +315,7 @@ export {
 	optionVariable,
 	type Prose,
 	type Ref,
+	specifyVariable,
 	textOf,
 } from "./surface/draft.ts";
 export {
