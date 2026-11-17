@@ -162,6 +162,7 @@ describe("the entry points", () => {
 			    "scopeOf",
 			    "selectAllText",
 			    "settingsFindings",
+			    "sharedIdentity",
 			    "sharedOf",
 			    "shortCommit",
 			    "skippedFolder",

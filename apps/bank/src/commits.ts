@@ -3,7 +3,7 @@
  * the app's save flow writes them, so they live with the app, not the library.
  */
 
-import type { Draft, SchemeKind } from "@qretools/core";
+import type { Draft, NamedScheme, SchemeKind } from "@qretools/core";
 import { isRoot, SCHEME_NAME, shortCommit } from "@qretools/core";
 import type { WorkspaceEntry } from "./model.js";
 
@@ -53,6 +53,29 @@ export function describeMove(
 		: textChanged
 			? `Move ${name} to ${folder} and update text`
 			: `Move ${name} to ${folder}`;
+}
+
+/**
+ * A rename's message: the shared file in the subject, and how many files that name it
+ * changed with it in the body, as counts (a scale may be named by dozens of questions).
+ */
+export function describeRename(
+	kind: NamedScheme,
+	from: string,
+	to: string,
+	questions: number,
+	instruments: number,
+): string {
+	const subject = `Rename ${SCHEME_NAME[kind]} ${from} to ${to}`;
+	const counted = (n: number, one: string) =>
+		n === 0 ? [] : [`${n} ${one}${n === 1 ? "" : "s"}`];
+	const files = [
+		...counted(questions, "question"),
+		...counted(instruments, "instrument"),
+	];
+	return files.length === 0
+		? subject
+		: `${subject}\n\nAnd the ${files.join(" and ")} that name it.`;
 }
 
 /** The surface fields that differ, in the surface language's order; the domain by its kind. */
