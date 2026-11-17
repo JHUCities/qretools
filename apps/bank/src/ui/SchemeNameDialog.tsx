@@ -40,13 +40,10 @@ const field = (kind: NamedScheme): string =>
 
 /** What a rename changes, as the dialog says it; the names are each file's own. */
 export interface RenamePreview {
+	/** The name it has: the dialog says nothing about it until another is typed. */
 	readonly from: string;
-	/** Saved on GitHub: the rename is a commit. A draft's is local only. */
-	readonly saved: boolean;
 	readonly questions: readonly { readonly id: Id; readonly name: string }[];
 	readonly instruments: readonly { readonly id: Id; readonly name: string }[];
-	/** Once the new name can be used: the DDI ID it is published under (none for a unit). */
-	readonly identity?: string;
 }
 
 const counted = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
@@ -167,9 +164,9 @@ export function SchemeNameDialog({
 }
 
 /**
- * What a rename changes. Plain text, not a live region (the field's validation says what
- * stops it): the files first, which don't depend on the new name, then the DDI, then
- * what does, so only the end of the dialog changes as the author types.
+ * What a rename changes: the files that name it, which don't depend on the new name, so
+ * nothing here moves as the author types. Plain text, not a live region (the field's
+ * validation says what stops it).
  */
 function RenameScope({
 	kind,
@@ -178,7 +175,7 @@ function RenameScope({
 	readonly kind: NamedScheme;
 	readonly rename: RenamePreview;
 }) {
-	const { questions, instruments, saved, identity } = rename;
+	const { questions, instruments } = rename;
 	const files = [
 		...(questions.length === 0 ? [] : [counted(questions.length, "question")]),
 		...(instruments.length === 0
@@ -201,15 +198,6 @@ function RenameScope({
 						))}
 					</ul>
 				</details>
-			)}
-			{saved && kind !== "unit" && (
-				<p>
-					{identity !== undefined ? (
-						<>In the DDI it becomes {inlineCode(`\`${identity}\``)}.</>
-					) : (
-						"In the DDI it gets a new ID."
-					)}
-				</p>
 			)}
 		</Stack>
 	);

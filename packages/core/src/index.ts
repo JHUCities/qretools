@@ -76,7 +76,6 @@ export {
 	elaborate,
 	elaborateItems,
 	NOT_TICKED,
-	sharedIdentity,
 	sharedOf,
 	TICKED,
 	type Versioning,

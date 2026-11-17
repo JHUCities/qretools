@@ -1,4 +1,4 @@
-import { err, ok, sharedIdentity } from "@qretools/core";
+import { err, ok } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { describeRename } from "./commits.js";
 import { init, type Model } from "./model.js";
@@ -199,7 +199,7 @@ describe("renaming a draft shared file", () => {
 	});
 });
 
-describe("a rename's message and identity", () => {
+describe("a rename's message", () => {
 	it("says the file in the subject and counts the rest", () => {
 		expect(describeRename("scale", "agree4", "agree_4", 0, 0)).toBe(
 			"Rename shared scale agree4 to agree_4",
@@ -210,11 +210,6 @@ describe("a rename's message and identity", () => {
 		expect(describeRename("scale", "agree4", "agree_4", 14, 2)).toBe(
 			"Rename shared scale agree4 to agree_4\n\nAnd the 14 questions and 2 instruments that name it.",
 		);
-	});
-
-	it("gives a unit no DDI identity", () => {
-		expect(sharedIdentity("scale", "agree4")).toBe("scale-agree4");
-		expect(sharedIdentity("unit", "days")).toBeUndefined();
 	});
 });
 
