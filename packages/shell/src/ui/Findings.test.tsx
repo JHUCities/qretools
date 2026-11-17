@@ -13,7 +13,7 @@ const dup: Finding = {
 	hint: "Keep one question.",
 };
 const own: Finding = {
-	code: "thin-intent",
+	code: "intent-repeats-text",
 	severity: "info",
 	path: "intent",
 	message: "Say more.",

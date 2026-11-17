@@ -161,24 +161,21 @@ const doubleBarreled: Rule = ({ text }) =>
 			]
 		: [];
 
-const thinIntent: Rule = ({ intent, text }) => {
-	if (intent === undefined) return [];
-	const restatesText =
-		text !== undefined && normalise(intent) === normalise(text);
-	return restatesText || intent.trim().split(/\s+/).length < 4
+/** An intent that only restates the question says nothing about why it is asked. A short one may say enough. */
+const intentRepeatsText: Rule = ({ intent, text }) =>
+	intent !== undefined &&
+	text !== undefined &&
+	normalise(intent) === normalise(text)
 		? [
 				advise(
-					"thin-intent",
+					"intent-repeats-text",
 					"info",
 					"intent",
-					restatesText
-						? "The intent repeats the question text."
-						: "The intent is very short.",
+					"The intent repeats the question text.",
 					"Say what you want to learn from this question, and why.",
 				),
 			]
 		: [];
-};
 
 const legacyFields: Rule = ({ legacy }) =>
 	legacy === undefined || legacy.length === 0
@@ -428,7 +425,7 @@ const RULES: readonly Rule[] = [
 	tooFewResponses,
 	noNoneOption,
 	doubleBarreled,
-	thinIntent,
+	intentRepeatsText,
 	legacyFields,
 	optionVariables,
 	matchesScale,

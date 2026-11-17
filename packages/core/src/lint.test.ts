@@ -75,14 +75,14 @@ describe("lint", () => {
 			[],
 		],
 		[
-			"thin intent",
+			"a short intent is fine",
 			"name: q\ntext: Do you rent?\nintent: Housing\nopen: {}\n",
-			["info:thin-intent@intent"],
+			[],
 		],
 		[
 			"intent that repeats the text",
 			"name: q\ntext: Do you rent your home today?\nintent: do you rent your home today?\nopen: {}\n",
-			["info:thin-intent@intent"],
+			["info:intent-repeats-text@intent"],
 		],
 	];
 
