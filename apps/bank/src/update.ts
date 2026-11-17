@@ -2661,6 +2661,11 @@ export function namingProblem(
 ): string | undefined {
 	// A rename's rule is its plan's, so the dialog allows exactly what the confirm does.
 	if (naming.purpose.kind === "rename") {
+		// A saved file's rename is a commit: while nothing can be written, say so here
+		// rather than let the confirm do nothing.
+		const saved = model.local.schemes[naming.purpose.id]?.base !== undefined;
+		const blocked = saved ? writeBlocked(model) : undefined;
+		if (blocked !== undefined) return blocked;
 		const plan = renamePlan(model, naming.purpose.id, naming.name, evaluations);
 		return plan.ok ? undefined : plan.error;
 	}

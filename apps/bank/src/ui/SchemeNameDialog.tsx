@@ -197,8 +197,8 @@ function RenameScope({
 			<p>
 				{saved
 					? files === ""
-						? "Saves to your branch in one commit. Nothing else names it."
-						: `Saves to your branch in one commit. The ${files} that name it change too. Unsaved changes stay unsaved.`
+						? "Saves to your branch. Nothing else names it."
+						: `Saves to your branch. The ${files} that name it change with it, all at once. Unsaved changes stay unsaved.`
 					: files === ""
 						? "Nothing else names it."
 						: `The ${files} here that name it change too, as unsaved changes.`}

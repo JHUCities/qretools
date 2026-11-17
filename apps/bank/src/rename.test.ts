@@ -485,6 +485,26 @@ describe("undoing a rename", () => {
 		expect(update(moved, { kind: "renameUndoRequested" })[1]).toEqual([]);
 	});
 
+	it("is refused once a file it changed was moved, even with the same text", () => {
+		const after = renamed(start());
+		const one = idOf(after, "questions/a/one.yaml");
+		const q1 = after.local.questions[one];
+		if (q1?.base === undefined) throw new Error("one");
+		const moved: Model = {
+			...after,
+			local: {
+				...after.local,
+				questions: {
+					...after.local.questions,
+					[one]: { ...q1, base: { ...q1.base, path: "questions/b/one.yaml" } },
+				},
+			},
+		};
+		expect(undoProblem(moved)).toBe(
+			"Something it changed was changed again since.",
+		);
+	});
+
 	it("is refused once another shared scale has the old name", () => {
 		const after = renamed(start());
 		const [creating] = update(after, {
