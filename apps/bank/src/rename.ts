@@ -44,10 +44,18 @@ export function schemeNameProblem(
 ): string | undefined {
 	if (name === "") return "Give it a name.";
 	if (!NAME_PATTERN.test(name)) return NAME_RULE_TEXT;
-	return Object.values(model.local.schemes).some(
-		(e) => e.kind === kind && e.name === name && e.id !== self,
-	)
-		? `A ${SCHEME_NAME[kind]} named \`${name}\` already exists.`
+	const others = Object.values(model.local.schemes).filter(
+		(e) => e.kind === kind && e.id !== self,
+	);
+	if (others.some((e) => e.name === name))
+		return `A ${SCHEME_NAME[kind]} named \`${name}\` already exists.`;
+	// Reserved while another is being renamed to it: on success it will have that name.
+	const a = (e: SchemeEntry) => model.activity[e.id];
+	return others.some((e) => {
+		const busy = a(e);
+		return busy?.kind === "saving" && busy.renaming === name;
+	})
+		? `A ${SCHEME_NAME[kind]} is being renamed to \`${name}\`.`
 		: undefined;
 }
 
