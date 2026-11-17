@@ -18,7 +18,6 @@ import {
 	type Mention,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
-	type NamedScheme,
 	parseSurface,
 	type Range,
 	type RemoteBank,
@@ -27,7 +26,6 @@ import {
 	SCHEME_NAME,
 	SHAPE,
 	saveableName,
-	UNNAMED,
 	WORKSPACE,
 	withLocks,
 } from "@qretools/core";
@@ -44,7 +42,6 @@ import {
 	mentionAt,
 	quoteCode,
 	rangesOf,
-	renameEdits,
 	sharedScaleSource,
 	textEntrySource,
 	withFields,
@@ -1793,12 +1790,6 @@ function write(
 		relocked?.moved,
 	);
 }
-
-/** A bank file's name as its author wrote it: a question's own, or the shared file's. */
-const nameOf = (model: Model, f: BankEntry): string =>
-	f.kind === "question"
-		? (parseSurface(f.source, envIn(model)).draft.name ?? UNNAMED)
-		: f.name;
 
 /**
  * What saving an instrument takes along, so it reads on the branch as it reads here:
