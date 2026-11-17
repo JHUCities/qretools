@@ -3,6 +3,7 @@
 import type { Diagnostic } from "@codemirror/lint";
 import {
 	codeSpans,
+	dismissFix,
 	type Finding,
 	type Fix,
 	plainText,
@@ -32,21 +33,29 @@ export const toDiagnostics = (
 	findings.map((f) => {
 		const [from, to] = locate(f, ranges);
 		const { fix } = f;
+		const dismiss = dismissFix(f);
 		return {
 			from,
 			to,
 			severity: SEVERITY[f.severity],
 			message: plainText(f.hint ? `${f.message}\n${f.hint}` : f.message),
 			renderMessage: () => messageNode(f),
-			...(fix !== undefined &&
-				onFix !== undefined && {
+			...(onFix !== undefined &&
+				(fix !== undefined || dismiss !== undefined) && {
 					actions: [
-						{
-							name: plainText(fix.label),
-							apply: () => onFix(fix),
-							// The editor's quick-fix key applies it (editor.ts), and its hint says so.
-							markClass: "cm-quickFix",
-						},
+						...(fix === undefined
+							? []
+							: [
+									{
+										name: plainText(fix.label),
+										apply: () => onFix(fix),
+										// The editor's quick-fix key applies it (editor.ts), and its hint says so.
+										markClass: "cm-quickFix",
+									},
+								]),
+						...(dismiss === undefined
+							? []
+							: [{ name: dismiss.label, apply: () => onFix(dismiss) }]),
 					],
 				}),
 		};

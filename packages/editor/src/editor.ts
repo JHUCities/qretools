@@ -547,7 +547,8 @@ const quickFixKey = Prec.high(
 				const head = view.state.selection.main.head;
 				let fix: (() => void) | undefined;
 				forEachDiagnostic(view.state, (d, from, to) => {
-					const action = d.actions?.[0];
+					// The fix, never Dismiss, which only the tooltip and the list offer.
+					const action = d.actions?.find((a) => a.markClass === "cm-quickFix");
 					if (fix === undefined && action && from <= head && head <= to)
 						fix = () => action.apply(view, from, to);
 				});

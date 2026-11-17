@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { NAME_RULE_TEXT } from "../copy.ts";
+import { DISMISSABLE } from "../findings.ts";
 import {
 	EMPTY_ENV,
 	type Env,
@@ -179,6 +180,17 @@ export const QuestionSchema = z
 			.optional()
 			.describe(
 				"Questions this one is meant to be like, each with why they differ, such as dem_inclo: split ballot, lower range. Stops the findings that call them duplicates.",
+			),
+		dismiss: z
+			.object(
+				Object.fromEntries(
+					DISMISSABLE.map((code) => [code, z.string().optional()]),
+				),
+			)
+			.strict()
+			.optional()
+			.describe(
+				"Advice that doesn't apply to this question, each with why, such as no-none-option: every respondent has at least one source of income. Hides that advice.",
 			),
 		access: z
 			.string()

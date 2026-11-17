@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 import {
-	addVariant,
+	addEntry,
 	applyEdits,
 	renameEdits,
 	sharedScaleSource,
@@ -124,7 +124,7 @@ describe("a unit inside a flow map", () => {
 
 describe("naming a question as a variant", () => {
 	const add = (source: string, name = "other") => {
-		const r = addVariant(source, name);
+		const r = addEntry(source, "variant_of", name);
 		return r.kind === "written"
 			? [r.text, r.text.slice(0, r.caret).split("\n").at(-1)]
 			: r.kind;

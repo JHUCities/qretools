@@ -249,15 +249,16 @@ const placeFor = ({ written, base }: TopFields, key: string): number =>
 		.sort((a, b) => a.at - b.at)[0]?.at ?? base.length;
 
 /**
- * The text naming question `name` under `variant_of`, with an empty reason where the
- * caret goes (a hole: the author says why the two differ), or why it can't be: `name`
- * is there already, or `variant_of` (or the text) isn't lines a line can be added to
- * (a `{…}` map, a word), so the author edits it by hand. Added where the field order
- * puts `variant_of`, at its entries' indent, after the last one; if it's empty, under
- * its key, keeping any comment after the colon on its line.
+ * The text with `key` added under the map field `field` (`variant_of`: a question's
+ * name; `dismiss`: an advice code), with an empty value where the caret goes (a hole:
+ * the author says why), or why it can't be: `key` is there already, or the field (or the
+ * text) isn't lines a line can be added to (a `{…}` map, a word), so the author edits it
+ * by hand. Added where the field order puts the field, at its entries' indent, after the
+ * last one; if it's empty, under its key, keeping any comment after the colon on its line.
  */
-export function addVariant(
+export function addEntry(
 	source: string,
+	field: "variant_of" | "dismiss",
 	name: string,
 ):
 	| { readonly kind: "written"; readonly text: string; readonly caret: number }
@@ -267,12 +268,12 @@ export function addVariant(
 	if (fields === undefined) return { kind: "unwritable" };
 	const top = parseDocument(source, { prettyErrors: false }).contents;
 	const pair = isMap(top)
-		? top.items.find((p) => isScalar(p.key) && p.key.value === "variant_of")
+		? top.items.find((p) => isScalar(p.key) && p.key.value === field)
 		: undefined;
 	const entry = `${scalar(name)}:`;
 	if (pair === undefined) {
-		const place = placeFor(fields, "variant_of");
-		const lines = `variant_of:\n  ${entry}`;
+		const place = placeFor(fields, field);
+		const lines = `${field}:\n  ${entry}`;
 		const { base } = fields;
 		return {
 			kind: "written",

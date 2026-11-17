@@ -202,3 +202,25 @@ describe("access levels, from the question's schema", () => {
 		]);
 	});
 });
+
+describe("dismissable advice, from the question's schema", () => {
+	const keysAt = (doc: string) => {
+		const state = EditorState.create({
+			doc,
+			extensions: [
+				yaml(),
+				stateExtensions(questionJsonSchema(EMPTY_ENV) as never),
+			],
+		});
+		return schemaCompletion(
+			new CompletionContext(state, doc.length, true),
+		)?.options.map((o) => o.label);
+	};
+
+	it("offers the advice codes under `dismiss:`, less those written", () => {
+		expect(keysAt("name: q\ndismiss:\n  ")).toContain("no-none-option");
+		expect(keysAt("name: q\ndismiss:\n  no-none-option: x\n  ")).not.toContain(
+			"no-none-option",
+		);
+	});
+});

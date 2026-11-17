@@ -109,6 +109,7 @@ export {
 	type BankScope,
 	bankFrom,
 	bankOf,
+	type Dismissed,
 	type Evaluation,
 	evaluate,
 	type Publishing,
@@ -126,6 +127,8 @@ export {
 	type Removed,
 } from "./filter.ts";
 export {
+	DISMISSABLE,
+	dismissFix,
 	type Edit,
 	type Finding,
 	type FindingCode,

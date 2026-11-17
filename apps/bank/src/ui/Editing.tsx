@@ -18,6 +18,7 @@ import { codebookOf, parse as parseDdi } from "@qretools/codebook";
 import {
 	type DdiDocument,
 	DEFAULT_SELECT_ALL,
+	type Dismissed,
 	documentOf,
 	type Evaluation,
 	envAt,
@@ -264,7 +265,12 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 		ev.ranges,
 		index,
 	);
-	const [listed, flush] = useSettled(findings, SETTLE_MS, q.id);
+	// Settled together: the dismissed list sits under the findings and moves with them.
+	const shown = useMemo(
+		() => ({ findings, dismissed: ev.dismissed }),
+		[findings, ev.dismissed],
+	);
+	const [listed, flush] = useSettled(shown, SETTLE_MS, q.id);
 	const diagnostics = useMemo(
 		() => toDiagnostics(findings, ev.ranges, onFix),
 		[findings, ev.ranges, onFix],
@@ -330,7 +336,8 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 						body={(pane) =>
 							pane === "findings" ? (
 								<SettledFindings
-									findings={listed}
+									findings={listed.findings}
+									dismissed={listed.dismissed}
 									flush={flush}
 									onTarget={onTarget}
 									related={related}
@@ -1003,12 +1010,14 @@ function useBankFindings(
 
 function SettledFindings({
 	findings,
+	dismissed,
 	flush,
 	onTarget,
 	related,
 	onFix,
 }: {
 	findings: readonly Finding[];
+	dismissed?: readonly Dismissed[];
 	flush: () => void;
 	onTarget: (target: Target) => void;
 	related?: (f: Finding) => Related | undefined;
@@ -1025,6 +1034,7 @@ function SettledFindings({
 		>
 			<Findings
 				findings={findings}
+				{...(dismissed !== undefined && { dismissed })}
 				onTarget={onTarget}
 				{...(related !== undefined && { related })}
 				onFix={onFix}

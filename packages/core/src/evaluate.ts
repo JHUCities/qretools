@@ -8,7 +8,12 @@ import { compact } from "./compact.ts";
 import type { Item } from "./ddi/document.ts";
 import { elaborateItems } from "./ddi/elaborate.ts";
 import type { Versions } from "./ddi/version.ts";
-import { type Finding, inDocumentOrder, type Range } from "./findings.ts";
+import {
+	canDismiss,
+	type Finding,
+	inDocumentOrder,
+	type Range,
+} from "./findings.ts";
 import { ROOT } from "./kinds.ts";
 import { lint } from "./lint.ts";
 import { type RespondentView, respondentView } from "./render.ts";
@@ -30,7 +35,7 @@ import type { Draft } from "./surface/draft.ts";
 import { type Env, envAt } from "./surface/env.ts";
 import { type Livelit, livelitsOf } from "./surface/livelits.ts";
 import type { Mark } from "./surface/marks.ts";
-import { parseSurface } from "./surface/parse.ts";
+import { type Dismissal, parseSurface } from "./surface/parse.ts";
 import {
 	fileFindings,
 	type Index,
@@ -41,8 +46,10 @@ import {
 
 export interface Evaluation {
 	readonly draft: Draft;
-	/** Parse findings and lint advice, in document order. */
+	/** Parse findings and lint advice, in document order, less the advice dismissed. */
 	readonly findings: readonly Finding[];
+	/** The advice this question dismisses, each with the reason written for it. */
+	readonly dismissed: readonly Dismissed[];
 	readonly ranges: Readonly<Record<string, Range>>;
 	/** What the editor colours by meaning (see marks.ts). */
 	readonly marks: readonly Mark[];
@@ -55,6 +62,44 @@ export interface Evaluation {
 
 export { UNDECLARED_AGENCY };
 
+/** Advice a question dismissed, and why. */
+export interface Dismissed {
+	readonly finding: Finding;
+	readonly reason: string;
+	/** Where the dismissal is written (`dismiss.<code>`): deleting it there brings the advice back. */
+	readonly path: string;
+}
+
+/**
+ * Advice split into what is shown and what the question dismisses, plus a note for each
+ * dismissal that matches nothing (it would hide advice the author never saw).
+ */
+export function dismiss(
+	findings: readonly Finding[],
+	dismissals: readonly Dismissal[],
+): { readonly shown: readonly Finding[]; readonly dismissed: Dismissed[] } {
+	const by = new Map(dismissals.map((d) => [d.code as string, d]));
+	const dismissed: Dismissed[] = [];
+	const shown = findings.filter((f) => {
+		const d = canDismiss(f) ? by.get(f.code) : undefined;
+		if (d !== undefined)
+			dismissed.push({ finding: f, reason: d.reason, path: d.path });
+		return d === undefined;
+	});
+	const unmatched = dismissals
+		.filter((d) => !dismissed.some((x) => x.finding.code === d.code))
+		.map(
+			(d): Finding => ({
+				code: "nothing-dismissed",
+				severity: "info",
+				path: d.path,
+				message: `There's no \`${d.code}\` advice on this question to dismiss.`,
+				hint: "Remove the line, unless you expect the advice to come back.",
+			}),
+		);
+	return { shown: [...shown, ...unmatched], dismissed };
+}
+
 /**
  * A question's evaluation: what an editor shows of it as it's typed. Its DDI is one
  * output among others, made only when asked for (`questionItems`).
@@ -62,12 +107,14 @@ export { UNDECLARED_AGENCY };
 export function evaluate(source: string, env: Env): Evaluation {
 	const parsed = parseSurface(source, env);
 	const { draft, findings, ranges } = parsed;
+	const { shown, dismissed } = dismiss(
+		[...findings, ...lint(draft, env, findings)],
+		parsed.dismissals,
+	);
 	return {
 		draft,
-		findings: inDocumentOrder(
-			[...findings, ...lint(draft, env, findings)],
-			ranges,
-		),
+		findings: inDocumentOrder(shown, ranges),
+		dismissed,
 		ranges,
 		marks: parsed.marks,
 		livelits: livelitsOf(source, parsed, env),

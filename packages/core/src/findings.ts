@@ -59,6 +59,8 @@ export type LintCode =
 	| "matches-unit"
 	| "unit-prose"
 	| "missing-code"
+	/** A `dismiss` entry no current finding matches. */
+	| "nothing-dismissed"
 	/** Bank-level: another question defines the same variable. */
 	| "duplicate-variable"
 	/** Bank-level: the same content written in two files (see symbols.ts). */
@@ -77,6 +79,33 @@ export type LintCode =
 	| "unused-level"
 	/** Bank-level: another question has the same name, so the same DDI identity. */
 	| "duplicate-name";
+
+/**
+ * The advice a question may dismiss under `dismiss:`, with a reason: survey craft that
+ * can be wrong for one question. Not bank findings (`variant_of` answers duplicates, and
+ * a shared name or variable must be unique), nor a duplicate option variable (two
+ * variables under one name).
+ */
+export const DISMISSABLE = [
+	"duplicate-label",
+	"too-few-responses",
+	"no-none-option",
+	"double-barreled",
+	"intent-repeats-text",
+	"legacy-fields",
+	"option-variable-prefix",
+	"matches-scale",
+	"matches-universe",
+	"matches-instruction",
+	"matches-concept",
+	"concept-prose",
+	"matches-unit",
+	"unit-prose",
+] as const satisfies readonly LintCode[];
+export type Dismissable = (typeof DISMISSABLE)[number];
+
+export const isDismissable = (code: string): code is Dismissable =>
+	(DISMISSABLE as readonly string[]).includes(code);
 
 /** Reported by an instrument's parse and checks. */
 export type InstrumentCode =
@@ -201,10 +230,16 @@ export type Fix =
 			readonly path: string;
 	  }
 	| {
-			/** This question named as a deliberate variant of question `name` (`addVariant`). */
+			/** This question named as a deliberate variant of question `name` (`addEntry`). */
 			readonly kind: "variant";
 			readonly label: string;
 			readonly name: string;
+	  }
+	| {
+			/** This finding's advice dismissed: `dismiss: {code: }`, its reason left to write. */
+			readonly kind: "dismiss";
+			readonly label: string;
+			readonly code: Dismissable;
 	  }
 	| {
 			/** Quotes around the response code `code`, at the key `path` names, as spelled. */
@@ -221,6 +256,16 @@ export type Fix =
 			readonly name: string;
 			readonly question: string;
 	  };
+
+/** Advice a question may dismiss: a dismissable code, at advice's severity. */
+export const canDismiss = (f: Finding<string>): boolean =>
+	isDismissable(f.code) && (f.severity === "warning" || f.severity === "info");
+
+/** The fix that dismisses a finding's advice, for advice a question may dismiss. */
+export const dismissFix = (f: Finding<string>): Fix | undefined =>
+	canDismiss(f) && isDismissable(f.code)
+		? { kind: "dismiss", label: "Dismiss", code: f.code }
+		: undefined;
 
 export const holes = <F extends Finding<string>>(
 	findings: readonly F[],
