@@ -2546,10 +2546,12 @@ const withoutNaming = (browser: Model["browser"]): Model["browser"] =>
 export function namingProblem(
 	model: Model,
 	naming: Naming,
+	/** The view's kept evaluations: the dialog asks on every keystroke. */
+	evaluations?: Evaluations,
 ): string | undefined {
 	// A rename's rule is its plan's, so the dialog allows exactly what the confirm does.
 	if (naming.purpose.kind === "rename") {
-		const plan = renamePlan(model, naming.purpose.id, naming.name);
+		const plan = renamePlan(model, naming.purpose.id, naming.name, evaluations);
 		return plan.ok ? undefined : plan.error;
 	}
 	return (
@@ -2640,6 +2642,14 @@ export function blockage(model: Model): Blockage | undefined {
 			return brief(
 				`Reading ${a.keys.map((k) => `\`${k}\``).join(", ")} before saving…`,
 			);
+	// A rename says what it renames: it can take a while (each file is written in turn).
+	const renaming = Object.entries(model.activity).flatMap(([id, a]) =>
+		a.kind === "saving" && a.renaming !== undefined
+			? [[model.local.schemes[Number(id)]?.name, a.renaming] as const]
+			: [],
+	)[0];
+	if (renaming !== undefined)
+		return brief(`Renaming ${renaming[0] ?? ""} to ${renaming[1]}…`);
 	if (
 		Object.values(model.activity).some(
 			(a) => a.kind === "saving" || a.kind === "deleting",

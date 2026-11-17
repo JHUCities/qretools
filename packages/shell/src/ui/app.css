@@ -935,3 +935,16 @@ button.finding-message {
 	font-size: var(--text-body-size-small);
 	overflow-wrap: break-word;
 }
+
+/* A rename's preview in its dialog: plain lines, the affected files folded under them. */
+.rename-scope p {
+	margin: 0;
+}
+.rename-scope ul {
+	margin: var(--base-size-4) 0 0;
+	padding-inline-start: var(--base-size-20);
+}
+.rename-scope summary {
+	cursor: pointer;
+}
+

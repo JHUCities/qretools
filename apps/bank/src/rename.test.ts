@@ -2,7 +2,7 @@ import { err, ok, sharedIdentity } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { describeRename } from "./commits.js";
 import { init, type Model } from "./model.js";
-import { renamePlan } from "./rename.js";
+import { renamePlan, renameScope } from "./rename.js";
 import { update } from "./update.js";
 
 /** Signed in, with these files loaded from the author's branch. */
@@ -375,5 +375,26 @@ describe("reloading during a rename's commit", () => {
 		const [busy] = update(typed, { kind: "schemeNamingConfirmed" });
 		const one = idOf(m, "questions/a/one.yaml");
 		expect(update(busy, { kind: "reloadRequested", id: one })[0]).toBe(busy);
+	});
+});
+
+describe("what the dialog lists and what the rename commits", () => {
+	it("commits a subset of what it lists: exactly the files whose GitHub copy names it", () => {
+		const m = edited(
+			loaded(BANK),
+			"questions/a/other.yaml",
+			q("other", "responses: agree4\n"),
+		);
+		const id = idOf(m, "scales/agree4.yaml");
+		const scope = renameScope(m, id);
+		const listed = [...scope.questions, ...scope.instruments];
+		const committed = plan(m).changes.flatMap((c) =>
+			c.id === undefined || c.id === id ? [] : [c.id],
+		);
+		expect(committed.every((c) => listed.includes(c))).toBe(true);
+		// `other` names it only here, so it is listed but not committed.
+		const other = idOf(m, "questions/a/other.yaml");
+		expect(listed).toContain(other);
+		expect(committed).not.toContain(other);
 	});
 });

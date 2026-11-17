@@ -769,10 +769,9 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 						flush();
 						on.save();
 					},
-					...(!isRoot(e.kind) &&
-						e.base === undefined && {
-							rename: () => dispatch({ kind: "schemeRenameOpened", id: e.id }),
-						}),
+					...(!isRoot(e.kind) && {
+						rename: () => dispatch({ kind: "schemeRenameOpened", id: e.id }),
+					}),
 				}}
 			/>
 			<div className="split">

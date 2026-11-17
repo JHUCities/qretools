@@ -32,6 +32,7 @@ import {
 	ROOT,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
+	sharedIdentity,
 	status as statusOf,
 	UNNAMED,
 	usedBy,
@@ -54,6 +55,7 @@ import {
 	type Model,
 	TEMPLATES,
 } from "../model.js";
+import { renamePlan, renameScope } from "../rename.js";
 import { alsoSaves, claimOf, isUnsaved, usersIn } from "../sync.js";
 import {
 	bankFolders,
@@ -93,7 +95,7 @@ import { type FileKind, FileSkeleton } from "./FileSkeleton.js";
 import { InstrumentNameDialog } from "./InstrumentNameDialog.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { SaveDialog } from "./SaveDialog.js";
-import { SchemeNameDialog } from "./SchemeNameDialog.js";
+import { type RenamePreview, SchemeNameDialog } from "./SchemeNameDialog.js";
 import { SignIn } from "./SignIn.js";
 import { SignOutDialog } from "./SignOutDialog.js";
 
@@ -231,6 +233,54 @@ export function App() {
 		model.pendingLink !== undefined &&
 		(model.session.kind === "connecting" ||
 			(model.session.kind === "connected" && model.loading.kind === "loading"));
+	// A rename's preview: what it changes from the moment it opens (`renameScope`, which
+	// doesn't depend on the name, so it isn't read again per keystroke), then what the
+	// name typed adds (`renamePlan`). Both read instruments through the kept evaluations.
+	const renaming =
+		model.browser.naming?.purpose.kind === "rename"
+			? model.browser.naming.purpose.id
+			: undefined;
+	const { remote } = model;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: read through `model`, keyed on the slices it reads
+	const renameFiles = useMemo(
+		() =>
+			renaming === undefined
+				? undefined
+				: renameScope(model, renaming, evaluations),
+		[renaming, local, remote, evaluations],
+	);
+	const renamePreview = useMemo((): RenamePreview | undefined => {
+		const naming = model.browser.naming;
+		if (naming?.purpose.kind !== "rename" || renameFiles === undefined)
+			return undefined;
+		const e = model.local.schemes[naming.purpose.id];
+		if (e === undefined) return undefined;
+		const kind = e.kind;
+		if (isRoot(kind)) return undefined;
+		const plan = renamePlan(model, e.id, naming.name, evaluations);
+		const questionName = (id: Id) => {
+			const q = model.local.questions[id];
+			return {
+				id,
+				name:
+					q === undefined
+						? UNNAMED
+						: (evaluations.get(q, env).draft.name ?? UNNAMED),
+			};
+		};
+		const identity = plan.ok ? sharedIdentity(kind, naming.name) : undefined;
+		return {
+			from: e.name,
+			saved: e.base !== undefined,
+			questions: renameFiles.questions.map(questionName),
+			instruments: renameFiles.instruments.map((id) => ({
+				id,
+				name: model.local.workspace[id]?.name ?? UNNAMED,
+			})),
+			...(plan.ok && { fills: plan.value.fills.length }),
+			...(identity !== undefined && { identity }),
+		};
+	}, [model, renameFiles, evaluations, env]);
 	const signingOut = model.browser.signingOut;
 	const signOut = signingOut && signOutPlan(model);
 	const saving = model.browser.saving;
@@ -541,7 +591,8 @@ export function App() {
 			{naming && (
 				<SchemeNameDialog
 					naming={naming}
-					problem={namingProblem(model, naming)}
+					problem={namingProblem(model, naming, evaluations)}
+					{...(renamePreview !== undefined && { rename: renamePreview })}
 					dispatch={dispatch}
 				/>
 			)}
