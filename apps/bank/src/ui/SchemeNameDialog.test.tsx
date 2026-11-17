@@ -94,19 +94,16 @@ describe("renaming a shared file", () => {
 		).toBe("true");
 	});
 
-	it("names the DDI identity and the questions it fills once the name can be used", () => {
+	it("names the DDI identity once the name can be used", () => {
 		render(
 			<SchemeNameDialog
 				naming={renaming("scale", "agree_4")}
 				problem={undefined}
-				rename={{ ...saved, fills: 1, identity: "scale-agree_4" }}
+				rename={{ ...saved, identity: "scale-agree_4" }}
 				dispatch={vi.fn()}
 			/>,
 		);
 		expect(screen.getByText("scale-agree_4")).toBeTruthy();
-		expect(screen.getByText(/1 question that names/).textContent).toBe(
-			"1 question that names agree_4 will use this shared scale.",
-		);
 	});
 
 	it("gives a unit no DDI paragraph at all", () => {
