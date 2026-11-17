@@ -27,6 +27,7 @@ import type {
 	Id,
 	Model,
 	Question,
+	Renamed,
 	SchemeEntry,
 	WorkspaceEntry,
 } from "./model.js";
@@ -273,4 +274,79 @@ export function renameScope(
 		),
 	];
 	return { questions, instruments };
+}
+
+/**
+ * Why the last rename can't be undone exactly now, or undefined when it can: every file
+ * it changed is still what it committed (so the reverse commit restores exactly what was
+ * there), and the old name is still free. Otherwise renaming back is the way.
+ */
+export function undoProblem(model: Model): string | undefined {
+	const r = model.browser.renamed;
+	if (r === undefined) return "There's no rename to undo.";
+	const e = model.local.schemes[r.id];
+	if (e === undefined || e.name !== r.to || isRoot(e.kind))
+		return "It was renamed or deleted since.";
+	const taken = schemeNameProblem(model, e.kind, r.from, e.id);
+	if (taken !== undefined) return taken;
+	const changed = r.reverse.some((c) => {
+		// The file at its new path: its base must still be what the rename committed.
+		if (c.text === null)
+			return e.base?.path !== c.path || e.base.sha !== c.expected;
+		if (c.id === undefined) return false;
+		const f =
+			model.local.questions[c.id] ??
+			model.local.workspace[c.id] ??
+			model.local.schemes[c.id];
+		if (f === undefined) return true;
+		// Changed both here and on GitHub, or deleted there: GitHub would refuse it again.
+		const sync = syncOf(f, remoteBlob(model.remote, f));
+		if (sync === "conflict" || sync === "deletedOnGitHub") return true;
+		return c.id !== e.id && f.base?.sha !== c.expected;
+	});
+	return changed ? "Something it changed was changed again since." : undefined;
+}
+
+/**
+ * The reverse of a rename that landed, from the model as GitHub's answer arrives (before
+ * any base moves) and the shas it committed: for the undo.
+ */
+export function renamedFrom(
+	model: Model,
+	e: SchemeEntry,
+	to: string,
+	changes: readonly Change[],
+	shas: Readonly<Record<string, string>>,
+	local: readonly (readonly [Id, string])[],
+): Renamed | undefined {
+	if (e.base === undefined) return undefined;
+	const oldPath = e.base.path;
+	const reverse = changes.flatMap((c): Change[] => {
+		if (c.text === null) return [];
+		const sha = shas[c.path];
+		if (sha === undefined) return [];
+		if (c.id === e.id)
+			return [
+				{ id: e.id, path: oldPath, expected: null, text: c.text },
+				{ path: c.path, expected: sha, text: null },
+			];
+		const f =
+			c.id === undefined
+				? undefined
+				: (model.local.questions[c.id] ?? model.local.workspace[c.id]);
+		return f?.base === undefined
+			? []
+			: [{ id: f.id, path: c.path, expected: sha, text: f.base.text }];
+	});
+	return {
+		id: e.id,
+		from: e.name,
+		to,
+		reverse,
+		local: local.flatMap(([id, after]) => {
+			const before =
+				model.local.questions[id]?.source ?? model.local.workspace[id]?.source;
+			return before === undefined ? [] : [[id, { before, after }] as const];
+		}),
+	};
 }

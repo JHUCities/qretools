@@ -102,6 +102,7 @@ import {
 	type Question,
 	type Remote,
 	type RemoteAddress,
+	type Renamed,
 	SCHEME_TEMPLATES,
 	type SchemeEntry,
 	sameName,
@@ -109,7 +110,13 @@ import {
 	signedOut,
 	toWork,
 } from "./model.js";
-import { renameLocal, renamePlan, schemeNameProblem } from "./rename.js";
+import {
+	renamedFrom,
+	renameLocal,
+	renamePlan,
+	schemeNameProblem,
+	undoProblem,
+} from "./rename.js";
 import {
 	blockedReason,
 	claimOf,
@@ -813,6 +820,38 @@ function step(model: Model, msg: Msg): Step {
 				[],
 			];
 
+		case "renameUndoRequested": {
+			const r = model.browser.renamed;
+			const as = writable(model);
+			if (
+				r === undefined ||
+				as === undefined ||
+				undoProblem(model) !== undefined
+			)
+				return [model, []];
+			const e = model.local.schemes[r.id];
+			if (e === undefined || isRoot(e.kind)) return [model, []];
+			// The reverse commit puts back exactly what the rename changed on GitHub.
+			const [busy, cmds] = commitFiles(
+				model,
+				as,
+				r.reverse,
+				[],
+				`Rename ${SCHEME_NAME[e.kind]} ${r.to} back to ${r.from}`,
+			);
+			return [
+				withActivity(busy, e.id, {
+					kind: "saving",
+					renaming: r.from,
+					undo: true,
+				}),
+				cmds,
+			];
+		}
+
+		case "renameNoticeDismissed":
+			return [withRenamed(model, undefined), []];
+
 		case "schemeNamingCancelled":
 			return [{ ...model, browser: withoutNaming(model.browser) }, []];
 
@@ -853,8 +892,13 @@ function step(model: Model, msg: Msg): Step {
 							count("instrument"),
 						),
 					);
+					// The last rename's undo stays until this one lands (`committed`), which
+					// replaces it: if GitHub refuses this one, that one can still be undone.
 					return [
-						withActivity(busy, e.id, { kind: "saving", renaming: naming.name }),
+						withActivity(busy, e.id, {
+							kind: "saving",
+							renaming: naming.name,
+						}),
 						cmds,
 					];
 				}
@@ -1176,11 +1220,35 @@ function step(model: Model, msg: Msg): Step {
 			// A rename: the working copies' new texts, read now, as the message arrives,
 			// while they are current and the file still claims its old name and path.
 			const renaming = ids.flatMap((id) => {
-				const to = model.activity[id];
+				const a = model.activity[id];
 				const e = model.local.schemes[id];
-				return to?.kind === "saving" && to.renaming !== undefined && e
-					? [{ e, to: to.renaming, local: renameLocal(model, e, to.renaming) }]
-					: [];
+				if (a?.kind !== "saving" || a.renaming === undefined || !e) return [];
+				const to = a.renaming;
+				const after = renameLocal(model, e, to);
+				if (a.undo !== true)
+					return [
+						{
+							e,
+							to,
+							local: after,
+							renamed: renamedFrom(model, e, to, msg.changes, shas, after),
+						},
+					];
+				// An undo: each working copy back to its text before the rename if it is still
+				// what the rename made it (exact); one edited since is renamed back instead.
+				// Accepted: an instrument edited since, that already named the new name before
+				// the rename, has that reference renamed back too (it is matched by path).
+				const back = new Map(after);
+				const local = (model.browser.renamed?.local ?? []).flatMap(
+					([fid, { before, after: made }]) => {
+						const now =
+							model.local.questions[fid]?.source ??
+							model.local.workspace[fid]?.source;
+						const text = now === made ? before : back.get(fid);
+						return text === undefined ? [] : [[fid, text] as const];
+					},
+				);
+				return [{ e, to, local, renamed: undefined }];
 			})[0];
 			const done = msg.changes.reduce<Model>((m, c) => {
 				// A delete with no working file is the old path of a move: GitHub only.
@@ -1204,9 +1272,12 @@ function step(model: Model, msg: Msg): Step {
 			const renamed =
 				renaming === undefined
 					? done
-					: renaming.local.reduce(
-							(m, [id, text]) => withSource(m, id, text),
-							withNamed(done, renaming.e.id, renaming.to),
+					: withRenamed(
+							renaming.local.reduce(
+								(m, [id, text]) => withSource(m, id, text),
+								withNamed(done, renaming.e.id, renaming.to),
+							),
+							renaming.renamed,
 						);
 			// Everything saveable is saved; drafts without a folder go, as the dialog said.
 			return leaving
@@ -2859,6 +2930,12 @@ export function bankAddProblem(adding: AddingBank): string | undefined {
 		? "That's this workspace: choose it from the list instead."
 		: undefined;
 }
+
+/** The last rename, as it can be undone; undefined once it is undone (no redo). */
+const withRenamed = (model: Model, renamed: Renamed | undefined): Model => ({
+	...model,
+	browser: compact({ ...model.browser, renamed }),
+});
 
 /** A shared file under a new name, its base (already moved by the commit) kept. */
 function withNamed(model: Model, id: Id, name: string): Model {

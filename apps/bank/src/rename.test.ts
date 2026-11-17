@@ -2,7 +2,7 @@ import { err, ok, sharedIdentity } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { describeRename } from "./commits.js";
 import { init, type Model } from "./model.js";
-import { renamePlan, renameScope } from "./rename.js";
+import { renamePlan, renameScope, undoProblem } from "./rename.js";
 import { update } from "./update.js";
 
 /** Signed in, with these files loaded from the author's branch. */
@@ -396,5 +396,154 @@ describe("what the dialog lists and what the rename commits", () => {
 		const other = idOf(m, "questions/a/other.yaml");
 		expect(listed).toContain(other);
 		expect(committed).not.toContain(other);
+	});
+});
+
+describe("undoing a rename", () => {
+	// An instrument that already names the new name (a hole until the rename fills it).
+	const SURVEY_WITH_HOLE =
+		"name: survey\nuses:\n  b: ../\ninputs:\n  mood:\n    responses: b.agree4\n  later:\n    responses: b.agree_4\nflow:\n  - ask: b.one\n";
+	const start = () =>
+		loaded({ ...BANK, "instruments/survey.yaml": SURVEY_WITH_HOLE });
+	/** Renamed to agree_4 and committed. */
+	const renamed = (m: Model) => {
+		const id = idOf(m, "scales/agree4.yaml");
+		const [opened] = update(m, { kind: "schemeRenameOpened", id });
+		const [typed] = update(opened, {
+			kind: "schemeNameChanged",
+			name: "agree_4",
+		});
+		const [busy, cmds] = update(typed, { kind: "schemeNamingConfirmed" });
+		return landed(busy, cmds);
+	};
+	const landed = (m: Model, cmds: ReturnType<typeof update>[1]) => {
+		const commit = cmds.find((c) => c.kind === "commit");
+		if (commit?.kind !== "commit") throw new Error("no commit");
+		return update(m, {
+			kind: "committed",
+			changes: commit.changes,
+			result: ok({
+				shas: Object.fromEntries(
+					commit.changes.map((c) => [c.path, `sha2-${c.path}`]),
+				),
+			}),
+		})[0];
+	};
+	const texts = (m: Model) =>
+		Object.fromEntries(
+			[
+				...Object.values(m.local.questions),
+				...Object.values(m.local.workspace),
+				...Object.values(m.local.schemes),
+			].map((f) => [f.id, [f.source, f.base?.path, "name" in f ? f.name : ""]]),
+		);
+
+	it("puts back exactly what was there, in one commit, a hole the rename filled included", () => {
+		const m = start();
+		const after = renamed(m);
+		expect(undoProblem(after)).toBeUndefined();
+		const [busy, cmds] = update(after, { kind: "renameUndoRequested" });
+		const commit = cmds.find((c) => c.kind === "commit");
+		expect(commit?.kind === "commit" && commit.message).toBe(
+			"Rename shared scale agree_4 back to agree4",
+		);
+		// Each file expected at what the rename committed.
+		expect(
+			commit?.kind === "commit" &&
+				commit.changes.every(
+					(c) => c.expected === null || c.expected.startsWith("sha2-"),
+				),
+		).toBe(true);
+		const back = landed(busy, cmds);
+		expect(texts(back)).toEqual(texts(m));
+		expect(back.browser.renamed).toBeUndefined();
+	});
+
+	it("is refused once a file it changed was changed again", () => {
+		const after = renamed(start());
+		const one = idOf(after, "questions/a/one.yaml");
+		const q1 = after.local.questions[one];
+		if (q1?.base === undefined) throw new Error("one");
+		const moved: Model = {
+			...after,
+			local: {
+				...after.local,
+				questions: {
+					...after.local.questions,
+					[one]: { ...q1, base: { ...q1.base, sha: "someone-else" } },
+				},
+			},
+		};
+		expect(undoProblem(moved)).toBe(
+			"Something it changed was changed again since.",
+		);
+		expect(update(moved, { kind: "renameUndoRequested" })[1]).toEqual([]);
+	});
+
+	it("is refused once another shared scale has the old name", () => {
+		const after = renamed(start());
+		const [creating] = update(after, {
+			kind: "schemeCreateOpened",
+			scheme: "scale",
+		});
+		const [named] = update(creating, {
+			kind: "schemeNameChanged",
+			name: "agree4",
+		});
+		const [made] = update(named, { kind: "schemeNamingConfirmed" });
+		expect(undoProblem(made)).toMatch(/already exists/);
+	});
+
+	it("keeps an edit made since, renaming it back", () => {
+		const after = renamed(start());
+		const edit = `${q("one", "responses: agree_4\n")}note: Since.\n`;
+		const changed = edited(after, "questions/a/one.yaml", edit);
+		const [busy, cmds] = update(changed, { kind: "renameUndoRequested" });
+		const back = landed(busy, cmds);
+		expect(
+			back.local.questions[idOf(after, "questions/a/one.yaml")]?.source,
+		).toBe(`${q("one", "responses: agree4\n")}note: Since.\n`);
+	});
+
+	it("is refused while a file it changed is in conflict with GitHub", () => {
+		const after = renamed(start());
+		const path = "questions/a/one.yaml";
+		const conflicted: Model = {
+			...edited(after, path, `${q("one", "responses: agree_4\n")}# here\n`),
+			remote: {
+				...after.remote,
+				questions: {
+					...after.remote.questions,
+					[path]: { sha: "theirs", text: "changed\n" },
+				},
+			},
+		};
+		expect(undoProblem(conflicted)).toBeDefined();
+	});
+
+	it("is kept when a new rename is refused", () => {
+		const after = renamed(start());
+		const id = idOf(after, "scales/agree_4.yaml");
+		const [opened] = update(after, { kind: "schemeRenameOpened", id });
+		const [typed] = update(opened, {
+			kind: "schemeNameChanged",
+			name: "agree5",
+		});
+		const [busy, cmds] = update(typed, { kind: "schemeNamingConfirmed" });
+		const commit = cmds.find((c) => c.kind === "commit");
+		const [refused] = update(busy, {
+			kind: "committed",
+			changes: commit?.kind === "commit" ? commit.changes : [],
+			result: err({
+				failure: { kind: "network" as const, message: "Offline." },
+			}),
+		});
+		expect(refused.browser.renamed?.to).toBe("agree_4");
+	});
+
+	it("is dismissed", () => {
+		const after = renamed(start());
+		const [gone] = update(after, { kind: "renameNoticeDismissed" });
+		expect(gone.browser.renamed).toBeUndefined();
 	});
 });

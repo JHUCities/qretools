@@ -80,8 +80,15 @@ export interface Base extends Blob {
 
 /** What is happening to a file. Absent from `Model.activity` means idle. */
 export type Activity =
-	/** A commit in flight; `renaming` when it renames this shared file to that name. */
-	| { readonly kind: "saving"; readonly renaming?: string }
+	/**
+	 * A commit in flight; `renaming` when it renames this shared file to that name, and
+	 * `undo` when that rename undoes the last one (`Browser.renamed`).
+	 */
+	| {
+			readonly kind: "saving";
+			readonly renaming?: string;
+			readonly undo?: true;
+	  }
 	/** An instrument's save held until the tags it reads (and locks) have been read. */
 	| { readonly kind: "waiting"; readonly keys: readonly AddressKey[] }
 	| { readonly kind: "deleting" }
@@ -209,6 +216,8 @@ export interface Browser {
 	 * the question it was asked from; or a draft shared file is renamed.
 	 */
 	readonly naming?: Naming;
+	/** The last rename, kept so it can be undone exactly (`undoProblem`). Never persisted. */
+	readonly renamed?: Renamed;
 	/**
 	 * A bank on GitHub being added from an instrument's `uses` entry, its address given:
 	 * `use` is where the address is written once it's added.
@@ -325,6 +334,22 @@ export interface Model {
 }
 
 export type ThemeChoice = "system" | "light" | "dark";
+
+/**
+ * A rename that landed, as it can be undone: the commit that puts back exactly what it
+ * changed on GitHub, and each working copy's text before and after it.
+ */
+export interface Renamed {
+	readonly id: Id;
+	readonly from: string;
+	readonly to: string;
+	/** Each file's pre-rename text, expected at the sha the rename committed. */
+	readonly reverse: readonly Change[];
+	readonly local: readonly (readonly [
+		Id,
+		{ readonly before: string; readonly after: string },
+	])[];
+}
 
 export interface Naming {
 	readonly kind: NamedScheme;
@@ -493,6 +518,9 @@ export type Msg =
 	| { readonly kind: "signOutDiscardConfirmed" }
 	| { readonly kind: "signOutCancelled" }
 	| { readonly kind: "failureDismissed"; readonly index: number }
+	/** Undo the last rename, exactly, while nothing it changed has changed again. */
+	| { readonly kind: "renameUndoRequested" }
+	| { readonly kind: "renameNoticeDismissed" }
 	| { readonly kind: "exampleHintDismissed" };
 
 /** A bank in another repository, as an instrument's `uses` gives it. */
