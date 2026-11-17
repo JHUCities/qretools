@@ -663,6 +663,7 @@ button.hole {
 	padding: 0;
 }
 .respondent legend {
+	white-space: pre-line; /* the author's line breaks, as a block scalar writes them */
 	font-size: var(--text-title-size-small);
 	font-weight: var(--base-text-weight-semibold);
 	padding: 0;

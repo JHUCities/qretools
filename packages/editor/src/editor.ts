@@ -130,7 +130,7 @@ export function createEditor(
 		// No schema hover: the cursor inspector shows a field's description, and a
 		// finding's tooltip shows the finding; a third tooltip repeated both.
 		stateExtensions(),
-		macCompletionKeys,
+		completionKeys,
 		quickFixKey,
 		spaceAfterColon,
 		...(options.newLine === undefined ? [] : [returnKey(options.newLine)]),
@@ -559,16 +559,17 @@ const quickFixKey = Prec.high(
 );
 
 /**
- * Opening completion on a Mac. Ctrl-Space is often taken by macOS for switching
- * input sources, and CodeMirror's own `Alt-i` cannot fire where Option-I is a dead
- * key (US layout: the circumflex). We do not force Option-I to work, because that
- * would stop authors typing accented text such as "rôle" in a question. Instead
- * we bind what VS Code binds on a Mac: Cmd-I and Option-Esc. Cmd-I replaces
- * CodeMirror's default "select parent syntax", which a question editor can spare.
+ * Opening completion: Cmd-I on a Mac, Ctrl-I elsewhere, as VS Code binds it,
+ * replacing CodeMirror's default "select parent syntax", which a question editor can
+ * spare (off a Mac, Ctrl-I silently changed the selection). On a Mac also Option-Esc,
+ * since Ctrl-Space is often taken by macOS for switching input sources, and
+ * CodeMirror's own `Alt-i` cannot fire where Option-I is a dead key (US layout: the
+ * circumflex). We do not force Option-I to work, because that would stop authors
+ * typing accented text such as "rôle" in a question.
  */
-const macCompletionKeys = Prec.highest(
+const completionKeys = Prec.highest(
 	keymap.of([
-		{ mac: "Cmd-i", run: startCompletion },
+		{ key: "Mod-i", run: startCompletion },
 		{ mac: "Alt-Escape", run: startCompletion },
 	]),
 );
