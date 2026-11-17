@@ -36,7 +36,7 @@ describe("status", () => {
 			kind: "complete",
 		});
 		expect(
-			statusOf("name: q\ntext: Do you rent?\nintent: Housing\nopen: {}\n"),
+			statusOf("name: q\ntext: Do you rent?\nintent: Do you rent?\nopen: {}\n"),
 		).toMatchObject({ kind: "advice", count: 1 });
 		expect(
 			statusOf("name: q\ntext: Do you rent?\nintent: Housing\nwording: x\n"),

@@ -47,7 +47,7 @@ export type LintCode =
 	| "too-few-responses"
 	| "no-none-option"
 	| "double-barreled"
-	| "thin-intent"
+	| "intent-repeats-text"
 	| "legacy-fields"
 	| "duplicate-option-variable"
 	| "option-variable-prefix"
