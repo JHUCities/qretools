@@ -80,7 +80,7 @@ describe("renaming a shared file", () => {
 		);
 		expect(
 			screen.getByText(
-				"Saves to your branch in one commit. The 2 questions and 1 instrument that name it change too. Unsaved changes stay unsaved.",
+				"Saves to your branch. The 2 questions and 1 instrument that name it change with it, all at once. Unsaved changes stay unsaved.",
 			),
 		).toBeTruthy();
 		expect(

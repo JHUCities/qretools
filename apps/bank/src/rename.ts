@@ -117,6 +117,9 @@ export function renamePlan(
 			if (stuck(q)) return err(blockedReason(model.remote, q).message);
 			changes.push({ id: q.id, path: q.base.path, expected: q.base.sha, text });
 		}
+		// Read through the kept evaluations, keyed by id and text: an instrument with unsaved
+		// edits is read again when its pane next asks (a fresh cache instead would rebuild the
+		// bank's scope on every keystroke in the dialog, measured at ~150 ms).
 		const saved = Object.values(model.local.workspace).flatMap((i) =>
 			i.kind === "instrument" && i.base !== undefined
 				? [{ ...i, source: i.base.text }]
@@ -302,7 +305,11 @@ export function undoProblem(model: Model): string | undefined {
 		// Changed both here and on GitHub, or deleted there: GitHub would refuse it again.
 		const sync = syncOf(f, remoteBlob(model.remote, f));
 		if (sync === "conflict" || sync === "deletedOnGitHub") return true;
-		return c.id !== e.id && f.base?.sha !== c.expected;
+		// At the path the rename committed it to, too: a file moved since (the same text,
+		// so the same sha) is no longer where the reverse commit would write.
+		return (
+			c.id !== e.id && (f.base?.sha !== c.expected || f.base.path !== c.path)
+		);
 	});
 	return changed ? "Something it changed was changed again since." : undefined;
 }
