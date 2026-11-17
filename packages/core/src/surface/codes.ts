@@ -50,7 +50,7 @@ export const keyText = (key: Scalar): string => key.source ?? String(key.value);
 
 /**
  * Each pair in the map becomes a Code. A label is text or, when `options` is
- * allowed, a small map with `label`, `title`, `variable` and `note`.
+ * allowed, a small map with `label`, `title`, `variable`, `note` and `specify`.
  * Findings sit under `path` (e.g. `responses.3`).
  */
 export function readCodeMap(
@@ -144,7 +144,7 @@ export function readCodeMap(
 									"unknown-key",
 									`${at}.${k}`,
 									`Option \`${code}\`: \`${k}\` isn't an option field.`,
-									"An option has `label`, `title`, `variable` and `note`.",
+									"An option has `label`, `title`, `variable`, `note` and `specify`.",
 								),
 							);
 						continue;
@@ -167,7 +167,22 @@ export function readCodeMap(
 				continue;
 			}
 			findings.push(...holes);
-			codes.push({ code, ...compact(result.data) });
+			const { specify, ...fields } = result.data;
+			// `false` is a second way to say "no box": leaving the line out is the one way.
+			if (specify === false)
+				findings.push({
+					code: "ignored-key",
+					severity: "warning",
+					path: `${at}.specify`,
+					message: `Option \`${code}\`: \`specify: false\` adds nothing.`,
+					hint: "Remove the line: an option has no box unless it says `specify`.",
+				});
+			codes.push({
+				code,
+				...compact(fields),
+				...(specify === true && { specify: {} }),
+				...(typeof specify === "object" && { specify: compact(specify) }),
+			});
 		} else if (pair.value === null || pair.value === undefined) {
 			findings.push(
 				hole(

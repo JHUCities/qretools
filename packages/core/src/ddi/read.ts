@@ -26,6 +26,35 @@ export const str = (j: unknown): string | undefined =>
 	typeof j === "string" ? j : undefined;
 
 /**
+ * How a QuestionItem is answered: its ResponseDomain or, where options have a box to
+ * type in beside them (a StructuredMixedResponseDomain), the domain the boxes are
+ * attached to: the one with no AttachmentLocation of its own.
+ */
+export const questionDomain = (question: JsonObject): JsonObject | undefined =>
+	asObj(question.ResponseDomain) ??
+	asList(asObj(question.StructuredMixedResponseDomain)?.ResponseDomainInMixed)
+		.filter((m) => m.AttachmentLocation === undefined)
+		.flatMap((m) => asList(m.ResponseDomain))[0];
+
+/**
+ * The boxes to type in beside a question's options: each attached domain's own
+ * OutParameter (what its variable records) and the value of the option it's beside.
+ */
+export const boxesOf = (
+	question: JsonObject,
+): readonly { readonly code: string; readonly parameter: JsonObject }[] =>
+	asList(
+		asObj(question.StructuredMixedResponseDomain)?.ResponseDomainInMixed,
+	).flatMap((m) => {
+		const at = asList(asObj(m.AttachmentLocation)?.DomainSpecificValue)[0];
+		const code = str(asList(at?.Value)[0]?.StringValue);
+		const parameter = asObj(asList(m.ResponseDomain)[0]?.OutParameter);
+		return code === undefined || parameter === undefined
+			? []
+			: [{ code, parameter }];
+	});
+
+/**
  * The words of an InternationalString, a StructuredString (a Name, a Label, a
  * Description, a LiteralText's Text) or a list of them: the words in `lang`, else the
  * first words written. A list may hold one language per element, or all in each.

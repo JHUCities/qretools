@@ -19,9 +19,10 @@ import {
 } from "./selectAll.ts";
 import {
 	type Code,
+	type DefinedVariable,
 	type Draft,
+	definedVariables,
 	type Named,
-	optionVariable,
 } from "./surface/draft.ts";
 import {
 	type Env,
@@ -190,42 +191,61 @@ const legacyFields: Rule = ({ legacy }) =>
 				),
 			];
 
-/** In select all that apply, each option is a variable; two options can't share one. */
+/** What defines a variable, as a finding names it mid-sentence. */
+const definer = (d: DefinedVariable): string =>
+	d.kind === "question"
+		? "the question"
+		: d.kind === "option"
+			? `option \`${d.option.code}\``
+			: `the box beside option \`${d.option.code}\``;
+
+/**
+ * Each option in select all that apply, and each option's box, is a variable of its
+ * own; no two of a question's variables can share a name.
+ */
+const duplicateVariables: Rule = (draft) => {
+	const seen = new Map<string, DefinedVariable>();
+	return definedVariables(draft).flatMap((d) => {
+		const first = seen.get(d.name);
+		if (first === undefined) {
+			seen.set(d.name, d);
+			return [];
+		}
+		const options = first.kind === "option" && d.kind === "option";
+		return [
+			advise(
+				"duplicate-option-variable",
+				"warning",
+				d.path,
+				options
+					? `Options \`${first.option.code}\` and \`${d.option.code}\` both have the variable name \`${d.name}\`.`
+					: `Variable \`${d.name}\` is named twice: by ${definer(first)} and by ${definer(d)}.`,
+				options
+					? "Each option is its own variable. Give one of them a different `variable:`."
+					: "Each is its own variable. Give one of them a different name.",
+			),
+		];
+	});
+};
+
+/** An option's own variable name, in select all that apply, kept beside its question's. */
 const optionVariables: Rule = ({ name, domain }) => {
 	if (domain?.kind !== "responses" || domain.select !== "many") return [];
-	const seen = new Map<string, string>();
-	return domain.codes.flatMap((c) => {
-		const variable = optionVariable(name, c);
-		if (variable === undefined) return [];
-		const out: Finding[] = [];
-		const first = seen.get(variable);
-		if (first === undefined) seen.set(variable, c.code);
-		else
-			out.push(
-				advise(
-					"duplicate-option-variable",
-					"warning",
-					`responses.${c.code}`,
-					`Options \`${first}\` and \`${c.code}\` both have the variable name \`${variable}\`.`,
-					"Each option is its own variable. Give one of them a different `variable:`.",
-				),
-			);
-		if (
-			name !== undefined &&
-			c.variable !== undefined &&
-			!c.variable.startsWith(name)
-		)
-			out.push(
-				advise(
-					"option-variable-prefix",
-					"info",
-					`responses.${c.code}`,
-					`Variable \`${c.variable}\` doesn't start with \`${name}\`.`,
-					`A name starting with \`${name}\` keeps it beside \`${name}\`'s other variables. Rename it, unless an older dataset used this name.`,
-				),
-			);
-		return out;
-	});
+	return domain.codes.flatMap((c) =>
+		name !== undefined &&
+		c.variable !== undefined &&
+		!c.variable.startsWith(name)
+			? [
+					advise(
+						"option-variable-prefix",
+						"info",
+						`responses.${c.code}`,
+						`Variable \`${c.variable}\` doesn't start with \`${name}\`.`,
+						`A name starting with \`${name}\` keeps it beside \`${name}\`'s other variables. Rename it, unless an older dataset used this name.`,
+					),
+				]
+			: [],
+	);
 };
 
 /** An inline list that duplicates a shared scale: the extract-to-shared refactoring, offered, not forced. */
@@ -233,7 +253,9 @@ const matchesScale: Rule = ({ domain }, env) => {
 	if (
 		domain?.kind !== "responses" ||
 		domain.scale !== undefined ||
-		domain.codes.length === 0
+		domain.codes.length === 0 ||
+		// A shared scale can't hold a box to type in, so it can't stand for this list.
+		domain.codes.some((c) => c.specify !== undefined)
 	)
 		return [];
 	// The same definition of "the same list" as the bank index: labels folded, codes aside.
@@ -427,6 +449,7 @@ const RULES: readonly Rule[] = [
 	doubleBarreled,
 	intentRepeatsText,
 	legacyFields,
+	duplicateVariables,
 	optionVariables,
 	matchesScale,
 	matchesShared("universe"),

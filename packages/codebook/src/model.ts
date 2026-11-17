@@ -12,6 +12,7 @@
 import {
 	asList,
 	asObj,
+	boxesOf,
 	type Command,
 	type Finding as CoreFinding,
 	DDI_DEPTH,
@@ -23,8 +24,10 @@ import {
 	type FlowInstrument,
 	type Indexed,
 	itemKeyOf,
+	type JsonObject,
 	latestOf as latestIn,
 	ok,
+	questionDomain,
 	type Result,
 	refUrn,
 	str,
@@ -445,13 +448,25 @@ export function codebookOf(
 				?.IncludedCode,
 		);
 		const codes = asList(included?.CodeReference);
-		const code =
-			parameter === undefined || codes.length !== 1
+		// The text typed in a box: the option it's beside, in the question's own list.
+		const beside = boxesOf(question.item).find(
+			(b) => b.parameter === parameter?.item,
+		)?.code;
+		// Only the Code's own fields are read (its value and category), never its identity.
+		const code: JsonObject | undefined =
+			parameter === undefined
 				? undefined
-				: follow(codes[0]);
+				: beside !== undefined
+					? asList(
+							follow(asObj(questionDomain(question.item))?.CodeListReference)
+								?.item.Code,
+						).find((c) => codeValue(c) === beside)
+					: codes.length === 1
+						? follow(codes[0])?.item
+						: undefined;
 		if (code === undefined) return undefined;
-		const value = codeValue(code.item);
-		const category = follow(code.item.CategoryReference);
+		const value = codeValue(code);
+		const category = follow(code.CategoryReference);
 		const label =
 			category === undefined ? undefined : text(category.item.Label);
 		return value === undefined
@@ -507,7 +522,7 @@ export function codebookOf(
 			managed(representation?.ValueRepresentationReference);
 		const domain =
 			recorded ??
-			asObj(q?.item.ResponseDomain) ??
+			(q === undefined ? undefined : questionDomain(q.item)) ??
 			managed(q?.item.ResponseDomainReference);
 		// Where the question is asked; where an ask binds its answer into this variable, only there.
 		const all = q === undefined ? [] : (flow.asked.get(latestOf(q).urn) ?? []);

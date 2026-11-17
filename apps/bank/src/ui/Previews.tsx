@@ -103,16 +103,27 @@ function RespondentInput({
 			// (author-spelled codes make poor ids, and `name` may still be a hole).
 			return (
 				<div className="options">
-					{input.options.map((o) => (
-						<label key={o.code}>
-							<input
-								type={input.select === "one" ? "radio" : "checkbox"}
-								name={group}
-								value={o.code}
-							/>{" "}
-							{o.label}
-						</label>
-					))}
+					{input.options.map((o) => {
+						const option = (
+							<label key={o.code}>
+								<input
+									type={input.select === "one" ? "radio" : "checkbox"}
+									name={group}
+									value={o.code}
+								/>{" "}
+								{o.label}
+							</label>
+						);
+						// A box beside the option, outside its label: typing in it mustn't toggle it.
+						return o.specify === undefined ? (
+							option
+						) : (
+							<div key={o.code} className="specify">
+								{option}
+								<input type="text" aria-label={`Text for ${o.label}`} />
+							</div>
+						);
+					})}
 				</div>
 			);
 		case "number":

@@ -38,7 +38,9 @@ describe("the bank index", () => {
 
 	it("defines the question's own variable, or one per option", () => {
 		expect(bank.b.defines.map((d) => d.name)).toEqual(["shared", "b_y"]);
-		expect(bank.d.defines).toEqual([{ name: "shared", path: "name" }]);
+		expect(bank.d.defines).toEqual([
+			{ kind: "question", name: "shared", path: "name" },
+		]);
 		expect(bank.e.defines).toEqual([]);
 	});
 

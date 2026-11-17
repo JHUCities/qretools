@@ -582,7 +582,7 @@ function outputs(
 			},
 		];
 	return definedVariables(q.evaluation.draft).map((d) =>
-		named(d.name, d.option === undefined ? type : answerType(q, bank, true)),
+		named(d.name, d.kind === "question" ? type : answerType(q, bank, d.kind)),
 	);
 }
 
