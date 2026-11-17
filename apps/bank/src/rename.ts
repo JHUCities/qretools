@@ -8,7 +8,6 @@
  * (its base) with the name rewritten, never its unsaved edits, which stay unsaved.
  */
 import {
-	EMPTY_ENV,
 	err,
 	instrumentAt,
 	isRoot,
@@ -17,7 +16,6 @@ import {
 	NAME_RULE_TEXT,
 	type NamedScheme,
 	ok,
-	parseSurface,
 	type Result,
 	SCHEME_NAME,
 	schemePath,
@@ -62,14 +60,12 @@ export function schemeNameProblem(
 		: undefined;
 }
 
-/** What a rename does: the commit, the working copies' new texts, and the questions it fills. */
+/** What a rename does: the commit, and the working copies' new texts. */
 export interface RenamePlan {
 	/** Empty for a draft shared file: nothing on GitHub has its name yet. */
 	readonly changes: readonly Change[];
 	/** Each working copy that names the file, with its text once renamed (drafts too). */
 	readonly local: readonly (readonly [Id, string])[];
-	/** Questions here that already name the new name: the rename makes them use this file. */
-	readonly fills: readonly Id[];
 }
 
 /**
@@ -140,17 +136,7 @@ export function renamePlan(
 			changes.push({ id: iid, path: i.base.path, expected: i.base.sha, text });
 		}
 	}
-	const fills = Object.values(model.local.questions)
-		.filter(
-			(q) =>
-				// Parsed only where the name appears at all: the dialog asks on every keystroke.
-				q.source.includes(to) &&
-				parseSurface(q.source, EMPTY_ENV).mentions.some(
-					(m) => m.scheme === kind && m.name === to,
-				),
-		)
-		.map((q) => q.id);
-	return ok({ changes, local, fills });
+	return ok({ changes, local });
 }
 
 /**

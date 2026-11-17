@@ -143,15 +143,6 @@ describe("renaming a saved shared file", () => {
 		expect(p.local.some(([id]) => id === other)).toBe(true);
 	});
 
-	it("lists the questions that already name the new name", () => {
-		const m = edited(
-			loaded(BANK),
-			"questions/a/other.yaml",
-			q("other", "responses: agree_4\n"),
-		);
-		expect(plan(m).fills).toEqual([idOf(m, "questions/a/other.yaml")]);
-	});
-
 	it("refuses an unchanged, invalid or taken name", () => {
 		const m = loaded({
 			...BANK,

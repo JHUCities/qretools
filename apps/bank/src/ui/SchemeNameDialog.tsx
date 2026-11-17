@@ -6,7 +6,6 @@
  */
 
 import { Dialog, FormControl, Stack, Textarea, TextInput } from "@primer/react";
-import { InlineMessage } from "@primer/react/experimental";
 import {
 	FIELD_OF,
 	type NamedScheme,
@@ -46,8 +45,6 @@ export interface RenamePreview {
 	readonly saved: boolean;
 	readonly questions: readonly { readonly id: Id; readonly name: string }[];
 	readonly instruments: readonly { readonly id: Id; readonly name: string }[];
-	/** Once the new name can be used: how many questions already name it. */
-	readonly fills?: number;
 	/** Once the new name can be used: the DDI ID it is published under (none for a unit). */
 	readonly identity?: string;
 }
@@ -140,9 +137,7 @@ export function SchemeNameDialog({
 							</FormControl.Validation>
 						)}
 					</FormControl>
-					{rename !== undefined && (
-						<RenameScope kind={kind} name={name} rename={rename} />
-					)}
+					{rename !== undefined && <RenameScope kind={kind} rename={rename} />}
 					{withText && (
 						<FormControl>
 							<FormControl.Label>
@@ -178,14 +173,12 @@ export function SchemeNameDialog({
  */
 function RenameScope({
 	kind,
-	name,
 	rename,
 }: {
 	readonly kind: NamedScheme;
-	readonly name: string;
 	readonly rename: RenamePreview;
 }) {
-	const { questions, instruments, saved, from, fills, identity } = rename;
+	const { questions, instruments, saved, identity } = rename;
 	const files = [
 		...(questions.length === 0 ? [] : [counted(questions.length, "question")]),
 		...(instruments.length === 0
@@ -217,14 +210,6 @@ function RenameScope({
 						"In the DDI it gets a new ID."
 					)}
 				</p>
-			)}
-			{fills !== undefined && fills > 0 && (
-				<InlineMessage variant="warning">
-					<span>
-						{counted(fills, "question")} that name{fills === 1 ? "s" : ""}{" "}
-						{inlineCode(`\`${name}\``)} will use this {SCHEME_NAME[kind]}.
-					</span>
-				</InlineMessage>
 			)}
 		</Stack>
 	);

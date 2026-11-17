@@ -277,7 +277,6 @@ export function App() {
 				id,
 				name: model.local.workspace[id]?.name ?? UNNAMED,
 			})),
-			...(plan.ok && { fills: plan.value.fills.length }),
 			...(identity !== undefined && { identity }),
 		};
 	}, [model, renameFiles, evaluations, env]);
