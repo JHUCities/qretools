@@ -69,7 +69,7 @@ describe("renaming a shared file", () => {
 		instruments: [{ id: 4, name: "survey" }],
 	};
 
-	it("says what it saves and what follows it, before a new name is typed, with no error for its own name", () => {
+	it("says what it updates and what keeps the old name, before a new name is typed, with no error for its own name", () => {
 		render(
 			<SchemeNameDialog
 				naming={renaming("scale", "agree4")}
@@ -80,15 +80,13 @@ describe("renaming a shared file", () => {
 		);
 		expect(
 			screen.getByText(
-				"Saves to your branch. The 2 questions and 1 instrument that name it change with it, all at once. Unsaved changes stay unsaved.",
+				"Renaming this shared scale updates 2 questions and 1 instrument.",
 			),
 		).toBeTruthy();
 		expect(
-			screen.getByText(/Nothing outside QREtools follows the rename/),
+			screen.getByText(/instruments that read this bank at a tag/),
 		).toBeTruthy();
-		expect(
-			screen.getByText(/In the DDI this is a new shared scale\./),
-		).toBeTruthy();
+		expect(screen.getByText(/In the DDI it gets a new ID\./)).toBeTruthy();
 		expect(screen.queryByText("That's its name already.")).toBeNull();
 		expect(
 			screen
@@ -112,7 +110,7 @@ describe("renaming a shared file", () => {
 		);
 	});
 
-	it("gives a unit no DDI sentence, but still says nothing outside follows", () => {
+	it("gives a unit no DDI sentence, but still says what keeps the old name", () => {
 		render(
 			<SchemeNameDialog
 				naming={renaming("unit", "day")}
@@ -123,7 +121,7 @@ describe("renaming a shared file", () => {
 		);
 		expect(screen.queryByText(/In the DDI/)).toBeNull();
 		expect(
-			screen.getByText(/Nothing outside QREtools follows the rename/),
+			screen.getByText(/instruments that read this bank at a tag/),
 		).toBeTruthy();
 	});
 
@@ -137,10 +135,8 @@ describe("renaming a shared file", () => {
 			/>,
 		);
 		expect(
-			screen.getByText(
-				"The 2 questions here that name it change too, as unsaved changes.",
-			),
+			screen.getByText("Renaming this shared scale updates 2 questions."),
 		).toBeTruthy();
-		expect(screen.queryByText(/Nothing outside/)).toBeNull();
+		expect(screen.queryByText(/In the DDI|keep/)).toBeNull();
 	});
 });
