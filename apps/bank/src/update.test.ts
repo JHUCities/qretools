@@ -26,6 +26,7 @@ import {
 	toWork,
 	warnOnLeave,
 } from "./model.js";
+import { schemeNameProblem } from "./rename.js";
 import { remoteBlob, syncOf } from "./sync.js";
 import {
 	bankLoading,
@@ -35,7 +36,6 @@ import {
 	moveProblem,
 	namingProblem,
 	ownBranch,
-	schemeNameProblem,
 	sessionStatus,
 	signOutPlan,
 	update,

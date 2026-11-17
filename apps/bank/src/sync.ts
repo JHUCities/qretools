@@ -5,13 +5,17 @@
  * three; nothing about it is stored.
  */
 import {
+	EMPTY_ENV,
 	type Index,
 	instrumentAt,
 	instrumentPath,
 	isRoot,
 	kindAt,
 	type Mention,
+	parseSurface,
+	SCHEME_NAME,
 	schemePath,
+	UNNAMED,
 	usedBy,
 } from "@qretools/core";
 import type { File } from "@qretools/shell";
@@ -309,4 +313,42 @@ export function alsoSaves(
 			? `${e.kind} ${e.name}`
 			: `${e.kind} ${e.name} (changes ${saved} saved question${saved === 1 ? "" : "s"})`;
 	});
+}
+
+/**
+ * Why a file that must be written with another can't be: changed both here and on GitHub
+ * (reloading drops the changes here), or deleted there. One wording, for Save and Rename.
+ */
+export function blockedReason(
+	remote: Remote,
+	stuck: Entry,
+): { readonly message: string; readonly hint: string } {
+	// A root file is named by its kind alone: "the workspace details".
+	const kindName =
+		stuck.kind === "question" || stuck.kind === "instrument"
+			? undefined
+			: SCHEME_NAME[stuck.kind];
+	const root =
+		stuck.kind !== "question" &&
+		stuck.kind !== "instrument" &&
+		isRoot(stuck.kind);
+	// A question's name is read from its text; no environment changes it.
+	const name =
+		stuck.kind === "question"
+			? (parseSurface(stuck.source, EMPTY_ENV).draft.name ?? UNNAMED)
+			: stuck.name;
+	const deleted =
+		syncOf(stuck, remoteBlob(remote, stuck)) === "deletedOnGitHub";
+	const subject = root ? `The ${kindName}` : `\`${name}\``;
+	const was = root ? "were" : "was";
+	const open = root ? `Open the ${kindName}` : `Open \`${name}\``;
+	const it = root ? "them" : "it";
+	return {
+		message: deleted
+			? `${subject} ${was} deleted on GitHub.`
+			: `${subject} ${was} changed both here and on GitHub.`,
+		hint: deleted
+			? `${open} and reload ${it}${root ? "" : ", or stop using it here"}, then save again.`
+			: `${open}, copy your changes somewhere, reload ${it} from GitHub, then save again.`,
+	};
 }

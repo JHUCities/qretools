@@ -108,7 +108,9 @@ import {
 	signedOut,
 	toWork,
 } from "./model.js";
+import { renamePlan, schemeNameProblem } from "./rename.js";
 import {
+	blockedReason,
 	claimOf,
 	dependencies,
 	rebase,
@@ -822,12 +824,13 @@ function step(model: Model, msg: Msg): Step {
 				const { id } = naming.purpose;
 				const e = model.local.schemes[id];
 				if (!e || isRoot(e.kind) || e.base !== undefined) return [closed, []];
-				// The instruments' references are read before the rename, while they resolve.
-				const inInstruments = instrumentRenames(model, e, naming.name);
+				// A draft: nothing on GitHub has its name, so the rename is local only.
+				const plan = renamePlan(model, id, naming.name);
+				if (!plan.ok) return [closed, []];
 				const renamed = withFile(closed, { ...e, name: naming.name });
-				const rewritten = inInstruments.reduce(
+				const rewritten = plan.value.local.reduce(
 					(m, [id, text]) => withSource(m, id, text),
-					renameReferences(renamed, e.kind, e.name, naming.name),
+					renamed,
 				);
 				return persist([rewritten, []]);
 			}
@@ -1608,31 +1611,8 @@ function write(
 				: { include: [], blocked: [] };
 	const [stuck] = deps.blocked;
 	if (stuck !== undefined) {
-		const name = nameOf(model, stuck);
-		// A root file is named by its kind alone: "the workspace details".
-		const root = stuck.kind !== "question" && isRoot(stuck.kind);
-		// Blocked: changed here and on GitHub (reloading drops the changes here), or deleted there.
-		const deleted =
-			syncOf(stuck, remoteBlob(model.remote, stuck)) === "deletedOnGitHub";
-		const subject = root ? `The ${SCHEME_NAME[stuck.kind]}` : `\`${name}\``;
-		const was = root ? "were" : "was";
-		const open = root
-			? `Open the ${SCHEME_NAME[stuck.kind]}`
-			: `Open \`${name}\``;
-		const it = root ? "them" : "it";
-		return [
-			refuse(
-				model,
-				id,
-				deleted
-					? `${subject} ${was} deleted on GitHub.`
-					: `${subject} ${was} changed both here and on GitHub.`,
-				deleted
-					? `${open} and reload ${it}${root ? "" : ", or stop using it here"}, then save again.`
-					: `${open}, copy your changes somewhere, reload ${it} from GitHub, then save again.`,
-			),
-			[],
-		];
+		const why = blockedReason(model.remote, stuck);
+		return [refuse(model, id, why.message, why.hint), []];
 	}
 	// Saved somewhere else than its base (a move): the old path goes in the same commit.
 	const moved: Change[] =
@@ -2441,21 +2421,6 @@ export function instrumentNameProblem(
 	return taken ? `An instrument named \`${name}\` already exists.` : undefined;
 }
 
-export function schemeNameProblem(
-	model: Model,
-	kind: NamedScheme,
-	name: string,
-	self?: Id,
-): string | undefined {
-	if (name === "") return "Give it a name.";
-	if (!NAME_PATTERN.test(name)) return NAME_RULE_TEXT;
-	return Object.values(model.local.schemes).some(
-		(e) => e.kind === kind && e.name === name && e.id !== self,
-	)
-		? `A ${SCHEME_NAME[kind]} named \`${name}\` already exists.`
-		: undefined;
-}
-
 const withoutSigningOut = (browser: Model["browser"]): Model["browser"] =>
 	compact({ ...browser, signingOut: undefined });
 
@@ -2532,9 +2497,13 @@ export function namingProblem(
 	model: Model,
 	naming: Naming,
 ): string | undefined {
-	const self = naming.purpose.kind === "rename" ? naming.purpose.id : undefined;
+	// A rename's rule is its plan's, so the dialog allows exactly what the confirm does.
+	if (naming.purpose.kind === "rename") {
+		const plan = renamePlan(model, naming.purpose.id, naming.name);
+		return plan.ok ? undefined : plan.error;
+	}
 	return (
-		schemeNameProblem(model, naming.kind, naming.name, self) ??
+		schemeNameProblem(model, naming.kind, naming.name) ??
 		shareProblem(model, naming)
 	);
 }
@@ -2554,57 +2523,6 @@ function shareProblem(model: Model, naming: Naming): string | undefined {
 	return q !== undefined && sharedScaleSource(q.source) !== undefined
 		? undefined
 		: "These responses can't be shared as they are. Each option must be a plain `code: label` line, with no title, variable or note.";
-}
-
-/** Every question in this tab that names the file by its old name now names the new one. */
-function renameReferences(
-	model: Model,
-	scheme: NamedScheme,
-	from: string,
-	to: string,
-): Model {
-	let next = model;
-	for (const q of Object.values(model.local.questions)) {
-		const edits = renameEdits(q.source, scheme, from, to);
-		const text = edits.length === 0 ? undefined : applyEdits(q.source, edits);
-		if (text !== undefined && text !== q.source)
-			next = withSource(next, q.id, text);
-	}
-	return next;
-}
-
-/**
- * Each instrument here that names the shared file `e`, with its text once every name
- * of it reads `<alias>.<to>`: a universe on a step, a scale an input is on. Read while
- * the old name still resolves; an instrument naming it becomes an unsaved change, as a
- * question does.
- */
-function instrumentRenames(
-	model: Model,
-	e: SchemeEntry,
-	to: string,
-): readonly (readonly [Id, string])[] {
-	const path = claimOf(e);
-	const evaluations = createEvaluations();
-	return Object.values(model.local.workspace).flatMap((i) => {
-		if (i.kind !== "instrument") return [];
-		const read = evaluations.instrument(model, i);
-		const hits = read.instrument.refs.filter((r) => {
-			if (r.kind !== "bank") return false;
-			const use = read.uses[r.alias];
-			return use?.kind === "local" && r.path === path;
-		});
-		if (hits.length === 0) return [];
-		// From the end, so each range still points where it did.
-		const text = [...hits]
-			.sort((a, b) => b.range[0] - a.range[0])
-			.reduce(
-				(src, r) =>
-					`${src.slice(0, r.range[0])}${r.kind === "bank" ? r.alias : ""}.${to}${src.slice(r.range[1])}`,
-				i.source,
-			);
-		return [[i.id, text] as const];
-	});
 }
 
 const current = (model: Model): Entry | undefined =>
