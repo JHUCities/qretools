@@ -22,7 +22,7 @@ import {
 } from "@qretools/core";
 import { applyEdits, renameEdits } from "@qretools/core/editor";
 import type { Change } from "@qretools/shell";
-import { createEvaluations } from "./evaluations.js";
+import { createEvaluations, type Evaluations } from "./evaluations.js";
 import type {
 	Id,
 	Model,
@@ -77,6 +77,8 @@ export function renamePlan(
 	model: Model,
 	id: Id,
 	to: string,
+	/** The view's kept evaluations, so the dialog's preview reads each instrument once. */
+	evaluations: Evaluations = createEvaluations(),
 ): Result<RenamePlan, string> {
 	const e = model.local.schemes[id];
 	if (e === undefined || isRoot(e.kind))
@@ -94,7 +96,7 @@ export function renamePlan(
 	if (e.base !== undefined && stuck(e))
 		return err(blockedReason(model.remote, e).message);
 
-	const local = renameLocal(model, e, to);
+	const local = renameLocal(model, e, to, evaluations);
 	const changes: Change[] = [];
 	if (e.base !== undefined) {
 		changes.push(
@@ -119,7 +121,13 @@ export function renamePlan(
 				? [{ ...i, source: i.base.text }]
 				: [],
 		);
-		for (const [iid, text] of instrumentRenames(model, e, to, saved)) {
+		for (const [iid, text] of instrumentRenames(
+			model,
+			e,
+			to,
+			saved,
+			evaluations,
+		)) {
 			const i = model.local.workspace[iid];
 			if (i?.base === undefined) continue;
 			if (stuck(i)) return err(blockedReason(model.remote, i).message);
@@ -148,6 +156,7 @@ export function renameLocal(
 	model: Model,
 	e: SchemeEntry,
 	to: string,
+	evaluations: Evaluations = createEvaluations(),
 ): readonly (readonly [Id, string])[] {
 	const kind = e.kind;
 	if (isRoot(kind)) return [];
@@ -158,7 +167,10 @@ export function renameLocal(
 	const instruments = Object.values(model.local.workspace).filter(
 		(i) => i.kind === "instrument",
 	);
-	return [...questions, ...instrumentRenames(model, e, to, instruments)];
+	return [
+		...questions,
+		...instrumentRenames(model, e, to, instruments, evaluations),
+	];
 }
 
 /** A question's text with every mention of `from` (of `kind`) naming `to`, or undefined if none. */
@@ -185,26 +197,80 @@ function instrumentRenames(
 	e: SchemeEntry,
 	to: string,
 	instruments: readonly WorkspaceEntry[],
+	evaluations: Evaluations,
 ): readonly (readonly [Id, string])[] {
-	const path = claimOf(e);
-	const evaluations = createEvaluations();
-	return instruments.flatMap((i) => {
-		if (i.kind !== "instrument") return [];
-		const read = evaluations.instrument(model, i);
-		const hits = read.instrument.refs.filter((r) => {
-			if (r.kind !== "bank") return false;
-			const use = read.uses[r.alias];
-			return use?.kind === "local" && r.path === path;
-		});
-		if (hits.length === 0) return [];
+	return instrumentHits(model, e, instruments, evaluations).map(([i, hits]) => {
 		// From the end, so each range still points where it did.
 		const text = [...hits]
 			.sort((a, b) => b.range[0] - a.range[0])
 			.reduce(
 				(src, r) =>
-					`${src.slice(0, r.range[0])}${r.kind === "bank" ? r.alias : ""}.${to}${src.slice(r.range[1])}`,
+					`${src.slice(0, r.range[0])}${r.alias}.${to}${src.slice(r.range[1])}`,
 				i.source,
 			);
-		return text === i.source ? [] : [[i.id, text] as const];
+		return [i.id, text] as const;
 	});
+}
+
+/** Each of `instruments` that names the shared file `e`, with where it names it. */
+function instrumentHits(
+	model: Model,
+	e: SchemeEntry,
+	instruments: readonly WorkspaceEntry[],
+	evaluations: Evaluations,
+): readonly (readonly [
+	WorkspaceEntry,
+	readonly {
+		readonly alias: string;
+		readonly range: readonly [number, number];
+	}[],
+])[] {
+	const path = claimOf(e);
+	return instruments.flatMap((i) => {
+		if (i.kind !== "instrument") return [];
+		const read = evaluations.instrument(model, i);
+		const hits = read.instrument.refs.flatMap((r) =>
+			r.kind === "bank" &&
+			read.uses[r.alias]?.kind === "local" &&
+			r.path === path
+				? [{ alias: r.alias, range: r.range }]
+				: [],
+		);
+		return hits.length === 0 ? [] : [[i, hits] as const];
+	});
+}
+
+/**
+ * What a rename of shared file `id` changes, whatever the new name: the questions and
+ * instruments that name it here or on GitHub. The dialog shows it from the moment it
+ * opens, before a new name is typed.
+ */
+export function renameScope(
+	model: Model,
+	id: Id,
+	evaluations: Evaluations = createEvaluations(),
+): { readonly questions: readonly Id[]; readonly instruments: readonly Id[] } {
+	const e = model.local.schemes[id];
+	if (e === undefined) return { questions: [], instruments: [] };
+	const kind = e.kind;
+	if (isRoot(kind)) return { questions: [], instruments: [] };
+	// Whether a text names it: renaming it to itself finds every place it is named.
+	const names = (text: string | undefined) =>
+		text !== undefined && renameEdits(text, kind, e.name, e.name).length > 0;
+	const questions = Object.values(model.local.questions)
+		.filter((q) => names(q.source) || names(q.base?.text))
+		.map((q) => q.id);
+	const all = Object.values(model.local.workspace);
+	const saved = all.flatMap((i) =>
+		i.base === undefined ? [] : [{ ...i, source: i.base.text }],
+	);
+	const instruments = [
+		...new Set(
+			[
+				...instrumentHits(model, e, all, evaluations),
+				...instrumentHits(model, e, saved, evaluations),
+			].map(([i]) => i.id),
+		),
+	];
+	return { questions, instruments };
 }

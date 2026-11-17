@@ -23,7 +23,7 @@ export interface HeaderActions {
 	readonly remove: () => void;
 	/** Absent for a file that can't move: a draft, or a scheme file (its path is its name). */
 	readonly move?: () => void;
-	/** Only for a shared file never saved: no one else uses its name yet. Local, so never blocked. */
+	/** A named shared file: a draft's rename is local; a saved one's is a commit, so it can be blocked. */
 	readonly rename?: () => void;
 	/** Back to the bank: shown on narrow screens, where the tree and the file are separate views. */
 	readonly close?: () => void;
@@ -94,6 +94,8 @@ export function FileHeader({
 			else if (blockedNow) tried();
 		};
 	const cantRemove = q.base !== undefined && !canWrite;
+	// A saved file's rename is a commit; a draft's is local, never blocked.
+	const cantRename = q.base !== undefined && !canWrite;
 	const cantSave = !canWrite && !nothing;
 	return (
 		<div className="qhead">
@@ -150,11 +152,19 @@ export function FileHeader({
 							<VisuallyHidden id={statusId}>{alsoText}</VisuallyHidden>
 						</>
 					)}
-					{on.rename !== undefined && (
-						<Button size="small" onClick={on.rename}>
-							Rename…
-						</Button>
-					)}
+					{on.rename !== undefined &&
+						explained(
+							cantRename,
+							<Button
+								size="small"
+								inactive={cantRename}
+								aria-disabled={cantRename || undefined}
+								aria-describedby={cantRename ? why : undefined}
+								onClick={when(!cantRename, on.rename, cantRename)}
+							>
+								Rename…
+							</Button>,
+						)}
 					{on.move !== undefined &&
 						explained(
 							!canWrite,

@@ -6,6 +6,7 @@
  */
 
 import { Dialog, FormControl, Stack, Textarea, TextInput } from "@primer/react";
+import { InlineMessage } from "@primer/react/experimental";
 import {
 	FIELD_OF,
 	type NamedScheme,
@@ -16,7 +17,7 @@ import {
 } from "@qretools/core";
 import { inlineCode } from "@qretools/shell/ui";
 import { useId } from "react";
-import type { Dispatch, Naming } from "../model.js";
+import type { Dispatch, Id, Naming } from "../model.js";
 
 const EXAMPLES: Readonly<Record<NamedScheme, string>> = {
 	concept: "neighborhood_satisfaction",
@@ -38,21 +39,42 @@ const PLACEHOLDER: Readonly<Record<NamedScheme, string>> = {
 const field = (kind: NamedScheme): string =>
 	FIELD_OF[kind].split(".").at(-1) ?? FIELD_OF[kind];
 
+/** What a rename changes, as the dialog says it; the names are each file's own. */
+export interface RenamePreview {
+	readonly from: string;
+	/** Saved on GitHub: the rename is a commit. A draft's is local only. */
+	readonly saved: boolean;
+	readonly questions: readonly { readonly id: Id; readonly name: string }[];
+	readonly instruments: readonly { readonly id: Id; readonly name: string }[];
+	/** Once the new name can be used: how many questions already name it. */
+	readonly fills?: number;
+	/** Once the new name can be used: the DDI ID it is published under (none for a unit). */
+	readonly identity?: string;
+}
+
+const counted = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
 export function SchemeNameDialog({
 	naming,
 	problem,
+	rename,
 	dispatch,
 }: {
 	readonly naming: Naming;
 	readonly problem: string | undefined;
+	/** For a rename: what it changes, shown from the moment the dialog opens. */
+	readonly rename?: RenamePreview;
 	readonly dispatch: Dispatch;
 }) {
 	const formId = useId();
 	const { kind, name, text, purpose } = naming;
 	const renaming = purpose.kind === "rename";
 	const close = () => dispatch({ kind: "schemeNamingCancelled" });
-	// An empty name is not yet wrong: say nothing until something is typed.
-	const shown = name === "" ? undefined : problem;
+	// An empty name, or the name it has, is not yet wrong: say nothing until one is typed.
+	const shown =
+		name === "" || (rename !== undefined && name === rename.from)
+			? undefined
+			: problem;
 	const shape = SHAPE[kind];
 	const withText = !renaming && shape !== "labels";
 	return (
@@ -111,8 +133,6 @@ export function SchemeNameDialog({
 							{purpose.kind === "create" &&
 								purpose.use !== undefined &&
 								" The question you came from will use it."}
-							{renaming &&
-								" Questions in this tab that use the old name are updated too."}
 						</FormControl.Caption>
 						{shown !== undefined && (
 							<FormControl.Validation variant="error">
@@ -120,6 +140,9 @@ export function SchemeNameDialog({
 							</FormControl.Validation>
 						)}
 					</FormControl>
+					{rename !== undefined && (
+						<RenameScope kind={kind} name={name} rename={rename} />
+					)}
 					{withText && (
 						<FormControl>
 							<FormControl.Label>
@@ -145,5 +168,75 @@ export function SchemeNameDialog({
 				</Stack>
 			</form>
 		</Dialog>
+	);
+}
+
+/**
+ * What a rename changes. Plain text, not a live region (the field's validation says what
+ * stops it): the files first, which don't depend on the new name, then the DDI, then
+ * what does, so only the end of the dialog changes as the author types.
+ */
+function RenameScope({
+	kind,
+	name,
+	rename,
+}: {
+	readonly kind: NamedScheme;
+	readonly name: string;
+	readonly rename: RenamePreview;
+}) {
+	const { questions, instruments, saved, from, fills, identity } = rename;
+	const files = [
+		...(questions.length === 0 ? [] : [counted(questions.length, "question")]),
+		...(instruments.length === 0
+			? []
+			: [counted(instruments.length, "instrument")]),
+	].join(" and ");
+	return (
+		<Stack gap="condensed" className="rename-scope">
+			<p>
+				{saved
+					? files === ""
+						? "Saves to your branch in one commit. Nothing else names it."
+						: `Saves to your branch in one commit. The ${files} that name it change too. Unsaved changes stay unsaved.`
+					: files === ""
+						? "Nothing else names it."
+						: `The ${files} here that name it change too, as unsaved changes.`}
+			</p>
+			{files !== "" && (
+				<details>
+					<summary>Show them</summary>
+					<ul>
+						{[...questions, ...instruments].map((f) => (
+							<li key={f.id}>{inlineCode(`\`${f.name}\``)}</li>
+						))}
+					</ul>
+				</details>
+			)}
+			{saved && (
+				<p>
+					{kind !== "unit" &&
+						(identity !== undefined ? (
+							<>
+								In the DDI this is a new {SCHEME_NAME[kind]},{" "}
+								{inlineCode(`\`${identity}\``)}.{" "}
+							</>
+						) : (
+							`In the DDI this is a new ${SCHEME_NAME[kind]}. `
+						))}
+					Nothing outside QREtools follows the rename: published codebooks,
+					other people's branches, instruments that read this bank at a tag, and
+					links to <code className="code">{from}</code> keep the old name.
+				</p>
+			)}
+			{fills !== undefined && fills > 0 && (
+				<InlineMessage variant="warning">
+					<span>
+						{counted(fills, "question")} that name{fills === 1 ? "s" : ""}{" "}
+						{inlineCode(`\`${name}\``)} will use this {SCHEME_NAME[kind]}.
+					</span>
+				</InlineMessage>
+			)}
+		</Stack>
 	);
 }
