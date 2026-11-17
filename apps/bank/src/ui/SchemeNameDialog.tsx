@@ -195,13 +195,9 @@ function RenameScope({
 	return (
 		<Stack gap="condensed" className="rename-scope">
 			<p>
-				{saved
-					? files === ""
-						? "Saves to your branch. Nothing else names it."
-						: `Saves to your branch. The ${files} that name it change with it, all at once. Unsaved changes stay unsaved.`
-					: files === ""
-						? "Nothing else names it."
-						: `The ${files} here that name it change too, as unsaved changes.`}
+				{files === ""
+					? "No question or instrument uses it."
+					: `Renaming this ${SCHEME_NAME[kind]} updates ${files}.`}
 			</p>
 			{files !== "" && (
 				<details>
@@ -217,16 +213,12 @@ function RenameScope({
 				<p>
 					{kind !== "unit" &&
 						(identity !== undefined ? (
-							<>
-								In the DDI this is a new {SCHEME_NAME[kind]},{" "}
-								{inlineCode(`\`${identity}\``)}.{" "}
-							</>
+							<>In the DDI it becomes {inlineCode(`\`${identity}\``)}. </>
 						) : (
-							`In the DDI this is a new ${SCHEME_NAME[kind]}. `
+							"In the DDI it gets a new ID. "
 						))}
-					Nothing outside QREtools follows the rename: published codebooks,
-					other people's branches, instruments that read this bank at a tag, and
-					links to <code className="code">{from}</code> keep the old name.
+					Published codebooks, other people's branches, instruments that read
+					this bank at a tag, and links keep {inlineCode(`\`${from}\``)}.
 				</p>
 			)}
 			{fills !== undefined && fills > 0 && (
