@@ -83,10 +83,9 @@ describe("renaming a shared file", () => {
 				"Renaming this shared scale updates 2 questions and 1 instrument.",
 			),
 		).toBeTruthy();
-		expect(
-			screen.getByText(/instruments that read this bank at a tag/),
-		).toBeTruthy();
-		expect(screen.getByText(/In the DDI it gets a new ID\./)).toBeTruthy();
+		expect(screen.getByText("In the DDI it gets a new ID.")).toBeTruthy();
+		// What reads the bank at a tag keeps the old name by itself: not explained.
+		expect(screen.queryByText(/keep/)).toBeNull();
 		expect(screen.queryByText("That's its name already.")).toBeNull();
 		expect(
 			screen
@@ -110,7 +109,7 @@ describe("renaming a shared file", () => {
 		);
 	});
 
-	it("gives a unit no DDI sentence, but still says what keeps the old name", () => {
+	it("gives a unit no DDI paragraph at all", () => {
 		render(
 			<SchemeNameDialog
 				naming={renaming("unit", "day")}
@@ -120,9 +119,8 @@ describe("renaming a shared file", () => {
 			/>,
 		);
 		expect(screen.queryByText(/In the DDI/)).toBeNull();
-		expect(
-			screen.getByText(/instruments that read this bank at a tag/),
-		).toBeTruthy();
+		// The opening line only: no empty paragraph taking the stack's gap.
+		expect(document.querySelectorAll(".rename-scope > p").length).toBe(1);
 	});
 
 	it("says a draft's rename is local", () => {

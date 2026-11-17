@@ -209,16 +209,13 @@ function RenameScope({
 					</ul>
 				</details>
 			)}
-			{saved && (
+			{saved && kind !== "unit" && (
 				<p>
-					{kind !== "unit" &&
-						(identity !== undefined ? (
-							<>In the DDI it becomes {inlineCode(`\`${identity}\``)}. </>
-						) : (
-							"In the DDI it gets a new ID. "
-						))}
-					Published codebooks, other people's branches, instruments that read
-					this bank at a tag, and links keep {inlineCode(`\`${from}\``)}.
+					{identity !== undefined ? (
+						<>In the DDI it becomes {inlineCode(`\`${identity}\``)}.</>
+					) : (
+						"In the DDI it gets a new ID."
+					)}
 				</p>
 			)}
 			{fills !== undefined && fills > 0 && (
