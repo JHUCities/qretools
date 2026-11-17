@@ -349,6 +349,8 @@ export interface Renamed {
 	readonly to: string;
 	/** Each file's pre-rename text, expected at the sha the rename committed. */
 	readonly reverse: readonly Change[];
+	/** Whether a file it saved kept edits of its own (only the rename was saved). */
+	readonly othersUnsaved: boolean;
 	readonly local: readonly (readonly [
 		Id,
 		{ readonly before: string; readonly after: string },
