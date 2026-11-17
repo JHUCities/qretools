@@ -448,8 +448,8 @@ function followDefinition(
 						if (onRename !== undefined && ref.href === undefined) {
 							const rename = Object.assign(document.createElement("button"), {
 								type: "button",
-								// It opens a dialog, as the header's Rename… does.
-								textContent: "Rename…",
+								// The same word as the header's Rename.
+								textContent: "Rename",
 								className: "cm-action",
 							});
 							rename.addEventListener("click", () => onRename(ref.from));
