@@ -74,7 +74,12 @@ export function EditorPane(
 			{
 				...(instrument
 					? { completions: [instrumentSource(scopes)], newLine: newLineAfter }
-					: question && { snippets: domainSnippets }),
+					: question && {
+							snippets: domainSnippets,
+							// F2 on a shared name renames it, as in an IDE.
+							onRename: (id: number, offset: number) =>
+								dispatch({ kind: "renameRequestedAt", id, offset }),
+						}),
 				// Pickers read the open file's bank (an instrument's, its banks) as they are
 				// when one opens.
 				...((pickers || instrument) && {

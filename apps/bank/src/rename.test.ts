@@ -2,7 +2,12 @@ import { err, ok, sharedIdentity } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { describeRename } from "./commits.js";
 import { init, type Model } from "./model.js";
-import { renamePlan, renameScope, undoProblem } from "./rename.js";
+import {
+	renamePlan,
+	renameScope,
+	showsRenameNotice,
+	undoProblem,
+} from "./rename.js";
 import { update } from "./update.js";
 
 /** Signed in, with these files loaded from the author's branch. */
@@ -545,5 +550,94 @@ describe("undoing a rename", () => {
 		const after = renamed(start());
 		const [gone] = update(after, { kind: "renameNoticeDismissed" });
 		expect(gone.browser.renamed).toBeUndefined();
+	});
+});
+
+describe("F2 on a shared name in a question", () => {
+	const at = (m: Model, path: string) => {
+		const id = idOf(m, path);
+		const source = m.local.questions[id]?.source ?? "";
+		return { id, offset: source.indexOf("agree4") + 2 };
+	};
+
+	it("opens the rename of the file it names", () => {
+		const m = loaded(BANK);
+		const { id, offset } = at(m, "questions/a/one.yaml");
+		const [open] = update(m, { kind: "fileOpened", id });
+		const [asked] = update(open, { kind: "renameRequestedAt", id, offset });
+		expect(asked.browser.naming).toEqual({
+			kind: "scale",
+			name: "agree4",
+			text: "",
+			purpose: {
+				kind: "rename",
+				id: idOf(m, "scales/agree4.yaml"),
+				from: id,
+			},
+		});
+	});
+
+	it("opens nothing on a name no file has, or while nothing can be written", () => {
+		const m = edited(
+			loaded(BANK),
+			"questions/a/one.yaml",
+			q("one", "responses: agree9\n"),
+		);
+		const one = idOf(m, "questions/a/one.yaml");
+		const [open] = update(m, { kind: "fileOpened", id: one });
+		const offset = (m.local.questions[one]?.source ?? "").indexOf("agree9") + 2;
+		expect(
+			update(open, { kind: "renameRequestedAt", id: one, offset })[0].browser
+				.naming,
+		).toBeUndefined();
+		const plain = loaded(BANK);
+		const two = at(plain, "questions/a/two.yaml");
+		const [opened] = update(plain, { kind: "fileOpened", id: two.id });
+		// Saving something else: nothing can be written until it lands.
+		const busy: Model = {
+			...opened,
+			activity: { [idOf(plain, "questions/a/one.yaml")]: { kind: "saving" } },
+		};
+		expect(
+			update(busy, { kind: "renameRequestedAt", ...two })[0].browser.naming,
+		).toBeUndefined();
+	});
+});
+
+describe("where a rename offers its undo", () => {
+	it("on the renamed file and the question it was started from, not every file it rewrote", () => {
+		const m = loaded(BANK);
+		const one = idOf(m, "questions/a/one.yaml");
+		const two = idOf(m, "questions/a/two.yaml");
+		const scale = idOf(m, "scales/agree4.yaml");
+		const [open] = update(m, { kind: "fileOpened", id: one });
+		const offset = (m.local.questions[one]?.source ?? "").indexOf("agree4") + 2;
+		const [asked] = update(open, {
+			kind: "renameRequestedAt",
+			id: one,
+			offset,
+		});
+		const [typed] = update(asked, {
+			kind: "schemeNameChanged",
+			name: "agree_4",
+		});
+		const [busy, cmds] = update(typed, { kind: "schemeNamingConfirmed" });
+		const commit = cmds.find((c) => c.kind === "commit");
+		const [done] = update(busy, {
+			kind: "committed",
+			changes: commit?.kind === "commit" ? commit.changes : [],
+			result: ok({
+				shas: Object.fromEntries(
+					(commit?.kind === "commit" ? commit.changes : []).map((c) => [
+						c.path,
+						`n-${c.path}`,
+					]),
+				),
+			}),
+		});
+		const r = done.browser.renamed;
+		expect(showsRenameNotice(r, scale)).toBe(true);
+		expect(showsRenameNotice(r, one)).toBe(true);
+		expect(showsRenameNotice(r, two)).toBe(false);
 	});
 });

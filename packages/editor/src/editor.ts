@@ -88,6 +88,11 @@ export interface EditorOptions {
 	readonly livelit?: LivelitHost;
 	/** Fields written out, offered beside the schema's keys: a question's response domains (core `domainSnippets`). */
 	readonly snippets?: (source: string, offset: number) => readonly Snippet[];
+	/**
+	 * Rename the shared name at an offset of the open file (F2, as in an IDE). Absent, F2
+	 * is left to the browser, and the name's tooltip offers no rename.
+	 */
+	readonly onRename?: (id: number, offset: number) => void;
 }
 
 export interface Editor {
@@ -136,9 +141,16 @@ export function createEditor(
 		...(options.newLine === undefined ? [] : [returnKey(options.newLine)]),
 		...(options.livelit === undefined ? [] : livelits(options.livelit)),
 		// The id `sync` last opened: a follow names the file it was reported against.
-		followDefinition((offset) => {
-			if (current !== undefined) onFollow(current, offset);
-		}),
+		followDefinition(
+			(offset) => {
+				if (current !== undefined) onFollow(current, offset);
+			},
+			options.onRename === undefined
+				? undefined
+				: (offset) => {
+						if (current !== undefined) options.onRename?.(current, offset);
+					},
+		),
 		EditorView.lineWrapping,
 		hangingIndent,
 		primerTheme,
@@ -356,7 +368,11 @@ const FOLLOW_KEYS = ` (${IS_MAC ? "⌘" : "Ctrl"}-click or F12)`;
  * None of this on another author's version (read only), which never follows a name.
  * `update` decides what the name opens; this only says where the author pointed.
  */
-function followDefinition(onFollow: (offset: number) => void) {
+function followDefinition(
+	onFollow: (offset: number) => void,
+	/** F2 and the tooltip's Rename: only where the editor was given one (a question's). */
+	onRename?: (offset: number) => void,
+) {
 	const held = ViewPlugin.fromClass(
 		class {
 			on = false;
@@ -428,6 +444,22 @@ function followDefinition(onFollow: (offset: number) => void) {
 						const row = document.createElement("div");
 						row.append(go, keys);
 						dom.append(row);
+						// A name of this bank's can be renamed here too, as in an IDE.
+						if (onRename !== undefined && ref.href === undefined) {
+							const rename = Object.assign(document.createElement("button"), {
+								type: "button",
+								// It opens a dialog, as the header's Rename… does.
+								textContent: "Rename…",
+								className: "cm-action",
+							});
+							rename.addEventListener("click", () => onRename(ref.from));
+							const f2 = document.createElement("span");
+							f2.className = "cm-action-keys";
+							f2.textContent = " (F2)";
+							const second = document.createElement("div");
+							second.append(rename, f2);
+							dom.append(second);
+						}
 						return { dom };
 					},
 				};
@@ -458,6 +490,21 @@ function followDefinition(onFollow: (offset: number) => void) {
 					return true;
 				},
 			},
+			// Bound only where a rename is offered: elsewhere F2 stays the browser's.
+			...(onRename === undefined
+				? []
+				: [
+						{
+							key: "F2",
+							run: (view: EditorView) => {
+								const head = view.state.selection.main.head;
+								if (view.state.readOnly || !refRangeAt(view.state, head))
+									return false;
+								onRename(head);
+								return true;
+							},
+						},
+					]),
 		]),
 	];
 }

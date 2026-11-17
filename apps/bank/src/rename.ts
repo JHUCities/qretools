@@ -318,6 +318,7 @@ export function renamedFrom(
 	changes: readonly Change[],
 	shas: Readonly<Record<string, string>>,
 	local: readonly (readonly [Id, string])[],
+	startedIn?: Id,
 ): Renamed | undefined {
 	if (e.base === undefined) return undefined;
 	const oldPath = e.base.path;
@@ -340,6 +341,7 @@ export function renamedFrom(
 	});
 	return {
 		id: e.id,
+		...(startedIn !== undefined && { startedIn }),
 		from: e.name,
 		to,
 		reverse,
@@ -350,3 +352,13 @@ export function renamedFrom(
 		}),
 	};
 }
+
+/**
+ * Whether file `id` offers the last rename's undo: the renamed file, and the file the
+ * author started it from (F2 in a question). Not every file it rewrote.
+ */
+export const showsRenameNotice = (
+	renamed: Renamed | undefined,
+	id: Id,
+): boolean =>
+	renamed !== undefined && (renamed.id === id || renamed.startedIn === id);

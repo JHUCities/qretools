@@ -95,7 +95,7 @@ import {
 	type SchemeEntry,
 	schemeFileNamed,
 } from "../model.js";
-import { undoProblem } from "../rename.js";
+import { showsRenameNotice, undoProblem } from "../rename.js";
 import {
 	alsoSaves,
 	claimOf,
@@ -300,6 +300,7 @@ function QuestionEditing({ q, index }: { q: Question; index: Index<Id> }) {
 				blocked={blocked}
 				also={also}
 				stale={stale}
+				hint={<RenameUndo id={q.id} />}
 				on={{
 					...on,
 					save: () => {
@@ -680,9 +681,6 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 	const agency = useAgency();
 	const { dispatch, onTarget, onFix, on } = useActions(e.id);
 	const eStale = useStale(e);
-	// The last rename, offered for undoing on the file it renamed while it can be exactly.
-	const renamed = useModel((m) => m.browser.renamed);
-	const undoable = useModel(undoProblem);
 	const ev = evaluations.scheme(e, env);
 	// The workspace's details are also told of the folders they name that hold no saved
 	// question: only the workspace knows its folders (`unknownFolders`). Not while it
@@ -768,40 +766,7 @@ function SchemeEditing({ e, index }: { e: SchemeEntry; index: Index<Id> }) {
 				activity={activity[e.id]}
 				blocked={blocked}
 				stale={eStale}
-				hint={
-					renamed?.id === e.id && (
-						<Banner
-							variant="success"
-							// One line beside its action, as the example's offer is.
-							layout="compact"
-							actionsLayout="inline"
-							// Primer's Banner takes its title as text only, so the name isn't code here.
-							title={`Renamed from ${renamed.from}.`}
-							{...(undoable !== undefined && {
-								description: "To undo it, rename it back.",
-							})}
-							{...(undoable === undefined && {
-								primaryAction: (
-									// Inactive while nothing can be written: the status says why.
-									<Banner.PrimaryAction
-										inactive={blocked !== undefined}
-										aria-disabled={blocked !== undefined || undefined}
-										aria-describedby={
-											blocked === undefined ? undefined : SESSION_STATUS
-										}
-										onClick={() => {
-											if (blocked === undefined)
-												dispatch({ kind: "renameUndoRequested" });
-										}}
-									>
-										Undo rename
-									</Banner.PrimaryAction>
-								),
-							})}
-							onDismiss={() => dispatch({ kind: "renameNoticeDismissed" })}
-						/>
-					)
-				}
+				hint={<RenameUndo id={e.id} />}
 				on={{
 					...on,
 					save: () => {
@@ -1486,5 +1451,49 @@ function FileLink({
 		<Button variant="link" onClick={onOpen}>
 			{children}
 		</Button>
+	);
+}
+
+/**
+ * The last rename, offered for undoing on the renamed file and the one it was started
+ * from (`showsRenameNotice`), while it can be undone exactly.
+ */
+function RenameUndo({ id }: { id: Id }) {
+	const { dispatch } = useApp();
+	const renamed = useModel((m) => m.browser.renamed);
+	const undoable = useModel(undoProblem);
+	const blocked = useModel(writeBlocked);
+	if (renamed === undefined || !showsRenameNotice(renamed, id)) return null;
+	return (
+		<Banner
+			variant="success"
+			// One line beside its action, as the example's offer is.
+			layout="compact"
+			actionsLayout="inline"
+			// Primer's Banner takes its title as text only, so the name isn't code here.
+			title={`Renamed ${renamed.from} to ${renamed.to}.`}
+			{...(undoable !== undefined && {
+				description: "To undo it, rename it back.",
+			})}
+			{...(undoable === undefined && {
+				primaryAction: (
+					// Inactive while nothing can be written: the status says why.
+					<Banner.PrimaryAction
+						inactive={blocked !== undefined}
+						aria-disabled={blocked !== undefined || undefined}
+						aria-describedby={
+							blocked === undefined ? undefined : SESSION_STATUS
+						}
+						onClick={() => {
+							if (blocked === undefined)
+								dispatch({ kind: "renameUndoRequested" });
+						}}
+					>
+						Undo rename
+					</Banner.PrimaryAction>
+				),
+			})}
+			onDismiss={() => dispatch({ kind: "renameNoticeDismissed" })}
+		/>
 	);
 }

@@ -87,6 +87,8 @@ export type Activity =
 	| {
 			readonly kind: "saving";
 			readonly renaming?: string;
+			/** Where the rename was started, besides the file itself (`Renamed.startedIn`). */
+			readonly startedIn?: Id;
 			readonly undo?: true;
 	  }
 	/** An instrument's save held until the tags it reads (and locks) have been read. */
@@ -341,6 +343,8 @@ export type ThemeChoice = "system" | "light" | "dark";
  */
 export interface Renamed {
 	readonly id: Id;
+	/** Where the author started it, besides the file itself: its undo is offered there too. */
+	readonly startedIn?: Id;
 	readonly from: string;
 	readonly to: string;
 	/** Each file's pre-rename text, expected at the sha the rename committed. */
@@ -364,7 +368,12 @@ export interface Naming {
 				/** A scale made from the question's own options there, which its name replaces. */
 				readonly share?: true;
 		  }
-		| { readonly kind: "rename"; readonly id: Id };
+		| {
+				readonly kind: "rename";
+				readonly id: Id;
+				/** Where the author started it, besides the file itself: there its undo is offered. */
+				readonly from?: Id;
+		  };
 }
 
 export type Msg =
@@ -389,6 +398,12 @@ export type Msg =
 	/** Go to definition (Mod-click or F12 on a shared name): open the file it names. */
 	| {
 			readonly kind: "definitionRequested";
+			readonly id: Id;
+			readonly offset: number;
+	  }
+	/** Rename (F2 on a shared name in a question): open the rename of the file it names. */
+	| {
+			readonly kind: "renameRequestedAt";
 			readonly id: Id;
 			readonly offset: number;
 	  }
@@ -422,7 +437,8 @@ export type Msg =
 			readonly use?: { readonly id: Id; readonly path: string };
 	  }
 	/** Rename a shared file that has never been saved: nothing on GitHub depends on its name. */
-	| { readonly kind: "schemeRenameOpened"; readonly id: Id }
+	/** `from`: the question F2 was pressed in, when it wasn't the file's own header. */
+	| { readonly kind: "schemeRenameOpened"; readonly id: Id; readonly from?: Id }
 	| { readonly kind: "schemeNameChanged"; readonly name: string }
 	| { readonly kind: "schemeTextChanged"; readonly text: string }
 	| { readonly kind: "schemeNamingConfirmed" }
