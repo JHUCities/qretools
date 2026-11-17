@@ -1,4 +1,4 @@
-import { ok, sharedIdentity } from "@qretools/core";
+import { err, ok, sharedIdentity } from "@qretools/core";
 import { describe, expect, it } from "vitest";
 import { describeRename } from "./commits.js";
 import { init, type Model } from "./model.js";
@@ -218,5 +218,162 @@ describe("a rename's message and identity", () => {
 	it("gives a unit no DDI identity", () => {
 		expect(sharedIdentity("scale", "agree4")).toBe("scale-agree4");
 		expect(sharedIdentity("unit", "days")).toBeUndefined();
+	});
+});
+
+describe("confirming a rename of a saved shared file", () => {
+	/** The dialog opened on agree4, the name typed, confirmed: the model and its commands. */
+	const confirm = (m: Model, to = "agree_4") => {
+		const id = idOf(m, "scales/agree4.yaml");
+		const [opened] = update(m, { kind: "schemeRenameOpened", id });
+		const [typed] = update(opened, { kind: "schemeNameChanged", name: to });
+		return update(typed, { kind: "schemeNamingConfirmed" });
+	};
+	/** GitHub took every change: each path gets a new sha. */
+	const accepted = (m: Model, cmds: ReturnType<typeof update>[1]) => {
+		const commit = cmds.find((c) => c.kind === "commit");
+		if (commit?.kind !== "commit") throw new Error("no commit");
+		return update(m, {
+			kind: "committed",
+			changes: commit.changes,
+			result: ok({
+				shas: Object.fromEntries(
+					commit.changes.map((c) => [c.path, `new-${c.path}`]),
+				),
+			}),
+		})[0];
+	};
+	const scaleOf = (m: Model) =>
+		Object.values(m.local.schemes).find((e) => e.kind === "scale");
+
+	it("commits the plan once, with the rename's message, the name unchanged until GitHub has it", () => {
+		const m = loaded(BANK);
+		const [busy, cmds] = confirm(m);
+		const commit = cmds.find((c) => c.kind === "commit");
+		expect(commit).toMatchObject({
+			kind: "commit",
+			message:
+				"Rename shared scale agree4 to agree_4\n\nAnd the 2 questions and 1 instrument that name it.",
+		});
+		expect(commit?.kind === "commit" && commit.changes[0]).toMatchObject({
+			path: "scales/agree_4.yaml",
+			expected: null,
+		});
+		expect(scaleOf(busy)?.name).toBe("agree4");
+		expect(busy.activity[idOf(m, "scales/agree4.yaml")]).toEqual({
+			kind: "saving",
+			renaming: "agree_4",
+		});
+		expect(busy.browser.naming).toBeUndefined();
+	});
+
+	it("reserves the new name while it runs, for a rename and for a new file", () => {
+		const [busy] = confirm(loaded(BANK));
+		const [creating] = update(busy, {
+			kind: "schemeCreateOpened",
+			scheme: "scale",
+		});
+		const [named] = update(creating, {
+			kind: "schemeNameChanged",
+			name: "agree_4",
+		});
+		const [after] = update(named, { kind: "schemeNamingConfirmed" });
+		expect(Object.values(after.local.schemes).map((e) => e.name)).not.toContain(
+			"agree_4",
+		);
+	});
+
+	it("renames the file and everything naming it once GitHub has the commit, with nothing left unsaved", () => {
+		const m = loaded(BANK);
+		const [busy, cmds] = confirm(m);
+		const done = accepted(busy, cmds);
+		const scale = scaleOf(done);
+		expect(scale?.name).toBe("agree_4");
+		expect(scale?.base?.path).toBe("scales/agree_4.yaml");
+		for (const path of [
+			"questions/a/one.yaml",
+			"questions/a/two.yaml",
+			"instruments/survey.yaml",
+		]) {
+			const id = idOf(m, path);
+			const f = done.local.questions[id] ?? done.local.workspace[id];
+			expect(f?.source).toContain("agree_4");
+			// The instrument walk: committed and working copy agree, no spurious unsaved change.
+			expect(f?.source).toBe(f?.base?.text);
+		}
+		expect(done.activity).toEqual({});
+	});
+
+	it("moves the address of the open file to its new path", () => {
+		const m = loaded(BANK);
+		const id = idOf(m, "scales/agree4.yaml");
+		const [open] = update(m, { kind: "fileOpened", id });
+		const [busy, cmds] = confirm(open);
+		const commit = cmds.find((c) => c.kind === "commit");
+		const [, after] = update(busy, {
+			kind: "committed",
+			changes: commit?.kind === "commit" ? commit.changes : [],
+			result: ok({ shas: { "scales/agree_4.yaml": "new" } }),
+		});
+		const link = after.find((c) => c.kind === "setLink");
+		expect(link?.kind === "setLink" && link.hash).toContain(
+			"scales%2Fagree_4.yaml",
+		);
+	});
+
+	it("keeps what was typed while the commit ran, renamed", () => {
+		const m = loaded(BANK);
+		const [busy, cmds] = confirm(m);
+		const typed = edited(
+			busy,
+			"questions/a/one.yaml",
+			`${q("one", "responses: agree4\n")}note: Typed meanwhile.\n`,
+		);
+		const done = accepted(typed, cmds);
+		expect(done.local.questions[idOf(m, "questions/a/one.yaml")]?.source).toBe(
+			`${q("one", "responses: agree_4\n")}note: Typed meanwhile.\n`,
+		);
+	});
+
+	it("renames nothing when GitHub refuses the commit", () => {
+		const m = loaded(BANK);
+		const [busy, cmds] = confirm(m);
+		const commit = cmds.find((c) => c.kind === "commit");
+		const [after] = update(busy, {
+			kind: "committed",
+			changes: commit?.kind === "commit" ? commit.changes : [],
+			result: err({
+				failure: { kind: "network" as const, message: "Offline." },
+			}),
+		});
+		expect(scaleOf(after)?.name).toBe("agree4");
+		expect(
+			after.local.questions[idOf(m, "questions/a/one.yaml")]?.source,
+		).toContain("responses: agree4\n");
+	});
+
+	it("is ignored when it arrives after signing out", () => {
+		const m = loaded(BANK);
+		const [busy, cmds] = confirm(m);
+		const [out] = update(busy, { kind: "signOutRequested" });
+		const done = accepted(out, cmds);
+		expect(Object.values(done.local.schemes).map((e) => e.name)).not.toContain(
+			"agree_4",
+		);
+	});
+});
+
+describe("reloading during a rename's commit", () => {
+	it("is ignored for a file in the commit, whose base the answer sets", () => {
+		const m = loaded(BANK);
+		const id = idOf(m, "scales/agree4.yaml");
+		const [opened] = update(m, { kind: "schemeRenameOpened", id });
+		const [typed] = update(opened, {
+			kind: "schemeNameChanged",
+			name: "agree_4",
+		});
+		const [busy] = update(typed, { kind: "schemeNamingConfirmed" });
+		const one = idOf(m, "questions/a/one.yaml");
+		expect(update(busy, { kind: "reloadRequested", id: one })[0]).toBe(busy);
 	});
 });

@@ -68,6 +68,7 @@ import {
 	describeChange,
 	describeChangeSet,
 	describeMove,
+	describeRename,
 	describeSchemeChange,
 	describeWorkspaceChange,
 	type TagMove,
@@ -108,7 +109,7 @@ import {
 	signedOut,
 	toWork,
 } from "./model.js";
-import { renamePlan, schemeNameProblem } from "./rename.js";
+import { renameLocal, renamePlan, schemeNameProblem } from "./rename.js";
 import {
 	blockedReason,
 	claimOf,
@@ -612,9 +613,9 @@ function step(model: Model, msg: Msg): Step {
 		}
 
 		case "schemeRenameOpened": {
-			// Only a draft: a saved file's name is its path on GitHub, and other branches'.
+			// Saved or a draft; whether it can be written is checked at the confirm.
 			const e = model.local.schemes[msg.id];
-			if (!e || isRoot(e.kind) || e.base !== undefined) return [model, []];
+			if (!e || isRoot(e.kind)) return [model, []];
 			return [
 				{
 					...model,
@@ -823,10 +824,41 @@ function step(model: Model, msg: Msg): Step {
 			if (naming.purpose.kind === "rename") {
 				const { id } = naming.purpose;
 				const e = model.local.schemes[id];
-				if (!e || isRoot(e.kind) || e.base !== undefined) return [closed, []];
-				// A draft: nothing on GitHub has its name, so the rename is local only.
+				if (!e || isRoot(e.kind)) return [closed, []];
+				// Planned again here, never taken from the dialog: the bank may have moved on.
+				// Refused: the dialog stays open with the name typed, as Move's does.
 				const plan = renamePlan(model, id, naming.name);
-				if (!plan.ok) return [closed, []];
+				if (!plan.ok) return [model, []];
+				if (e.base !== undefined) {
+					// Saved: one commit, and the name changes here only once GitHub has it.
+					// Instruments go in as they are, not through `write`: their tag locks are in
+					// the workspace details, which a rename never changes.
+					const as = writable(model);
+					if (as === undefined) return [model, []];
+					const { changes } = plan.value;
+					const count = (kind: "question" | "instrument") =>
+						changes.filter(
+							(c) => c.id !== undefined && fileOf(model, c.id)?.kind === kind,
+						).length;
+					const [busy, cmds] = commitFiles(
+						closed,
+						as,
+						changes,
+						[],
+						describeRename(
+							e.kind,
+							e.name,
+							naming.name,
+							count("question"),
+							count("instrument"),
+						),
+					);
+					return [
+						withActivity(busy, e.id, { kind: "saving", renaming: naming.name }),
+						cmds,
+					];
+				}
+				// A draft: nothing on GitHub has its name, so the rename is local only.
 				const renamed = withFile(closed, { ...e, name: naming.name });
 				const rewritten = plan.value.local.reduce(
 					(m, [id, text]) => withSource(m, id, text),
@@ -1141,6 +1173,15 @@ function step(model: Model, msg: Msg): Step {
 				return seen === undefined ? [failedAt, []] : persist([failedAt, []]);
 			}
 			const { shas } = msg.result.value;
+			// A rename: the working copies' new texts, read now, as the message arrives,
+			// while they are current and the file still claims its old name and path.
+			const renaming = ids.flatMap((id) => {
+				const to = model.activity[id];
+				const e = model.local.schemes[id];
+				return to?.kind === "saving" && to.renaming !== undefined && e
+					? [{ e, to: to.renaming, local: renameLocal(model, e, to.renaming) }]
+					: [];
+			})[0];
 			const done = msg.changes.reduce<Model>((m, c) => {
 				// A delete with no working file is the old path of a move: GitHub only.
 				if (c.text === null)
@@ -1160,10 +1201,17 @@ function step(model: Model, msg: Msg): Step {
 					: m;
 				return withGitHub(based, c.path, blob);
 			}, idle);
+			const renamed =
+				renaming === undefined
+					? done
+					: renaming.local.reduce(
+							(m, [id, text]) => withSource(m, id, text),
+							withNamed(done, renaming.e.id, renaming.to),
+						);
 			// Everything saveable is saved; drafts without a folder go, as the dialog said.
 			return leaving
-				? signOut({ ...committed(done), local: EMPTY_LOCAL })
-				: persist([committed(done), []]);
+				? signOut({ ...committed(renamed), local: EMPTY_LOCAL })
+				: persist([committed(renamed), []]);
 		}
 
 		case "reloadRequested": {
@@ -1175,7 +1223,9 @@ function step(model: Model, msg: Msg): Step {
 			if (
 				q === undefined ||
 				path === undefined ||
-				model.session.kind !== "connected"
+				model.session.kind !== "connected" ||
+				// Not while its commit is in flight: the commit's answer sets its base.
+				model.activity[msg.id]?.kind === "saving"
 			)
 				return [model, []];
 			if (q.base !== undefined && remoteBlob(model.remote, q) === undefined)
@@ -2798,6 +2848,12 @@ export function bankAddProblem(adding: AddingBank): string | undefined {
 	return address.kind === "local"
 		? "That's this workspace: choose it from the list instead."
 		: undefined;
+}
+
+/** A shared file under a new name, its base (already moved by the commit) kept. */
+function withNamed(model: Model, id: Id, name: string): Model {
+	const e = model.local.schemes[id];
+	return e === undefined ? model : withFile(model, { ...e, name });
 }
 
 function withSource(model: Model, id: Id, source: string): Model {

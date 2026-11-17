@@ -2725,7 +2725,7 @@ describe("renaming a draft shared file", () => {
 		expect(done.local.questions[2]).toBe(m.local.questions[2]);
 	});
 
-	it("keeps its own name free (no change is not taken), and refuses a saved file", () => {
+	it("opens prefilled with its own name, for a saved file too", () => {
 		const m = drafted();
 		const e = Object.values(m.local.schemes)[0];
 		if (!e) throw new Error("no file");
@@ -2743,9 +2743,11 @@ describe("renaming a draft shared file", () => {
 				},
 			},
 		};
-		expect(update(saved, { kind: "schemeRenameOpened", id: e.id })[0]).toBe(
-			saved,
-		);
+		// A saved file is renamed too (owner, 2026-11-17): by one commit, see rename.test.ts.
+		expect(
+			update(saved, { kind: "schemeRenameOpened", id: e.id })[0].browser.naming
+				?.purpose,
+		).toEqual({ kind: "rename", id: e.id });
 	});
 });
 
