@@ -32,7 +32,6 @@ import {
 	ROOT,
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
-	sharedIdentity,
 	status as statusOf,
 	UNNAMED,
 	usedBy,
@@ -55,7 +54,7 @@ import {
 	type Model,
 	TEMPLATES,
 } from "../model.js";
-import { renamePlan, renameScope } from "../rename.js";
+import { renameScope } from "../rename.js";
 import { alsoSaves, claimOf, isUnsaved, usersIn } from "../sync.js";
 import {
 	bankFolders,
@@ -257,7 +256,6 @@ export function App() {
 		if (e === undefined) return undefined;
 		const kind = e.kind;
 		if (isRoot(kind)) return undefined;
-		const plan = renamePlan(model, e.id, naming.name, evaluations);
 		const questionName = (id: Id) => {
 			const q = model.local.questions[id];
 			return {
@@ -268,16 +266,13 @@ export function App() {
 						: (evaluations.get(q, env).draft.name ?? UNNAMED),
 			};
 		};
-		const identity = plan.ok ? sharedIdentity(kind, naming.name) : undefined;
 		return {
 			from: e.name,
-			saved: e.base !== undefined,
 			questions: renameFiles.questions.map(questionName),
 			instruments: renameFiles.instruments.map((id) => ({
 				id,
 				name: model.local.workspace[id]?.name ?? UNNAMED,
 			})),
-			...(identity !== undefined && { identity }),
 		};
 	}, [model, renameFiles, evaluations, env]);
 	const signingOut = model.browser.signingOut;

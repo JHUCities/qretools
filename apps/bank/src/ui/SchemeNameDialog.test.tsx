@@ -61,7 +61,6 @@ describe("renaming a shared file", () => {
 		naming({ kind, name, purpose: { kind: "rename", id: 1 } });
 	const saved = {
 		from: "agree4",
-		saved: true,
 		questions: [
 			{ id: 2, name: "one" },
 			{ id: 3, name: "two" },
@@ -69,7 +68,7 @@ describe("renaming a shared file", () => {
 		instruments: [{ id: 4, name: "survey" }],
 	};
 
-	it("says what it updates and what keeps the old name, before a new name is typed, with no error for its own name", () => {
+	it("says what it updates, and nothing else, with no error for its own name", () => {
 		render(
 			<SchemeNameDialog
 				naming={renaming("scale", "agree4")}
@@ -83,9 +82,8 @@ describe("renaming a shared file", () => {
 				"Renaming this shared scale updates 2 questions and 1 instrument.",
 			),
 		).toBeTruthy();
-		expect(screen.getByText("In the DDI it gets a new ID.")).toBeTruthy();
-		// What reads the bank at a tag keeps the old name by itself: not explained.
-		expect(screen.queryByText(/keep/)).toBeNull();
+		// One line and the list: no DDI identity, no warning, nothing that keeps the old name.
+		expect(document.querySelectorAll(".rename-scope > p").length).toBe(1);
 		expect(screen.queryByText("That's its name already.")).toBeNull();
 		expect(
 			screen
@@ -94,44 +92,17 @@ describe("renaming a shared file", () => {
 		).toBe("true");
 	});
 
-	it("names the DDI identity once the name can be used", () => {
+	it("counts only what it updates", () => {
 		render(
 			<SchemeNameDialog
 				naming={renaming("scale", "agree_4")}
 				problem={undefined}
-				rename={{ ...saved, identity: "scale-agree_4" }}
-				dispatch={vi.fn()}
-			/>,
-		);
-		expect(screen.getByText("scale-agree_4")).toBeTruthy();
-	});
-
-	it("gives a unit no DDI paragraph at all", () => {
-		render(
-			<SchemeNameDialog
-				naming={renaming("unit", "day")}
-				problem={undefined}
-				rename={{ ...saved, from: "days" }}
-				dispatch={vi.fn()}
-			/>,
-		);
-		expect(screen.queryByText(/In the DDI/)).toBeNull();
-		// The opening line only: no empty paragraph taking the stack's gap.
-		expect(document.querySelectorAll(".rename-scope > p").length).toBe(1);
-	});
-
-	it("says a draft's rename is local", () => {
-		render(
-			<SchemeNameDialog
-				naming={renaming("scale", "agree_4")}
-				problem={undefined}
-				rename={{ ...saved, saved: false, instruments: [] }}
+				rename={{ ...saved, instruments: [] }}
 				dispatch={vi.fn()}
 			/>,
 		);
 		expect(
 			screen.getByText("Renaming this shared scale updates 2 questions."),
 		).toBeTruthy();
-		expect(screen.queryByText(/In the DDI|keep/)).toBeNull();
 	});
 });

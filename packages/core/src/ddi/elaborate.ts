@@ -31,11 +31,7 @@ import {
 	labelOf,
 	type Named,
 } from "../surface/draft.ts";
-import type {
-	LabelledEntry,
-	NamedScheme,
-	TextEntry,
-} from "../surface/env.ts";
+import type { LabelledEntry, TextEntry } from "../surface/env.ts";
 import { hasFill, piecesOf } from "../surface/fills.ts";
 import {
 	codeValue,
@@ -107,16 +103,6 @@ const SHARED_PREFIX = {
 
 const sharedId = (kind: keyof typeof SHARED_PREFIX, name: string): string =>
 	`${SHARED_PREFIX[kind]}${name}`;
-
-/**
- * The DDI ID a named shared file is published under (`scale-agree4`), or undefined for a
- * unit, which has none: only its label is exported, as a question's measurement unit.
- */
-export const sharedIdentity = (
-	kind: NamedScheme,
-	name: string,
-): string | undefined =>
-	kind === "unit" ? undefined : sharedId(kind, name);
 
 /**
  * The bank's shared file a DDI item was published from, by the item's URN: the kind
