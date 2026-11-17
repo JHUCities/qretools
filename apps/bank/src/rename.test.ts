@@ -4,6 +4,7 @@ import { describeRename } from "./commits.js";
 import { init, type Model } from "./model.js";
 import {
 	renamePlan,
+	renameSaved,
 	renameScope,
 	showsRenameNotice,
 	undoProblem,
@@ -483,6 +484,27 @@ describe("undoing a rename", () => {
 			"Something it changed was changed again since.",
 		);
 		expect(update(moved, { kind: "renameUndoRequested" })[1]).toEqual([]);
+	});
+
+	it("says what it saved besides the shared file, and when their other edits stay unsaved", () => {
+		const after = renamed(start());
+		const r = after.browser.renamed;
+		if (r === undefined) throw new Error("no rename");
+		expect(renameSaved(r)).toBe(
+			"2 questions and 1 instrument were updated and saved.",
+		);
+		// An edit of its own in a renamed question: only the rename was saved.
+		const busy = edited(
+			start(),
+			"questions/a/one.yaml",
+			q("one", "responses: agree4\ntitle: Mine\n"),
+		);
+		const later = renamed(busy);
+		const r2 = later.browser.renamed;
+		if (r2 === undefined) throw new Error("no rename");
+		expect(renameSaved(r2)).toBe(
+			"2 questions and 1 instrument were updated and saved. Their other changes are still unsaved.",
+		);
 	});
 
 	it("is refused once a file it changed was moved, even with the same text", () => {

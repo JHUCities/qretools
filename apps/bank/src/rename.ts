@@ -10,7 +10,9 @@
 import {
 	EMPTY_ENV,
 	err,
+	instrumentAt,
 	isRoot,
+	kindAt,
 	NAME_PATTERN,
 	NAME_RULE_TEXT,
 	type NamedScheme,
@@ -346,12 +348,20 @@ export function renamedFrom(
 			? []
 			: [{ id: f.id, path: c.path, expected: sha, text: f.base.text }];
 	});
+	// A file the rename saved whose working copy then differs from what it saved: its
+	// own edits stayed unsaved. Recorded now, as a fact of this rename.
+	const committed = new Map(changes.map((c) => [c.id, c.text]));
+	const othersUnsaved = local.some(
+		([id, after]) =>
+			id !== e.id && committed.has(id) && committed.get(id) !== after,
+	);
 	return {
 		id: e.id,
 		...(startedIn !== undefined && { startedIn }),
 		from: e.name,
 		to,
 		reverse,
+		othersUnsaved,
 		local: local.flatMap(([id, after]) => {
 			const before =
 				model.local.questions[id]?.source ?? model.local.workspace[id]?.source;
@@ -369,3 +379,30 @@ export const showsRenameNotice = (
 	id: Id,
 ): boolean =>
 	renamed !== undefined && (renamed.id === id || renamed.startedIn === id);
+
+/**
+ * What the last rename saved besides the shared file, from its own reverse change set
+ * (by path, so a file deleted since still counts): "3 questions and 1 instrument were
+ * updated and saved.", and, when any of them had edits of its own as the rename landed
+ * (`othersUnsaved`, recorded then, so the notice never changes as the author types),
+ * that those are still unsaved. Undefined when it changed nothing else.
+ */
+export function renameSaved(renamed: Renamed): string | undefined {
+	const paths = renamed.reverse.flatMap((c) =>
+		c.id === undefined || c.id === renamed.id ? [] : [c.path],
+	);
+	const questions = paths.filter((p) => kindAt(p)?.kind === "question").length;
+	const instruments = paths.filter((p) => instrumentAt(p) !== undefined).length;
+	const total = questions + instruments;
+	if (total === 0) return undefined;
+	const counted = (n: number, one: string) =>
+		`${n} ${one}${n === 1 ? "" : "s"}`;
+	const what = [
+		...(questions === 0 ? [] : [counted(questions, "question")]),
+		...(instruments === 0 ? [] : [counted(instruments, "instrument")]),
+	].join(" and ");
+	const saved = `${what} ${total === 1 ? "was" : "were"} updated and saved.`;
+	return renamed.othersUnsaved
+		? `${saved} ${total === 1 ? "Its" : "Their"} other changes are still unsaved.`
+		: saved;
+}

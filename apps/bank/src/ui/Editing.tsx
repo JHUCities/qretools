@@ -95,7 +95,7 @@ import {
 	type SchemeEntry,
 	schemeFileNamed,
 } from "../model.js";
-import { showsRenameNotice, undoProblem } from "../rename.js";
+import { renameSaved, showsRenameNotice, undoProblem } from "../rename.js";
 import {
 	alsoSaves,
 	claimOf,
@@ -1464,6 +1464,13 @@ function RenameUndo({ id }: { id: Id }) {
 	const undoable = useModel(undoProblem);
 	const blocked = useModel(writeBlocked);
 	if (renamed === undefined || !showsRenameNotice(renamed, id)) return null;
+	const saved = renameSaved(renamed);
+	const description = [
+		saved,
+		undoable === undefined ? undefined : "To undo it, rename it back.",
+	]
+		.filter((d) => d !== undefined)
+		.join(" ");
 	return (
 		<Banner
 			variant="success"
@@ -1472,9 +1479,7 @@ function RenameUndo({ id }: { id: Id }) {
 			actionsLayout="inline"
 			// Primer's Banner takes its title as text only, so the name isn't code here.
 			title={`Renamed ${renamed.from} to ${renamed.to}.`}
-			{...(undoable !== undefined && {
-				description: "To undo it, rename it back.",
-			})}
+			{...(description !== "" && { description })}
 			{...(undoable === undefined && {
 				primaryAction: (
 					// Inactive while nothing can be written: the status says why.
