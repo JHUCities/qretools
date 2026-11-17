@@ -138,6 +138,54 @@ describe("go to definition in the editor", () => {
 		editor.destroy();
 	});
 
+	it("renames on F2 at a name only where a rename is offered, and leaves F2 to the browser elsewhere", () => {
+		const press = (view: EditorView) => {
+			const e = new KeyboardEvent("keydown", {
+				key: "F2",
+				bubbles: true,
+				cancelable: true,
+			});
+			view.contentDOM.dispatchEvent(e);
+			return e.defaultPrevented;
+		};
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const renamed: number[] = [];
+		const make = (onRename?: (id: number, offset: number) => void) => {
+			const host = document.createElement("div");
+			parent.append(host);
+			const editor = createEditor(
+				host,
+				() => {},
+				() => {},
+				() => {},
+				onRename === undefined ? {} : { onRename },
+			);
+			const text = "name: q\nresponses: agree4\n";
+			const from = text.indexOf("agree4");
+			editor.sync({
+				id: 1,
+				text,
+				diagnostics: [],
+				marks: [{ kind: "ref", range: [from, from + 6] }],
+				schema: {},
+			});
+			const view = EditorView.findFromDOM(
+				host.querySelector(".cm-editor") as HTMLElement,
+			);
+			if (!view) throw new Error("no view");
+			view.dispatch({ selection: { anchor: from + 2 } });
+			return { editor, view, from };
+		};
+		const offered = make((_, o) => renamed.push(o));
+		expect(press(offered.view)).toBe(true);
+		expect(renamed).toEqual([offered.from + 2]);
+		const without = make();
+		expect(press(without.view)).toBe(false);
+		offered.editor.destroy();
+		without.editor.destroy();
+	});
+
 	it("follows a name from another repository too, drawn apart, knowing where it opens", () => {
 		const { editor, view, followed, from, parent } = setup();
 		const href = "https://github.com/o/r/blob/v1/scales/agree4.yaml";

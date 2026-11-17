@@ -554,6 +554,28 @@ function step(model: Model, msg: Msg): Step {
 				: step(model, { kind: "fileOpened", id: target.id });
 		}
 
+		case "renameRequestedAt": {
+			// The author's own open question only, as go to definition.
+			const q = current(model);
+			if (!q || q.id !== msg.id || q.kind !== "question") return [model, []];
+			const parsed = parseSurface(q.source, EMPTY_ENV);
+			const m = mentionAt(parsed.ranges, parsed.mentions, q.source, msg.offset);
+			const target =
+				m === undefined
+					? undefined
+					: schemeFileNamed(model.local.schemes, m.scheme, m.name);
+			if (target === undefined) return [model, []];
+			// A saved file's rename is a commit: when nothing can be written, say why, as
+			// the header's inactive Rename does, rather than open a dialog that can't confirm.
+			if (target.base !== undefined && blockage(model) !== undefined)
+				return step(model, { kind: "blockedActionTried" });
+			return step(model, {
+				kind: "schemeRenameOpened",
+				id: target.id,
+				from: q.id,
+			});
+		}
+
 		case "fileOpened":
 			return fileOf(model, msg.id)
 				? [{ ...model, screen: { kind: "editing", id: msg.id } }, []]
@@ -632,7 +654,11 @@ function step(model: Model, msg: Msg): Step {
 							kind: e.kind,
 							name: e.name,
 							text: "",
-							purpose: { kind: "rename", id: e.id },
+							purpose: compact({
+								kind: "rename" as const,
+								id: e.id,
+								from: msg.from,
+							}),
 						},
 					},
 				},
@@ -895,10 +921,15 @@ function step(model: Model, msg: Msg): Step {
 					// The last rename's undo stays until this one lands (`committed`), which
 					// replaces it: if GitHub refuses this one, that one can still be undone.
 					return [
-						withActivity(busy, e.id, {
-							kind: "saving",
-							renaming: naming.name,
-						}),
+						withActivity(
+							busy,
+							e.id,
+							compact({
+								kind: "saving" as const,
+								renaming: naming.name,
+								startedIn: naming.purpose.from,
+							}),
+						),
 						cmds,
 					];
 				}
@@ -1231,7 +1262,15 @@ function step(model: Model, msg: Msg): Step {
 							e,
 							to,
 							local: after,
-							renamed: renamedFrom(model, e, to, msg.changes, shas, after),
+							renamed: renamedFrom(
+								model,
+								e,
+								to,
+								msg.changes,
+								shas,
+								after,
+								a.startedIn,
+							),
 						},
 					];
 				// An undo: each working copy back to its text before the rename if it is still
