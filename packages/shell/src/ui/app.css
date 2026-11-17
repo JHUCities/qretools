@@ -858,6 +858,18 @@ button.finding-message {
 	font-size: var(--text-body-size-small);
 	text-align: start;
 }
+/* Dismissed advice, closed under its count after the findings. */
+.dismissed {
+	margin-block-start: var(--base-size-12);
+	font-size: var(--text-body-size-small);
+}
+.dismissed > summary {
+	color: var(--fgColor-muted);
+	cursor: pointer;
+}
+.dismissed > .findings {
+	margin-block-start: var(--base-size-8);
+}
 /* A library's own words under the plain message: kept, quieter. */
 .detail {
 	display: block;

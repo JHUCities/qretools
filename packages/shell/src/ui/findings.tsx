@@ -14,6 +14,8 @@ import {
 import { Label, Link } from "@primer/react";
 import {
 	codeSpans,
+	type Dismissed,
+	dismissFix,
 	type Finding,
 	type Fix,
 	SEVERITY_LABEL,
@@ -141,9 +143,12 @@ export function Findings<F extends Finding<string>>({
 	onTarget,
 	related,
 	onFix,
+	dismissed = [],
 	label = "Findings",
 }: {
 	findings: readonly F[];
+	/** Advice the file dismisses, listed after the findings under their count. */
+	dismissed?: readonly Dismissed[];
 	/** The list's name, heard by screen readers. */
 	label?: string;
 	onTarget?: OnTarget;
@@ -152,68 +157,141 @@ export function Findings<F extends Finding<string>>({
 	/** Apply a finding's quick fix; absent where nothing can be edited. */
 	onFix?: (fix: Fix) => void;
 }) {
+	const rest =
+		dismissed.length === 0 ? null : (
+			<DismissedList dismissed={dismissed} onTarget={onTarget} />
+		);
 	if (findings.length === 0)
-		return <p className="quiet">Nothing to fill in, fix, or reconsider.</p>;
+		return (
+			<>
+				<p className="quiet">Nothing to fill in, fix, or reconsider.</p>
+				{rest}
+			</>
+		);
 	const keys = findingKeys(findings);
+	// A plain list, editable or not: a fix and a link sit under the message, as
+	// GitHub offers "Create a new release" under "No releases published", which an
+	// ActionList item (one button) cannot hold. `role="list"`: Safari's VoiceOver
+	// drops list semantics from a list without bullets.
 	return (
-		// A plain list, editable or not: a fix and a link sit under the message, as
-		// GitHub offers "Create a new release" under "No releases published", which an
-		// ActionList item (one button) cannot hold. `role="list"`: Safari's VoiceOver
-		// drops list semantics from a list without bullets.
-		// biome-ignore lint/a11y/noRedundantRoles: VoiceOver, above
-		<ul className="findings" role="list" aria-label={label}>
-			{findings.map((f, i) => {
-				const { Icon, className } = SEVERITY[f.severity];
-				const other = related?.(f);
-				const fix = onFix === undefined ? undefined : f.fix;
-				const message = inlineCode(f.message);
-				return (
-					<li key={keys[i]} className="finding">
-						<Icon
-							className={`${className} finding-icon`}
-							aria-label={SEVERITY_LABEL[f.severity]}
-						/>
-						<div className="finding-body">
-							{onTarget === undefined ? (
-								<span className="finding-message">{message}</span>
-							) : (
-								// The message goes to its place in the source.
-								<Link
-									as="button"
-									type="button"
-									className="finding-message"
-									onClick={() => onTarget(f)}
-								>
-									{message}
-								</Link>
-							)}
-							{f.hint !== undefined && (
-								<span className="finding-hint">{inlineCode(f.hint)}</span>
-							)}
-							{f.detail !== undefined && (
-								<span className="detail">{f.detail}</span>
-							)}
-							{fix !== undefined && (
-								<Link
-									as="button"
-									type="button"
-									className="finding-action"
-									// Where focus goes next is `update`'s: into the source for an edit,
-									// the name dialog for a new shared entry.
-									onClick={() => onFix?.(fix)}
-								>
-									{inlineCode(fix.label)}
-								</Link>
-							)}
-							{other !== undefined && (
-								<Link className="finding-action" href={other.href}>
-									{other.label}
-								</Link>
-							)}
-						</div>
-					</li>
-				);
-			})}
-		</ul>
+		<>
+			{/* biome-ignore lint/a11y/noRedundantRoles: VoiceOver, above */}
+			<ul className="findings" role="list" aria-label={label}>
+				{findings.map((f, i) => {
+					const { Icon, className } = SEVERITY[f.severity];
+					const other = related?.(f);
+					const fix = onFix === undefined ? undefined : f.fix;
+					const dismiss = onFix === undefined ? undefined : dismissFix(f);
+					const message = inlineCode(f.message);
+					return (
+						<li key={keys[i]} className="finding">
+							<Icon
+								className={`${className} finding-icon`}
+								aria-label={SEVERITY_LABEL[f.severity]}
+							/>
+							<div className="finding-body">
+								{onTarget === undefined ? (
+									<span className="finding-message">{message}</span>
+								) : (
+									// The message goes to its place in the source.
+									<Link
+										as="button"
+										type="button"
+										className="finding-message"
+										onClick={() => onTarget(f)}
+									>
+										{message}
+									</Link>
+								)}
+								{f.hint !== undefined && (
+									<span className="finding-hint">{inlineCode(f.hint)}</span>
+								)}
+								{f.detail !== undefined && (
+									<span className="detail">{f.detail}</span>
+								)}
+								{fix !== undefined && (
+									<Link
+										as="button"
+										type="button"
+										className="finding-action"
+										// Where focus goes next is `update`'s: into the source for an edit,
+										// the name dialog for a new shared entry.
+										onClick={() => onFix?.(fix)}
+									>
+										{inlineCode(fix.label)}
+									</Link>
+								)}
+								{dismiss !== undefined && (
+									<Link
+										as="button"
+										type="button"
+										className="finding-action"
+										// Writes `dismiss: {code: }` and puts the caret at the reason.
+										onClick={() => onFix?.(dismiss)}
+									>
+										{dismiss.label}
+									</Link>
+								)}
+								{other !== undefined && (
+									<Link className="finding-action" href={other.href}>
+										{other.label}
+									</Link>
+								)}
+							</div>
+						</li>
+					);
+				})}
+			</ul>
+			{rest}
+		</>
+	);
+}
+
+/**
+ * Advice the file dismisses, closed under its count. Each goes to where its dismissal is
+ * written: deleting that line brings the advice back.
+ */
+function DismissedList({
+	dismissed,
+	onTarget,
+}: {
+	dismissed: readonly Dismissed[];
+	onTarget: OnTarget;
+}) {
+	const keys = findingKeys(dismissed.map((d) => d.finding));
+	return (
+		<details className="dismissed">
+			<summary>{dismissed.length} dismissed</summary>
+			{/* biome-ignore lint/a11y/noRedundantRoles: VoiceOver drops a bulletless list's semantics */}
+			<ul className="findings" role="list" aria-label="Dismissed">
+				{dismissed.map(({ finding: f, reason, path }, i) => {
+					const { Icon, className } = SEVERITY[f.severity];
+					const message = inlineCode(f.message);
+					return (
+						<li key={keys[i]} className="finding">
+							<Icon
+								className={`${className} finding-icon`}
+								aria-label={SEVERITY_LABEL[f.severity]}
+							/>
+							<div className="finding-body">
+								{onTarget === undefined ? (
+									<span className="finding-message">{message}</span>
+								) : (
+									<Link
+										as="button"
+										type="button"
+										className="finding-message"
+										onClick={() => onTarget({ path, severity: "info" })}
+									>
+										{message}
+									</Link>
+								)}
+								<span className="finding-hint">{reason}</span>
+							</div>
+						</li>
+					);
+				})}
+			</ul>
+		</details>
 	);
 }

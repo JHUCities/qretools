@@ -27,8 +27,8 @@ export {
 export { LIST_FIELDS, newLineAfter } from "./instrument/parse.ts";
 export { labelledSource, textEntrySource } from "./schemes.ts";
 export {
+	addEntry,
 	addSpace,
-	addVariant,
 	applyEdits,
 	quoteCode,
 	renameEdits,

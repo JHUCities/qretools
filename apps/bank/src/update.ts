@@ -32,9 +32,9 @@ import {
 	withLocks,
 } from "@qretools/core";
 import {
+	addEntry,
 	addInstrumentFill,
 	addSpace,
-	addVariant,
 	applyEdits,
 	applyLivelit,
 	type Livelit,
@@ -355,14 +355,19 @@ function step(model: Model, msg: Msg): Step {
 					[],
 				];
 			}
-			if (fix.kind === "variant") {
-				const added = addVariant(q.source, fix.name);
+			if (fix.kind === "variant" || fix.kind === "dismiss") {
+				const field = fix.kind === "variant" ? "variant_of" : "dismiss";
+				const added = addEntry(
+					q.source,
+					field,
+					fix.kind === "variant" ? fix.name : fix.code,
+				);
 				// Named there already: the finding goes on the next evaluation.
 				if (added.kind === "named") return [model, []];
-				// Not a line it can add to (a flow map): the caret goes to `variant_of`, for
-				// the author to write it there; a fix never does nothing at all.
+				// Not a line it can add to (a flow map): the caret goes to the field, for the
+				// author to write it there; a fix never does nothing at all.
 				if (added.kind === "unwritable") {
-					const at = rangesOf(q.source).variant_of ?? [0, 0];
+					const at = rangesOf(q.source)[field] ?? [0, 0];
 					return [model, [{ kind: "revealRange", range: [at[0], at[0]] }]];
 				}
 				return persist([

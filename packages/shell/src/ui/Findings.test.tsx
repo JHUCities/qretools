@@ -90,3 +90,41 @@ describe("a read-only list", () => {
 		expect(screen.queryByRole("button")).toBeNull();
 	});
 });
+
+describe("advice a question may dismiss", () => {
+	it("offers Dismiss under the message, beside its fix, and not on a bank finding", () => {
+		const onFix = vi.fn();
+		render(<Findings findings={[dup, own]} onTarget={vi.fn()} onFix={onFix} />);
+		const dismiss = screen.getAllByRole("button", { name: "Dismiss" });
+		expect(dismiss).toHaveLength(1);
+		fireEvent.click(dismiss[0] as HTMLElement);
+		expect(onFix).toHaveBeenCalledWith({
+			kind: "dismiss",
+			label: "Dismiss",
+			code: "intent-repeats-text",
+		});
+	});
+
+	it("lists what was dismissed after the findings, with its reason, going to the dismissal", () => {
+		const onTarget = vi.fn();
+		render(
+			<Findings
+				findings={[]}
+				dismissed={[
+					{ finding: own, reason: "Short on purpose.", path: "dismiss.x" },
+				]}
+				onTarget={onTarget}
+			/>,
+		);
+		expect(
+			screen.getByText("Nothing to fill in, fix, or reconsider."),
+		).toBeTruthy();
+		expect(screen.getByText("1 dismissed")).toBeTruthy();
+		expect(screen.getByText("Short on purpose.")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Say more." }));
+		expect(onTarget).toHaveBeenCalledWith({
+			path: "dismiss.x",
+			severity: "info",
+		});
+	});
+});

@@ -15,7 +15,13 @@ import {
 	SCHEME_NAME,
 	SCHEME_SINGULAR,
 } from "../copy.ts";
-import type { Finding, Fix, Range } from "../findings.ts";
+import {
+	type Dismissable,
+	type Finding,
+	type Fix,
+	isDismissable,
+	type Range,
+} from "../findings.ts";
 import { unitKey } from "../fold.ts";
 import { EXAMPLE, keyText, readCodeMap } from "./codes.ts";
 import type { Domain, Draft, Named } from "./draft.ts";
@@ -67,6 +73,8 @@ export interface Parsed {
 	readonly mentions: readonly Mention[];
 	/** The questions this one is a deliberate variant of (`variant_of`); the bank index checks them. */
 	readonly variants: readonly Variant[];
+	/** The advice this question dismisses (`dismiss`), each with its reason. */
+	readonly dismissals: readonly Dismissal[];
 	/** Where each empty value starts, by path: where holes are drawn. */
 	readonly empties: Readonly<Record<string, number>>;
 	/** What the editor colours by meaning: resolved names, codes, `legacy`, holes. */
@@ -80,6 +88,13 @@ export interface Variant {
 	readonly name: string;
 	readonly path: string;
 	readonly why: string;
+}
+
+/** Advice a question dismisses under `dismiss`, and why it doesn't apply. */
+export interface Dismissal {
+	readonly code: Dismissable;
+	readonly path: string;
+	readonly reason: string;
 }
 
 const FIELDS_HINT = `Fields: ${KNOWN_KEYS.join(", ")}. Fields from an older format go under \`legacy\`.`;
@@ -104,6 +119,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			empties,
 			mentions: [],
 			variants: [],
+			dismissals: [],
 			marks: [],
 		};
 	}
@@ -158,6 +174,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 	const legacy = readLegacy(data.legacy);
 	const fills = readFills(doc);
 	const variants = readVariants(data.variant_of);
+	const dismissals = readDismissals(data.dismiss);
 	const domain = readDomain(doc, data, ranges, env);
 	const access = readAccess(data.access, env);
 	const draft: Draft = compact({
@@ -184,6 +201,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 			...instruction.findings,
 			...legacy.findings,
 			...variants.findings,
+			...dismissals.findings,
 			...domain.findings,
 			...fills.findings,
 			...access.findings,
@@ -197,6 +215,7 @@ export function parseSurface(text: string, env: Env): Parsed {
 		empties,
 		mentions,
 		variants: variants.value ?? [],
+		dismissals: dismissals.value ?? [],
 		marks: ordered([
 			...marksOf(doc, mentions, env, text.length),
 			...fillMarks(doc, text, ranges.text, fills.value ?? []),
@@ -315,6 +334,69 @@ function readVariants(value: unknown): Read<readonly Variant[]> {
 		else variants.push({ name, path, why });
 	}
 	return { value: variants, findings };
+}
+
+/**
+ * `dismiss`: advice codes, each with why it doesn't apply to this question. Empty, or
+ * with an empty reason, it's a hole like any opened key; a code that isn't advice a
+ * question can dismiss is a warning, as is anything else malformed: a dismissal changes
+ * nothing in the DDI, so a retired or renamed advice code must never stop a bank building.
+ */
+const warn = (f: Finding): Finding => ({ ...f, severity: "warning" });
+
+function readDismissals(value: unknown): Read<readonly Dismissal[]> {
+	if (value === undefined) return fail();
+	if (value === null || value === "")
+		return fail(hole("dismiss", "`dismiss` is empty.", EMPTY_HINT));
+	if (!isPlainObject(value))
+		return fail(
+			warn(
+				error(
+					"wrong-type",
+					"dismiss",
+					"Write `dismiss` as `advice: why it doesn't apply` lines.",
+				),
+			),
+		);
+	const dismissals: Dismissal[] = [];
+	const findings: Finding[] = [];
+	for (const [code, reason] of Object.entries(value)) {
+		const path = `dismiss.${code}`;
+		if (!isDismissable(code))
+			findings.push(
+				warn(
+					error(
+						"unknown-key",
+						path,
+						`\`${code}\` isn't advice a question can dismiss.`,
+						"Use Dismiss on the advice in the Findings list to write it here.",
+					),
+				),
+			);
+		else if (
+			reason === null ||
+			(typeof reason === "string" && reason.trim() === "")
+		)
+			findings.push(
+				hole(
+					path,
+					"Say why this advice doesn't apply to this question.",
+					"For example: every respondent has at least one source of income.",
+				),
+			);
+		else if (typeof reason !== "string")
+			findings.push(
+				warn(
+					error(
+						"wrong-type",
+						path,
+						"Say in words why this advice doesn't apply.",
+					),
+				),
+			);
+		else dismissals.push({ code, path, reason });
+	}
+	return { value: dismissals, findings };
 }
 
 /**
