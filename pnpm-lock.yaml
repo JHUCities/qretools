@@ -19,7 +19,7 @@ importers:
         version: 19.42.0(react@19.3.1)
       '@primer/react':
         specifier: ^38.40.0
-        version: 38.43.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react-is@19.3.0)(react@19.3.1)
+        version: 38.47.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react-is@19.3.0)(react@19.3.1)
       '@qretools/codebook':
         specifier: workspace:*
         version: link:../../packages/codebook
@@ -290,7 +290,7 @@ importers:
         version: 19.42.0(react@19.3.1)
       '@primer/react':
         specifier: ^38.40.0
-        version: 38.43.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react-is@19.3.0)(react@19.3.1)
+        version: 38.47.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react-is@19.3.0)(react@19.3.1)
       '@testing-library/dom':
         specifier: ^10.4.2
         version: 10.4.2
@@ -592,8 +592,8 @@ packages:
   '@octokit/types@18.0.0':
     resolution: {integrity: sha512-l6bAF43PNxkJp6g+W4PjoUSSkxHomXw2nOum5CTftJz1NlV3vu93NImgOYtLf6CbBUb5j+fiuzW0PPQ5JTSvZA==}
 
-  '@oddbird/popover-polyfill@0.5.2':
-    resolution: {integrity: sha512-iFrvar5SOMtKFOSjYvs4z9UlLqDdJbMx0mgISLcPedv+g0ac5sgeETLGtipHCVIae6HJPclNEH5aCyD1RZaEHw==}
+  '@oddbird/popover-polyfill@0.7.3':
+    resolution: {integrity: sha512-uOY7RLqS1M12u+EzZHQ8vPSh3NjwDlb4qwJ1WDzQ0inZ14+47Vv0NNs+1Lh4PtX1nLiiCbfJyIxPRHsgBTvhvg==}
 
   '@oxc-project/types@0.155.0':
     resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
@@ -615,8 +615,8 @@ packages:
   '@primer/primitives@11.10.0':
     resolution: {integrity: sha512-ihZxIst4Izry284StKFjpbYvX6R/IBFTLu+qiuAmR93PsKF2hdjoabhSYwKI8iCxOUx94jVP55bI3NoY7STjYQ==}
 
-  '@primer/react@38.43.0':
-    resolution: {integrity: sha512-7kLqRKk6diXQ+63nMEh7pJwrCmmWMg9P3t2yYUsiq8rWApZTo2PP3KWoPcPylIu+daJp49PfeJLDoDGrU6v/vQ==}
+  '@primer/react@38.47.0':
+    resolution: {integrity: sha512-UsEjfKaCReJOUgXiR3Wq+hlqSXP8CQR2q0Hp0TP3Inw9hK9HOucnwx9s57XCteFemFY53MHb8GgC7KCK+j++6A==}
     engines: {node: '>=12', npm: '>=7'}
     peerDependencies:
       '@types/react': 18.x || 19.x
@@ -1151,9 +1151,6 @@ packages:
   history@5.3.0:
     resolution: {integrity: sha512-ZqaKwjjrAYUYfLG+htGaIIZ4nioX2L70ZUMIFysS3xvBsSG4x/n1V6TXV3N8ZYNuFGlDirFg32T7B6WOUPDYcQ==}
 
-  hsluv@1.0.1:
-    resolution: {integrity: sha512-zCaFTiDqBLQjCCFBu0qg7z9ASYPd+Bxx2GDCVZJsnehjK80S+jByqhuFz0pCd2Aw3FSKr18AWbRlwnKR0YdizQ==}
-
   html-encoding-sniffer@7.0.0:
     resolution: {integrity: sha512-UikN5yr7xsCDAq87Or5or0PAlD3HJJOKVzM05az588WnpDJ4Ux7a2A53Qi6gofGg2/EtvF/H4hCi/TXfCW4Y6w==}
     engines: {node: ^22.13.0 || >=24.0.0}
@@ -1385,15 +1382,6 @@ packages:
     resolution: {integrity: sha512-Y0bARz53lhEC1NMCASs0/j+faB/zqt3R8hpvg1e8+61ZVJ4UL0UdC4cBbXfZMcIuhrfgeILTLe+ZeBCavQPtKQ==}
     peerDependencies:
       react: ^19.3.1
-
-  react-intersection-observer@10.1.0:
-    resolution: {integrity: sha512-V8HDu3+Llg6OEhOxx8LnUSS0t4VS+1Xk9ZatkI8Jct/H0CwKnqFTCu8NT3q7ghJTghTdIrEMPSWr2dkKPG+gdQ==}
-    peerDependencies:
-      react: ^17.0.0 || ^18.0.0 || ^19.0.0
-      react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      react-dom:
-        optional: true
 
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
@@ -1961,7 +1949,7 @@ snapshots:
     dependencies:
       '@octokit/openapi-types': 29.0.1
 
-  '@oddbird/popover-polyfill@0.5.2': {}
+  '@oddbird/popover-polyfill@0.7.3': {}
 
   '@oxc-project/types@0.155.0': {}
 
@@ -1981,12 +1969,12 @@ snapshots:
 
   '@primer/primitives@11.10.0': {}
 
-  '@primer/react@38.43.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react-is@19.3.0)(react@19.3.1)':
+  '@primer/react@38.47.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react-is@19.3.0)(react@19.3.1)':
     dependencies:
       '@github/mini-throttle': 2.1.1
       '@github/relative-time-element': 5.3.1
       '@lit-labs/react': 1.2.1
-      '@oddbird/popover-polyfill': 0.5.2
+      '@oddbird/popover-polyfill': 0.7.3
       '@primer/behaviors': 1.11.0
       '@primer/live-region-element': 0.8.1
       '@primer/octicons-react': 19.42.0(react@19.3.1)
@@ -1997,12 +1985,10 @@ snapshots:
       deepmerge: 4.3.1
       focus-visible: 5.2.1
       history: 5.3.0
-      hsluv: 1.0.1
       lodash.isempty: 4.4.0
       lodash.isobject: 3.0.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
-      react-intersection-observer: 10.1.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react-is: 19.3.0
     optionalDependencies:
       '@types/react': 19.3.0
@@ -2418,8 +2404,6 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.7
 
-  hsluv@1.0.1: {}
-
   html-encoding-sniffer@7.0.0:
     dependencies:
       '@exodus/bytes': 1.16.0
@@ -2648,12 +2632,6 @@ snapshots:
     dependencies:
       react: 19.3.1
       scheduler: 0.28.0
-
-  react-intersection-observer@10.1.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
-    dependencies:
-      react: 19.3.1
-    optionalDependencies:
-      react-dom: 19.3.1(react@19.3.1)
 
   react-is@17.0.2: {}
 
